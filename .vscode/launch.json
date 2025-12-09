@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:SwiftText}",
+            "name": "Debug swifttext",
+            "target": "swifttext",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug swifttext"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:SwiftText}",
+            "name": "Release swifttext",
+            "target": "swifttext",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release swifttext"
+        }
+    ]
+}
