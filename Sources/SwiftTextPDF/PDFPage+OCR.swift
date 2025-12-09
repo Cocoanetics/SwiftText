@@ -89,7 +89,7 @@ extension PDFPage
 		}
 		
 		// Set the context's coordinate system to match the PDF's coordinate system
-		context.setFillColor(CGColor.white) // White background
+		context.setFillColor(red: 1.0, green: 1.0, blue: 1.0, alpha: 1.0) // White background
 		context.fill(CGRect(origin: .zero, size: targetSize))
 		context.scaleBy(x: scale, y: scale)
 		
