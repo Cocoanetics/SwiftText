@@ -14,33 +14,6 @@ import Vision
 extension PDFPage
 {
 	/**
-	 Errors that can occur during OCR processing on a PDF page.
-	 */
-	@available(iOS 13.0, tvOS 13.0, macOS 10.15, *)
-	public enum OCRError: Error, CustomStringConvertible
-	{
-		case failedToCreateContext
-		case failedToCreateCGImage
-		case visionRequestFailed(Error)
-		case noTextRecognized
-		
-		public var description: String
-		{
-			switch self
-			{
-				case .failedToCreateContext:
-					return "Failed to create CGContext for rendering the PDF page."
-				case .failedToCreateCGImage:
-					return "Failed to create CGImage from the rendered CGContext."
-				case .visionRequestFailed(let error):
-					return "Vision request failed: \(error.localizedDescription)"
-				case .noTextRecognized:
-					return "No text could be recognized on the page."
-			}
-		}
-	}
-	
-	/**
 	 Performs OCR (Optical Character Recognition) on the current PDF page.
 	 
 	 - Returns: An array of `TextLine` objects representing the recognized text lines on the page.
@@ -101,42 +74,8 @@ extension PDFPage
 			throw OCRError.failedToCreateCGImage
 		}
 		
-		// Perform text recognition using Vision
-		let requestHandler = VNImageRequestHandler(cgImage: cgImage, options: [:])
-		let textRecognitionRequest = VNRecognizeTextRequest()
-		textRecognitionRequest.recognitionLevel = .accurate
-		
-		do {
-			try requestHandler.perform([textRecognitionRequest])
-		} catch {
-			throw OCRError.visionRequestFailed(error)
-		}
-		
-		// Process the Vision results
-		guard let results = textRecognitionRequest.results else {
-			throw OCRError.noTextRecognized
-		}
-		
-		// Convert Vision results into TextFragments
-		var fragments = [TextFragment]()
-		for observation in results {
-			if let topCandidate = observation.topCandidates(1).first {
-				let boundingBox = observation.boundingBox
-				
-				let bounds = CGRect(
-					x: boundingBox.minX * pageBounds.width,
-					y: (1.0 - boundingBox.maxY) * pageBounds.height, // flipped y
-					width: boundingBox.width  * pageBounds.width,
-					height: boundingBox.height * pageBounds.height
-				)
-				
-				let fragment = TextFragment(bounds: bounds, string: topCandidate.string)
-				fragments.append(fragment)
-			}
-		}
-		
-		// Assemble fragments into lines and reverse for correct order (PDF uses bottom-to-top coordinates)
-		return fragments.assembledLines()
+		// Use CGImage OCR functionality
+		return try cgImage.performOCR(imageSize: pageBounds.size)
 	}
 }
 
