@@ -26,47 +26,7 @@ public extension PDFDocument
 		for pageIndex in 0..<self.pageCount
 		{
 			guard let page = self.page(at: pageIndex) else { continue }
-
-			// Get the overall page bounds so we know its height
-			let pageBounds = page.bounds(for: .mediaBox)
-			let pageHeight = pageBounds.height
-
-			let pageSelection = page.selection(for: pageBounds)
-			
-			// Attempt to extract text using PDFKit's selection mechanism
-			if let selectionsByLine = pageSelection?.selectionsByLine(), !selectionsByLine.isEmpty
-			{
-				var fragments = [TextFragment]()
-				for lineSelection in selectionsByLine
-				{
-					if let lineString = lineSelection.string
-					{
-						// Original PDFKit bounds (origin at bottom-left)
-						let originalBounds = lineSelection.bounds(for: page)
-						
-						// Flip y so top = 0, bottom = pageHeight
-						let flippedRect = CGRect(
-							x: originalBounds.minX,
-							y: pageHeight - originalBounds.maxY,
-							width: originalBounds.width,
-							height: originalBounds.height
-						)
-						
-						let fragment = TextFragment(bounds: flippedRect, string: lineString)
-						fragments.append(fragment)
-					}
-				}
-				
-				// Assemble fragments into logical lines
-				allLines.append(contentsOf: fragments.assembledLines())
-			}
-			
-			// Fallback to OCR if no text is available (iOS 13.0+, tvOS 13.0+, macOS 10.15+)
-			else if #available(iOS 13.0, tvOS 13.0, macOS 10.15, *),
-					let ocrTextLines = try? page.performOCR()
-			{
-				allLines.append(contentsOf: ocrTextLines)
-			}
+			allLines.append(contentsOf: page.textLines())
 		}
 
 		return allLines
@@ -90,6 +50,35 @@ public extension PDFDocument
 	 */
 	func extractText() -> String {
 		return textLines().string()
+	}
+	
+	/**
+	 Enumerates each page in the PDF document, extracting text lines and calling the provided closure.
+	 
+	 - Parameter body: A closure that receives the page and its extracted text lines. The closure can return `false` to stop enumeration.
+	 - Discussion:
+	 This method processes each page sequentially, first attempting to extract text using PDFKit's text selection mechanism. If no selectable text is found, it falls back to OCR using Apple's Vision framework.
+	 
+	 Example:
+	 ```swift
+	 pdfDocument.enumeratePages { page, textLines in
+	 print("Page text: \(textLines.map { $0.combinedText }.joined(separator: "\n"))")
+	 return true // Continue to next page
+	 }
+	 ```
+	 */
+	func enumeratePages(_ body: (PDFPage, [TextLine]) -> Bool)
+	{
+		for pageIndex in 0..<self.pageCount
+		{
+			guard let page = self.page(at: pageIndex) else { continue }
+			
+			let textLines = page.textLines()
+			
+			if !body(page, textLines) {
+				break
+			}
+		}
 	}
 }
 

@@ -14,6 +14,59 @@ import Vision
 extension PDFPage
 {
 	/**
+	 Extracts all text lines from the PDF page as `TextLine` objects. Each `TextLine` represents a logical line of text, preserving vertical alignment and reading order.
+	 
+	 - Returns: An array of `TextLine` objects representing recognized text lines from the page.
+	 - Discussion:
+	   This method first attempts to extract text using the PDFKit text selection mechanism. If no selectable text is found, it falls back to OCR using Apple's Vision framework.
+	 */
+	func textLines() -> [TextLine]
+	{
+		// Get the overall page bounds so we know its height
+		let pageBounds = self.bounds(for: .mediaBox)
+		let pageHeight = pageBounds.height
+
+		let pageSelection = self.selection(for: pageBounds)
+		
+		// Attempt to extract text using PDFKit's selection mechanism
+		if let selectionsByLine = pageSelection?.selectionsByLine(), !selectionsByLine.isEmpty
+		{
+			var fragments = [TextFragment]()
+			for lineSelection in selectionsByLine
+			{
+				if let lineString = lineSelection.string
+				{
+					// Original PDFKit bounds (origin at bottom-left)
+					let originalBounds = lineSelection.bounds(for: self)
+					
+					// Flip y so top = 0, bottom = pageHeight
+					let flippedRect = CGRect(
+						x: originalBounds.minX,
+						y: pageHeight - originalBounds.maxY,
+						width: originalBounds.width,
+						height: originalBounds.height
+					)
+					
+					let fragment = TextFragment(bounds: flippedRect, string: lineString)
+					fragments.append(fragment)
+				}
+			}
+			
+			// Assemble fragments into logical lines
+			return fragments.assembledLines()
+		}
+		
+		// Fallback to OCR if no text is available (iOS 13.0+, tvOS 13.0+, macOS 10.15+)
+		if #available(iOS 13.0, tvOS 13.0, macOS 10.15, *),
+		   let ocrTextLines = try? performOCR()
+		{
+			return ocrTextLines
+		}
+		
+		return []
+	}
+	
+	/**
 	 Performs OCR (Optical Character Recognition) on the current PDF page.
 	 
 	 - Returns: An array of `TextLine` objects representing the recognized text lines on the page.
