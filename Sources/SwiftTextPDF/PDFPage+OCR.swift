@@ -13,6 +13,39 @@ import Vision
 
 extension PDFPage
 {
+	/// Renders the PDF page into a bitmap image at the specified DPI and returns the created CGImage with the page's logical size.
+	@available(iOS 13.0, tvOS 13.0, macOS 10.15, *)
+	func renderedPageImage(dpi: CGFloat) throws -> (CGImage, CGSize)
+	{
+		let pageBounds = self.bounds(for: .mediaBox)
+		let scale = dpi / 72.0 // PDF default resolution is 72 DPI
+		let targetSize = CGSize(width: pageBounds.width * scale, height: pageBounds.height * scale)
+		
+		let colorSpace = CGColorSpaceCreateDeviceRGB()
+		guard let context = CGContext(
+			data: nil,
+			width: Int(targetSize.width),
+			height: Int(targetSize.height),
+			bitsPerComponent: 8,
+			bytesPerRow: 0,
+			space: colorSpace,
+			bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+		) else {
+			throw OCRError.failedToCreateContext
+		}
+		
+		context.setFillColor(red: 1.0, green: 1.0, blue: 1.0, alpha: 1.0)
+		context.fill(CGRect(origin: .zero, size: targetSize))
+		context.scaleBy(x: scale, y: scale)
+		draw(with: .mediaBox, to: context)
+		
+		guard let cgImage = context.makeImage() else {
+			throw OCRError.failedToCreateCGImage
+		}
+		
+		return (cgImage, targetSize)
+	}
+	
 	/**
 	 Extracts all text lines from the PDF page as `TextLine` objects. Each `TextLine` represents a logical line of text, preserving vertical alignment and reading order.
 	 
@@ -29,7 +62,7 @@ extension PDFPage
 		let pageSelection = self.selection(for: pageBounds)
 		
 		// Attempt to extract text using PDFKit's selection mechanism
-		if let selectionsByLine = pageSelection?.selectionsByLine(), !selectionsByLine.isEmpty
+		if let selectionsByLine = pageSelection?.selectionsByLine(), !selectionsByLine.isEmpty && false
 		{
 			var fragments = [TextFragment]()
 			for lineSelection in selectionsByLine
@@ -131,4 +164,3 @@ extension PDFPage
 		return try cgImage.performOCR(imageSize: pageBounds.size)
 	}
 }
-

@@ -1,0 +1,25 @@
+{
+  "configurations" : [
+    {
+      "id" : "ED1426F6-CD0F-4205-8AD4-F29AE2B7F8FE",
+      "name" : "Test Scheme Action",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "codeCoverage" : false,
+    "performanceAntipatternCheckerEnabled" : true
+  },
+  "testTargets" : [
+    {
+      "target" : {
+        "containerPath" : "container:",
+        "identifier" : "SwiftTextPDFTests",
+        "name" : "SwiftTextPDFTests"
+      }
+    }
+  ],
+  "version" : 1
+}

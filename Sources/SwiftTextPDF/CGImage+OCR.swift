@@ -62,16 +62,26 @@ public extension CGImage
 		var fragments = [TextFragment]()
 		for observation in results {
 			if let topCandidate = observation.topCandidates(1).first {
-				let boundingBox = observation.boundingBox
+				let rect: CGRect
+				if #available(iOS 18.0, tvOS 18.0, macOS 15.0, *) {
+					let normalized = Vision.NormalizedRect(
+						x: observation.boundingBox.minX,
+						y: observation.boundingBox.minY,
+						width: observation.boundingBox.width,
+						height: observation.boundingBox.height
+					)
+					rect = normalized.toImageCoordinates(from: .fullImage, imageSize: imageSize, origin: .upperLeft)
+				} else {
+					let boundingBox = observation.boundingBox
+					rect = CGRect(
+						x: boundingBox.minX * imageSize.width,
+						y: (1.0 - boundingBox.maxY) * imageSize.height,
+						width: boundingBox.width  * imageSize.width,
+						height: boundingBox.height * imageSize.height
+					)
+				}
 				
-				let bounds = CGRect(
-					x: boundingBox.minX * imageSize.width,
-					y: (1.0 - boundingBox.maxY) * imageSize.height, // flipped y
-					width: boundingBox.width  * imageSize.width,
-					height: boundingBox.height * imageSize.height
-				)
-				
-				let fragment = TextFragment(bounds: bounds, string: topCandidate.string)
+				let fragment = TextFragment(bounds: rect, string: topCandidate.string)
 				fragments.append(fragment)
 			}
 		}
@@ -119,4 +129,3 @@ public extension CGImage
 		return textLines(imageSize: imageSize).string()
 	}
 }
-
