@@ -300,11 +300,11 @@ struct SwiftTextOCRTests {
 		print("Segmented transcript:\n\(transcript)")
 		for block in blocks {
 			switch block.kind {
-			case .paragraph(let paragraph):
-				print("Paragraph block: \(paragraph.text)")
-				for line in paragraph.lines {
-					print("  textLine: \(line.text)")
-				}
+				case .paragraph(let paragraph):
+					print("Paragraph block: \(paragraph.text)")
+					for line in paragraph.lines {
+						print("  textLine: \(line.text)")
+					}
 			case .list(let list):
 				let items = list.items.map(\.text).joined(separator: " | ")
 				print("List block: \(items)")
@@ -318,12 +318,68 @@ struct SwiftTextOCRTests {
 		
 		let missingLines = ocrStrings.filter { !transcript.contains($0) }
 		if !missingLines.isEmpty {
-			print("Missing OCR lines from segmented transcript:\n\(missingLines.joined(separator: \"\\n\"))")
+			let joined = missingLines.joined(separator: "\n")
+			print("Missing OCR lines from segmented transcript:\n\(joined)")
 		}
 		
 		#expect(missingLines.isEmpty, "Segmented transcript should include all OCR-recognized lines")
 		#else
 		#expect(true, "Vision not available; skipping PNG OCR comparison test")
+		#endif
+	}
+
+	@Test func testParagraphMergingForTestPNG() async throws {
+		#if canImport(Vision)
+		guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, *) else {
+			return
+		}
+
+		let pngPath = ("~/Downloads/test.png" as NSString).expandingTildeInPath
+		let pngURL = URL(fileURLWithPath: pngPath)
+		let fileExists = FileManager.default.fileExists(atPath: pngPath)
+		#expect(fileExists, "Expected PNG fixture at \(pngPath)")
+		guard fileExists else { return }
+
+		guard
+			let source = CGImageSourceCreateWithURL(pngURL as CFURL, nil),
+			let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil)
+		else {
+			#expect(false, "Unable to decode PNG at \(pngPath)")
+			return
+		}
+
+		let pageSize = CGSize(width: CGFloat(cgImage.width), height: CGFloat(cgImage.height))
+		let result = try await documentBlocks(from: cgImage)
+		let processed = postProcessBlocks(result.blocks, pageSize: pageSize)
+
+		let paragraphs = processed.compactMap { block -> String? in
+			if case .paragraph(let paragraph) = block.kind {
+				return paragraph.text.trimmingCharacters(in: .whitespacesAndNewlines)
+			}
+			return nil
+		}
+
+
+
+		let hasAddress = paragraphs.contains { text in
+			text.contains("CC Inuspherese GmbH") && text.contains("Tel. Nr. 0677 64564459")
+		}
+		let hasGreeting = paragraphs.contains { text in
+			text == "Sehr geehrte/r Patient/in, (m/w/d)"
+		}
+		let hasMedicalParagraph = paragraphs.contains { text in
+			text.contains("Aufgrund einer medizinischen Sondersituation") && text.contains("Nebenwirkungen der Therapie 24 Stunden vor der Behandlung vorgeschrieben.")
+		}
+		let hasHeading = paragraphs.contains { text in
+			text.contains("Verfahrensweise: Die INUSpherese®") && text.contains("Die %uale Entlastung ist individuell.")
+		}
+
+		#expect(hasAddress, "Expected merged address paragraph")
+		#expect(hasGreeting, "Expected greeting line to stay separate")
+		#expect(hasMedicalParagraph, "Expected medical paragraph to remain grouped")
+		#expect(hasHeading, "Expected merged heading paragraph")
+		#else
+		#expect(true, "Vision not available; skipping paragraph merge test")
 		#endif
 	}
 	

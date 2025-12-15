@@ -44,7 +44,9 @@ public struct DocumentBlockMarkdownRenderer {
 			}
 		}
 		
-		let fragments = orderedBlocks.map { block -> String in
+		let mergedBlocks = mergeParagraphContinuations(orderedBlocks, pageBounds: pageBounds)
+		
+		let fragments = mergedBlocks.map { block -> String in
 			switch block.kind {
 			case .paragraph(let paragraph):
 				return format(paragraph)
@@ -154,6 +156,42 @@ public struct DocumentBlockMarkdownRenderer {
 			width: rect.width / pageBounds.width,
 			height: rect.height / pageBounds.height
 		)
+	}
+	
+	private static func mergeParagraphContinuations(_ blocks: [DocumentBlock], pageBounds: CGRect) -> [DocumentBlock] {
+		guard !blocks.isEmpty else { return blocks }
+		var result: [DocumentBlock] = []
+		let maxLeftDelta = max(pageBounds.width * 0.02, 8)
+		
+		for block in blocks {
+			guard
+				case .paragraph(let currentParagraph) = block.kind,
+				let last = result.last,
+				case .paragraph(let previousParagraph) = last.kind
+			else {
+				result.append(block)
+				continue
+			}
+			
+			let verticalGap = block.bounds.minY - last.bounds.maxY
+			let avgHeight = max((block.bounds.height + last.bounds.height) / 2, 1)
+			let maxGap = max(avgHeight * 0.8, 6)
+			let leftDelta = abs(block.bounds.minX - last.bounds.minX)
+			
+			let isContinuation = verticalGap >= -4 && verticalGap <= maxGap && leftDelta <= maxLeftDelta
+			
+			if isContinuation {
+				let combinedLines = previousParagraph.lines + currentParagraph.lines
+				let combinedText = combinedLines.map(\.text).joined(separator: "\n")
+				let combinedBounds = last.bounds.union(block.bounds)
+				let merged = DocumentBlock(bounds: combinedBounds, kind: .paragraph(.init(text: combinedText, lines: combinedLines)))
+				result[result.count - 1] = merged
+			} else {
+				result.append(block)
+			}
+		}
+		
+		return result
 	}
 	
 	private static func isInReadingOrder(_ lhs: CGRect, _ rhs: CGRect, pageBounds: CGRect) -> Bool {

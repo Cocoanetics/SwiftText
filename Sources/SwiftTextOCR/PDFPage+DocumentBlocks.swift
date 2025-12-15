@@ -31,11 +31,11 @@ public enum DocumentScannerError: Error, CustomStringConvertible {
 
 #if canImport(Vision)
 extension PDFPage {
-	public func documentBlocks(dpi: CGFloat = 300) async throws -> [DocumentBlock] {
-		return try await documentBlocksWithImages(dpi: dpi).blocks
+	public func documentBlocks(dpi: CGFloat = 300, applyPostProcessing: Bool = true) async throws -> [DocumentBlock] {
+		return try await documentBlocksWithImages(dpi: dpi, applyPostProcessing: applyPostProcessing).blocks
 	}
 	
-	public func documentBlocksWithImages(dpi: CGFloat = 300) async throws -> (blocks: [DocumentBlock], images: [DocumentImage]) {
+	public func documentBlocksWithImages(dpi: CGFloat = 300, applyPostProcessing: Bool = true) async throws -> (blocks: [DocumentBlock], images: [DocumentImage]) {
 		guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, *) else {
 			throw DocumentScannerError.visionUnavailable
 		}
@@ -49,7 +49,7 @@ extension PDFPage {
 		}
 		
 		let extractor = DocumentBlockExtractor(image: cgImage, pageSize: pageSize, allowStandaloneSupplementation: true)
-		return try extractor.extractBlocksWithImages(from: document)
+		return try extractor.extractBlocksWithImages(from: document, applyPostProcessing: applyPostProcessing)
 	}
 	
 	/// Detects rectangular regions on the rendered page. Coordinates are returned in page space (origin at the top-left).
@@ -62,11 +62,11 @@ extension PDFPage {
 	}
 }
 
-public func documentBlocks(from cgImage: CGImage) async throws -> (blocks: [DocumentBlock], images: [DocumentImage]) {
-	guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, *) else {
-		throw DocumentScannerError.visionUnavailable
-	}
-	let pageSize = CGSize(width: CGFloat(cgImage.width), height: CGFloat(cgImage.height))
+	public func documentBlocks(from cgImage: CGImage, applyPostProcessing: Bool = true) async throws -> (blocks: [DocumentBlock], images: [DocumentImage]) {
+		guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, *) else {
+			throw DocumentScannerError.visionUnavailable
+		}
+		let pageSize = CGSize(width: CGFloat(cgImage.width), height: CGFloat(cgImage.height))
 	let recognizeRequest = RecognizeDocumentsRequest()
 	let observations = try await recognizeRequest.perform(on: cgImage, orientation: nil)
 	
@@ -75,7 +75,7 @@ public func documentBlocks(from cgImage: CGImage) async throws -> (blocks: [Docu
 	}
 	
 	let extractor = DocumentBlockExtractor(image: cgImage, pageSize: pageSize)
-	return try extractor.extractBlocksWithImages(from: document)
+	return try extractor.extractBlocksWithImages(from: document, applyPostProcessing: applyPostProcessing)
 }
 
 /// Detects rectangular regions within a CGImage. Coordinates are returned in image space (origin at the top-left).
@@ -107,7 +107,7 @@ struct DocumentBlockExtractor {
 		self.allowStandaloneSupplementation = allowStandaloneSupplementation
 	}
 	
-	func extractBlocks(from container: DocumentObservation.Container) throws -> [DocumentBlock] {
+	func extractBlocks(from container: DocumentObservation.Container, applyPostProcessing: Bool = true) throws -> [DocumentBlock] {
 		let ocrLines = allowStandaloneSupplementation ? recognizeTextLines() : []
 		var usedOCRLineIDs = Set<Int>()
 		var usedOCRTexts = Set<String>()
@@ -122,11 +122,11 @@ struct DocumentBlockExtractor {
 		}
 		
 		structuredBlocks.append(contentsOf: imageResult.blocks)
-		let deduped = deduplicatedBlocks(structuredBlocks)
-		return deduped.sorted(by: isInReadingOrder(_:_:))
+		let ordered = structuredBlocks.sorted { SwiftTextOCR.isInReadingOrder($0, $1, pageSize: pageSize) }
+		return applyPostProcessing ? postProcessBlocks(ordered, pageSize: pageSize) : ordered
 	}
 	
-	func extractBlocksWithImages(from container: DocumentObservation.Container) throws -> (blocks: [DocumentBlock], images: [DocumentImage]) {
+	func extractBlocksWithImages(from container: DocumentObservation.Container, applyPostProcessing: Bool = true) throws -> (blocks: [DocumentBlock], images: [DocumentImage]) {
 		let ocrLines = allowStandaloneSupplementation ? recognizeTextLines() : []
 		var usedOCRLineIDs = Set<Int>()
 		var usedOCRTexts = Set<String>()
@@ -141,9 +141,9 @@ struct DocumentBlockExtractor {
 		}
 		
 		structuredBlocks.append(contentsOf: imageResult.blocks)
-		let deduped = deduplicatedBlocks(structuredBlocks)
-		let sorted = deduped.sorted(by: isInReadingOrder(_:_:))
-		return (sorted, imageResult.images)
+		let ordered = structuredBlocks.sorted { SwiftTextOCR.isInReadingOrder($0, $1, pageSize: pageSize) }
+		let processed = applyPostProcessing ? postProcessBlocks(ordered, pageSize: pageSize) : ordered
+		return (processed, imageResult.images)
 	}
 	
 	private func gatherStructuredBlocks(from container: DocumentObservation.Container, ocrLines: [OCRLine], usedOCRLineIDs: inout Set<Int>, usedOCRTexts: inout Set<String>) -> [DocumentBlock] {
@@ -637,6 +637,219 @@ private func deduplicatedBlocks(_ blocks: [DocumentBlock]) -> [DocumentBlock] {
 	}
 	
 	return result
+}
+
+private func mergeAdjacentParagraphs(_ blocks: [DocumentBlock], pageSize: CGSize) -> [DocumentBlock] {
+	guard !blocks.isEmpty else { return blocks }
+	
+	var result = [DocumentBlock]()
+	let maxLeftDelta = max(pageSize.width * 0.04, 14)
+	let debug = ProcessInfo.processInfo.environment["SWIFTTEXT_DEBUG_MERGE"] == "1"
+	let debugRects = ProcessInfo.processInfo.environment["SWIFTTEXT_DEBUG_RECT"] == "1"
+	if debug {
+		print("DEBUG merge start: \(blocks.count) blocks")
+	}
+	
+	func logParagraph(_ paragraph: DocumentBlock.Paragraph, bounds: CGRect, prefix: String) {
+		guard debugRects else { return }
+		if paragraph.text.contains("Filters von krankhaften Faktoren entlastet") ||
+			paragraph.text.contains("Die %uale Entlastung ist") {
+			let rectString = String(format: "(x:%.1f, y:%.1f, w:%.1f, h:%.1f)", bounds.minX, bounds.minY, bounds.width, bounds.height)
+			print("DEBUG rect \(prefix): \(rectString) lines=\(paragraph.lines.count)")
+			for (idx, line) in paragraph.lines.enumerated() {
+				let r = line.bounds
+				let s = String(format: "(x:%.1f, y:%.1f, w:%.1f, h:%.1f)", r.minX, r.minY, r.width, r.height)
+				print("  line \(idx): \(s) text=\"\(line.text)\"")
+			}
+		}
+	}
+	
+	for block in blocks {
+		guard
+			case .paragraph(let currentParagraph) = block.kind,
+			let last = result.last,
+			case .paragraph(let previousParagraph) = last.kind
+		else {
+			result.append(block)
+			if case .paragraph(let para) = block.kind {
+				logParagraph(para, bounds: block.bounds, prefix: "initial")
+			}
+			continue
+		}
+		
+		let verticalGap = block.bounds.minY - last.bounds.maxY
+		let lastLine = previousParagraph.lines.last
+		let firstLine = currentParagraph.lines.first
+		
+		let currentLineHeight = firstLine?.bounds.height ?? block.bounds.height
+		let baselineHeight = currentLineHeight
+		// Allow merges when the gap is at most ~1.5x the lower line height (capped with a modest buffer).
+		let allowedGap = max(min(baselineHeight * 1.5, baselineHeight + 20), 6)
+		let leftDelta = abs(block.bounds.minX - last.bounds.minX)
+		
+		let lineGap: CGFloat
+		if let lastLine, let firstLine {
+			lineGap = firstLine.bounds.minY - lastLine.bounds.maxY
+		} else {
+			lineGap = verticalGap
+		}
+		
+		if shouldPreserveParagraphBoundary(previous: previousParagraph, current: currentParagraph) {
+			if debug {
+				print("DEBUG preserved boundary due to heading check")
+			}
+			result.append(block)
+			continue
+		}
+
+		let isContinuation = (lineGap >= -6 && lineGap <= allowedGap && leftDelta <= maxLeftDelta)
+		
+		if isContinuation {
+			let combinedLines = previousParagraph.lines + currentParagraph.lines
+			let combinedText = combinedLines.map(\.text).joined(separator: "\n")
+			let combinedBounds = last.bounds.union(block.bounds)
+			let merged = DocumentBlock(bounds: combinedBounds, kind: .paragraph(.init(text: combinedText, lines: combinedLines)))
+			result[result.count - 1] = merged
+			if debug {
+				print("DEBUG merged paragraphs gap=\(lineGap), allowed=\(allowedGap), leftDelta=\(leftDelta)")
+			}
+			logParagraph(previousParagraph, bounds: last.bounds, prefix: "pre-merge")
+			logParagraph(currentParagraph, bounds: block.bounds, prefix: "merged-in")
+			if case .paragraph(let para) = merged.kind {
+				logParagraph(para, bounds: merged.bounds, prefix: "merged-result")
+			}
+		} else {
+			if debug {
+				print("DEBUG kept separate gap=\(lineGap), allowed=\(allowedGap), leftDelta=\(leftDelta) text=\"\(currentParagraph.text.prefix(40))\"")
+			}
+			result.append(block)
+			logParagraph(currentParagraph, bounds: block.bounds, prefix: "kept")
+		}
+	}
+	
+	if debug {
+		let paragraphs = result.enumerated().compactMap { index, block -> String? in
+			if case .paragraph(let paragraph) = block.kind {
+				let preview = paragraph.text.prefix(80)
+				return "#\(index) \(paragraph.lines.count) lines @ y:\(block.bounds.minY.rounded()) \"\(preview)\""
+			}
+			return nil
+		}
+		print("DEBUG merge end paragraphs:")
+		paragraphs.forEach { print($0) }
+	}
+	
+	return result
+}
+
+private func splitParagraphsWithLargeInternalGaps(_ blocks: [DocumentBlock]) -> [DocumentBlock] {
+	guard !blocks.isEmpty else { return blocks }
+	let gapMultiplier: CGFloat = 0.9
+
+	var result = [DocumentBlock]()
+
+	for block in blocks {
+		switch block.kind {
+		case .paragraph:
+			result.append(contentsOf: splitParagraph(block, gapMultiplier: gapMultiplier))
+		default:
+			result.append(block)
+		}
+	}
+
+	return result
+}
+
+private func splitParagraph(_ block: DocumentBlock, gapMultiplier: CGFloat) -> [DocumentBlock] {
+	guard case .paragraph(let paragraph) = block.kind else { return [block] }
+	let lines = paragraph.lines
+	guard lines.count > 1 else { return [block] }
+
+	var segments = [[DocumentBlock.TextLine]]()
+	var currentSegment = [DocumentBlock.TextLine]()
+
+	for line in lines {
+		if let previous = currentSegment.last {
+			let isAtSegmentStart = currentSegment.count == 1
+			let shouldSplitNow = isAtSegmentStart && shouldSplit(after: previous, before: line, multiplier: gapMultiplier)
+			if shouldSplitNow {
+				segments.append(currentSegment)
+				currentSegment = []
+			}
+		}
+
+		currentSegment.append(line)
+	}
+
+	if !currentSegment.isEmpty {
+		segments.append(currentSegment)
+	}
+
+	if segments.count <= 1 {
+		return [block]
+	}
+
+	return segments.map { segment -> DocumentBlock in
+		let bounds = segment.reduce(into: CGRect.null) { partial, textLine in
+			partial = partial.union(textLine.bounds)
+		}
+		let normalizedBounds = bounds.isNull ? segment.first?.bounds ?? .zero : bounds
+		let text = segment.map(\.text).joined(separator: "\n")
+		return DocumentBlock(bounds: normalizedBounds, kind: .paragraph(.init(text: text, lines: segment)))
+	}
+}
+
+private func shouldSplit(after previous: DocumentBlock.TextLine, before current: DocumentBlock.TextLine, multiplier: CGFloat) -> Bool {
+	let gap = current.bounds.minY - previous.bounds.maxY
+	guard gap > 0 else { return false }
+	let lineHeight = max(previous.bounds.height, current.bounds.height)
+	let widthRatio = previous.bounds.width / max(current.bounds.width, 1)
+	let isNarrowIntro = widthRatio < 0.75
+	return gap > lineHeight * multiplier && isNarrowIntro
+}
+
+private func shouldPreserveParagraphBoundary(previous: DocumentBlock.Paragraph, current: DocumentBlock.Paragraph) -> Bool {
+	let headings = [previous.text, current.text]
+	for candidate in headings {
+		let trimmed = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+		if isHeadingStyle(trimmed) {
+			return true
+		}
+	}
+	return false
+}
+
+private func isHeadingStyle(_ text: String) -> Bool {
+	let firstLine = text.components(separatedBy: .newlines).first ?? text
+	let pattern = #"^[A-ZÄÖÜ][^:\n]{0,30}:"# 
+	return firstLine.range(of: pattern, options: .regularExpression) != nil
+}
+
+public func postProcessBlocks(_ blocks: [DocumentBlock], pageSize: CGSize) -> [DocumentBlock] {
+	let ordered = blocks.sorted { isInReadingOrder($0, $1, pageSize: pageSize) }
+	let merged = mergeAdjacentParagraphs(ordered, pageSize: pageSize)
+	let split = splitParagraphsWithLargeInternalGaps(merged)
+	let deduped = deduplicatedBlocks(split)
+	return deduped.sorted { isInReadingOrder($0, $1, pageSize: pageSize) }
+}
+
+private func isInReadingOrder(_ lhs: DocumentBlock, _ rhs: DocumentBlock, pageSize: CGSize) -> Bool {
+	let page = CGRect(origin: .zero, size: pageSize)
+	return isInReadingOrder(lhs.bounds, rhs.bounds, page: page)
+}
+
+private func isInReadingOrder(_ lhs: CGRect, _ rhs: CGRect, page: CGRect) -> Bool {
+	let lhsNormalized = normalize(lhs, in: page)
+	let rhsNormalized = normalize(rhs, in: page)
+	
+	let verticalDelta = lhsNormalized.minY - rhsNormalized.minY
+	let tolerance: CGFloat = 0.01
+	
+	if abs(verticalDelta) > tolerance {
+		return verticalDelta < 0
+	}
+	
+	return lhsNormalized.minX < rhsNormalized.minX
 }
 
 @available(iOS 18.0, tvOS 18.0, macOS 15.0, *)

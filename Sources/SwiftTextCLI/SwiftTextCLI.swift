@@ -22,7 +22,7 @@ struct SwiftTextCLI: AsyncParsableCommand {
 		commandName: "swifttext",
 		abstract: "Extract text from PDF or image sources.",
 		version: "1.0",
-		subcommands: [OCR.self],
+		subcommands: [OCR.self, Overlay.self],
 		defaultSubcommand: OCR.self
 	)
 }
@@ -196,17 +196,6 @@ struct OCR: AsyncParsableCommand {
 		"\(rect.minX.rounded())-\(rect.minY.rounded())-\(rect.width.rounded())-\(rect.height.rounded())"
 	}
 	
-	private func resolvedURL(from path: String) -> URL {
-		let expanded = (path as NSString).expandingTildeInPath
-		
-		if expanded.hasPrefix("/") {
-			return URL(fileURLWithPath: expanded)
-		} else {
-			let currentDirectory = FileManager.default.currentDirectoryPath
-			return URL(fileURLWithPath: currentDirectory).appendingPathComponent(expanded)
-		}
-	}
-	
 	private func writeOutputIfNeeded(_ contents: String) throws {
 		if let outputPath {
 			let expanded = (outputPath as NSString).expandingTildeInPath
@@ -225,6 +214,134 @@ struct OCR: AsyncParsableCommand {
 			let bounds = line.fragments.reduce(line.fragments.first?.bounds ?? .zero) { $0.union($1.bounds) }
 			return DocumentBlock.TextLine(text: line.combinedText, bounds: bounds)
 		}
+	}
+}
+
+@available(macOS 10.15, macCatalyst 13, iOS 13, tvOS 13, watchOS 6, *)
+struct Overlay: AsyncParsableCommand {
+	static let configuration = CommandConfiguration(
+		commandName: "overlay",
+		abstract: "Render a visual overlay of detected structure onto the source PDF or image."
+	)
+	
+	@Argument(help: "Path to the PDF or image file.")
+	var path: String
+	
+	@Option(name: .shortAndLong, help: "Write overlay to this path. Defaults to adding -overlay before the extension.")
+	var outputPath: String?
+	
+	@Option(name: .long, help: "DPI used when rendering PDF pages.")
+	var dpi: Double = 300
+	
+	func run() async throws {
+		let inputURL = resolvedURL(from: path)
+		guard FileManager.default.fileExists(atPath: inputURL.path) else {
+			throw ValidationError("File not found: \(inputURL.path)")
+		}
+		
+		let ext = inputURL.pathExtension.lowercased()
+		if ext == "pdf" {
+			let outputURL = resolvedOutputURL(for: inputURL, explicit: outputPath, defaultExtension: "pdf")
+			try await renderPDFOverlay(inputURL: inputURL, outputURL: outputURL)
+			print(outputURL.path)
+		} else if ["png", "jpg", "jpeg", "heic", "tif", "tiff"].contains(ext) {
+			let outputURL = resolvedOutputURL(for: inputURL, explicit: outputPath, defaultExtension: ext)
+			try await renderImageOverlay(inputURL: inputURL, outputURL: outputURL)
+			print(outputURL.path)
+		} else {
+			throw ValidationError("Unsupported file type for overlay: .\(ext)")
+		}
+	}
+	
+	private func renderImageOverlay(inputURL: URL, outputURL: URL) async throws {
+		guard
+			let source = CGImageSourceCreateWithURL(inputURL as CFURL, nil),
+			let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil)
+		else {
+			throw ValidationError("Could not decode image: \(inputURL.path)")
+		}
+		
+		let pageSize = CGSize(width: CGFloat(cgImage.width), height: CGFloat(cgImage.height))
+		
+		guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, *) else {
+			throw ValidationError("Vision document segmentation is unavailable on this platform.")
+		}
+		
+			let result = try await documentBlocks(from: cgImage, applyPostProcessing: false)
+			let textLines = cgImage.textLines(imageSize: pageSize)
+			let rectangles = try detectedRectangles(from: cgImage)
+			
+			let overlayImage = try OverlayRenderer.overlayImage(
+				baseImage: cgImage,
+				pageSize: pageSize,
+				blocks: result.blocks,
+				lines: textLines,
+				rectangles: rectangles
+			)
+			
+			try OverlayRenderer.writeImage(overlayImage, to: outputURL, suggestedExtension: inputURL.pathExtension)
+	}
+	
+	private func renderPDFOverlay(inputURL: URL, outputURL: URL) async throws {
+		guard let document = PDFDocument(url: inputURL) else {
+			throw ValidationError("Could not open PDF file: \(inputURL.path)")
+		}
+		
+		guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, *) else {
+			throw ValidationError("Vision document segmentation is unavailable on this platform.")
+		}
+		
+		let pdfContext = try OverlayRenderer.beginPDFContext(at: outputURL)
+		
+		for pageIndex in 0..<document.pageCount {
+			guard let page = document.page(at: pageIndex) else { continue }
+			
+			let (blocks, _) = try await page.documentBlocksWithImages(dpi: dpi, applyPostProcessing: false)
+			let textLines = page.textLines()
+			let rectangles = try page.detectedRectangles(dpi: dpi)
+			let (renderedPage, renderedSize) = try page.renderedPageImage(dpi: dpi)
+			
+			let mergedBlocks = postProcessBlocks(blocks, pageSize: renderedSize)
+			
+			let overlay = try OverlayRenderer.overlayImage(
+				baseImage: renderedPage,
+				pageSize: renderedSize,
+				blocks: mergedBlocks,
+				lines: textLines,
+				rectangles: rectangles
+			)
+			
+			let mediaBox = page.bounds(for: .mediaBox)
+			OverlayRenderer.drawPage(
+				overlayImage: overlay,
+				into: pdfContext,
+				mediaBox: mediaBox
+			)
+		}
+		
+		pdfContext.closePDF()
+	}
+	
+	private func resolvedOutputURL(for input: URL, explicit: String?, defaultExtension: String) -> URL {
+		if let explicit {
+			let expanded = (explicit as NSString).expandingTildeInPath
+			return URL(fileURLWithPath: expanded)
+		}
+		
+		let base = input.deletingPathExtension()
+		let filename = base.lastPathComponent + "-overlay"
+		return base.deletingLastPathComponent().appendingPathComponent(filename).appendingPathExtension(defaultExtension)
+	}
+}
+
+fileprivate func resolvedURL(from path: String) -> URL {
+	let expanded = (path as NSString).expandingTildeInPath
+	
+	if expanded.hasPrefix("/") {
+		return URL(fileURLWithPath: expanded)
+	} else {
+		let currentDirectory = FileManager.default.currentDirectoryPath
+		return URL(fileURLWithPath: currentDirectory).appendingPathComponent(expanded)
 	}
 }
 

@@ -15,7 +15,7 @@ extension PDFPage
 {
 	/// Renders the PDF page into a bitmap image at the specified DPI and returns the created CGImage with the page's logical size.
 	@available(iOS 13.0, tvOS 13.0, macOS 10.15, *)
-	func renderedPageImage(dpi: CGFloat = 300) throws -> (CGImage, CGSize)
+	public func renderedPageImage(dpi: CGFloat = 300) throws -> (CGImage, CGSize)
 	{
 		let pageBounds = self.bounds(for: .mediaBox)
 		let scale = dpi / 72.0 // PDF default resolution is 72 DPI
@@ -53,7 +53,7 @@ extension PDFPage
 	 - Discussion:
 	   This method first attempts to extract text using the PDFKit text selection mechanism. If no selectable text is found, it falls back to OCR using Apple's Vision framework.
 	 */
-	func textLines() -> [TextLine]
+	public func textLines() -> [TextLine]
 	{
 		// Get the overall page bounds so we know its height
 		let pageBounds = self.bounds(for: .mediaBox)
