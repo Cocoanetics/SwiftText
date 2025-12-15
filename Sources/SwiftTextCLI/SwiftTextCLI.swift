@@ -9,7 +9,7 @@ import ArgumentParser
 import Foundation
 import ImageIO
 import PDFKit
-import SwiftTextPDF
+import SwiftTextOCR
 #if canImport(Vision)
 import Vision
 #endif
@@ -21,7 +21,17 @@ struct SwiftTextCLI: AsyncParsableCommand {
 	static let configuration = CommandConfiguration(
 		commandName: "swifttext",
 		abstract: "Extract text from PDF or image sources.",
-		version: "1.0"
+		version: "1.0",
+		subcommands: [OCR.self],
+		defaultSubcommand: OCR.self
+	)
+}
+
+@available(macOS 10.15, macCatalyst 13, iOS 13, tvOS 13, watchOS 6, *)
+struct OCR: AsyncParsableCommand {
+	static let configuration = CommandConfiguration(
+		commandName: "ocr",
+		abstract: "Extract text (or Markdown when segmented) from PDFs or images."
 	)
 	
 	@Argument(help: "Path to the PDF or image file.")
@@ -72,12 +82,12 @@ struct SwiftTextCLI: AsyncParsableCommand {
 			return output
 		}
 		
+		let textLines = pdfDocument.textLines()
 		if lines {
-			let textLines = pdfDocument.stringsFromLines
-			return textLines.joined(separator: "\n")
+			return textLines.map(\.combinedText).joined(separator: "\n")
 		}
 		
-		return pdfDocument.extractText()
+		return textLines.string()
 	}
 	
 	private func processImage(at url: URL) async throws -> String {
@@ -105,15 +115,12 @@ struct SwiftTextCLI: AsyncParsableCommand {
 		}
 		
 		// Non-markdown: fallback to OCR lines
-		guard #available(iOS 13.0, tvOS 13.0, macOS 10.15, *) else {
-			throw ValidationError("OCR is unavailable on this platform.")
-		}
-		let textLines = cgImage.stringsFromLines(imageSize: pageSize)
+		let textLines = cgImage.textLines(imageSize: pageSize)
 		if lines {
-			return textLines.joined(separator: "\n")
+			return textLines.map(\.combinedText).joined(separator: "\n")
 		}
 		
-		return textLines.joined(separator: "\n")
+		return textLines.string()
 	}
 	
 	private func extractDocumentBlocks(from pdfDocument: PDFDocument) async throws -> ([DocumentBlock], ImageLookup) {

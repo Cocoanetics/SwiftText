@@ -5,8 +5,8 @@ let package = Package(
 	name: "SwiftText",
 	products: [
 		.library(
-			name: "SwiftTextPDF",
-			targets: ["SwiftTextPDF"]
+			name: "SwiftTextOCR",
+			targets: ["SwiftTextOCR"]
 		),
 		.executable(
 			name: "swifttext",
@@ -18,21 +18,21 @@ let package = Package(
 	],
 	targets: [
 		.target(
-			name: "SwiftTextPDF",
-			path: "Sources/SwiftTextPDF"
+			name: "SwiftTextOCR",
+			path: "Sources/SwiftTextOCR"
 		),
 		.executableTarget(
 			name: "SwiftTextCLI",
 			dependencies: [
-				"SwiftTextPDF",
+				"SwiftTextOCR",
 				.product(name: "ArgumentParser", package: "swift-argument-parser"),
 			],
 			path: "Sources/SwiftTextCLI"
 		),
 		.testTarget(
-			name: "SwiftTextPDFTests",
-			dependencies: ["SwiftTextPDF"],
-			path: "Tests/SwiftTextPDFTests"
+			name: "SwiftTextOCRTests",
+			dependencies: ["SwiftTextOCR"],
+			path: "Tests/SwiftTextOCRTests"
 		),
 	]
 )

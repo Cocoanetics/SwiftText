@@ -8,7 +8,7 @@ SwiftText provides Swift libraries and command-line tools for extracting text fr
 
 ## Modules
 
-### SwiftTextPDF
+### SwiftTextOCR
 
 Extracts text from PDF documents using a combination of:
 - **PDFKit text selection** - For PDFs with embedded text layers
@@ -35,7 +35,7 @@ Then add the desired target to your dependencies:
 ```swift
 .target(
     name: "YourTarget",
-    dependencies: ["SwiftTextPDF"]
+    dependencies: ["SwiftTextOCR"]
 )
 ```
 
@@ -45,7 +45,7 @@ Then add the desired target to your dependencies:
 
 ```swift
 import PDFKit
-import SwiftTextPDF
+import SwiftTextOCR
 
 // Load a PDF document
 let pdfURL = URL(fileURLWithPath: "/path/to/document.pdf")
@@ -107,4 +107,3 @@ swifttext pdf ../folder/file.pdf
 ## License
 
 MIT License
-
