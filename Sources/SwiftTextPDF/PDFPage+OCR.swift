@@ -15,7 +15,7 @@ extension PDFPage
 {
 	/// Renders the PDF page into a bitmap image at the specified DPI and returns the created CGImage with the page's logical size.
 	@available(iOS 13.0, tvOS 13.0, macOS 10.15, *)
-	func renderedPageImage(dpi: CGFloat) throws -> (CGImage, CGSize)
+	func renderedPageImage(dpi: CGFloat = 300) throws -> (CGImage, CGSize)
 	{
 		let pageBounds = self.bounds(for: .mediaBox)
 		let scale = dpi / 72.0 // PDF default resolution is 72 DPI
@@ -62,7 +62,7 @@ extension PDFPage
 		let pageSelection = self.selection(for: pageBounds)
 		
 		// Attempt to extract text using PDFKit's selection mechanism
-		if let selectionsByLine = pageSelection?.selectionsByLine(), !selectionsByLine.isEmpty && false
+		if let selectionsByLine = pageSelection?.selectionsByLine(), !selectionsByLine.isEmpty
 		{
 			var fragments = [TextFragment]()
 			for lineSelection in selectionsByLine
@@ -127,40 +127,8 @@ extension PDFPage
 	@available(iOS 13.0, tvOS 13.0, macOS 10.15, *)
 	public func performOCR() throws -> [TextLine]?
 	{
-		// Define the desired resolution (e.g., 300 DPI)
-		let dpi: CGFloat = 300
 		let pageBounds = self.bounds(for: .mediaBox)
-		let scale = dpi / 72.0 // PDF default resolution is 72 DPI
-		let targetSize = CGSize(width: pageBounds.width * scale, height: pageBounds.height * scale)
-		
-		// Create a bitmap context with the desired resolution
-		let colorSpace = CGColorSpaceCreateDeviceRGB()
-		guard let context = CGContext(
-			data: nil,
-			width: Int(targetSize.width),
-			height: Int(targetSize.height),
-			bitsPerComponent: 8,
-			bytesPerRow: 0,
-			space: colorSpace,
-			bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-		) else {
-			throw OCRError.failedToCreateContext
-		}
-		
-		// Set the context's coordinate system to match the PDF's coordinate system
-		context.setFillColor(red: 1.0, green: 1.0, blue: 1.0, alpha: 1.0) // White background
-		context.fill(CGRect(origin: .zero, size: targetSize))
-		context.scaleBy(x: scale, y: scale)
-		
-		// Render the PDF page into the context
-		draw(with: .mediaBox, to: context)
-		
-		// Create a CGImage from the context
-		guard let cgImage = context.makeImage() else {
-			throw OCRError.failedToCreateCGImage
-		}
-		
-		// Use CGImage OCR functionality
+		let (cgImage, _) = try renderedPageImage()
 		return try cgImage.performOCR(imageSize: pageBounds.size)
 	}
 }

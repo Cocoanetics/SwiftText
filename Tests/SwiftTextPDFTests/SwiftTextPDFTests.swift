@@ -416,7 +416,6 @@ struct SwiftTextPDFTests {
 }
 
 #if canImport(Vision)
-@available(iOS 26.0, tvOS 26.0, macOS 26.0, *)
 private func renderOverlay(for page: PDFPage, blocks: [DocumentBlock], lines: [TextLine], rectangles: [CGRect] = [], dpi: CGFloat, to url: URL) throws {
 	let (pageImage, pageSize) = try page.renderedPageImage(dpi: dpi)
 	let pdfSize = page.bounds(for: .mediaBox).size

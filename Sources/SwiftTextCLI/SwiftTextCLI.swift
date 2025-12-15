@@ -60,6 +60,9 @@ struct SwiftTextCLI: AsyncParsableCommand {
 		}
 		
 		if markdown {
+			guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, *) else {
+				throw ValidationError("Vision document segmentation is unavailable on this platform.")
+			}
 			let (blocks, lookupStorage) = try await extractDocumentBlocks(from: pdfDocument)
 			var imageLookup = lookupStorage
 			let output = DocumentBlockMarkdownRenderer.markdown(from: blocks) { block in
@@ -98,10 +101,12 @@ struct SwiftTextCLI: AsyncParsableCommand {
 			} else {
 				throw ValidationError("Vision document segmentation is unavailable on this platform.")
 			}
-			return ""
 		}
 		
 		// Non-markdown: fallback to OCR lines
+		guard #available(iOS 13.0, tvOS 13.0, macOS 10.15, *) else {
+			throw ValidationError("OCR is unavailable on this platform.")
+		}
 		let textLines = cgImage.stringsFromLines(imageSize: pageSize)
 		if lines {
 			return textLines.joined(separator: "\n")
@@ -110,7 +115,6 @@ struct SwiftTextCLI: AsyncParsableCommand {
 		return textLines.joined(separator: "\n")
 	}
 	
-	@available(iOS 26.0, tvOS 26.0, macOS 26.0, *)
 	private func extractDocumentBlocks(from pdfDocument: PDFDocument) async throws -> ([DocumentBlock], ImageLookup) {
 		var allBlocks = [DocumentBlock]()
 		var lookupStorage: [String: [String]] = [:]
@@ -160,6 +164,9 @@ struct SwiftTextCLI: AsyncParsableCommand {
 	}
 	
 	private func writePNG(_ cgImage: CGImage, to url: URL) throws {
+		guard #available(iOS 14.0, tvOS 14.0, macOS 11.0, *) else {
+			throw ValidationError("PNG export requires a newer platform.")
+		}
 		guard let destination = CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil) else {
 			throw ValidationError("Unable to create image destination at \(url.path)")
 		}

@@ -31,13 +31,14 @@ public enum DocumentScannerError: Error, CustomStringConvertible {
 
 #if canImport(Vision)
 extension PDFPage {
-	@available(iOS 26.0, tvOS 26.0, macOS 26.0, *)
 	public func documentBlocks(dpi: CGFloat = 300) async throws -> [DocumentBlock] {
 		return try await documentBlocksWithImages(dpi: dpi).blocks
 	}
 	
-	@available(iOS 26.0, tvOS 26.0, macOS 26.0, *)
 	public func documentBlocksWithImages(dpi: CGFloat = 300) async throws -> (blocks: [DocumentBlock], images: [DocumentImage]) {
+		guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, *) else {
+			throw DocumentScannerError.visionUnavailable
+		}
 		let (cgImage, pageSize) = try renderedPageImage(dpi: dpi)
 		
 		let recognizeRequest = RecognizeDocumentsRequest()
@@ -52,15 +53,19 @@ extension PDFPage {
 	}
 	
 	/// Detects rectangular regions on the rendered page. Coordinates are returned in page space (origin at the top-left).
-	@available(iOS 26.0, tvOS 26.0, macOS 26.0, *)
 	public func detectedRectangles(dpi: CGFloat = 300) throws -> [CGRect] {
+		guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, *) else {
+			throw DocumentScannerError.visionUnavailable
+		}
 		let (cgImage, pageSize) = try renderedPageImage(dpi: dpi)
 		return try detectRectangles(in: cgImage, pageSize: pageSize)
 	}
 }
 
-@available(iOS 26.0, tvOS 26.0, macOS 26.0, *)
 public func documentBlocks(from cgImage: CGImage) async throws -> (blocks: [DocumentBlock], images: [DocumentImage]) {
+	guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, *) else {
+		throw DocumentScannerError.visionUnavailable
+	}
 	let pageSize = CGSize(width: CGFloat(cgImage.width), height: CGFloat(cgImage.height))
 	let recognizeRequest = RecognizeDocumentsRequest()
 	let observations = try await recognizeRequest.perform(on: cgImage, orientation: nil)
@@ -74,8 +79,10 @@ public func documentBlocks(from cgImage: CGImage) async throws -> (blocks: [Docu
 }
 
 /// Detects rectangular regions within a CGImage. Coordinates are returned in image space (origin at the top-left).
-@available(iOS 26.0, tvOS 26.0, macOS 26.0, *)
 public func detectedRectangles(from cgImage: CGImage) throws -> [CGRect] {
+	guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, *) else {
+		throw DocumentScannerError.visionUnavailable
+	}
 	let pageSize = CGSize(width: CGFloat(cgImage.width), height: CGFloat(cgImage.height))
 	return try detectRectangles(in: cgImage, pageSize: pageSize)
 }
@@ -364,18 +371,13 @@ struct DocumentBlockExtractor {
 			let rawBounds = line.fragments.reduce(line.fragments.first?.bounds ?? .zero) { partialResult, fragment in
 				partialResult.union(fragment.bounds)
 			}
-			let bounds: CGRect
-			if #available(iOS 18.0, tvOS 18.0, macOS 15.0, *) {
-				let normalized = Vision.NormalizedRect(
-					x: rawBounds.minX / pageSize.width,
-					y: rawBounds.minY / pageSize.height,
-					width: rawBounds.width / pageSize.width,
-					height: rawBounds.height / pageSize.height
-				)
-				bounds = normalized.toImageCoordinates(from: .fullImage, imageSize: pageSize, origin: .upperLeft)
-			} else {
-				bounds = rawBounds
-			}
+			let normalized = Vision.NormalizedRect(
+				x: rawBounds.minX / pageSize.width,
+				y: rawBounds.minY / pageSize.height,
+				width: rawBounds.width / pageSize.width,
+				height: rawBounds.height / pageSize.height
+			)
+			let bounds = normalized.toImageCoordinates(from: .fullImage, imageSize: pageSize, origin: .upperLeft)
 			return OCRLine(id: index, text: line.combinedText, bounds: bounds)
 		}.filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 		.sorted { lhs, rhs in
@@ -505,7 +507,6 @@ struct DocumentBlockExtractor {
 	}
 }
 
-@available(iOS 26.0, tvOS 26.0, macOS 26.0, *)
 private func detectRectangles(in cgImage: CGImage, pageSize: CGSize) throws -> [CGRect] {
 	let rectangleRequest = VNDetectRectanglesRequest()
 	rectangleRequest.maximumObservations = 24
@@ -535,14 +536,12 @@ private func detectRectangles(in cgImage: CGImage, pageSize: CGSize) throws -> [
 	}
 }
 
-@available(iOS 26.0, tvOS 26.0, macOS 26.0, *)
 private struct OCRLine {
 	let id: Int
 	let text: String
 	let bounds: CGRect
 }
 
-@available(iOS 26.0, tvOS 26.0, macOS 26.0, *)
 private func textSet(from blocks: [DocumentBlock]) -> Set<String> {
 	var texts = Set<String>()
 	for block in blocks {
@@ -569,7 +568,6 @@ private func textSet(from blocks: [DocumentBlock]) -> Set<String> {
 	return texts.filter { !$0.isEmpty }
 }
 
-@available(iOS 26.0, tvOS 26.0, macOS 26.0, *)
 private extension CGRect {
 	var center: CGPoint {
 		CGPoint(x: midX, y: midY)
@@ -586,7 +584,6 @@ private extension CGRect {
 	}
 }
 
-@available(iOS 26.0, tvOS 26.0, macOS 26.0, *)
 private func normalizedComparableText(_ text: String) -> String {
 	let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
 	let pattern = #"^[0-9]+[.)\s]+"#
@@ -607,7 +604,6 @@ private func convertNormalizedRect(_ rect: Vision.NormalizedRect, in pageSize: C
 	)
 }
 
-@available(iOS 26.0, tvOS 26.0, macOS 26.0, *)
 private func convertNormalizedBoundingBox(_ rect: CGRect, in pageSize: CGSize) -> CGRect {
 	return CGRect(
 		x: rect.minX * pageSize.width,
@@ -617,7 +613,6 @@ private func convertNormalizedBoundingBox(_ rect: CGRect, in pageSize: CGSize) -
 	)
 }
 
-@available(iOS 26.0, tvOS 26.0, macOS 26.0, *)
 private func overlapRatio(between first: CGRect, and second: CGRect) -> CGFloat {
 	let intersection = first.intersection(second)
 	guard !intersection.isNull && !intersection.isInfinite else {
