@@ -15,6 +15,7 @@ import Vision
 #endif
 import UniformTypeIdentifiers
 
+@available(macOS 10.15, macCatalyst 13, iOS 13, tvOS 13, watchOS 6, *)
 @main
 struct SwiftTextCLI: AsyncParsableCommand {
 	static let configuration = CommandConfiguration(
