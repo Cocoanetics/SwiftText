@@ -75,8 +75,12 @@ struct OCR: AsyncParsableCommand {
 				throw ValidationError("Vision document segmentation is unavailable on this platform.")
 			}
 			let (blocks, lookupStorage) = try await extractDocumentBlocks(from: pdfDocument)
+			let textLines = pdfDocument.textLines()
 			var imageLookup = lookupStorage
-			let output = DocumentBlockMarkdownRenderer.markdown(from: blocks) { block in
+			let output = DocumentBlockMarkdownRenderer.markdown(
+				from: blocks,
+				textLines: convertToDocumentBlockLines(textLines)
+			) { block in
 				imageLookup.pop(for: block)
 			}
 			return output
@@ -103,9 +107,13 @@ struct OCR: AsyncParsableCommand {
 		if markdown {
 			if #available(iOS 26.0, tvOS 26.0, macOS 26.0, *) {
 				let result = try await documentBlocks(from: cgImage)
+				let textLines = cgImage.textLines(imageSize: pageSize)
 				
 				var imageLookup = try saveImagesIfNeeded(images: result.images)
-				let output = DocumentBlockMarkdownRenderer.markdown(from: result.blocks) { block in
+				let output = DocumentBlockMarkdownRenderer.markdown(
+					from: result.blocks,
+					textLines: convertToDocumentBlockLines(textLines)
+				) { block in
 					imageLookup.pop(for: block)
 				}
 				return output
@@ -189,11 +197,13 @@ struct OCR: AsyncParsableCommand {
 	}
 	
 	private func resolvedURL(from path: String) -> URL {
-		if path.hasPrefix("/") {
-			return URL(fileURLWithPath: path)
+		let expanded = (path as NSString).expandingTildeInPath
+		
+		if expanded.hasPrefix("/") {
+			return URL(fileURLWithPath: expanded)
 		} else {
 			let currentDirectory = FileManager.default.currentDirectoryPath
-			return URL(fileURLWithPath: currentDirectory).appendingPathComponent(path)
+			return URL(fileURLWithPath: currentDirectory).appendingPathComponent(expanded)
 		}
 	}
 	
@@ -208,6 +218,13 @@ struct OCR: AsyncParsableCommand {
 		}
 		
 		print(contents)
+	}
+	
+	private func convertToDocumentBlockLines(_ lines: [TextLine]) -> [DocumentBlock.TextLine] {
+		lines.map { line in
+			let bounds = line.fragments.reduce(line.fragments.first?.bounds ?? .zero) { $0.union($1.bounds) }
+			return DocumentBlock.TextLine(text: line.combinedText, bounds: bounds)
+		}
 	}
 }
 
