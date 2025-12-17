@@ -383,6 +383,71 @@ struct SwiftTextOCRTests {
 		#endif
 	}
 	
+	@Test func testSemanticGroupingForTestPNG() async throws {
+		#if canImport(Vision)
+		guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, *) else {
+			return
+		}
+		
+		let pngPath = ("~/Downloads/test.png" as NSString).expandingTildeInPath
+		let pngURL = URL(fileURLWithPath: pngPath)
+		let fileExists = FileManager.default.fileExists(atPath: pngPath)
+		#expect(fileExists, "Expected PNG fixture at \(pngPath)")
+		guard fileExists else { return }
+		
+		guard
+			let source = CGImageSourceCreateWithURL(pngURL as CFURL, nil),
+			let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil)
+		else {
+			#expect(false, "Unable to decode PNG at \(pngPath)")
+			return
+		}
+		
+		let pageSize = CGSize(width: CGFloat(cgImage.width), height: CGFloat(cgImage.height))
+		let textLines = cgImage.textLines(imageSize: pageSize)
+		let semantics = try await documentSemantics(from: cgImage)
+		let groupedBlocks = TextLineSemanticComposer.composeBlocks(
+			from: textLines,
+			semantics: semantics,
+			layoutSize: pageSize
+		)
+		
+		let structure = groupedBlocks.compactMap { block -> String? in
+			guard case .paragraph(let paragraph) = block.kind else { return nil }
+			let inner = paragraph.lines.map { "    \($0.text)" }.joined(separator: "\n")
+			return "{\n\(inner)\n}"
+		}.joined(separator: "\n")
+		print("Semantic grouping structure:\n\(structure)")
+		
+		let sourceLines = textLines
+			.map { $0.combinedText.trimmingCharacters(in: .whitespacesAndNewlines) }
+			.filter { !$0.isEmpty }
+		let assignedLines = groupedBlocks.flatMap { block -> [String] in
+			switch block.kind {
+			case .paragraph(let paragraph):
+				return paragraph.lines.map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }
+			case .list(let list):
+				return list.items.flatMap { $0.lines.map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) } }
+			case .table(let table):
+				return table.rows.flatMap { row in
+					row.flatMap { cell in
+						cell.lines.map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }
+					}
+				}
+			case .image:
+				return []
+			}
+		}.filter { !$0.isEmpty }
+		
+		#expect(sourceLines.count == assignedLines.count, "All text lines should be assigned to semantic blocks")
+		let sourceSorted = sourceLines.sorted()
+		let assignedSorted = assignedLines.sorted()
+		#expect(sourceSorted == assignedSorted, "Expected semantic grouping to reuse every OCR text line")
+		#else
+		#expect(true, "Vision not available; skipping semantic grouping test")
+		#endif
+	}
+	
 	@Test func testTextLineAssembly() async throws {
 		// Test that fragments are correctly assembled into lines
 		let fragment1 = TextFragment(bounds: CGRect(x: 0, y: 0, width: 50, height: 12), string: "Hello")

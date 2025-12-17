@@ -74,16 +74,15 @@ struct OCR: AsyncParsableCommand {
 			guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, *) else {
 				throw ValidationError("Vision document segmentation is unavailable on this platform.")
 			}
-			let (blocks, lookupStorage) = try await extractDocumentBlocks(from: pdfDocument)
 			let textLines = pdfDocument.textLines()
+			let (blocks, lookupStorage) = try await semanticMarkdownBlocks(for: pdfDocument)
 			var imageLookup = lookupStorage
-			let output = DocumentBlockMarkdownRenderer.markdown(
+			return DocumentBlockMarkdownRenderer.markdown(
 				from: blocks,
 				textLines: convertToDocumentBlockLines(textLines)
 			) { block in
 				imageLookup.pop(for: block)
 			}
-			return output
 		}
 		
 		let textLines = pdfDocument.textLines()
@@ -106,17 +105,15 @@ struct OCR: AsyncParsableCommand {
 		
 		if markdown {
 			if #available(iOS 26.0, tvOS 26.0, macOS 26.0, *) {
-				let result = try await documentBlocks(from: cgImage)
 				let textLines = cgImage.textLines(imageSize: pageSize)
-				
-				var imageLookup = try saveImagesIfNeeded(images: result.images)
-				let output = DocumentBlockMarkdownRenderer.markdown(
-					from: result.blocks,
+				let (blocks, lookup) = try await semanticMarkdownBlocks(for: cgImage, pageSize: pageSize, textLines: textLines)
+				var imageLookup = lookup
+				return DocumentBlockMarkdownRenderer.markdown(
+					from: blocks,
 					textLines: convertToDocumentBlockLines(textLines)
 				) { block in
 					imageLookup.pop(for: block)
 				}
-				return output
 			} else {
 				throw ValidationError("Vision document segmentation is unavailable on this platform.")
 			}
@@ -214,6 +211,44 @@ struct OCR: AsyncParsableCommand {
 			let bounds = line.fragments.reduce(line.fragments.first?.bounds ?? .zero) { $0.union($1.bounds) }
 			return DocumentBlock.TextLine(text: line.combinedText, bounds: bounds)
 		}
+	}
+	
+	@available(iOS 26.0, tvOS 26.0, macOS 26.0, *)
+	private func semanticMarkdownBlocks(for document: PDFDocument) async throws -> ([DocumentBlock], ImageLookup) {
+		var combinedBlocks = [DocumentBlock]()
+		var lookupStorage: [String: [String]] = [:]
+		
+		for pageIndex in 0..<document.pageCount {
+			guard let page = document.page(at: pageIndex) else { continue }
+			let semantics = try await page.documentSemantics(dpi: 300)
+			let layoutSize = page.bounds(for: .mediaBox).size
+			let lines = page.textLines()
+			let grouped = TextLineSemanticComposer.composeBlocks(
+				from: lines,
+				semantics: semantics,
+				layoutSize: layoutSize
+			)
+			combinedBlocks.append(contentsOf: grouped)
+			
+			let saved = try saveImagesIfNeeded(images: semantics.images, pageIndex: pageIndex)
+			for (key, value) in saved.storage {
+				lookupStorage[key, default: []].append(contentsOf: value)
+			}
+		}
+		
+		return (combinedBlocks, ImageLookup(storage: lookupStorage))
+	}
+	
+	@available(iOS 26.0, tvOS 26.0, macOS 26.0, *)
+	private func semanticMarkdownBlocks(for cgImage: CGImage, pageSize: CGSize, textLines: [TextLine]) async throws -> ([DocumentBlock], ImageLookup) {
+		let semantics = try await documentSemantics(from: cgImage)
+		let grouped = TextLineSemanticComposer.composeBlocks(
+			from: textLines,
+			semantics: semantics,
+			layoutSize: pageSize
+		)
+		let lookup = try saveImagesIfNeeded(images: semantics.images)
+		return (grouped, lookup)
 	}
 }
 
