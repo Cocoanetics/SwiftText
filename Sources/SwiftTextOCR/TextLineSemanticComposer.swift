@@ -126,6 +126,7 @@ private func composeBlock(
 ) -> (block: DocumentBlock?, metadata: BlockMetadata?) {
 	let normalizedBounds = semanticBlock.normalizedBounds
 	let block: DocumentBlock
+	let metadataBounds: NormalizedRect
 	switch semanticBlock.block.kind {
 	case .paragraph:
 		let matched = consumeLines(
@@ -140,7 +141,15 @@ private func composeBlock(
 		let finalLines = makeDocumentLines(from: matched)
 		let text = finalLines.map(\.text).joined(separator: "\n")
 		let updated = DocumentBlock.Paragraph(text: text, lines: finalLines)
-		block = DocumentBlock(bounds: semanticBlock.block.bounds, kind: .paragraph(updated))
+		let resolvedBounds = unionRect(
+			matched.map(\.semanticBounds),
+			fallback: semanticBlock.block.bounds
+		)
+		block = DocumentBlock(bounds: resolvedBounds, kind: .paragraph(updated))
+		metadataBounds = unionNormalizedRect(
+			matched.map(\.normalizedBounds),
+			fallback: normalizedBounds
+		)
 		
 	case .list(let list):
 		var items = [DocumentBlock.List.Item]()
@@ -166,6 +175,7 @@ private func composeBlock(
 		}
 		let updated = DocumentBlock.List(marker: list.marker, items: items)
 		block = DocumentBlock(bounds: semanticBlock.block.bounds, kind: .list(updated))
+		metadataBounds = normalizedBounds
 		
 	case .table(let table):
 		var rows = [[DocumentBlock.Table.Cell]]()
@@ -196,12 +206,31 @@ private func composeBlock(
 		}
 		let updated = DocumentBlock.Table(rows: rows)
 		block = DocumentBlock(bounds: semanticBlock.block.bounds, kind: .table(updated))
+		metadataBounds = normalizedBounds
 		
 	case .image(let image):
 		block = DocumentBlock(bounds: semanticBlock.block.bounds, kind: .image(image))
+		metadataBounds = normalizedBounds
 	}
 	
-	return (block, BlockMetadata(normalizedBounds: normalizedBounds))
+	return (block, BlockMetadata(normalizedBounds: metadataBounds))
+}
+
+private func unionRect(_ rects: [CGRect], fallback: CGRect) -> CGRect {
+	let unioned = rects.reduce(into: CGRect.null) { partial, rect in
+		partial = partial.union(rect)
+	}
+	return unioned.isNull ? fallback : unioned
+}
+
+private func unionNormalizedRect(_ rects: [NormalizedRect], fallback: NormalizedRect) -> NormalizedRect {
+	guard var unioned = rects.first else {
+		return fallback
+	}
+	for rect in rects.dropFirst() {
+		unioned = unioned.union(rect)
+	}
+	return unioned
 }
 
 private func mergeParagraphBlocks(

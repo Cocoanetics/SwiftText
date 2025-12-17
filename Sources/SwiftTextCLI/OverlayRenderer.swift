@@ -40,9 +40,9 @@ enum OverlayRenderer {
 			context.translateBy(x: 0, y: pageSize.height)
 			context.scaleBy(x: 1, y: -1)
 
-			drawRectangles(rectangles, on: context)
-			drawBlocks(blocks, on: context)
 			drawLines(lines, on: context)
+			drawBlocks(blocks, on: context)
+			drawRectangles(rectangles, on: context)
 
 			context.restoreGState()
 		
@@ -122,7 +122,7 @@ private extension OverlayRenderer {
 			}
 			
 			context.setStrokeColor(color)
-			context.setLineWidth(2.0)
+			context.setLineWidth(2.5)
 			
 			let rect = block.bounds
 			context.stroke(rect)

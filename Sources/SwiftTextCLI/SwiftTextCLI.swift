@@ -268,6 +268,9 @@ struct Overlay: AsyncParsableCommand {
 	@Option(name: .long, help: "DPI used when rendering PDF pages.")
 	var dpi: Double = 300
 	
+	@Flag(name: .long, help: "Render raw Vision blocks instead of reconstructed semantic blocks.")
+	var raw: Bool = false
+	
 	func run() async throws {
 		let inputURL = resolvedURL(from: path)
 		guard FileManager.default.fileExists(atPath: inputURL.path) else {
@@ -302,14 +305,20 @@ struct Overlay: AsyncParsableCommand {
 			throw ValidationError("Vision document segmentation is unavailable on this platform.")
 		}
 		
-			let result = try await documentBlocks(from: cgImage, applyPostProcessing: false)
 			let textLines = cgImage.textLines(imageSize: pageSize)
-			let rectangles = try detectedRectangles(from: cgImage)
+			let rectangles = raw ? try detectedRectangles(from: cgImage) : []
+			let blocks: [DocumentBlock]
+			if raw {
+				let rawBlocks = try await documentBlocks(from: cgImage, applyPostProcessing: false).blocks
+				blocks = rawBlocks
+			} else {
+				blocks = try await reconstructedBlocks(for: cgImage, textLines: textLines)
+			}
 			
 			let overlayImage = try OverlayRenderer.overlayImage(
 				baseImage: cgImage,
 				pageSize: pageSize,
-				blocks: result.blocks,
+				blocks: blocks,
 				lines: textLines,
 				rectangles: rectangles
 			)
@@ -328,23 +337,33 @@ struct Overlay: AsyncParsableCommand {
 		
 		let pdfContext = try OverlayRenderer.beginPDFContext(at: outputURL)
 		
-		for pageIndex in 0..<document.pageCount {
-			guard let page = document.page(at: pageIndex) else { continue }
-			
-			let (blocks, _) = try await page.documentBlocksWithImages(dpi: dpi, applyPostProcessing: false)
-			let textLines = page.textLines()
-			let rectangles = try page.detectedRectangles(dpi: dpi)
-			let (renderedPage, renderedSize) = try page.renderedPageImage(dpi: dpi)
-			
-			let mergedBlocks = postProcessBlocks(blocks, pageSize: renderedSize)
-			
-			let overlay = try OverlayRenderer.overlayImage(
-				baseImage: renderedPage,
-				pageSize: renderedSize,
-				blocks: mergedBlocks,
-				lines: textLines,
-				rectangles: rectangles
-			)
+			for pageIndex in 0..<document.pageCount {
+				guard let page = document.page(at: pageIndex) else { continue }
+				
+				let rectangles = raw ? try page.detectedRectangles(dpi: dpi) : []
+				let (renderedPage, renderedSize) = try page.renderedPageImage(dpi: dpi)
+				let textLines: [TextLine]
+				if raw {
+					textLines = page.textLines()
+				} else {
+					textLines = renderedPage.textLines(imageSize: renderedSize)
+				}
+				
+				let blocks: [DocumentBlock]
+				if raw {
+					let rawBlocks = try await page.documentBlocksWithImages(dpi: dpi, applyPostProcessing: false).blocks
+					blocks = postProcessBlocks(rawBlocks, pageSize: renderedSize)
+				} else {
+					blocks = try await reconstructedBlocks(for: renderedPage, textLines: textLines)
+				}
+				
+				let overlay = try OverlayRenderer.overlayImage(
+					baseImage: renderedPage,
+					pageSize: renderedSize,
+					blocks: blocks,
+					lines: textLines,
+					rectangles: rectangles
+				)
 			
 			let mediaBox = page.bounds(for: .mediaBox)
 			OverlayRenderer.drawPage(
@@ -391,3 +410,18 @@ private struct ImageLookup {
 		return path
 	}
 }
+
+#if canImport(Vision)
+@available(iOS 26.0, tvOS 26.0, macOS 26.0, *)
+private extension Overlay {
+	func reconstructedBlocks(for image: CGImage, textLines: [TextLine]) async throws -> [DocumentBlock] {
+		let semantics = try await documentSemantics(from: image)
+		let layoutSize = CGSize(width: CGFloat(image.width), height: CGFloat(image.height))
+		return TextLineSemanticComposer.composeBlocks(
+			from: textLines,
+			semantics: semantics,
+			layoutSize: layoutSize
+		)
+	}
+}
+#endif
