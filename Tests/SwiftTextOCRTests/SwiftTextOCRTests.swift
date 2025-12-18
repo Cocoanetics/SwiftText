@@ -612,6 +612,43 @@ struct SwiftTextOCRTests {
 		#expect(horizontalLine?.combinedText == "Hello\tWorld")
 	}
 	
+	@Test func testMasterCardOCRFragmentSplitting() async throws {
+		#if canImport(Vision)
+		guard #available(iOS 26.0, tvOS 26.0, macOS 14.0, *) else { return }
+		
+		let pngPath = ("~/Desktop/mastercard_test.png" as NSString).expandingTildeInPath
+		let fileExists = FileManager.default.fileExists(atPath: pngPath)
+		#expect(fileExists, "Expected mastercard test image at \(pngPath)")
+		guard fileExists,
+			  let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: pngPath) as CFURL, nil),
+			  let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+			return
+		}
+		
+		let imageSize = CGSize(width: cgImage.width, height: cgImage.height)
+		guard let lines = try cgImage.performOCR(imageSize: imageSize), !lines.isEmpty else {
+			Issue.record("OCR did not return text lines for mastercard_test.png")
+			return
+		}
+		
+		guard let targetLine = lines.first(where: { $0.combinedText.contains("CRV*Action") }) else {
+			Issue.record("Unable to locate CRV*Action line in OCR output")
+			return
+		}
+		
+		print("Fragments for CRV*Action line:")
+		for fragment in targetLine.fragments {
+			print("  \"\(fragment.string)\" bounds: \(fragment.bounds)")
+		}
+		
+		let fragmentStrings = targetLine.fragments.map(\.string)
+		#expect(fragmentStrings.contains("28.10"), "Expected 28.10 to be a separate fragment: \(fragmentStrings)")
+		#expect(fragmentStrings.first == "27.10", "Expected the line to begin with 27.10, got \(fragmentStrings.first ?? "<none>")")
+		#else
+		#expect(true, "Vision not available; skipping OCR fragment splitting test")
+		#endif
+	}
+	
 	@Test func testTextLineString() async throws {
 		// Test conversion of TextLines to string
 		let line1 = TextLine(fragments: [TextFragment(bounds: CGRect(x: 0, y: 0, width: 100, height: 12), string: "First line")])
