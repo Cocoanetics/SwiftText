@@ -110,22 +110,42 @@ private extension OverlayRenderer {
 	static func drawBlocks(_ blocks: [DocumentBlock], on context: CGContext) {
 		for block in blocks {
 			let color: CGColor
+			let outlineWidth: CGFloat
 			switch block.kind {
 			case .paragraph:
 				color = CGColor(red: 1, green: 0, blue: 0, alpha: 0.8) // red
+				outlineWidth = 2.5
 			case .list:
 				color = CGColor(red: 1, green: 0.5, blue: 0, alpha: 0.8) // orange
+				outlineWidth = 2.5
 			case .table:
 				color = CGColor(red: 0.6, green: 0, blue: 0.8, alpha: 0.8) // purple
+				outlineWidth = 3.0
 			case .image:
 				color = CGColor(red: 1, green: 1, blue: 0, alpha: 0.8) // yellow
+				outlineWidth = 2.5
 			}
 			
 			context.setStrokeColor(color)
-			context.setLineWidth(2.5)
+			context.setLineWidth(outlineWidth)
 			
 			let rect = block.bounds
 			context.stroke(rect)
+			
+			if case .table(let table) = block.kind {
+				let shouldFlipCells = shouldFlipTableCells(table, tableBounds: rect)
+				context.saveGState()
+				context.setLineWidth(1.0)
+				for row in table.rows {
+					for cell in row {
+						let cellBounds = shouldFlipCells
+							? flipVertically(cell.bounds, within: rect)
+							: cell.bounds
+						context.stroke(cellBounds)
+					}
+				}
+				context.restoreGState()
+			}
 		}
 	}
 	
@@ -144,5 +164,28 @@ private extension OverlayRenderer {
 		context.restoreGState()
 	}
 	
+	static func shouldFlipTableCells(_ table: DocumentBlock.Table, tableBounds: CGRect) -> Bool {
+		guard let firstRow = table.rows.first else { return false }
+		let firstRowBounds = unionRect(for: firstRow)
+		guard !firstRowBounds.isNull else { return false }
+		let distanceToTop = abs(firstRowBounds.minY - tableBounds.minY)
+		let distanceToBottom = abs(firstRowBounds.minY - tableBounds.maxY)
+		return distanceToBottom < distanceToTop
+	}
+	
+	static func unionRect(for row: [DocumentBlock.Table.Cell]) -> CGRect {
+		row.reduce(into: CGRect.null) { partial, cell in
+			partial = partial.union(cell.bounds)
+		}
+	}
+	
+	static func flipVertically(_ rect: CGRect, within bounds: CGRect) -> CGRect {
+		CGRect(
+			x: rect.minX,
+			y: bounds.minY + (bounds.maxY - rect.maxY),
+			width: rect.width,
+			height: rect.height
+		)
+	}
 }
 #endif

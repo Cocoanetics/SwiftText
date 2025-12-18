@@ -190,8 +190,16 @@ private func composeBlock(
 					lineInfos: lineInfos,
 					assigned: &assignedLines
 				)
-				let finalLines = cellMatches.isEmpty ? cell.lines : makeDocumentLines(from: cellMatches)
-				let text = finalLines.map(\.text).joined(separator: "\n")
+				let matchedLines = makeDocumentLines(from: cellMatches)
+				var finalLines = cell.lines
+				if finalLines.isEmpty {
+					if !cell.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+						finalLines = [DocumentBlock.TextLine(text: cell.text, bounds: cell.bounds)]
+					} else {
+						finalLines = matchedLines
+					}
+				}
+				let text = cell.text.isEmpty ? finalLines.map(\.text).joined(separator: "\n") : cell.text
 				newRow.append(
 					DocumentBlock.Table.Cell(
 						rowRange: cell.rowRange,

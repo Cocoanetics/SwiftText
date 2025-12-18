@@ -79,13 +79,27 @@ public struct DocumentBlockMarkdownRenderer {
 	}
 	
 	private static func format(_ table: DocumentBlock.Table) -> String {
-		let rows = table.rows.map { row in
-			"| " + row.map { cell in
+		let columnCount = table.rows.map(\.count).max() ?? 0
+		guard columnCount > 0 else { return "" }
+		
+		let normalizedRows: [[String]] = table.rows.map { row in
+			let cells = row.map { cell -> String in
 				let text = cell.text.trimmingCharacters(in: .whitespacesAndNewlines)
 				return text.isEmpty ? " " : text.replacingOccurrences(of: "|", with: "\\|")
-			}.joined(separator: " | ") + " |"
+			}
+			if cells.count >= columnCount {
+				return cells
+			}
+			return cells + Array(repeating: " ", count: columnCount - cells.count)
 		}
-		return rows.joined(separator: "\n")
+		
+		let header = "| " + normalizedRows[0].joined(separator: " | ") + " |"
+		let separator = "| " + Array(repeating: "---", count: columnCount).joined(separator: " | ") + " |"
+		let body = normalizedRows.dropFirst().map { row in
+			"| " + row.joined(separator: " | ") + " |"
+		}
+		
+		return ([header, separator] + body).joined(separator: "\n")
 	}
 	
 	private static func formatImage(path: String?) -> String {

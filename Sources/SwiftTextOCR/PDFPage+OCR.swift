@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import ImageIO
 import PDFKit
 #if canImport(Vision)
 import Vision
@@ -55,48 +56,49 @@ extension PDFPage
 	 */
 	public func textLines() -> [TextLine]
 	{
-		// Get the overall page bounds so we know its height
-		let pageBounds = self.bounds(for: .mediaBox)
-		let pageHeight = pageBounds.height
-
-		let pageSelection = self.selection(for: pageBounds)
-		
-		// Attempt to extract text using PDFKit's selection mechanism
-		if let selectionsByLine = pageSelection?.selectionsByLine(), !selectionsByLine.isEmpty
+		if let selectionLines = textLinesFromSelections(), !selectionLines.isEmpty
 		{
-			var fragments = [TextFragment]()
-			for lineSelection in selectionsByLine
-			{
-				if let lineString = lineSelection.string
-				{
-					// Original PDFKit bounds (origin at bottom-left)
-					let originalBounds = lineSelection.bounds(for: self)
-					
-					// Flip y so top = 0, bottom = pageHeight
-					let flippedRect = CGRect(
-						x: originalBounds.minX,
-						y: pageHeight - originalBounds.maxY,
-						width: originalBounds.width,
-						height: originalBounds.height
-					)
-					
-					let fragment = TextFragment(bounds: flippedRect, string: lineString)
-					fragments.append(fragment)
-				}
-			}
-			
-			// Assemble fragments into logical lines
-			return fragments.assembledLines()
+			return selectionLines
 		}
 		
-		// Fallback to OCR if no text is available (iOS 13.0+, tvOS 13.0+, macOS 10.15+)
-		if #available(iOS 13.0, tvOS 13.0, macOS 10.15, *),
-		   let ocrTextLines = try? performOCR()
+		if let ocrLines = textLinesFromOCR()
 		{
-			return ocrTextLines
+			return ocrLines
 		}
 		
 		return []
+	}
+	
+	func textLinesFromSelections() -> [TextLine]?
+	{
+		let pageBounds = bounds(for: .mediaBox)
+		let pageHeight = pageBounds.height
+		guard let pageSelection = selection(for: pageBounds) else {
+			return nil
+		}
+		
+		let selectionsByLine = pageSelection.selectionsByLine()
+		guard !selectionsByLine.isEmpty else { return nil }
+		
+		var fragments = [TextFragment]()
+		
+		for lineSelection in selectionsByLine
+		{
+			fragments.append(contentsOf: selectionFragments(from: lineSelection, pageHeight: pageHeight))
+		}
+		
+		return fragments.isEmpty ? nil : fragments.assembledLines()
+	}
+	
+	func textLinesFromOCR() -> [TextLine]?
+	{
+		if #available(iOS 13.0, tvOS 13.0, macOS 10.15, *),
+		   let textLines = try? performOCR()
+		{
+			return textLines
+		}
+		
+		return nil
 	}
 	
 	/**
@@ -131,4 +133,232 @@ extension PDFPage
 		let (cgImage, _) = try renderedPageImage()
 		return try cgImage.performOCR(imageSize: pageBounds.size)
 	}
+	
+	private func selectionFragments(from lineSelection: PDFSelection, pageHeight: CGFloat) -> [TextFragment]
+	{
+		guard let pageString = string, !pageString.isEmpty else {
+			return fragmentsFromFallbackSelection(lineSelection, pageHeight: pageHeight)
+		}
+		
+		let nsString = pageString as NSString
+		let rangeCount = lineSelection.numberOfTextRanges(on: self)
+		guard rangeCount > 0 else {
+			return fragmentsFromFallbackSelection(lineSelection, pageHeight: pageHeight)
+		}
+		
+#if DEBUG
+		if let lineText = lineSelection.string {
+			let debugTargets = ["CRV*BILLA DANKT 000344"]
+			if debugTargets.contains(where: { lineText.contains($0) }) {
+				let pageSize = bounds(for: .mediaBox).size
+				logCharacterBounds(for: lineSelection, sourceString: nsString, pageSize: pageSize)
+				print("Line selection \"\(lineText.trimmingCharacters(in: .whitespacesAndNewlines))\" uses \(rangeCount) ranges")
+				for rangeIndex in 0..<rangeCount {
+					let nsRange = lineSelection.range(at: rangeIndex, on: self)
+					let snippet = nsString.substring(with: nsRange)
+					let rect = lineSelection.bounds(for: self)
+					print("  range[\(rangeIndex)] \(nsRange) snippet: \(snippet)")
+					print("    bounds: \(rect)")
+				}
+			}
+		}
+#endif
+		
+		let lineBounds = flippedRect(from: lineSelection.bounds(for: self), pageHeight: pageHeight)
+		var fragments = [TextFragment]()
+		
+		for rangeIndex in 0..<rangeCount {
+			let nsRange = lineSelection.range(at: rangeIndex, on: self)
+			fragments.append(
+				contentsOf: selectionFragments(
+					in: nsRange,
+					from: nsString,
+					pageHeight: pageHeight,
+					lineBounds: lineBounds
+				)
+			)
+		}
+		
+		if fragments.isEmpty {
+			return fragmentsFromFallbackSelection(lineSelection, pageHeight: pageHeight)
+		}
+		
+		return fragments
+	}
+	
+	private func selectionFragments(
+		in range: NSRange,
+		from sourceString: NSString,
+		pageHeight: CGFloat,
+		lineBounds: CGRect
+	) -> [TextFragment] {
+		guard range.length > 0 else { return [] }
+		
+		var result = [TextFragment]()
+		let upperBound = range.location + range.length
+		var currentStart: Int?
+		var currentLength = 0
+		var currentBounds = CGRect.null
+		var previousCharacterBounds: CGRect?
+		var hadWhitespaceGap = false
+		
+		func flushCurrent() {
+			guard let start = currentStart, currentLength > 0 else { return }
+			let fragmentRange = NSRange(location: start, length: currentLength)
+			let rawText = sourceString.substring(with: fragmentRange)
+			let trimmed = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+			guard !trimmed.isEmpty else {
+				currentStart = nil
+				currentLength = 0
+				currentBounds = .null
+				return
+			}
+			
+			guard !currentBounds.isNull else {
+				currentStart = nil
+				currentLength = 0
+				currentBounds = .null
+				return
+			}
+			
+			let flipped = flippedRect(from: currentBounds, pageHeight: pageHeight)
+			let aligned = alignedRect(flipped, to: lineBounds)
+			result.append(TextFragment(bounds: aligned, string: trimmed))
+			currentStart = nil
+			currentLength = 0
+			currentBounds = .null
+		}
+		
+		var index = range.location
+		while index < upperBound {
+			let charCode = sourceString.character(at: index)
+			let scalar = UnicodeScalar(charCode)
+			let isWhitespace = scalar.map { CharacterSet.whitespacesAndNewlines.contains($0) } ?? false
+			
+			if currentStart == nil {
+				if isWhitespace {
+					index += 1
+					continue
+				}
+				currentStart = index
+				currentBounds = .null
+				currentLength = 0
+			}
+			
+			let bounds = resolvedBoundsForCharacter(at: index)
+			let hasBounds = !(bounds.isNull || bounds.isEmpty)
+			
+			if !isWhitespace, hasBounds {
+				if let previous = previousCharacterBounds,
+				   hadWhitespaceGap,
+				   shouldSplit(after: previous, before: bounds)
+				{
+					flushCurrent()
+					previousCharacterBounds = nil
+					hadWhitespaceGap = false
+					currentStart = index
+					currentBounds = .null
+					currentLength = 0
+				}
+				
+				hadWhitespaceGap = false
+				currentBounds = currentBounds.isNull ? bounds : currentBounds.union(bounds)
+				previousCharacterBounds = bounds
+			}
+			else if isWhitespace {
+				hadWhitespaceGap = true
+			}
+			
+			currentLength += 1
+			index += 1
+		}
+		
+		flushCurrent()
+		return result
+	}
+	
+	private func fragmentsFromFallbackSelection(_ selection: PDFSelection, pageHeight: CGFloat) -> [TextFragment]
+	{
+		guard
+			let rawString = selection.string?.trimmingCharacters(in: .whitespacesAndNewlines),
+			!rawString.isEmpty
+		else {
+			return []
+		}
+		
+		let bounds = flippedRect(from: selection.bounds(for: self), pageHeight: pageHeight)
+		return [TextFragment(bounds: bounds, string: rawString)]
+	}
+	
+	private func flippedRect(from rect: CGRect, pageHeight: CGFloat) -> CGRect
+	{
+		return CGRect(
+			x: rect.minX,
+			y: pageHeight - rect.maxY,
+			width: rect.width,
+			height: rect.height
+		)
+	}
+	
+	private func shouldSplit(after previous: CGRect, before current: CGRect) -> Bool
+	{
+		let medianHeight = max((previous.height + current.height) / 2.0, 1)
+		let widthLimit = max(medianHeight * 3, 12)
+		let effectivePreviousWidth = min(previous.width, widthLimit)
+		let effectiveCurrentWidth = min(current.width, widthLimit)
+		let medianWidth = max((effectivePreviousWidth + effectiveCurrentWidth) / 2.0, 1)
+		let gapThreshold = max(medianWidth * 1.5, medianHeight * 0.6, 4)
+		
+		let adjustedPreviousMaxX = previous.minX + effectivePreviousWidth
+		let gap = current.minX - adjustedPreviousMaxX
+		return gap > gapThreshold
+	}
+	
+	private func resolvedBoundsForCharacter(at index: Int) -> CGRect
+	{
+		guard index >= 0 else { return .null }
+		let range = NSRange(location: index, length: 1)
+		if let selection = selection(for: range) {
+			let bounds = selection.bounds(for: self)
+			if !bounds.isNull && !bounds.isEmpty {
+				return bounds
+			}
+		}
+		return characterBounds(at: index)
+	}
+	
+	private func alignedRect(_ rect: CGRect, to lineBounds: CGRect) -> CGRect
+	{
+		let deltaY = lineBounds.midY - rect.midY
+		return CGRect(
+			x: rect.minX,
+			y: rect.minY + deltaY,
+			width: rect.width,
+			height: rect.height
+		)
+	}
+#if DEBUG
+	private func logCharacterBounds(for selection: PDFSelection, sourceString: NSString, pageSize: CGSize)
+	{
+		guard pageSize.width > 0, pageSize.height > 0 else { return }
+		print("Character bounds for selection: \(selection.string ?? "")")
+		let rangeCount = selection.numberOfTextRanges(on: self)
+		for rangeIndex in 0..<rangeCount {
+			let nsRange = selection.range(at: rangeIndex, on: self)
+			for offset in 0..<nsRange.length {
+				let globalIndex = nsRange.location + offset
+				let character = sourceString.character(at: globalIndex)
+				let scalar = UnicodeScalar(character).map(String.init) ?? "?"
+				let rect = resolvedBoundsForCharacter(at: globalIndex)
+				let normalized = NormalizedRect(
+					minX: rect.minX / pageSize.width,
+					minY: rect.minY / pageSize.height,
+					width: rect.width / pageSize.width,
+					height: rect.height / pageSize.height
+				)
+				print("  char[\(globalIndex)] \(scalar) (\(character)) bounds: \(rect) normalized: \(normalized)")
+			}
+		}
+	}
+#endif
 }
