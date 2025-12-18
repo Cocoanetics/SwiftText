@@ -87,7 +87,7 @@ extension PDFPage
 			fragments.append(contentsOf: selectionFragments(from: lineSelection, pageHeight: pageHeight))
 		}
 		
-		return fragments.isEmpty ? nil : fragments.assembledLines()
+		return fragments.isEmpty ? nil : fragments.assembledLines(splitVerticalFragments: true)
 	}
 	
 	func textLinesFromOCR() -> [TextLine]?

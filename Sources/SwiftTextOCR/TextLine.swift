@@ -12,9 +12,9 @@ public struct TextLine {
 	/// The text fragments that make up the line.
 	public var fragments: [TextFragment]
 	
-	/// The combined text of the line, constructed by joining all fragments with spaces.
+	/// The combined text of the line, constructed by joining all fragments with tabs.
 	public var combinedText: String {
-		fragments.map { $0.string }.joined(separator: " ")
+		fragments.map { $0.string }.joined(separator: "\t")
 	}
 	
 	/// The vertical position of the line, determined by the first fragment's minimum Y coordinate.
@@ -34,10 +34,38 @@ public struct TextFragment {
 
 extension Sequence where Element == TextFragment
 {
-	func assembledLines() -> [TextLine] {
+	func assembledLines(
+		splitVerticalFragments: Bool = false,
+		verticalAspectRatioThreshold: CGFloat = 2.0,
+		verticalHeightMultiplier: CGFloat = 1.5
+	) -> [TextLine] {
+		
+		let fragmentsArray = Array(self)
+		let positiveHeights = fragmentsArray
+			.map { Swift.max($0.bounds.height, 0) }
+			.filter { $0 > 0 }
+			.sorted()
+		let typicalHeight = positiveHeights.isEmpty ? 0 : positiveHeights[positiveHeights.count / 2]
+		
+		var verticalFragments = [TextFragment]()
+		var horizontalFragments = [TextFragment]()
+		
+		for fragment in fragmentsArray {
+			let width = Swift.max(fragment.bounds.width, 0.1)
+			let height = Swift.max(fragment.bounds.height, 0)
+			let isVerticalCandidate = splitVerticalFragments
+				&& height >= width * verticalAspectRatioThreshold
+				&& (typicalHeight == 0 || height >= typicalHeight * verticalHeightMultiplier)
+			
+			if isVerticalCandidate {
+				verticalFragments.append(fragment)
+			} else {
+				horizontalFragments.append(fragment)
+			}
+		}
 		
 		var lines = [TextLine]()
-		var unprocessedFragments = sorted { $0.bounds.minX < $1.bounds.minX }
+		var unprocessedFragments = horizontalFragments.sorted { $0.bounds.minX < $1.bounds.minX }
 		
 		while !unprocessedFragments.isEmpty {
 			let firstFragment = unprocessedFragments.removeFirst()
@@ -58,6 +86,10 @@ extension Sequence where Element == TextFragment
 			
 			// Add the assembled line
 			lines.append(TextLine(fragments: currentLineFragments))
+		}
+		
+		if splitVerticalFragments {
+			lines.append(contentsOf: verticalFragments.map { TextLine(fragments: [$0]) })
 		}
 		
 		// Sort lines by Y (top to bottom)
@@ -114,6 +146,3 @@ public extension Array where Element == TextLine
 		return result
 	}
 }
-
-
-

@@ -87,7 +87,7 @@ public extension CGImage
 		}
 		
 		// Assemble fragments into lines
-		return fragments.assembledLines()
+		return fragments.assembledLines(splitVerticalFragments: true)
 		#else
 		throw OCRError.noTextRecognized
 		#endif

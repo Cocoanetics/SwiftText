@@ -593,8 +593,23 @@ struct SwiftTextOCRTests {
 		let lines = fragments.assembledLines()
 		
 		#expect(lines.count == 2)
-		#expect(lines[0].combinedText == "Hello World")
+		#expect(lines[0].combinedText == "Hello\tWorld")
 		#expect(lines[1].combinedText == "Second line")
+	}
+	
+	@Test func testVerticalFragmentsSplitIntoSeparateLine() async throws {
+		let vertical = TextFragment(bounds: CGRect(x: 0, y: 0, width: 6, height: 40), string: "vertical")
+		let fragment1 = TextFragment(bounds: CGRect(x: 10, y: 60, width: 40, height: 10), string: "Hello")
+		let fragment2 = TextFragment(bounds: CGRect(x: 60, y: 60, width: 40, height: 10), string: "World")
+		
+		let lines = [vertical, fragment1, fragment2].assembledLines(splitVerticalFragments: true)
+		
+		#expect(lines.count == 2)
+		let verticalLine = lines.first { $0.fragments.count == 1 && $0.fragments.first?.string == "vertical" }
+		let horizontalLine = lines.first { $0.fragments.count == 2 }
+		
+		#expect(verticalLine != nil, "Expected the vertical fragment to form its own line")
+		#expect(horizontalLine?.combinedText == "Hello\tWorld")
 	}
 	
 	@Test func testTextLineString() async throws {
