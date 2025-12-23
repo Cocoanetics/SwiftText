@@ -1,9 +1,13 @@
-// swift-tools-version:6.0
+// swift-tools-version:6.1
 import PackageDescription
 
 let package = Package(
 	name: "SwiftText",
 	products: [
+		.library(
+			name: "SwiftText",
+			targets: ["SwiftText"]
+		),
 		.library(
 			name: "SwiftTextOCR",
 			targets: ["SwiftTextOCR"]
@@ -21,11 +25,27 @@ let package = Package(
 			targets: ["SwiftTextCLI"]
 		),
 	],
+	traits: [
+		.trait(name: "OCR", description: "Image OCR support"),
+		.trait(name: "PDF", description: "PDF text extraction", enabledTraits: ["OCR"]),
+		.trait(name: "DOCX", description: "DOCX extraction"),
+		.trait(name: "HTML", description: "HTML extraction"),
+		.default(enabledTraits: ["OCR"]),
+	],
 	dependencies: [
 		.package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0"),
 		.package(url: "https://github.com/weichsel/ZIPFoundation.git", from: "0.9.12"),
 	],
 	targets: [
+		.target(
+			name: "SwiftText",
+			dependencies: [
+				.target(name: "SwiftTextOCR", condition: .when(traits: ["OCR"])),
+				.target(name: "SwiftTextPDF", condition: .when(traits: ["PDF"])),
+				.target(name: "SwiftTextDOCX", condition: .when(traits: ["DOCX"])),
+			],
+			path: "Sources/SwiftText"
+		),
 		.target(
 			name: "SwiftTextOCR",
 			path: "Sources/SwiftTextOCR"

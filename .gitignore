@@ -1,4 +1,5 @@
 .DS_Store
+.clang-module-cache/
 /.build
 /Packages
 xcuserdata/
