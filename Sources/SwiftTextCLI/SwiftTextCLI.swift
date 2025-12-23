@@ -9,6 +9,7 @@ import ArgumentParser
 import Foundation
 import ImageIO
 import PDFKit
+import SwiftTextDOCX
 import SwiftTextOCR
 #if canImport(Vision)
 import Vision
@@ -20,9 +21,9 @@ import UniformTypeIdentifiers
 struct SwiftTextCLI: AsyncParsableCommand {
 	static let configuration = CommandConfiguration(
 		commandName: "swifttext",
-		abstract: "Extract text from PDF or image sources.",
+		abstract: "Extract text from PDF, image, or DOCX sources.",
 		version: "1.0",
-		subcommands: [OCR.self, Overlay.self],
+		subcommands: [OCR.self, Docx.self, Overlay.self],
 		defaultSubcommand: OCR.self
 	)
 }
@@ -249,6 +250,34 @@ struct OCR: AsyncParsableCommand {
 		)
 		let lookup = try saveImagesIfNeeded(images: semantics.images)
 		return (grouped, lookup)
+	}
+}
+
+@available(macOS 10.15, macCatalyst 13, iOS 13, tvOS 13, watchOS 6, *)
+struct Docx: AsyncParsableCommand {
+	static let configuration = CommandConfiguration(
+		commandName: "docx",
+		abstract: "Extract text from DOCX files."
+	)
+
+	@Argument(help: "Path to the DOCX file.")
+	var path: String
+
+	@Flag(name: .shortAndLong, help: "Output Markdown with headings and lists.")
+	var markdown: Bool = false
+
+	func run() async throws {
+		let fileURL = resolvedURL(from: path)
+		guard FileManager.default.fileExists(atPath: fileURL.path) else {
+			throw ValidationError("File not found: \(fileURL.path)")
+		}
+
+		let docx = try DocxFile(url: fileURL)
+		let output = markdown ? docx.markdown() : docx.plainText()
+		guard !output.isEmpty else {
+			return
+		}
+		print(output)
 	}
 }
 
