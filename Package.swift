@@ -9,6 +9,10 @@ let package = Package(
 			targets: ["SwiftText"]
 		),
 		.library(
+			name: "SwiftTextHTML",
+			targets: ["SwiftTextHTML"]
+		),
+		.library(
 			name: "SwiftTextOCR",
 			targets: ["SwiftTextOCR"]
 		),
@@ -27,6 +31,7 @@ let package = Package(
 	],
 	traits: [
 		.trait(name: "OCR", description: "Image OCR support"),
+		.trait(name: "HTML", description: "HTML parsing"),
 		.trait(name: "PDF", description: "PDF text extraction", enabledTraits: ["OCR"]),
 		.trait(name: "DOCX", description: "DOCX extraction"),
 		.default(enabledTraits: ["OCR"]),
@@ -39,11 +44,40 @@ let package = Package(
 		.target(
 			name: "SwiftText",
 			dependencies: [
+				.target(name: "SwiftTextHTML", condition: .when(traits: ["HTML"])),
 				.target(name: "SwiftTextOCR", condition: .when(traits: ["OCR"])),
 				.target(name: "SwiftTextPDF", condition: .when(traits: ["PDF"])),
 				.target(name: "SwiftTextDOCX", condition: .when(traits: ["DOCX"])),
 			],
 			path: "Sources/SwiftText"
+		),
+		.target(
+			name: "SwiftTextHTML",
+			dependencies: ["HTMLParser"],
+			path: "Sources/SwiftTextHTML"
+		),
+		.target(
+			name: "HTMLParser",
+			dependencies: ["CHTMLParser"],
+			path: "Sources/HTMLParser"
+		),
+		.target(
+			name: "CHTMLParser",
+			dependencies: {
+				#if os(Linux)
+				return [.systemLibrary(name: "libxml2", pkgConfig: "libxml-2.0", providers: [
+					.apt(["libxml2-dev"]),
+					.brew(["libxml2"])
+				])]
+				#else
+				return []
+				#endif
+			}(),
+			path: "Sources/CHTMLParser",
+			publicHeadersPath: "include",
+			linkerSettings: [
+				.linkedLibrary("xml2")
+			]
 		),
 		.target(
 			name: "SwiftTextOCR",
