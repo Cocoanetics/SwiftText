@@ -1,4 +1,5 @@
 import Foundation
+import ZIPFoundation
 
 /// A parsed DOCX file with convenience helpers for plain text or Markdown output.
 public final class DocxFile {
@@ -36,6 +37,45 @@ public final class DocxFile {
 	public func markdown() -> String {
 		let paragraphs = document.renderedParagraphs(style: .markdown)
 		return DocxTextOutput.join(paragraphs)
+	}
+
+	/// Extracts embedded images from the DOCX archive to the given directory.
+	/// Images are deduplicated by file name within the archive.
+	/// - Parameter directory: The destination directory. Defaults to the current working directory.
+	/// - Returns: The URLs of the extracted images on disk.
+	/// - Throws: A ``DocxFileError`` describing the failure reason.
+	public func extractImages(to directory: URL? = nil) throws -> [URL] {
+		guard FileManager.default.fileExists(atPath: url.path) else {
+			throw DocxFileError.fileNotFound(url)
+		}
+		let archive: Archive
+		do {
+			archive = try Archive(url: url, accessMode: .read)
+		} catch {
+			throw DocxFileError.unreadableArchive(url, error)
+		}
+
+		let destination = directory ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
+		try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+
+		var extracted = [URL]()
+		var seenNames: [String: URL] = [:]
+		for entry in archive {
+			guard entry.path.hasPrefix("word/media/"), !entry.path.hasSuffix("/") else { continue }
+			let fileName = URL(fileURLWithPath: entry.path).lastPathComponent
+			if let existing = seenNames[fileName] {
+				extracted.append(existing)
+				continue
+			}
+			var data = Data()
+			_ = try archive.extract(entry) { data.append($0) }
+			let outputURL = uniqueDestinationURL(for: fileName, in: destination)
+			try data.write(to: outputURL, options: .atomic)
+			seenNames[fileName] = outputURL
+			extracted.append(outputURL)
+		}
+
+		return extracted
 	}
 }
 
@@ -97,4 +137,21 @@ private enum DocxTextOutput {
 		}
 		return builder
 	}
+}
+
+private func uniqueDestinationURL(for fileName: String, in directory: URL) -> URL {
+	let base = URL(fileURLWithPath: fileName).deletingPathExtension().lastPathComponent
+	let ext = URL(fileURLWithPath: fileName).pathExtension
+	var candidate = directory.appendingPathComponent(fileName)
+	var counter = 1
+	while FileManager.default.fileExists(atPath: candidate.path) {
+		let suffix = "\(base)-\(counter)"
+		if ext.isEmpty {
+			candidate = directory.appendingPathComponent(suffix)
+		} else {
+			candidate = directory.appendingPathComponent(suffix).appendingPathExtension(ext)
+		}
+		counter += 1
+	}
+	return candidate
 }

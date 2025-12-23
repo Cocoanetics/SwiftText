@@ -70,12 +70,6 @@ guard let document = PDFDocument(url: pdfURL) else {
 let text = document.extractText()
 print(text)
 
-// Or get individual lines
-let lines = document.stringsFromLines
-for line in lines {
-	print(line)
-}
-
 // For more control, access TextLine objects directly
 let textLines = document.textLines()
 for textLine in textLines {
@@ -105,8 +99,8 @@ swift run swifttext ocr /path/to/document.pdf
 ```
 
 Options:
-- **ocr** `--lines`/`-l` (line-by-line output), `--markdown`/`-m` (Vision segmentation), `--save-images <dir>`, `--output-path <file>`/`-o`
-- **docx** `--markdown`/`-m` (headings and lists)
+- **ocr** `--markdown`/`-m` (Vision segmentation), `--save-images <dir>`, `--output-path <file>`/`-o`
+- **docx** `--markdown`/`-m` (headings and lists), `--output-path <file>`/`-o`, `--save-images`
 - **overlay** `--output-path <file>`/`-o`, `--dpi <value>`, `--raw`
 
 Examples:
@@ -129,6 +123,12 @@ swifttext docx ~/Documents/contract.docx
 
 # Extract Markdown from a Word document
 swifttext docx --markdown ~/Documents/contract.docx
+
+# Save Word output to a file
+swifttext docx --output-path ./contract.txt ~/Documents/contract.docx
+
+# Extract embedded images to the output directory or current directory
+swifttext docx --save-images ~/Documents/contract.docx
 
 # Render an overlay PDF for inspection
 swifttext overlay --dpi 300 ~/Documents/report.pdf

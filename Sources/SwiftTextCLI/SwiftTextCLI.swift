@@ -266,6 +266,12 @@ struct Docx: AsyncParsableCommand {
 	@Flag(name: .shortAndLong, help: "Output Markdown with headings and lists.")
 	var markdown: Bool = false
 
+	@Option(name: .shortAndLong, help: "Write output to a file instead of stdout.")
+	var outputPath: String?
+
+	@Flag(name: .long, help: "Extract embedded images to the output directory or current directory.")
+	var saveImages: Bool = false
+
 	func run() async throws {
 		let fileURL = resolvedURL(from: path)
 		guard FileManager.default.fileExists(atPath: fileURL.path) else {
@@ -274,10 +280,36 @@ struct Docx: AsyncParsableCommand {
 
 		let docx = try DocxFile(url: fileURL)
 		let output = markdown ? docx.markdown() : docx.plainText()
-		guard !output.isEmpty else {
+		if !output.isEmpty {
+			try writeOutputIfNeeded(output)
+		}
+
+		if saveImages {
+			let destination = resolvedImageDirectory()
+			_ = try docx.extractImages(to: destination)
+		}
+	}
+
+	private func writeOutputIfNeeded(_ contents: String) throws {
+		if let outputPath {
+			let expanded = (outputPath as NSString).expandingTildeInPath
+			let url = URL(fileURLWithPath: expanded)
+			let dir = url.deletingLastPathComponent()
+			try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+			try contents.write(to: url, atomically: true, encoding: .utf8)
 			return
 		}
-		print(output)
+
+		print(contents)
+	}
+
+	private func resolvedImageDirectory() -> URL {
+		if let outputPath {
+			let expanded = (outputPath as NSString).expandingTildeInPath
+			return URL(fileURLWithPath: expanded).deletingLastPathComponent()
+		}
+
+		return URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
 	}
 }
 
