@@ -53,7 +53,7 @@ let package = Package(
 		),
 		.target(
 			name: "SwiftTextHTML",
-			dependencies: ["HTMLParser"],
+			dependencies: ["HTMLParser", "CHTMLParser"],
 			path: "Sources/SwiftTextHTML"
 		),
 		.target(
@@ -98,12 +98,18 @@ let package = Package(
 		.executableTarget(
 			name: "SwiftTextCLI",
 			dependencies: [
+				"SwiftTextHTML",
 				"SwiftTextOCR",
 				"SwiftTextPDF",
 				"SwiftTextDOCX",
 				.product(name: "ArgumentParser", package: "swift-argument-parser"),
 			],
 			path: "Sources/SwiftTextCLI"
+		),
+		.testTarget(
+			name: "SwiftTextHTMLTests",
+			dependencies: ["SwiftTextHTML"],
+			path: "Tests/SwiftTextHTMLTests"
 		),
 		.testTarget(
 			name: "SwiftTextOCRTests",

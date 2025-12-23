@@ -9,6 +9,7 @@ public class HTMLParser: NSObject
 	// Input
 	private var data: Data
 	private var encoding: String.Encoding
+	private var options: HTMLParserOptions
 
 	// Parser State
 	private var parserContext: htmlParserCtxtPtr?
@@ -19,10 +20,11 @@ public class HTMLParser: NSObject
 
 	// MARK: - Init / Deinit
 
-	public init(data: Data, encoding: String.Encoding)
+	public init(data: Data, encoding: String.Encoding, options: HTMLParserOptions = [.recover, .noNet, .compact, .noBlanks])
 	{
 		self.data = data
 		self.encoding = encoding
+		self.options = options
 		self.handler = htmlSAXHandler()
 		super.init()
 	}
@@ -73,7 +75,6 @@ public class HTMLParser: NSObject
 
 		parserContext = htmlCreatePushParserCtxt(&handler, Unmanaged.passUnretained(self).toOpaque(), dataBytes, Int32(dataSize), nil, charEnc)
 
-		let options: HTMLParserOptions = [.recover, .noNet, .compact, .noBlanks]
 		htmlCtxtUseOptions(parserContext, options.rawValue)
 
 		let result = htmlParseDocument(parserContext)
@@ -241,4 +242,3 @@ func swift_error_handler(_ ctx: UnsafeMutableRawPointer?, _ msg: UnsafePointer<C
 	let errorMessage = String(cString: message)
 	parser.handleError(errorMessage)
 }
-

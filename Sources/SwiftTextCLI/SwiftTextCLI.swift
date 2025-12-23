@@ -9,6 +9,7 @@ import ArgumentParser
 import Foundation
 import ImageIO
 import PDFKit
+import SwiftTextHTML
 import SwiftTextPDF
 import SwiftTextDOCX
 import SwiftTextOCR
@@ -22,9 +23,9 @@ import UniformTypeIdentifiers
 struct SwiftTextCLI: AsyncParsableCommand {
 	static let configuration = CommandConfiguration(
 		commandName: "swifttext",
-		abstract: "Extract text from PDF, image, or DOCX sources.",
+		abstract: "Extract text from HTML, PDF, image, or DOCX sources.",
 		version: "1.0",
-		subcommands: [OCR.self, Docx.self, Overlay.self],
+		subcommands: [OCR.self, Docx.self, HTML.self, Overlay.self],
 		defaultSubcommand: OCR.self
 	)
 }
@@ -251,6 +252,99 @@ struct OCR: AsyncParsableCommand {
 		)
 		let lookup = try saveImagesIfNeeded(images: semantics.images)
 		return (grouped, lookup)
+	}
+}
+
+@available(macOS 10.15, macCatalyst 13, iOS 13, tvOS 13, watchOS 6, *)
+struct HTML: AsyncParsableCommand {
+	static let configuration = CommandConfiguration(
+		commandName: "html",
+		abstract: "Extract text or Markdown from HTML sources."
+	)
+
+	@Argument(help: "Path or URL to an HTML file or page.")
+	var source: String
+
+	@Flag(name: .shortAndLong, help: "Output Markdown instead of plain text.")
+	var markdown: Bool = false
+
+	@Option(name: .shortAndLong, help: "Write output to a file instead of stdout.")
+	var outputPath: String?
+
+	@Option(name: .long, help: "Directory to save downloaded images when using Markdown output.")
+	var saveImages: String?
+
+	func run() async throws {
+		let (data, baseURL) = try await loadHTMLData(from: source)
+		let document = try await HTMLDocument(data: data, baseURL: baseURL)
+		let output: String
+		if markdown {
+			let folderURL = resolveOutputDirectory(from: saveImages)
+			output = try await document.markdown(saveImagesAt: folderURL)
+		} else {
+			output = document.text()
+		}
+		try writeOutputIfNeeded(output)
+	}
+
+	private func loadHTMLData(from source: String) async throws -> (Data, URL?) {
+		if let url = URL(string: source), let scheme = url.scheme?.lowercased() {
+			if scheme == "http" || scheme == "https" {
+				let data = try await fetchData(from: url)
+				return (data, url)
+			}
+			if url.isFileURL {
+				return (try Data(contentsOf: url), url)
+			}
+		}
+
+		let expanded = (source as NSString).expandingTildeInPath
+		let fileURL = URL(fileURLWithPath: expanded)
+		guard FileManager.default.fileExists(atPath: fileURL.path) else {
+			throw ValidationError("File not found: \(fileURL.path)")
+		}
+		return (try Data(contentsOf: fileURL), fileURL)
+	}
+
+	private func fetchData(from url: URL) async throws -> Data {
+		try await withCheckedThrowingContinuation { continuation in
+			let task = URLSession.shared.dataTask(with: url) { data, response, error in
+				if let error {
+					continuation.resume(throwing: error)
+					return
+				}
+
+				guard let data else {
+					continuation.resume(throwing: ValidationError("No data received from \(url.absoluteString)"))
+					return
+				}
+
+				continuation.resume(returning: data)
+			}
+			task.resume()
+		}
+	}
+
+	private func writeOutputIfNeeded(_ contents: String) throws {
+		if let outputPath {
+			let expanded = (outputPath as NSString).expandingTildeInPath
+			let url = URL(fileURLWithPath: expanded)
+			let dir = url.deletingLastPathComponent()
+			try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+			try contents.write(to: url, atomically: true, encoding: .utf8)
+			return
+		}
+
+		print(contents)
+	}
+
+	private func resolveOutputDirectory(from path: String?) -> URL? {
+		guard let path, !path.isEmpty else {
+			return nil
+		}
+
+		let expanded = (path as NSString).expandingTildeInPath
+		return URL(fileURLWithPath: expanded, isDirectory: true)
 	}
 }
 
