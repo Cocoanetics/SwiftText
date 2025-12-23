@@ -37,7 +37,7 @@ Add SwiftText to your Swift package dependencies:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/your-repo/SwiftText.git", from: "1.0.0")
+    .package(url: "https://github.com/your-repo/SwiftText.git", branch: "main")
 ]
 ```
 
@@ -105,8 +105,9 @@ swift run swifttext ocr /path/to/document.pdf
 ```
 
 Options:
-- `--lines` / `-l`: Output each line separately instead of formatted text
-- `--markdown`: Output Markdown when available (Vision segmentation for OCR, document styles for DOCX)
+- **ocr** `--lines`/`-l` (line-by-line output), `--markdown`/`-m` (Vision segmentation), `--save-images <dir>`, `--output-path <file>`/`-o`
+- **docx** `--markdown`/`-m` (headings and lists)
+- **overlay** `--output-path <file>`/`-o`, `--dpi <value>`, `--raw`
 
 Examples:
 
@@ -114,17 +115,23 @@ Examples:
 # Extract formatted text from a PDF
 swifttext ocr ~/Documents/report.pdf
 
-# Extract text line by line
-swifttext ocr --lines ./document.pdf
-
 # Using a relative path
 swifttext ocr ../folder/file.pdf
+
+# Save OCR output to a file
+swifttext ocr --output-path ./output.txt ~/Documents/report.pdf
+
+# Save images while producing Markdown from a PDF
+swifttext ocr --markdown --save-images ./images ~/Documents/report.pdf
 
 # Extract plain text from a Word document
 swifttext docx ~/Documents/contract.docx
 
 # Extract Markdown from a Word document
 swifttext docx --markdown ~/Documents/contract.docx
+
+# Render an overlay PDF for inspection
+swifttext overlay --dpi 300 ~/Documents/report.pdf
 ```
 
 ## Requirements
