@@ -164,7 +164,7 @@ struct SwiftTextOCRTests {
 		#expect(markdown == expected)
 	}
 	
-	@Test func testSemanticOverlayExport() async throws {
+	@Test(.enabled(if: FixtureAvailability.fileExists("~/Desktop/Inuspherese/Aufklärungsbogen DE.pdf"), "Requires ~/Desktop/Inuspherese/Aufklärungsbogen DE.pdf")) func testSemanticOverlayExport() async throws {
 		#if canImport(Vision)
 		guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, *) else { return }
 		
@@ -192,7 +192,7 @@ struct SwiftTextOCRTests {
 		#endif
 	}
 	
-	@Test func testPNGTextExtraction() async throws {
+	@Test(.enabled(if: FixtureAvailability.fileExists("~/Desktop/mastercard_test.png"), "Requires ~/Desktop/mastercard_test.png")) func testPNGTextExtraction() async throws {
 		#if canImport(Vision)
 		guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, *) else {
 			return
@@ -253,7 +253,7 @@ struct SwiftTextOCRTests {
 		#endif
 	}
 	
-	@Test func testPNGSegmentationMatchesOCRLines() async throws {
+	@Test(.enabled(if: FixtureAvailability.fileExists("~/Desktop/mastercard_test.png"), "Requires ~/Desktop/mastercard_test.png")) func testPNGSegmentationMatchesOCRLines() async throws {
 		#if canImport(Vision)
 		guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, *) else {
 			return
@@ -328,7 +328,7 @@ struct SwiftTextOCRTests {
 		#endif
 	}
 
-	@Test func testParagraphMergingForTestPNG() async throws {
+	@Test(.enabled(if: FixtureAvailability.fileExists("~/Desktop/mastercard_test.png"), "Requires ~/Desktop/mastercard_test.png")) func testParagraphMergingForTestPNG() async throws {
 		#if canImport(Vision)
 		guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, *) else {
 			return
@@ -383,7 +383,7 @@ struct SwiftTextOCRTests {
 		#endif
 	}
 	
-	@Test func testSemanticGroupingForTestPNG() async throws {
+	@Test(.enabled(if: FixtureAvailability.fileExists("~/Desktop/mastercard_test.png"), "Requires ~/Desktop/mastercard_test.png")) func testSemanticGroupingForTestPNG() async throws {
 		#if canImport(Vision)
 		guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, *) else {
 			return
@@ -504,7 +504,7 @@ struct SwiftTextOCRTests {
 		#endif
 	}
 	
-	@Test func testMarkdownTableUsesSemanticCellsForMastercardPDF() async throws {
+	@Test(.enabled(if: FixtureAvailability.fileExists("~/Downloads/MASTERCARD_2025_11_REF_NR_95382227957-overlay.pdf"), "Requires ~/Downloads/MASTERCARD_2025_11_REF_NR_95382227957-overlay.pdf")) func testMarkdownTableUsesSemanticCellsForMastercardPDF() async throws {
 		#if canImport(Vision)
 		guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, *) else {
 			return
@@ -661,7 +661,7 @@ struct SwiftTextOCRTests {
 		#expect(result.contains("Second line"))
 	}
 	
-	@Test func testDocumentBlocksExtraction() async throws {
+	@Test(.enabled(if: FixtureAvailability.fileExists("~/Desktop/Inuspherese"), "Requires ~/Desktop/Inuspherese")) func testDocumentBlocksExtraction() async throws {
 			let directoryPath = ("~/Desktop/Inuspherese" as NSString).expandingTildeInPath
 			let directoryURL = URL(fileURLWithPath: directoryPath, isDirectory: true)
 			
@@ -722,7 +722,7 @@ struct SwiftTextOCRTests {
 			#expect(hasImage, "Expected to detect at least one image block within the provided fixtures")
 		}
 	
-	@Test func testMasterCardSelectionMatchesOCR() async throws {
+	@Test(.enabled(if: FixtureAvailability.fileExists("~/Downloads/MASTERCARD.pdf"), "Requires ~/Downloads/MASTERCARD.pdf")) func testMasterCardSelectionMatchesOCR() async throws {
 		#if canImport(Vision)
 		guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, *) else { return }
 		
@@ -818,7 +818,7 @@ struct SwiftTextOCRTests {
 		#endif
 	}
 	
-	@Test func testMasterCardTransactionWhitespaceCharacters() throws {
+	@Test(.enabled(if: FixtureAvailability.fileExists("~/Downloads/MASTERCARD.pdf"), "Requires ~/Downloads/MASTERCARD.pdf")) func testMasterCardTransactionWhitespaceCharacters() throws {
 		let pdfPath = ("~/Downloads/MASTERCARD.pdf" as NSString).expandingTildeInPath
 		let fileExists = FileManager.default.fileExists(atPath: pdfPath)
 		#expect(fileExists, "The Mastercard fixture must exist at \(pdfPath)")
@@ -852,7 +852,14 @@ struct SwiftTextOCRTests {
 		#expect(uniqueWhitespaceValues == [32], "Expected only ASCII spaces in transaction substring, found \(uniqueWhitespaceValues)")
 		}
 		
+}
+
+private enum FixtureAvailability {
+	static func fileExists(_ path: String) -> Bool {
+		let expanded = (path as NSString).expandingTildeInPath
+		return FileManager.default.fileExists(atPath: expanded)
 	}
+}
 
 private func tableCellCount(_ table: DocumentBlock.Table) -> Int {
 	table.rows.reduce(0) { $0 + $1.count }
