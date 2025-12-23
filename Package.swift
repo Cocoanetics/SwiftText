@@ -47,5 +47,13 @@ let package = Package(
 			dependencies: ["SwiftTextOCR"],
 			path: "Tests/SwiftTextOCRTests"
 		),
+		.testTarget(
+			name: "SwiftTextDOCXTests",
+			dependencies: ["SwiftTextDOCX"],
+			path: "Tests/SwiftTextDOCXTests",
+			resources: [
+				.process("Resources"),
+			]
+		),
 	]
 )
