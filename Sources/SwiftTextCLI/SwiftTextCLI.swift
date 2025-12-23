@@ -274,7 +274,29 @@ struct HTML: AsyncParsableCommand {
 	@Option(name: .long, help: "Directory to save downloaded images when using Markdown output.")
 	var saveImages: String?
 
+	@Flag(name: .long, help: "Load HTML via WebKit before parsing (macOS only).")
+	var webkit: Bool = false
+
+	@Flag(name: .long, help: "When using --webkit, export a PDF and parse that instead of HTML.")
+	var viaPdf: Bool = false
+
 	func run() async throws {
+		if viaPdf && !webkit {
+			throw ValidationError("--via-pdf requires --webkit.")
+		}
+
+		if webkit && viaPdf {
+			#if os(macOS)
+			let pdfURL = try await loadPDFViaWebKit(from: source)
+			defer { try? FileManager.default.removeItem(at: pdfURL) }
+			let output = try await processPDF(at: pdfURL)
+			try writeOutputIfNeeded(output)
+			return
+			#else
+			throw ValidationError("WebKit loading is only available on macOS.")
+			#endif
+		}
+
 		let (data, baseURL) = try await loadHTMLData(from: source)
 		let document = try await HTMLDocument(data: data, baseURL: baseURL)
 		let output: String
@@ -288,6 +310,14 @@ struct HTML: AsyncParsableCommand {
 	}
 
 	private func loadHTMLData(from source: String) async throws -> (Data, URL?) {
+		if webkit {
+			#if os(macOS)
+			return try await loadHTMLDataViaWebKit(from: source)
+			#else
+			throw ValidationError("WebKit loading is only available on macOS.")
+			#endif
+		}
+
 		if let url = URL(string: source), let scheme = url.scheme?.lowercased() {
 			if scheme == "http" || scheme == "https" {
 				let data = try await fetchData(from: url)
@@ -306,6 +336,60 @@ struct HTML: AsyncParsableCommand {
 		return (try Data(contentsOf: fileURL), fileURL)
 	}
 
+	#if os(macOS)
+	@MainActor
+	private func loadHTMLDataViaWebKit(from source: String) async throws -> (Data, URL?) {
+		let (url, baseURL) = try await resolveWebKitURL(from: source)
+
+		let browser = WebKitBrowser(url: url)
+		await browser.waitForLoadCompletion()
+		guard let html = await browser.html() else {
+			throw ValidationError("WebKit did not return any HTML.")
+		}
+		guard let data = html.data(using: .utf8) else {
+			throw ValidationError("Failed to encode WebKit HTML as UTF-8.")
+		}
+		return (data, baseURL)
+	}
+
+	@MainActor
+	private func loadPDFViaWebKit(from source: String) async throws -> URL {
+		guard #available(macOS 12.0, *) else {
+			throw ValidationError("WebKit PDF export requires macOS 12 or newer.")
+		}
+
+		let (url, _) = try await resolveWebKitURL(from: source)
+		let browser = WebKitBrowser(url: url)
+		await browser.waitForLoadCompletion()
+
+		let tempURL = FileManager.default.temporaryDirectory
+			.appendingPathComponent(UUID().uuidString)
+			.appendingPathExtension("pdf")
+		try await browser.exportPDF(to: tempURL)
+		return tempURL
+	}
+
+	@MainActor
+	private func resolveWebKitURL(from source: String) async throws -> (URL, URL?) {
+		if let parsedURL = URL(string: source), let scheme = parsedURL.scheme?.lowercased() {
+			if scheme == "http" || scheme == "https" {
+				return (parsedURL, parsedURL)
+			}
+			if parsedURL.isFileURL {
+				return (parsedURL, parsedURL)
+			}
+			throw ValidationError("Unsupported URL scheme: \(scheme)")
+		}
+
+		let expanded = (source as NSString).expandingTildeInPath
+		let fileURL = URL(fileURLWithPath: expanded)
+		guard FileManager.default.fileExists(atPath: fileURL.path) else {
+			throw ValidationError("File not found: \(fileURL.path)")
+		}
+		return (fileURL, fileURL)
+	}
+	#endif
+
 	private func fetchData(from url: URL) async throws -> Data {
 		try await withCheckedThrowingContinuation { continuation in
 			let task = URLSession.shared.dataTask(with: url) { data, response, error in
@@ -323,6 +407,110 @@ struct HTML: AsyncParsableCommand {
 			}
 			task.resume()
 		}
+	}
+
+	private func processPDF(at url: URL) async throws -> String {
+		guard let pdfDocument = PDFDocument(url: url) else {
+			throw ValidationError("Could not open PDF file: \(url.path)")
+		}
+
+		if markdown {
+			guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, *) else {
+				throw ValidationError("Vision document segmentation is unavailable on this platform.")
+			}
+			let textLines = pdfDocument.textLines()
+			let (blocks, lookupStorage) = try await semanticMarkdownBlocks(for: pdfDocument)
+			var imageLookup = lookupStorage
+			return DocumentBlockMarkdownRenderer.markdown(
+				from: blocks,
+				textLines: convertToDocumentBlockLines(textLines)
+			) { block in
+				imageLookup.pop(for: block)
+			}
+		}
+
+		let textLines = pdfDocument.textLines()
+		return textLines.string()
+	}
+
+	private func saveImagesIfNeeded(images: [DocumentImage], pageIndex: Int? = nil) throws -> ImageLookup {
+		guard let savePath = saveImages else { return ImageLookup(storage: [:]) }
+
+		var isDirectory: ObjCBool = false
+		let expanded = (savePath as NSString).expandingTildeInPath
+		if !FileManager.default.fileExists(atPath: expanded, isDirectory: &isDirectory) {
+			try FileManager.default.createDirectory(atPath: expanded, withIntermediateDirectories: true)
+		}
+
+		let baseURL = URL(fileURLWithPath: expanded, isDirectory: true)
+		var lookup: [String: [String]] = [:]
+
+		for (index, image) in images.enumerated() {
+			let filename: String
+			if let pageIndex {
+				filename = "page-\(pageIndex + 1)-image-\(index + 1).png"
+			} else {
+				filename = "image-\(index + 1).png"
+			}
+
+			let destinationURL = baseURL.appendingPathComponent(filename)
+			try writePNG(image.image, to: destinationURL)
+
+			let key = rectKey(image.bounds)
+			lookup[key, default: []].append(destinationURL.path)
+		}
+
+		return ImageLookup(storage: lookup)
+	}
+
+	private func writePNG(_ cgImage: CGImage, to url: URL) throws {
+		guard #available(iOS 14.0, tvOS 14.0, macOS 11.0, *) else {
+			throw ValidationError("PNG export requires a newer platform.")
+		}
+		guard let destination = CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil) else {
+			throw ValidationError("Unable to create image destination at \(url.path)")
+		}
+		CGImageDestinationAddImage(destination, cgImage, nil)
+		if !CGImageDestinationFinalize(destination) {
+			throw ValidationError("Failed to save image at \(url.path)")
+		}
+	}
+
+	private func rectKey(_ rect: CGRect) -> String {
+		"\(rect.minX.rounded())-\(rect.minY.rounded())-\(rect.width.rounded())-\(rect.height.rounded())"
+	}
+
+	private func convertToDocumentBlockLines(_ lines: [TextLine]) -> [DocumentBlock.TextLine] {
+		lines.map { line in
+			let bounds = line.fragments.reduce(line.fragments.first?.bounds ?? .zero) { $0.union($1.bounds) }
+			return DocumentBlock.TextLine(text: line.combinedText, bounds: bounds)
+		}
+	}
+
+	@available(iOS 26.0, tvOS 26.0, macOS 26.0, *)
+	private func semanticMarkdownBlocks(for document: PDFDocument) async throws -> ([DocumentBlock], ImageLookup) {
+		var combinedBlocks = [DocumentBlock]()
+		var lookupStorage: [String: [String]] = [:]
+
+		for pageIndex in 0..<document.pageCount {
+			guard let page = document.page(at: pageIndex) else { continue }
+			let semantics = try await page.documentSemantics(dpi: 300)
+			let layoutSize = page.bounds(for: .mediaBox).size
+			let lines = page.textLines()
+			let grouped = TextLineSemanticComposer.composeBlocks(
+				from: lines,
+				semantics: semantics,
+				layoutSize: layoutSize
+			)
+			combinedBlocks.append(contentsOf: grouped)
+
+			let saved = try saveImagesIfNeeded(images: semantics.images, pageIndex: pageIndex)
+			for (key, value) in saved.storage {
+				lookupStorage[key, default: []].append(contentsOf: value)
+			}
+		}
+
+		return (combinedBlocks, ImageLookup(storage: lookupStorage))
 	}
 
 	private func writeOutputIfNeeded(_ contents: String) throws {
