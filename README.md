@@ -19,6 +19,17 @@ Features:
 - Maintains vertical spacing between paragraphs
 - Handles multi-page documents with page break markers
 - High-resolution OCR (300 DPI) for accurate text recognition
+- Optional Markdown output using Vision document segmentation (iOS 26+, macOS 26+)
+
+### SwiftTextDOCX
+
+Extracts text and basic structure from DOCX archives using:
+- **ZIPFoundation** to read the Word archive
+- **XMLParser** to parse document, styles, and numbering
+
+Features:
+- Plain text paragraph extraction
+- Markdown output with headings, emphasis, and lists
 
 ## Installation
 
@@ -34,14 +45,16 @@ Then add the desired target to your dependencies:
 
 ```swift
 .target(
-    name: "YourTarget",
-    dependencies: ["SwiftTextOCR"]
+	name: "YourTarget",
+	dependencies: ["SwiftTextOCR", "SwiftTextDOCX"]
 )
 ```
 
 ## Usage
 
 ### Library Usage
+
+#### PDF / Images (OCR)
 
 ```swift
 import PDFKit
@@ -50,7 +63,7 @@ import SwiftTextOCR
 // Load a PDF document
 let pdfURL = URL(fileURLWithPath: "/path/to/document.pdf")
 guard let document = PDFDocument(url: pdfURL) else {
-    fatalError("Could not load PDF")
+	fatalError("Could not load PDF")
 }
 
 // Extract all text as a single string
@@ -60,14 +73,26 @@ print(text)
 // Or get individual lines
 let lines = document.stringsFromLines
 for line in lines {
-    print(line)
+	print(line)
 }
 
 // For more control, access TextLine objects directly
 let textLines = document.textLines()
 for textLine in textLines {
-    print("Position: \(textLine.yPosition), Text: \(textLine.combinedText)")
+	print("Position: \(textLine.yPosition), Text: \(textLine.combinedText)")
 }
+```
+
+#### DOCX
+
+```swift
+import SwiftTextDOCX
+
+let url = URL(fileURLWithPath: "/path/to/document.docx")
+let docx = try DocxFile(url: url)
+
+let plainText = docx.plainText()
+let markdown = docx.markdown()
 ```
 
 ### Command Line Tool
@@ -76,23 +101,30 @@ Build and run the CLI:
 
 ```bash
 swift build
-swift run swifttext pdf /path/to/document.pdf
+swift run swifttext ocr /path/to/document.pdf
 ```
 
 Options:
 - `--lines` / `-l`: Output each line separately instead of formatted text
+- `--markdown`: Output Markdown when available (Vision segmentation for OCR, document styles for DOCX)
 
 Examples:
 
 ```bash
 # Extract formatted text from a PDF
-swifttext pdf ~/Documents/report.pdf
+swifttext ocr ~/Documents/report.pdf
 
 # Extract text line by line
-swifttext pdf --lines ./document.pdf
+swifttext ocr --lines ./document.pdf
 
 # Using a relative path
-swifttext pdf ../folder/file.pdf
+swifttext ocr ../folder/file.pdf
+
+# Extract plain text from a Word document
+swifttext docx ~/Documents/contract.docx
+
+# Extract Markdown from a Word document
+swifttext docx --markdown ~/Documents/contract.docx
 ```
 
 ## Requirements
@@ -103,6 +135,7 @@ swifttext pdf ../folder/file.pdf
 **Note:** 
 - PDF text extraction (via PDFKit) works on any platform that supports PDFKit
 - OCR fallback requires iOS 13.0+, tvOS 13.0+, or macOS 10.15+ (automatically enabled when available via availability checks)
+- OCR Markdown segmentation requires iOS 26.0+, tvOS 26.0+, or macOS 26.0+
 
 ## License
 
