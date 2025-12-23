@@ -29,7 +29,6 @@ let package = Package(
 		.trait(name: "OCR", description: "Image OCR support"),
 		.trait(name: "PDF", description: "PDF text extraction", enabledTraits: ["OCR"]),
 		.trait(name: "DOCX", description: "DOCX extraction"),
-		.trait(name: "HTML", description: "HTML extraction"),
 		.default(enabledTraits: ["OCR"]),
 	],
 	dependencies: [

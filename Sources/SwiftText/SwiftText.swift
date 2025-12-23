@@ -9,7 +9,3 @@
 #if DOCX
 @_exported import SwiftTextDOCX
 #endif
-
-#if HTML
-// Placeholder trait for future HTML support.
-#endif

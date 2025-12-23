@@ -50,18 +50,29 @@ dependencies: [
 ]
 ```
 
-Then add the desired target to your dependencies:
+Then pick either specific products or the umbrella module.
+
+Individual products (import only what you need):
 
 ```swift
 .target(
 	name: "YourTarget",
-	dependencies: ["SwiftTextOCR", "SwiftTextPDF", "SwiftTextDOCX"]
+	dependencies: [
+		.product(name: "SwiftTextOCR", package: "SwiftText"),
+		.product(name: "SwiftTextPDF", package: "SwiftText"),
+		.product(name: "SwiftTextDOCX", package: "SwiftText")
+	]
 )
 ```
 
-To import everything from a single module, use the umbrella product:
+Umbrella module (single import), with traits:
 
 ```swift
+.package(
+	url: "https://github.com/your-repo/SwiftText.git",
+	branch: "main",
+	traits: [.defaults, "PDF", "DOCX"]
+),
 .target(
 	name: "YourTarget",
 	dependencies: [
@@ -70,14 +81,10 @@ To import everything from a single module, use the umbrella product:
 )
 ```
 
-SwiftText defaults to OCR-only. Enable extra traits when declaring the package dependency:
+SwiftText defaults to `OCR` only. Enable traits as needed:
 
 ```swift
-.package(
-	url: "https://github.com/your-repo/SwiftText.git",
-	branch: "main",
-	traits: [.defaults, "PDF", "DOCX"]
-)
+traits: [.defaults, "PDF", "DOCX"]
 ```
 
 ## Usage
