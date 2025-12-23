@@ -8,6 +8,7 @@
 import Foundation
 import ImageIO
 import PDFKit
+import SwiftTextPDF
 import Testing
 #if canImport(Vision)
 import Vision

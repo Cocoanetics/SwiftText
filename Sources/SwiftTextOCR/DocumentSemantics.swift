@@ -7,7 +7,6 @@
 
 import CoreGraphics
 import Foundation
-import PDFKit
 #if canImport(Vision)
 import Vision
 #endif
@@ -115,7 +114,7 @@ public struct NormalizedRect: Equatable, Sendable {
 }
 
 extension CGRect {
-	func normalized(in size: CGSize) -> NormalizedRect {
+	public func normalized(in size: CGSize) -> NormalizedRect {
 		guard size.width > 0, size.height > 0 else {
 			return .zero
 		}
@@ -184,24 +183,6 @@ public struct NormalizedDocumentBlock {
 }
 
 #if canImport(Vision)
-@available(iOS 26.0, tvOS 26.0, macOS 26.0, *)
-extension PDFPage {
-	public func documentSemantics(dpi: CGFloat = 300, applyPostProcessing: Bool = true) async throws -> DocumentSemantics {
-		let (cgImage, renderedSize) = try renderedPageImage(dpi: dpi)
-		let request = RecognizeDocumentsRequest()
-		let observations = try await request.perform(on: cgImage, orientation: nil)
-		
-		guard let document = observations.first?.document else {
-			throw DocumentScannerError.unrecognizedDocument
-		}
-		
-		let extractor = DocumentBlockExtractor(image: cgImage, pageSize: renderedSize, allowStandaloneSupplementation: false)
-		let (blocks, images) = try extractor.extractBlocksWithImages(from: document, applyPostProcessing: applyPostProcessing)
-		let normalized = normalize(blocks: blocks, referenceSize: renderedSize)
-		return DocumentSemantics(referenceSize: renderedSize, blocks: normalized, images: images)
-	}
-}
-
 @available(iOS 26.0, tvOS 26.0, macOS 26.0, *)
 public func documentSemantics(from cgImage: CGImage, applyPostProcessing: Bool = true) async throws -> DocumentSemantics {
 	let referenceSize = CGSize(width: CGFloat(cgImage.width), height: CGFloat(cgImage.height))

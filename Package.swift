@@ -9,6 +9,10 @@ let package = Package(
 			targets: ["SwiftTextOCR"]
 		),
 		.library(
+			name: "SwiftTextPDF",
+			targets: ["SwiftTextPDF"]
+		),
+		.library(
 			name: "SwiftTextDOCX",
 			targets: ["SwiftTextDOCX"]
 		),
@@ -27,6 +31,11 @@ let package = Package(
 			path: "Sources/SwiftTextOCR"
 		),
 		.target(
+			name: "SwiftTextPDF",
+			dependencies: ["SwiftTextOCR"],
+			path: "Sources/SwiftTextPDF"
+		),
+		.target(
 			name: "SwiftTextDOCX",
 			dependencies: [
 				.product(name: "ZIPFoundation", package: "ZIPFoundation"),
@@ -37,6 +46,7 @@ let package = Package(
 			name: "SwiftTextCLI",
 			dependencies: [
 				"SwiftTextOCR",
+				"SwiftTextPDF",
 				"SwiftTextDOCX",
 				.product(name: "ArgumentParser", package: "swift-argument-parser"),
 			],
@@ -44,7 +54,7 @@ let package = Package(
 		),
 		.testTarget(
 			name: "SwiftTextOCRTests",
-			dependencies: ["SwiftTextOCR"],
+			dependencies: ["SwiftTextOCR", "SwiftTextPDF"],
 			path: "Tests/SwiftTextOCRTests"
 		),
 		.testTarget(

@@ -30,11 +30,17 @@ public struct TextFragment {
 	
 	/// The textual content of the fragment.
 	public let string: String
+
+	/// Creates a text fragment with a bounding rectangle and string value.
+	public init(bounds: CGRect, string: String) {
+		self.bounds = bounds
+		self.string = string
+	}
 }
 
 extension Sequence where Element == TextFragment
 {
-	func assembledLines(
+	public func assembledLines(
 		splitVerticalFragments: Bool = false,
 		verticalAspectRatioThreshold: CGFloat = 2.0,
 		verticalHeightMultiplier: CGFloat = 1.5

@@ -10,16 +10,25 @@ SwiftText provides Swift libraries and command-line tools for extracting text fr
 
 ### SwiftTextOCR
 
-Extracts text from PDF documents using a combination of:
-- **PDFKit text selection** - For PDFs with embedded text layers
-- **Vision OCR** - Automatic fallback for scanned documents or PDFs without selectable text
+Extracts text from images using:
+- **Vision OCR** - Text recognition for bitmap content
 
 Features:
 - Preserves logical line structure and reading order
 - Maintains vertical spacing between paragraphs
-- Handles multi-page documents with page break markers
 - High-resolution OCR (300 DPI) for accurate text recognition
 - Optional Markdown output using Vision document segmentation (iOS 26+, macOS 26+)
+
+### SwiftTextPDF
+
+Extracts text from PDFs using a combination of:
+- **PDFKit text selection** - For PDFs with embedded text layers
+- **Vision OCR** - Automatic fallback for scanned documents or PDFs without selectable text
+
+Features:
+- Handles multi-page documents with page break markers
+- Preserves logical line structure and reading order
+- Maintains vertical spacing between paragraphs
 
 ### SwiftTextDOCX
 
@@ -46,7 +55,7 @@ Then add the desired target to your dependencies:
 ```swift
 .target(
 	name: "YourTarget",
-	dependencies: ["SwiftTextOCR", "SwiftTextDOCX"]
+	dependencies: ["SwiftTextOCR", "SwiftTextPDF", "SwiftTextDOCX"]
 )
 ```
 
@@ -54,11 +63,11 @@ Then add the desired target to your dependencies:
 
 ### Library Usage
 
-#### PDF / Images (OCR)
+#### PDF (SwiftTextPDF)
 
 ```swift
 import PDFKit
-import SwiftTextOCR
+import SwiftTextPDF
 
 // Load a PDF document
 let pdfURL = URL(fileURLWithPath: "/path/to/document.pdf")
@@ -75,6 +84,15 @@ let textLines = document.textLines()
 for textLine in textLines {
 	print("Position: \(textLine.yPosition), Text: \(textLine.combinedText)")
 }
+```
+
+#### Images (SwiftTextOCR)
+
+```swift
+import SwiftTextOCR
+
+let textLines = cgImage.textLines(imageSize: CGSize(width: cgImage.width, height: cgImage.height))
+let text = textLines.string()
 ```
 
 #### DOCX

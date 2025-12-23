@@ -9,6 +9,7 @@ import ArgumentParser
 import Foundation
 import ImageIO
 import PDFKit
+import SwiftTextPDF
 import SwiftTextDOCX
 import SwiftTextOCR
 #if canImport(Vision)
