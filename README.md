@@ -8,6 +8,15 @@ SwiftText provides Swift libraries and command-line tools for extracting text fr
 
 ## Modules
 
+### SwiftTextHTML
+
+Extracts text or Markdown from HTML using:
+- **HTMLParser** (libxml2-backed)
+
+Features:
+- Plain text extraction
+- Markdown conversion (links, lists, tables, code)
+
 ### SwiftTextOCR
 
 Extracts text from images using:
@@ -55,9 +64,10 @@ Then pick either specific products or the umbrella module.
 Individual products (import only what you need):
 
 ```swift
-.target(
+	.target(
 	name: "YourTarget",
 	dependencies: [
+		.product(name: "SwiftTextHTML", package: "SwiftText"),
 		.product(name: "SwiftTextOCR", package: "SwiftText"),
 		.product(name: "SwiftTextPDF", package: "SwiftText"),
 		.product(name: "SwiftTextDOCX", package: "SwiftText")
@@ -71,7 +81,7 @@ Umbrella module (single import), with traits:
 .package(
 	url: "https://github.com/your-repo/SwiftText.git",
 	branch: "main",
-	traits: [.defaults, "PDF", "DOCX"]
+	traits: [.defaults, "HTML", "PDF", "DOCX"]
 ),
 .target(
 	name: "YourTarget",
@@ -84,12 +94,23 @@ Umbrella module (single import), with traits:
 SwiftText defaults to `OCR` only. Enable traits as needed:
 
 ```swift
-traits: [.defaults, "PDF", "DOCX"]
+traits: [.defaults, "HTML", "PDF", "DOCX"]
 ```
 
 ## Usage
 
 ### Library Usage
+
+#### HTML (SwiftTextHTML)
+
+```swift
+import SwiftTextHTML
+
+let url = URL(string: "https://example.com")!
+let (data, _) = try await URLSession.shared.data(from: url)
+let document = try await HTMLDocument(data: data, baseURL: url)
+let markdown = document.markdown()
+```
 
 #### PDF (SwiftTextPDF)
 
@@ -111,6 +132,45 @@ print(text)
 let textLines = document.textLines()
 for textLine in textLines {
 	print("Position: \(textLine.yPosition), Text: \(textLine.combinedText)")
+}
+```
+
+#### PDF Markdown (SwiftTextOCR + SwiftTextPDF, iOS/macOS 26+)
+
+```swift
+import PDFKit
+import SwiftTextOCR
+import SwiftTextPDF
+
+let pdfURL = URL(fileURLWithPath: "/path/to/document.pdf")
+guard let document = PDFDocument(url: pdfURL) else {
+	fatalError("Could not load PDF")
+}
+
+if #available(iOS 26.0, tvOS 26.0, macOS 26.0, *) {
+	let allLines = document.textLines()
+	var allBlocks: [DocumentBlock] = []
+
+	for pageIndex in 0..<document.pageCount {
+		guard let page = document.page(at: pageIndex) else { continue }
+		let semantics = try await page.documentSemantics(dpi: 300)
+		let layoutSize = page.bounds(for: .mediaBox).size
+		let grouped = TextLineSemanticComposer.composeBlocks(
+			from: page.textLines(),
+			semantics: semantics,
+			layoutSize: layoutSize
+		)
+		allBlocks.append(contentsOf: grouped)
+	}
+
+	let markdown = DocumentBlockMarkdownRenderer.markdown(
+		from: allBlocks,
+		textLines: allLines.map {
+			let bounds = $0.fragments.reduce($0.fragments.first?.bounds ?? .zero) { $0.union($1.bounds) }
+			return DocumentBlock.TextLine(text: $0.combinedText, bounds: bounds)
+		}
+	)
+	print(markdown)
 }
 ```
 
@@ -146,6 +206,7 @@ swift run swifttext ocr /path/to/document.pdf
 
 Options:
 - **ocr** `--markdown`/`-m` (Vision segmentation), `--save-images <dir>`, `--output-path <file>`/`-o`
+- **html** `--markdown`/`-m`, `--save-images <dir>`, `--output-path <file>`/`-o`, `--webkit`, `--via-pdf`
 - **docx** `--markdown`/`-m` (headings and lists), `--output-path <file>`/`-o`, `--save-images`
 - **overlay** `--output-path <file>`/`-o`, `--dpi <value>`, `--raw`
 
@@ -169,6 +230,10 @@ swifttext docx ~/Documents/contract.docx
 
 # Extract Markdown from a Word document
 swifttext docx --markdown ~/Documents/contract.docx
+
+# Extract Markdown from HTML (optionally load via WebKit)
+swifttext html --markdown https://example.com
+swifttext html --markdown --webkit https://example.com
 
 # Save Word output to a file
 swifttext docx --output-path ./contract.txt ~/Documents/contract.docx
