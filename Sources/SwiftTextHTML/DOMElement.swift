@@ -224,8 +224,9 @@ public class DOMElement: DOMNode
 			result += content
 
 		case "table":
-			for child in children {
-				let rowText = child.text().trimmingCharacters(in: .whitespacesAndNewlines)
+			let rows = collectTableRows()
+			for row in rows {
+				let rowText = row.text().trimmingCharacters(in: .whitespacesAndNewlines)
 				guard !rowText.isEmpty else { continue }
 				result += rowText + "\n"
 			}
@@ -262,17 +263,16 @@ public class DOMElement: DOMNode
 	private func buildTableColumns(imageResolver: ((String) -> String?)?) -> [[String]] {
 		var columns: [[String]] = []
 		var maxColumns = 0
+		let rows = collectTableRows()
 
-		for child in children {
-			if let row = child as? DOMElement, row.name == "tr" {
-				var currentRow: [String] = []
-				for cell in row.children {
-					let cellContent = cell.markdown(imageResolver: imageResolver).trimmingCharacters(in: .whitespacesAndNewlines)
-					currentRow.append(cellContent)
-				}
-				maxColumns = max(maxColumns, currentRow.count)
-				columns.append(currentRow)
+		for row in rows {
+			var currentRow: [String] = []
+			for cell in row.children {
+				let cellContent = cell.markdown(imageResolver: imageResolver).trimmingCharacters(in: .whitespacesAndNewlines)
+				currentRow.append(cellContent)
 			}
+			maxColumns = max(maxColumns, currentRow.count)
+			columns.append(currentRow)
 		}
 
 		for i in 0..<columns.count {
@@ -282,6 +282,26 @@ public class DOMElement: DOMNode
 		}
 
 		return columns
+	}
+
+	private func collectTableRows() -> [DOMElement] {
+		collectTableRows(from: self)
+	}
+
+	private func collectTableRows(from element: DOMElement) -> [DOMElement] {
+		var rows: [DOMElement] = []
+		for child in element.children {
+			guard let childElement = child as? DOMElement else { continue }
+			if childElement.name == "tr" {
+				rows.append(childElement)
+				continue
+			}
+
+			if ["thead", "tbody", "tfoot"].contains(childElement.name) {
+				rows.append(contentsOf: collectTableRows(from: childElement))
+			}
+		}
+		return rows
 	}
 
 	private func formatTable(columns: [[String]]) -> String {
