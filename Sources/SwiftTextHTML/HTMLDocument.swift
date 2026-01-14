@@ -18,7 +18,7 @@ public final class HTMLDocument
 
 	public func markdown() -> String
 	{
-		root.markdown().trimmingCharacters(in: .whitespacesAndNewlines)
+		root.markdown(imageResolver: resolveMarkdownImageSource).trimmingCharacters(in: .whitespacesAndNewlines)
 	}
 
 	public func markdown(saveImagesAt folderURL: URL?) async throws -> String
@@ -98,6 +98,26 @@ public final class HTMLDocument
 		}
 
 		return URL(string: source)
+	}
+
+	private func resolveMarkdownImageSource(_ source: String) -> String? {
+		guard !source.isEmpty else {
+			return source
+		}
+
+		if source.hasPrefix("data:") || source.hasPrefix("//") {
+			return source
+		}
+
+		if let url = URL(string: source), url.scheme != nil {
+			return source
+		}
+
+		guard let baseURL else {
+			return source
+		}
+
+		return URL(string: source, relativeTo: baseURL)?.absoluteURL.absoluteString ?? source
 	}
 
 	private func suggestedFileName(for url: URL, fallbackIndex: Int) -> String {

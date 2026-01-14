@@ -12,6 +12,21 @@ func htmlDocumentParsesRemoteURL() async throws {
 	#expect(text.localizedCaseInsensitiveContains("SwiftText"))
 }
 
+@Test
+func markdownResolvesRelativeImageURLsAgainstBaseURL() async throws {
+	let html = """
+	<html>
+	<body>
+		<img src="/mattt/iMCP/raw/main/Assets/calendar.svg" alt="Calendar" />
+	</body>
+	</html>
+	"""
+	let baseURL = try #require(URL(string: "https://github.com/mattt/iMCP"))
+	let document = try await HTMLDocument(data: Data(html.utf8), baseURL: baseURL)
+	let markdown = document.markdown()
+	#expect(markdown.contains("![Calendar](https://github.com/mattt/iMCP/raw/main/Assets/calendar.svg)"))
+}
+
 #if os(macOS)
 @Test
 @MainActor
@@ -23,4 +38,3 @@ func webKitBrowserLoadsHTML() async throws {
 	#expect(html?.localizedCaseInsensitiveContains("SwiftText") == true)
 }
 #endif
-
