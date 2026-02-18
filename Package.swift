@@ -47,27 +47,38 @@ let swiftTextExtraDeps: [Target.Dependency] = [
 let ocrTestDeps: [Target.Dependency] = []
 #endif
 
+// libxml2 system library:
+//   - On Linux: resolved via pkg-config "libxml-2.0" which provides
+//     -I/usr/include/libxml2 and -lxml2.  CHTMLParser depends on CLibXML2
+//     so those flags propagate automatically.
+//   - On macOS: libxml2 is part of the SDK; link directly with -lxml2.
+#if os(Linux)
+let cHTMLParserDeps: [Target.Dependency] = [.target(name: "CLibXML2")]
+let cHTMLParserLinker: [LinkerSetting] = []
+let xmlSystemTargets: [Target] = [
+	.systemLibrary(
+		name: "CLibXML2",
+		pkgConfig: "libxml-2.0",
+		providers: [.apt(["libxml2-dev"])]
+	),
+]
+#else
+let cHTMLParserDeps: [Target.Dependency] = []
+let cHTMLParserLinker: [LinkerSetting] = [.linkedLibrary("xml2")]
+let xmlSystemTargets: [Target] = []
+#endif
+
 // HTMLParser is cross-platform: libxml2 HTML parsing works fine on Linux.
-// On Linux, CHTMLParser needs the /usr/include/libxml2 header search path
-// (provided by the libxml2-dev package).
 let htmlProducts: [Product] = [
 	.library(name: "SwiftTextHTML", targets: ["SwiftTextHTML"]),
 ]
 let htmlTargets: [Target] = [
 	.target(
 		name: "CHTMLParser",
-		dependencies: [],
+		dependencies: cHTMLParserDeps,
 		path: "Sources/CHTMLParser",
 		publicHeadersPath: "include",
-		cSettings: [
-			// On Linux, libxml2 headers live under /usr/include/libxml2/.
-			// HTMLparser.h internally includes <libxml/xmlversion.h> (no libxml2/ prefix),
-			// so we must add /usr/include/libxml2 as an explicit search path.
-			.unsafeFlags(["-I/usr/include/libxml2"], .when(platforms: [.linux])),
-		],
-		linkerSettings: [
-			.linkedLibrary("xml2")
-		]
+		linkerSettings: cHTMLParserLinker
 	),
 	.target(
 		name: "HTMLParser",
@@ -84,7 +95,8 @@ let htmlTargets: [Target] = [
 		dependencies: ["SwiftTextHTML"],
 		path: "Tests/SwiftTextHTMLTests"
 	),
-]
+] + xmlSystemTargets
+
 let swiftTextHTMLDeps: [Target.Dependency] = [
 	.target(name: "SwiftTextHTML", condition: .when(traits: ["HTML"])),
 ]
