@@ -1,22 +1,17 @@
 // swift-tools-version:6.1
 import PackageDescription
 
-// On Linux, Vision/PDFKit are unavailable, so we exclude macOS-only targets.
+// On Linux, Vision/PDFKit are unavailable AND the HTMLParser relies on
+// Objective-C runtime features (@objc, #selector, NS_OPTIONS) that are
+// disabled on Linux.  Exclude those targets entirely on Linux.
 #if os(Linux)
 let macOSProducts: [Product] = []
 let macOSTargets: [Target] = []
+let htmlProducts: [Product] = []
+let htmlTargets: [Target] = []
+let swiftTextHTMLDeps: [Target.Dependency] = []
 let swiftTextExtraDeps: [Target.Dependency] = []
 let ocrTestDeps: [Target.Dependency] = []
-// On Linux we add a system library target so pkg-config wires up the libxml2
-// include paths (-I/usr/include/libxml2) and link flags for all dependents.
-let linuxExtraTargets: [Target] = [
-	.systemLibrary(
-		name: "CLibxml2",
-		pkgConfig: "libxml-2.0",
-		providers: [.apt(["libxml2-dev"])]
-	)
-]
-let chtmlParserSystemDeps: [Target.Dependency] = ["CLibxml2"]
 #else
 let macOSProducts: [Product] = [
 	.library(name: "SwiftTextOCR", targets: ["SwiftTextOCR"]),
@@ -50,13 +45,44 @@ let macOSTargets: [Target] = [
 		path: "Tests/SwiftTextOCRTests"
 	),
 ]
+// HTMLParser uses ObjC runtime features — keep it macOS-only.
+let htmlProducts: [Product] = [
+	.library(name: "SwiftTextHTML", targets: ["SwiftTextHTML"]),
+]
+let htmlTargets: [Target] = [
+	.target(
+		name: "CHTMLParser",
+		dependencies: [],
+		path: "Sources/CHTMLParser",
+		publicHeadersPath: "include",
+		linkerSettings: [
+			.linkedLibrary("xml2")
+		]
+	),
+	.target(
+		name: "HTMLParser",
+		dependencies: ["CHTMLParser"],
+		path: "Sources/HTMLParser"
+	),
+	.target(
+		name: "SwiftTextHTML",
+		dependencies: ["HTMLParser", "CHTMLParser"],
+		path: "Sources/SwiftTextHTML"
+	),
+	.testTarget(
+		name: "SwiftTextHTMLTests",
+		dependencies: ["SwiftTextHTML"],
+		path: "Tests/SwiftTextHTMLTests"
+	),
+]
+let swiftTextHTMLDeps: [Target.Dependency] = [
+	.target(name: "SwiftTextHTML", condition: .when(traits: ["HTML"])),
+]
 let swiftTextExtraDeps: [Target.Dependency] = [
 	.target(name: "SwiftTextOCR", condition: .when(traits: ["OCR"])),
 	.target(name: "SwiftTextPDF", condition: .when(traits: ["PDF"])),
 ]
 let ocrTestDeps: [Target.Dependency] = []
-let linuxExtraTargets: [Target] = []
-let chtmlParserSystemDeps: [Target.Dependency] = []
 #endif
 
 let packageProducts: [Product] = [
@@ -65,44 +91,20 @@ let packageProducts: [Product] = [
 		targets: ["SwiftText"]
 	),
 	.library(
-		name: "SwiftTextHTML",
-		targets: ["SwiftTextHTML"]
-	),
-	.library(
 		name: "SwiftTextDOCX",
 		targets: ["SwiftTextDOCX"]
 	),
-] + macOSProducts
+] + htmlProducts + macOSProducts
 
 let swiftTextDependencies: [Target.Dependency] = [
-	.target(name: "SwiftTextHTML", condition: .when(traits: ["HTML"])),
 	.target(name: "SwiftTextDOCX", condition: .when(traits: ["DOCX"])),
-] + swiftTextExtraDeps
+] + swiftTextHTMLDeps + swiftTextExtraDeps
 
 let packageTargets: [Target] = [
 	.target(
 		name: "SwiftText",
 		dependencies: swiftTextDependencies,
 		path: "Sources/SwiftText"
-	),
-	.target(
-		name: "SwiftTextHTML",
-		dependencies: ["HTMLParser", "CHTMLParser"],
-		path: "Sources/SwiftTextHTML"
-	),
-	.target(
-		name: "HTMLParser",
-		dependencies: ["CHTMLParser"],
-		path: "Sources/HTMLParser"
-	),
-	.target(
-		name: "CHTMLParser",
-		dependencies: chtmlParserSystemDeps,
-		path: "Sources/CHTMLParser",
-		publicHeadersPath: "include",
-		linkerSettings: [
-			.linkedLibrary("xml2")
-		]
 	),
 	.target(
 		name: "SwiftTextDOCX",
@@ -112,11 +114,6 @@ let packageTargets: [Target] = [
 		path: "Sources/SwiftTextDOCX"
 	),
 	.testTarget(
-		name: "SwiftTextHTMLTests",
-		dependencies: ["SwiftTextHTML"],
-		path: "Tests/SwiftTextHTMLTests"
-	),
-	.testTarget(
 		name: "SwiftTextDOCXTests",
 		dependencies: ["SwiftTextDOCX"],
 		path: "Tests/SwiftTextDOCXTests",
@@ -124,7 +121,7 @@ let packageTargets: [Target] = [
 			.process("Resources"),
 		]
 	),
-] + macOSTargets + linuxExtraTargets
+] + htmlTargets + macOSTargets
 
 let package = Package(
 	name: "SwiftText",
