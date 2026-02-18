@@ -2,7 +2,7 @@ name: Swift
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "ios-support"]
   pull_request:
     branches: ["main"]
 
