@@ -1,6 +1,5 @@
 import Foundation
 import HTMLParser
-import CHTMLParser
 
 public final class DomBuilder
 {
