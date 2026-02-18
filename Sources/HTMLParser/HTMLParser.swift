@@ -1,6 +1,23 @@
 import Foundation
 import CHTMLParser
 
+// Pure-Swift OptionSet for libxml2 HTML parser options.
+// Replaces the former C header HTMLParserOptions.h (NS_OPTIONS), which
+// produced an OptionSet on macOS but just an Int32 on Linux.
+public struct HTMLParserOptions: OptionSet, Sendable
+{
+	public let rawValue: Int32
+	public init(rawValue: Int32) { self.rawValue = rawValue }
+
+	public static let recover   = HTMLParserOptions(rawValue: 1 << 0)
+	public static let noError   = HTMLParserOptions(rawValue: 1 << 1)
+	public static let noWarning = HTMLParserOptions(rawValue: 1 << 2)
+	public static let pedantic  = HTMLParserOptions(rawValue: 1 << 3)
+	public static let noBlanks  = HTMLParserOptions(rawValue: 1 << 4)
+	public static let noNet     = HTMLParserOptions(rawValue: 1 << 5)
+	public static let compact   = HTMLParserOptions(rawValue: 1 << 6)
+}
+
 // Simple Swift error type — no ObjC runtime required
 public struct HTMLParserError: Error
 {
@@ -190,8 +207,8 @@ public class HTMLParser
 
 	private func accumulateCharacters(_ characters: UnsafePointer<xmlChar>?, length: Int32) {
 		guard let characters = characters else { return }
-		let str = String(bytesNoCopy: UnsafeMutableRawPointer(mutating: characters), length: Int(length), encoding: .utf8, freeWhenDone: false)
-		if let str = str {
+		let buf = UnsafeBufferPointer(start: characters, count: Int(length))
+		if let str = String(bytes: buf, encoding: .utf8) {
 			if accumulateBuffer == nil {
 				accumulateBuffer = str
 			} else {
