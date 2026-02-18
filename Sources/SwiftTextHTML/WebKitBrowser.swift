@@ -16,12 +16,25 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate
 	private var didLoad = false
 	private var continuation: CheckedContinuation<String?, Never>?
 	private var loadContinuation: CheckedContinuation<Void, Never>?
+	private var htmlStringToLoad: String?
 
 	// MARK: - Public Interface
 
 	public init(url: URL)
 	{
 		self.url = url
+		self.htmlStringToLoad = nil
+		super.init()
+	}
+
+	/// Initialise the browser by loading an HTML string directly.
+	/// - Parameters:
+	///   - htmlString: The HTML content to render.
+	///   - baseURL: Optional base URL used to resolve relative resources.
+	public init(htmlString: String, baseURL: URL? = nil)
+	{
+		self.url = baseURL ?? URL(string: "about:blank")!
+		self.htmlStringToLoad = htmlString
 		super.init()
 	}
 
@@ -52,6 +65,22 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate
 		try data.write(to: outputURL)
 	}
 
+	/// Exports the rendered page as PDF data.
+	///
+	/// - Parameter configuration: Optional `WKPDFConfiguration`; defaults to capturing the full page.
+	/// - Returns: PDF data for the rendered content.
+	@MainActor
+	@available(macOS 12.0, *)
+	public func exportPDFData(configuration: WKPDFConfiguration = WKPDFConfiguration()) async throws -> Data
+	{
+		if !didLoad
+		{
+			await waitForLoadCompletion()
+		}
+
+		return try await webView.pdf(configuration: configuration)
+	}
+
 	@MainActor
 	public func exportHTML(to outputURL: URL) async throws
 	{
@@ -73,8 +102,15 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate
 		webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 800, height: 600), configuration: config)
 		webView.navigationDelegate = self
 
-		let urlRequest = URLRequest(url: url)
-		webView.load(urlRequest)
+		if let html = htmlStringToLoad
+		{
+			webView.loadHTMLString(html, baseURL: url == URL(string: "about:blank") ? nil : url)
+		}
+		else
+		{
+			let urlRequest = URLRequest(url: url)
+			webView.load(urlRequest)
+		}
 	}
 
 	@MainActor
