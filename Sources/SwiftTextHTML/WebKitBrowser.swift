@@ -18,6 +18,14 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate
 	private var loadContinuation: CheckedContinuation<Void, Never>?
 	private var htmlStringToLoad: String?
 
+	/// Optional frame size override. When set, the WKWebView is created
+	/// with this size so content reflows to the target width (e.g. A4).
+	public var frameSize: CGSize?
+
+	/// When `true`, the webview frame is NOT resized to the scroll height
+	/// after loading. This lets WebKit paginate content for PDF export.
+	public var preserveFrameHeight = false
+
 	// MARK: - Public Interface
 
 	public init(url: URL)
@@ -81,6 +89,48 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate
 		return try await webView.pdf(configuration: configuration)
 	}
 
+	/// Exports the rendered page as paginated PDF data using NSPrintOperation.
+	///
+	/// Unlike `exportPDFData` (which produces a single continuous page),
+	/// this method uses the print pipeline and respects CSS `@page` rules
+	/// for page size, margins, and page breaks.
+	///
+	/// - Parameter paperSize: The paper size in points (e.g. 595.28×841.89 for A4).
+	/// - Returns: Paginated PDF data.
+	@MainActor
+	@available(macOS 11.0, *)
+	public func exportPaginatedPDFData(paperSize: CGSize) async throws -> Data
+	{
+		if !didLoad
+		{
+			await waitForLoadCompletion()
+		}
+
+		let tempURL = FileManager.default.temporaryDirectory
+			.appendingPathComponent(UUID().uuidString)
+			.appendingPathExtension("pdf")
+
+		let printInfo = NSPrintInfo()
+		printInfo.paperSize = paperSize
+		printInfo.topMargin = 0
+		printInfo.bottomMargin = 0
+		printInfo.leftMargin = 0
+		printInfo.rightMargin = 0
+		printInfo.horizontalPagination = .fit
+		printInfo.verticalPagination = .automatic
+		printInfo.isHorizontallyCentered = false
+		printInfo.isVerticallyCentered = false
+		printInfo.jobDisposition = .save
+		printInfo.dictionary()[NSPrintInfo.AttributeKey.jobSavingURL] = tempURL
+
+		let printOperation = webView.printOperation(with: printInfo)
+		printOperation.showsPrintPanel = false
+		printOperation.showsProgressPanel = false
+
+		let helper = PrintOperationHelper()
+		return try await helper.run(printOperation, outputURL: tempURL)
+	}
+
 	@MainActor
 	public func exportHTML(to outputURL: URL) async throws
 	{
@@ -99,7 +149,8 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate
 		contentController.add(self, name: "pageLoaded")
 		config.userContentController = contentController
 
-		webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 800, height: 600), configuration: config)
+		let initialSize = frameSize ?? CGSize(width: 800, height: 600)
+		webView = WKWebView(frame: CGRect(origin: .zero, size: initialSize), configuration: config)
 		webView.navigationDelegate = self
 
 		if let html = htmlStringToLoad
@@ -116,7 +167,8 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate
 	@MainActor
 	private func updateWebView(size: CGSize)
 	{
-		self.webView.frame = CGRect(x: 0, y: 0, width: 800, height: size.height)
+		let width = frameSize?.width ?? 800
+		self.webView.frame = CGRect(x: 0, y: 0, width: width, height: size.height)
 		self.webView.layout()
 	}
 
@@ -172,9 +224,10 @@ extension WebKitBrowser: WKScriptMessageHandler
 		Task
 		{
 			do {
-				let maxSize = try await webView.getMaxScrollSize()
-
-				self.updateWebView(size: maxSize)
+				if !preserveFrameHeight {
+					let maxSize = try await webView.getMaxScrollSize()
+					self.updateWebView(size: maxSize)
+				}
 
 				self.loadContinuation?.resume()
 				self.loadContinuation = nil
@@ -272,6 +325,55 @@ extension WKWebView
 public enum WebKitBrowserError: Error
 {
 	case missingHTML
+	case printFailed
+}
+
+// MARK: - Print Operation Helper
+
+/// Bridges NSPrintOperation's delegate callback to async/await.
+@available(macOS 10.15, *)
+private class PrintOperationHelper: NSObject
+{
+	private var continuation: CheckedContinuation<Data, Error>?
+	private var outputURL: URL?
+
+	@MainActor
+	func run(_ operation: NSPrintOperation, outputURL: URL) async throws -> Data
+	{
+		self.outputURL = outputURL
+
+		return try await withCheckedThrowingContinuation { continuation in
+			self.continuation = continuation
+			operation.runModal(
+				for: NSWindow(),
+				delegate: self,
+				didRun: #selector(printOperationDidRun(_:success:contextInfo:)),
+				contextInfo: nil
+			)
+		}
+	}
+
+	@objc func printOperationDidRun(_ operation: NSPrintOperation, success: Bool, contextInfo: UnsafeMutableRawPointer?)
+	{
+		guard let outputURL else {
+			continuation?.resume(throwing: WebKitBrowserError.printFailed)
+			return
+		}
+
+		if success, FileManager.default.fileExists(atPath: outputURL.path) {
+			do {
+				let data = try Data(contentsOf: outputURL)
+				try? FileManager.default.removeItem(at: outputURL)
+				continuation?.resume(returning: data)
+			} catch {
+				try? FileManager.default.removeItem(at: outputURL)
+				continuation?.resume(throwing: error)
+			}
+		} else {
+			try? FileManager.default.removeItem(at: outputURL)
+			continuation?.resume(throwing: WebKitBrowserError.printFailed)
+		}
+	}
 }
 
 #endif

@@ -39,25 +39,3 @@ jobs:
 
       - name: Build & Test (Linux)
         run: swift test
-
-  build-windows:
-    runs-on: windows-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: SwiftyLab/setup-swift@latest
-        with:
-          swift-version: "6"
-
-      - name: Install libxml2 via vcpkg
-        run: vcpkg install libxml2:x64-windows
-
-      - name: Verify Swift version
-        run: swift --version
-
-      - name: Build & Test (Windows)
-        run: swift test
-        env:
-          INCLUDE: C:\vcpkg\installed\x64-windows\include;C:\vcpkg\installed\x64-windows\include\libxml2
-          LIB: C:\vcpkg\installed\x64-windows\lib

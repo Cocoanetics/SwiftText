@@ -10,6 +10,7 @@ import ArgumentParser
 import Foundation
 import SwiftTextHTML
 import SwiftTextDOCX
+import WebKit
 
 // MARK: - Paper size
 
@@ -140,13 +141,28 @@ struct PDF: AsyncParsableCommand {
 
 	// MARK: - WebKit rendering
 
+	/// Builds a `WKPDFConfiguration` whose rect matches the chosen paper size and orientation.
+	@available(macOS 12.0, *)
+	private func pdfConfiguration() -> WKPDFConfiguration {
+		let config = WKPDFConfiguration()
+		let size = paper.pointSize
+		if landscape {
+			config.rect = CGRect(origin: .zero, size: CGSize(width: size.height, height: size.width))
+		} else {
+			config.rect = CGRect(origin: .zero, size: size)
+		}
+		return config
+	}
+
 	/// Renders an HTML string to a PDF file using WebKit.
 	@MainActor
 	@available(macOS 12.0, *)
 	private func renderHTML(_ html: String, sourceURL: URL?, to outputURL: URL) async throws {
 		let browser = WebKitBrowser(htmlString: html, baseURL: sourceURL)
+		browser.frameSize = pageSize()
+		browser.preserveFrameHeight = true
 		await browser.waitForLoadCompletion()
-		let pdfData = try await browser.exportPDFData()
+		let pdfData = try await browser.exportPaginatedPDFData(paperSize: pageSize())
 		try writeData(pdfData, to: outputURL)
 	}
 
@@ -155,9 +171,20 @@ struct PDF: AsyncParsableCommand {
 	@available(macOS 12.0, *)
 	private func renderURL(_ url: URL, to outputURL: URL) async throws {
 		let browser = WebKitBrowser(url: url)
+		browser.frameSize = pageSize()
+		browser.preserveFrameHeight = true
 		await browser.waitForLoadCompletion()
-		let pdfData = try await browser.exportPDFData()
+		let pdfData = try await browser.exportPaginatedPDFData(paperSize: pageSize())
 		try writeData(pdfData, to: outputURL)
+	}
+
+	/// Returns the page size in points, respecting orientation.
+	private func pageSize() -> CGSize {
+		let size = paper.pointSize
+		if landscape {
+			return CGSize(width: size.height, height: size.width)
+		}
+		return size
 	}
 
 	// MARK: - Output URL helpers
