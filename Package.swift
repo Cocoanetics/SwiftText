@@ -47,12 +47,17 @@ let swiftTextExtraDeps: [Target.Dependency] = [
 let ocrTestDeps: [Target.Dependency] = []
 #endif
 
+// HTML/libxml2 is not available on Windows — only Linux and macOS support it.
+#if os(Windows)
+let htmlProducts: [Product] = []
+let htmlTargets: [Target] = []
+let swiftTextHTMLDeps: [Target.Dependency] = []
+#else
 // libxml2 system library:
 //   - On Linux: resolved via pkg-config "libxml-2.0" which provides
 //     -I/usr/include/libxml2 and -lxml2.  CHTMLParser depends on CLibXML2
 //     so those flags propagate automatically.
 //   - On macOS: libxml2 is part of the SDK; link directly with -lxml2.
-//   - On Windows: installed via vcpkg; headers/libs found via INCLUDE/LIB env vars.
 #if os(Linux)
 let cHTMLParserDeps: [Target.Dependency] = [.target(name: "CLibXML2")]
 let cHTMLParserLinker: [LinkerSetting] = []
@@ -63,17 +68,13 @@ let xmlSystemTargets: [Target] = [
 		providers: [.apt(["libxml2-dev"])]
 	),
 ]
-#elseif os(Windows)
-let cHTMLParserDeps: [Target.Dependency] = []
-let cHTMLParserLinker: [LinkerSetting] = [.linkedLibrary("libxml2")]
-let xmlSystemTargets: [Target] = []
 #else
 let cHTMLParserDeps: [Target.Dependency] = []
 let cHTMLParserLinker: [LinkerSetting] = [.linkedLibrary("xml2")]
 let xmlSystemTargets: [Target] = []
 #endif
 
-// HTMLParser is cross-platform: libxml2 HTML parsing works fine on Linux.
+// HTMLParser is cross-platform on Linux/macOS: libxml2 HTML parsing works fine.
 let htmlProducts: [Product] = [
 	.library(name: "SwiftTextHTML", targets: ["SwiftTextHTML"]),
 ]
@@ -105,6 +106,7 @@ let htmlTargets: [Target] = [
 let swiftTextHTMLDeps: [Target.Dependency] = [
 	.target(name: "SwiftTextHTML", condition: .when(traits: ["HTML"])),
 ]
+#endif
 
 let packageProducts: [Product] = [
 	.library(

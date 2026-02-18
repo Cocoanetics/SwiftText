@@ -50,14 +50,15 @@ jobs:
         with:
           swift-version: "6"
 
-      - name: Install libxml2 via vcpkg
-        run: vcpkg install libxml2:x64-windows
+      # Set up the MSVC toolchain environment (vcvarsall.bat) so the
+      # Swift/SPM linker can locate msvcrt.lib, oldnames.lib, msvcprt.lib, etc.
+      - name: Set up MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
 
       - name: Verify Swift version
         run: swift --version
 
-      - name: Build & Test (Windows)
-        run: swift test
-        env:
-          INCLUDE: C:\vcpkg\installed\x64-windows\include;C:\vcpkg\installed\x64-windows\include\libxml2
-          LIB: C:\vcpkg\installed\x64-windows\lib
+      # HTML (libxml2) is excluded on Windows via Package.swift #if os(Windows)
+      # guards, so only SwiftText core + SwiftTextDOCX are built/tested.
+      - name: Build & Test (Windows – DOCX only)
+        run: swift test --filter SwiftTextDOCXTests
