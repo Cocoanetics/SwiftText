@@ -61,9 +61,9 @@ let htmlTargets: [Target] = [
 		publicHeadersPath: "include",
 		cSettings: [
 			// On Linux, libxml2 headers live under /usr/include/libxml2/.
-			// The bridging header already has #elif __has_include(<libxml2/libxml/HTMLparser.h>)
-			// which picks this up when the compiler searches /usr/include.
-			// No extra flags needed — kept as comment for documentation.
+			// HTMLparser.h internally includes <libxml/xmlversion.h> (no libxml2/ prefix),
+			// so we must add /usr/include/libxml2 as an explicit search path.
+			.unsafeFlags(["-I/usr/include/libxml2"], .when(platforms: [.linux])),
 		],
 		linkerSettings: [
 			.linkedLibrary("xml2")
