@@ -67,3 +67,28 @@ jobs:
             -scheme SwiftText-Package \
             -destination "platform=iOS Simulator,name=iPhone 17,OS=latest" \
             -skipPackagePluginValidation
+
+  build-visionos:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 26.0
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "26.0"
+
+      - name: Build for visionOS Simulator
+        run: |
+          xcodebuild build \
+            -scheme SwiftText-Package \
+            -destination "generic/platform=visionOS Simulator" \
+            -skipPackagePluginValidation
+
+      - name: Test on visionOS Simulator
+        run: |
+          xcodebuild test \
+            -scheme SwiftText-Package \
+            -destination "platform=visionOS Simulator,name=Apple Vision Pro" \
+            -skipPackagePluginValidation
