@@ -2,7 +2,7 @@ import Foundation
 import HTMLParser
 import CHTMLParser
 
-public final class DomBuilder: NSObject
+public final class DomBuilder
 {
 	// MARK: - Public Properties
 
@@ -20,7 +20,6 @@ public final class DomBuilder: NSObject
 	public init(html: Data, baseURL: URL?) async throws
 	{
 		self.baseURL = baseURL
-		super.init()
 		try await parseHTML(html)
 	}
 
@@ -112,7 +111,7 @@ extension DomBuilder: HTMLParserDelegate
 		currentElement = elementStack.removeLast()
 	}
 
-	public func parser(_ parser: HTMLParser, parseErrorOccurred parseError: NSError) {
+	public func parser(_ parser: HTMLParser, parseErrorOccurred parseError: Error) {
 		self.parseError = parseError
 	}
 }

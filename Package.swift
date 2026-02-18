@@ -1,15 +1,10 @@
 // swift-tools-version:6.1
 import PackageDescription
 
-// On Linux, Vision/PDFKit are unavailable AND the HTMLParser relies on
-// Objective-C runtime features (@objc, #selector, NS_OPTIONS) that are
-// disabled on Linux.  Exclude those targets entirely on Linux.
+// macOS-only targets (Vision, PDFKit, AppKit, WebKit)
 #if os(Linux)
 let macOSProducts: [Product] = []
 let macOSTargets: [Target] = []
-let htmlProducts: [Product] = []
-let htmlTargets: [Target] = []
-let swiftTextHTMLDeps: [Target.Dependency] = []
 let swiftTextExtraDeps: [Target.Dependency] = []
 let ocrTestDeps: [Target.Dependency] = []
 #else
@@ -45,7 +40,16 @@ let macOSTargets: [Target] = [
 		path: "Tests/SwiftTextOCRTests"
 	),
 ]
-// HTMLParser uses ObjC runtime features — keep it macOS-only.
+let swiftTextExtraDeps: [Target.Dependency] = [
+	.target(name: "SwiftTextOCR", condition: .when(traits: ["OCR"])),
+	.target(name: "SwiftTextPDF", condition: .when(traits: ["PDF"])),
+]
+let ocrTestDeps: [Target.Dependency] = []
+#endif
+
+// HTMLParser is cross-platform: libxml2 HTML parsing works fine on Linux.
+// On Linux, CHTMLParser needs the /usr/include/libxml2 header search path
+// (provided by the libxml2-dev package).
 let htmlProducts: [Product] = [
 	.library(name: "SwiftTextHTML", targets: ["SwiftTextHTML"]),
 ]
@@ -55,6 +59,12 @@ let htmlTargets: [Target] = [
 		dependencies: [],
 		path: "Sources/CHTMLParser",
 		publicHeadersPath: "include",
+		cSettings: [
+			// On Linux, libxml2 headers live under /usr/include/libxml2/.
+			// The bridging header already has #elif __has_include(<libxml2/libxml/HTMLparser.h>)
+			// which picks this up when the compiler searches /usr/include.
+			// No extra flags needed — kept as comment for documentation.
+		],
 		linkerSettings: [
 			.linkedLibrary("xml2")
 		]
@@ -78,12 +88,6 @@ let htmlTargets: [Target] = [
 let swiftTextHTMLDeps: [Target.Dependency] = [
 	.target(name: "SwiftTextHTML", condition: .when(traits: ["HTML"])),
 ]
-let swiftTextExtraDeps: [Target.Dependency] = [
-	.target(name: "SwiftTextOCR", condition: .when(traits: ["OCR"])),
-	.target(name: "SwiftTextPDF", condition: .when(traits: ["PDF"])),
-]
-let ocrTestDeps: [Target.Dependency] = []
-#endif
 
 let packageProducts: [Product] = [
 	.library(
