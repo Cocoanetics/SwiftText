@@ -47,22 +47,85 @@ let swiftTextExtraDeps: [Target.Dependency] = [
 let ocrTestDeps: [Target.Dependency] = []
 #endif
 
+let packageProducts: [Product] = [
+	.library(
+		name: "SwiftText",
+		targets: ["SwiftText"]
+	),
+	.library(
+		name: "SwiftTextHTML",
+		targets: ["SwiftTextHTML"]
+	),
+	.library(
+		name: "SwiftTextDOCX",
+		targets: ["SwiftTextDOCX"]
+	),
+] + macOSProducts
+
+let swiftTextDependencies: [Target.Dependency] = [
+	.target(name: "SwiftTextHTML", condition: .when(traits: ["HTML"])),
+	.target(name: "SwiftTextDOCX", condition: .when(traits: ["DOCX"])),
+] + swiftTextExtraDeps
+
+let packageTargets: [Target] = [
+	.target(
+		name: "SwiftText",
+		dependencies: swiftTextDependencies,
+		path: "Sources/SwiftText"
+	),
+	.target(
+		name: "SwiftTextHTML",
+		dependencies: ["HTMLParser", "CHTMLParser"],
+		path: "Sources/SwiftTextHTML"
+	),
+	.target(
+		name: "HTMLParser",
+		dependencies: ["CHTMLParser"],
+		path: "Sources/HTMLParser"
+	),
+	.target(
+		name: "CHTMLParser",
+		dependencies: {
+			#if os(Linux)
+			return [.systemLibrary(name: "libxml2", pkgConfig: "libxml-2.0", providers: [
+				.apt(["libxml2-dev"]),
+				.brew(["libxml2"])
+			])]
+			#else
+			return []
+			#endif
+		}(),
+		path: "Sources/CHTMLParser",
+		publicHeadersPath: "include",
+		linkerSettings: [
+			.linkedLibrary("xml2")
+		]
+	),
+	.target(
+		name: "SwiftTextDOCX",
+		dependencies: [
+			.product(name: "ZIPFoundation", package: "ZIPFoundation"),
+		],
+		path: "Sources/SwiftTextDOCX"
+	),
+	.testTarget(
+		name: "SwiftTextHTMLTests",
+		dependencies: ["SwiftTextHTML"],
+		path: "Tests/SwiftTextHTMLTests"
+	),
+	.testTarget(
+		name: "SwiftTextDOCXTests",
+		dependencies: ["SwiftTextDOCX"],
+		path: "Tests/SwiftTextDOCXTests",
+		resources: [
+			.process("Resources"),
+		]
+	),
+] + macOSTargets
+
 let package = Package(
 	name: "SwiftText",
-	products: [
-		.library(
-			name: "SwiftText",
-			targets: ["SwiftText"]
-		),
-		.library(
-			name: "SwiftTextHTML",
-			targets: ["SwiftTextHTML"]
-		),
-		.library(
-			name: "SwiftTextDOCX",
-			targets: ["SwiftTextDOCX"]
-		),
-	] + macOSProducts,
+	products: packageProducts,
 	traits: [
 		.trait(name: "OCR", description: "Image OCR support"),
 		.trait(name: "HTML", description: "HTML parsing"),
@@ -74,62 +137,5 @@ let package = Package(
 		.package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0"),
 		.package(url: "https://github.com/weichsel/ZIPFoundation.git", from: "0.9.12"),
 	],
-	targets: [
-		.target(
-			name: "SwiftText",
-			dependencies: [
-				.target(name: "SwiftTextHTML", condition: .when(traits: ["HTML"])),
-				.target(name: "SwiftTextDOCX", condition: .when(traits: ["DOCX"])),
-			] + swiftTextExtraDeps,
-			path: "Sources/SwiftText"
-		),
-		.target(
-			name: "SwiftTextHTML",
-			dependencies: ["HTMLParser", "CHTMLParser"],
-			path: "Sources/SwiftTextHTML"
-		),
-		.target(
-			name: "HTMLParser",
-			dependencies: ["CHTMLParser"],
-			path: "Sources/HTMLParser"
-		),
-		.target(
-			name: "CHTMLParser",
-			dependencies: {
-				#if os(Linux)
-				return [.systemLibrary(name: "libxml2", pkgConfig: "libxml-2.0", providers: [
-					.apt(["libxml2-dev"]),
-					.brew(["libxml2"])
-				])]
-				#else
-				return []
-				#endif
-			}(),
-			path: "Sources/CHTMLParser",
-			publicHeadersPath: "include",
-			linkerSettings: [
-				.linkedLibrary("xml2")
-			]
-		),
-		.target(
-			name: "SwiftTextDOCX",
-			dependencies: [
-				.product(name: "ZIPFoundation", package: "ZIPFoundation"),
-			],
-			path: "Sources/SwiftTextDOCX"
-		),
-		.testTarget(
-			name: "SwiftTextHTMLTests",
-			dependencies: ["SwiftTextHTML"],
-			path: "Tests/SwiftTextHTMLTests"
-		),
-		.testTarget(
-			name: "SwiftTextDOCXTests",
-			dependencies: ["SwiftTextDOCX"],
-			path: "Tests/SwiftTextDOCXTests",
-			resources: [
-				.process("Resources"),
-			]
-		),
-	] + macOSTargets
+	targets: packageTargets
 )
