@@ -1,5 +1,9 @@
 import Foundation
 import ZIPFoundation
+#if canImport(FoundationXML)
+// On Linux, XMLParser/XMLParserDelegate live in FoundationXML, not Foundation.
+import FoundationXML
+#endif
 
 final class DocxParser {
 	func readDocument(from url: URL) throws -> DocxDocument {
