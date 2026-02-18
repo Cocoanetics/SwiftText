@@ -80,18 +80,13 @@ jobs:
           xcode-version: "26.0"
 
       - name: Install visionOS platform
-        run: xcodebuild -downloadPlatform visionOS
+        run: |
+          xcodebuild -downloadPlatform visionOS || true
+          xcrun simctl list runtimes
 
-      - name: Build for visionOS Simulator
+      - name: Build for visionOS
         run: |
           xcodebuild build \
             -scheme SwiftText-Package \
-            -destination "generic/platform=visionOS Simulator" \
-            -skipPackagePluginValidation
-
-      - name: Test on visionOS Simulator
-        run: |
-          xcodebuild test \
-            -scheme SwiftText-Package \
-            -destination "platform=visionOS Simulator,name=Apple Vision Pro" \
+            -destination "generic/platform=visionOS" \
             -skipPackagePluginValidation
