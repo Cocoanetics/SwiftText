@@ -70,7 +70,7 @@ extension PDFPage
 		return []
 	}
 	
-	func textLinesFromSelections() -> [TextLine]?
+	public func textLinesFromSelections() -> [TextLine]?
 	{
 		let pageBounds = bounds(for: .mediaBox)
 		let pageHeight = pageBounds.height

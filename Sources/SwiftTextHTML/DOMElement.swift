@@ -161,8 +161,14 @@ public class DOMElement: DOMNode
 			result += normalized
 
 		case "blockquote":
-			let blockquoteContent = children.map { $0.markdown(imageResolver: imageResolver).trimmingCharacters(in: .whitespacesAndNewlines) }.joined(separator: "\n")
-			result += "> " + blockquoteContent.replacingOccurrences(of: "\n", with: "\n> ")
+			let blockquoteContent = children.map { $0.markdown(imageResolver: imageResolver) }.joined()
+			let normalizedContent = blockquoteContent
+				.replacingOccurrences(of: "\r\n", with: "\n")
+				.trimmingCharacters(in: .whitespacesAndNewlines)
+			guard !normalizedContent.isEmpty else {
+				return ""
+			}
+			result += prefixBlockquoteLines(normalizedContent)
 
 		case "pre":
 			let preContent: String
@@ -358,5 +364,43 @@ public class DOMElement: DOMNode
 		while let first = lines.first, first.isEmpty { lines.removeFirst() }
 		while let last = lines.last, last.isEmpty { lines.removeLast() }
 		return lines.joined(separator: "\n")
+	}
+
+	private func prefixBlockquoteLines(_ content: String) -> String {
+		let lines = content.components(separatedBy: "\n")
+		return lines.map { prefixBlockquoteLine($0) }.joined(separator: "\n")
+	}
+
+	private func prefixBlockquoteLine(_ line: String) -> String {
+		let trimmedLine = line.trimmingCharacters(in: .whitespaces)
+		guard !trimmedLine.isEmpty else {
+			return ">"
+		}
+
+		let (existingLevel, remainder) = parseBlockquotePrefix(in: trimmedLine)
+		let quotePrefix = String(repeating: ">", count: existingLevel + 1)
+
+		guard !remainder.isEmpty else {
+			return quotePrefix
+		}
+
+		return "\(quotePrefix) \(remainder)"
+	}
+
+	private func parseBlockquotePrefix(in line: String) -> (level: Int, remainder: String) {
+		var index = line.startIndex
+		var level = 0
+
+		while index < line.endIndex, line[index] == ">" {
+			level += 1
+			index = line.index(after: index)
+
+			while index < line.endIndex, line[index].isWhitespace {
+				index = line.index(after: index)
+			}
+		}
+
+		let remainder = line[index...].trimmingCharacters(in: .whitespaces)
+		return (level, remainder)
 	}
 }
