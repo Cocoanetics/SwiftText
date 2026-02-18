@@ -146,6 +146,12 @@ let packageTargets: [Target] = [
 
 let package = Package(
 	name: "SwiftText",
+	platforms: [
+		.macOS(.v12),
+		.iOS(.v13),
+		.tvOS(.v13),
+		.watchOS(.v6),
+	],
 	products: packageProducts,
 	traits: [
 		.trait(name: "OCR", description: "Image OCR support"),

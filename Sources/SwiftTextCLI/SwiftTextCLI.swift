@@ -5,6 +5,7 @@
 //  Created by Oliver Drobnik on 09.12.24.
 //
 
+#if os(macOS)
 import ArgumentParser
 import Foundation
 import ImageIO
@@ -769,3 +770,20 @@ private extension Overlay {
 	}
 }
 #endif
+
+#else // !os(macOS)
+
+// SwiftTextCLI is a macOS-only command-line tool. This stub satisfies the
+// Swift compiler when the package manifest includes the executable target
+// (because Package.swift is evaluated on a macOS host, making #if os(macOS)
+// true in the manifest even when cross-compiling for iOS/tvOS/watchOS).
+import Foundation
+
+@main
+enum SwiftTextCLIStub {
+	static func main() {
+		fatalError("SwiftTextCLI is a macOS-only tool and cannot run on this platform.")
+	}
+}
+
+#endif // os(macOS)
