@@ -1,0 +1,36 @@
+name: Swift
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify Swift version
+        run: swift --version
+
+      - name: Build & Test (macOS)
+        run: swift test
+
+  build-linux:
+    runs-on: ubuntu-latest
+    container: swift:6.1
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install libxml2 dev
+        run: apt-get update && apt-get install -y libxml2-dev
+
+      - name: Verify Swift version
+        run: swift --version
+
+      - name: Build & Test (Linux)
+        run: swift test
