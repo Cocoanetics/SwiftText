@@ -79,6 +79,9 @@ jobs:
         with:
           xcode-version: "26.0"
 
+      - name: Install visionOS platform
+        run: xcodebuild -downloadPlatform visionOS
+
       - name: Build for visionOS Simulator
         run: |
           xcodebuild build \
