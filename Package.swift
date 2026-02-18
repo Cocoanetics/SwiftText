@@ -2,7 +2,7 @@
 import PackageDescription
 
 // macOS-only targets (Vision, PDFKit, AppKit, WebKit)
-#if os(Linux)
+#if !os(macOS)
 let macOSProducts: [Product] = []
 let macOSTargets: [Target] = []
 let swiftTextExtraDeps: [Target.Dependency] = []
@@ -52,6 +52,7 @@ let ocrTestDeps: [Target.Dependency] = []
 //     -I/usr/include/libxml2 and -lxml2.  CHTMLParser depends on CLibXML2
 //     so those flags propagate automatically.
 //   - On macOS: libxml2 is part of the SDK; link directly with -lxml2.
+//   - On Windows: installed via vcpkg; headers/libs found via INCLUDE/LIB env vars.
 #if os(Linux)
 let cHTMLParserDeps: [Target.Dependency] = [.target(name: "CLibXML2")]
 let cHTMLParserLinker: [LinkerSetting] = []
@@ -62,6 +63,10 @@ let xmlSystemTargets: [Target] = [
 		providers: [.apt(["libxml2-dev"])]
 	),
 ]
+#elseif os(Windows)
+let cHTMLParserDeps: [Target.Dependency] = []
+let cHTMLParserLinker: [LinkerSetting] = [.linkedLibrary("libxml2")]
+let xmlSystemTargets: [Target] = []
 #else
 let cHTMLParserDeps: [Target.Dependency] = []
 let cHTMLParserLinker: [LinkerSetting] = [.linkedLibrary("xml2")]

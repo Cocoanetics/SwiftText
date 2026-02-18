@@ -1,8 +1,8 @@
-#if OCR && !os(Linux)
+#if OCR && os(macOS)
 @_exported import SwiftTextOCR
 #endif
 
-#if PDF && !os(Linux)
+#if PDF && os(macOS)
 @_exported import SwiftTextPDF
 #endif
 
