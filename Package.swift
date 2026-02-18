@@ -7,6 +7,16 @@ let macOSProducts: [Product] = []
 let macOSTargets: [Target] = []
 let swiftTextExtraDeps: [Target.Dependency] = []
 let ocrTestDeps: [Target.Dependency] = []
+// On Linux we add a system library target so pkg-config wires up the libxml2
+// include paths (-I/usr/include/libxml2) and link flags for all dependents.
+let linuxExtraTargets: [Target] = [
+	.systemLibrary(
+		name: "CLibxml2",
+		pkgConfig: "libxml-2.0",
+		providers: [.apt(["libxml2-dev"])]
+	)
+]
+let chtmlParserSystemDeps: [Target.Dependency] = ["CLibxml2"]
 #else
 let macOSProducts: [Product] = [
 	.library(name: "SwiftTextOCR", targets: ["SwiftTextOCR"]),
@@ -45,6 +55,8 @@ let swiftTextExtraDeps: [Target.Dependency] = [
 	.target(name: "SwiftTextPDF", condition: .when(traits: ["PDF"])),
 ]
 let ocrTestDeps: [Target.Dependency] = []
+let linuxExtraTargets: [Target] = []
+let chtmlParserSystemDeps: [Target.Dependency] = []
 #endif
 
 let packageProducts: [Product] = [
@@ -85,16 +97,7 @@ let packageTargets: [Target] = [
 	),
 	.target(
 		name: "CHTMLParser",
-		dependencies: {
-			#if os(Linux)
-			return [.systemLibrary(name: "libxml2", pkgConfig: "libxml-2.0", providers: [
-				.apt(["libxml2-dev"]),
-				.brew(["libxml2"])
-			])]
-			#else
-			return []
-			#endif
-		}(),
+		dependencies: chtmlParserSystemDeps,
 		path: "Sources/CHTMLParser",
 		publicHeadersPath: "include",
 		linkerSettings: [
@@ -121,7 +124,7 @@ let packageTargets: [Target] = [
 			.process("Resources"),
 		]
 	),
-] + macOSTargets
+] + macOSTargets + linuxExtraTargets
 
 let package = Package(
 	name: "SwiftText",
