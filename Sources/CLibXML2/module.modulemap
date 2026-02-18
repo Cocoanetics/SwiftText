@@ -1,6 +1,8 @@
+// CLibXML2: system library shim for Linux.
+// Purpose: deliver pkg-config cflags/libs (-I/usr/include/libxml2, -lxml2)
+// to the CHTMLParser C target.  No libxml2 types are exported to Swift.
 module CLibXML2 [system] {
+    header "libxml2_bridging.h"
     link "xml2"
-    umbrella header "libxml2_bridging.h"
     export *
-    module * { export * }
 }
