@@ -16,7 +16,7 @@ import Vision
 extension PDFPage
 {
 	/// Renders the PDF page into a bitmap image at the specified DPI and returns the created CGImage with the page's logical size.
-	@available(iOS 13.0, tvOS 13.0, macOS 10.15, *)
+	@available(iOS 13.0, tvOS 13.0, macOS 10.15, visionOS 1.0, *)
 	public func renderedPageImage(dpi: CGFloat = 300) throws -> (CGImage, CGSize)
 	{
 		let pageBounds = self.bounds(for: .mediaBox)
@@ -93,7 +93,7 @@ extension PDFPage
 	
 	func textLinesFromOCR() -> [TextLine]?
 	{
-		if #available(iOS 13.0, tvOS 13.0, macOS 10.15, *),
+		if #available(iOS 13.0, tvOS 13.0, macOS 10.15, visionOS 1.0, *),
 		   let textLines = try? performOCR()
 		{
 			return textLines
@@ -127,7 +127,7 @@ extension PDFPage
 	 }
 	 ```
 	 */
-	@available(iOS 13.0, tvOS 13.0, macOS 10.15, *)
+	@available(iOS 13.0, tvOS 13.0, macOS 10.15, visionOS 1.0, *)
 	public func performOCR() throws -> [TextLine]?
 	{
 		let pageBounds = self.bounds(for: .mediaBox)

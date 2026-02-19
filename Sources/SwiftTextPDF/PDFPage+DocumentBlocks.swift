@@ -19,7 +19,7 @@ extension PDFPage {
 	}
 
 	public func documentBlocksWithImages(dpi: CGFloat = 300, applyPostProcessing: Bool = true) async throws -> (blocks: [DocumentBlock], images: [DocumentImage]) {
-		guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, *) else {
+		guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, visionOS 26.0, *) else {
 			throw DocumentScannerError.visionUnavailable
 		}
 		let (cgImage, _) = try renderedPageImage(dpi: dpi)
@@ -29,7 +29,7 @@ extension PDFPage {
 
 	/// Detects rectangular regions on the rendered page. Coordinates are returned in page space (origin at the top-left).
 	public func detectedRectangles(dpi: CGFloat = 300) throws -> [CGRect] {
-		guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, *) else {
+		guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, visionOS 26.0, *) else {
 			throw DocumentScannerError.visionUnavailable
 		}
 		let (cgImage, _) = try renderedPageImage(dpi: dpi)

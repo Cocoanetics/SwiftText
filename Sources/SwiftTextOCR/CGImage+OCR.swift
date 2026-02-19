@@ -38,7 +38,7 @@ public extension CGImage
 	 }
 	 ```
 	 */
-	@available(iOS 13.0, tvOS 13.0, macOS 10.15, *)
+	@available(iOS 13.0, tvOS 13.0, macOS 10.15, visionOS 1.0, *)
 	func performOCR(imageSize: CGSize) throws -> [TextLine]?
 	{
 		#if canImport(Vision)
@@ -63,7 +63,7 @@ public extension CGImage
 		for observation in results {
 			if let topCandidate = observation.topCandidates(1).first {
 				let rect: CGRect
-				if #available(iOS 18.0, tvOS 18.0, macOS 15.0, *) {
+				if #available(iOS 18.0, tvOS 18.0, macOS 15.0, visionOS 2.0, *) {
 					let normalized = Vision.NormalizedRect(
 						x: observation.boundingBox.minX,
 						y: observation.boundingBox.minY,
@@ -103,7 +103,7 @@ public extension CGImage
 	 - Discussion:
 	 This method performs OCR on the image to extract text. Since images don't have selectable text like PDFs, OCR is the only method available.
 	 */
-	@available(iOS 13.0, tvOS 13.0, macOS 10.15, *)
+	@available(iOS 13.0, tvOS 13.0, macOS 10.15, visionOS 1.0, *)
 	func textLines(imageSize: CGSize) -> [TextLine]
 	{
 		return (try? performOCR(imageSize: imageSize)) ?? []
@@ -115,7 +115,7 @@ public extension CGImage
 	 - Parameter imageSize: The size of the image in points.
 	 - Returns: An array of `String` objects, where each string represents a line of text extracted from the image.
 	 */
-	@available(iOS 13.0, tvOS 13.0, macOS 10.15, *)
+	@available(iOS 13.0, tvOS 13.0, macOS 10.15, visionOS 1.0, *)
 	func stringsFromLines(imageSize: CGSize) -> [String] {
 		return textLines(imageSize: imageSize).map { $0.combinedText }
 	}
@@ -126,7 +126,7 @@ public extension CGImage
 	 - Parameter imageSize: The size of the image in points.
 	 - Returns: A `String` containing all extracted text from the image.
 	 */
-	@available(iOS 13.0, tvOS 13.0, macOS 10.15, *)
+	@available(iOS 13.0, tvOS 13.0, macOS 10.15, visionOS 1.0, *)
 	func extractText(imageSize: CGSize) -> String {
 		return textLines(imageSize: imageSize).string()
 	}

@@ -10,7 +10,7 @@ import PDFKit
 import SwiftTextOCR
 
 #if canImport(Vision)
-@available(iOS 26.0, tvOS 26.0, macOS 26.0, *)
+@available(iOS 26.0, tvOS 26.0, macOS 26.0, visionOS 26.0, *)
 extension PDFPage {
 	public func documentSemantics(dpi: CGFloat = 300, applyPostProcessing: Bool = true) async throws -> DocumentSemantics {
 		let (cgImage, _) = try renderedPageImage(dpi: dpi)
