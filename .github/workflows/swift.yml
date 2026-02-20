@@ -2,7 +2,7 @@ name: Swift
 
 on:
   push:
-    branches: ["main", "ios-support"]
+    branches: ["main"]
   pull_request:
     branches: ["main"]
 
@@ -66,27 +66,4 @@ jobs:
           xcodebuild test \
             -scheme SwiftText-Package \
             -destination "platform=iOS Simulator,name=iPhone 17,OS=latest" \
-            -skipPackagePluginValidation
-
-  build-visionos:
-    runs-on: macos-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Select Xcode 26.0
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: "26.0"
-
-      - name: Install visionOS platform
-        run: |
-          xcodebuild -downloadPlatform visionOS || true
-          xcrun simctl list runtimes
-
-      - name: Build for visionOS
-        run: |
-          xcodebuild build \
-            -scheme SwiftText-Package \
-            -destination "generic/platform=visionOS" \
             -skipPackagePluginValidation
