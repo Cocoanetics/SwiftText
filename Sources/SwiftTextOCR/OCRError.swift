@@ -10,7 +10,7 @@ import Foundation
 /**
  Errors that can occur during OCR processing.
  */
-@available(iOS 13.0, tvOS 13.0, macOS 10.15, *)
+@available(iOS 13.0, tvOS 13.0, macOS 10.15, visionOS 1.0, *)
 public enum OCRError: Error, CustomStringConvertible
 {
 	case failedToCreateContext

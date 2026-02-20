@@ -183,7 +183,7 @@ public struct NormalizedDocumentBlock {
 }
 
 #if canImport(Vision)
-@available(iOS 26.0, tvOS 26.0, macOS 26.0, *)
+@available(iOS 26.0, tvOS 26.0, macOS 26.0, visionOS 26.0, *)
 public func documentSemantics(from cgImage: CGImage, applyPostProcessing: Bool = true) async throws -> DocumentSemantics {
 	let referenceSize = CGSize(width: CGFloat(cgImage.width), height: CGFloat(cgImage.height))
 	let request = RecognizeDocumentsRequest()

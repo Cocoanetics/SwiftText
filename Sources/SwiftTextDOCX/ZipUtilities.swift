@@ -1,5 +1,6 @@
 import Foundation
 
+#if os(macOS) || os(Linux)
 #if os(Windows)
 private let tarExecutablePath = "C:\\Windows\\System32\\tar.exe"
 #else
@@ -34,3 +35,4 @@ internal func unzip(url: URL, to destination: URL) throws {
         throw DocxFileError.unreadableArchive(url, nil)
     }
 }
+#endif

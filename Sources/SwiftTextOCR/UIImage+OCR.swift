@@ -20,7 +20,7 @@ public extension UIImage
 	 
 	 - Note: This method requires iOS 13.0+, tvOS 13.0+, or macOS 10.15+. On earlier versions, this method will not be available.
 	 */
-	@available(iOS 13.0, tvOS 13.0, macOS 10.15, *)
+	@available(iOS 13.0, tvOS 13.0, macOS 10.15, visionOS 1.0, *)
 	func performOCR() throws -> [TextLine]?
 	{
 		guard let cgImage = self.cgImage else {
@@ -36,7 +36,7 @@ public extension UIImage
 	 - Discussion:
 	 This method performs OCR on the image to extract text. Since images don't have selectable text like PDFs, OCR is the only method available.
 	 */
-	@available(iOS 13.0, tvOS 13.0, macOS 10.15, *)
+	@available(iOS 13.0, tvOS 13.0, macOS 10.15, visionOS 1.0, *)
 	func textLines() -> [TextLine]
 	{
 		guard let cgImage = self.cgImage else { return [] }
@@ -48,7 +48,7 @@ public extension UIImage
 	 
 	 - Returns: An array of `String` objects, where each string represents a line of text extracted from the image.
 	 */
-	@available(iOS 13.0, tvOS 13.0, macOS 10.15, *)
+	@available(iOS 13.0, tvOS 13.0, macOS 10.15, visionOS 1.0, *)
 	var stringsFromLines: [String] {
 		guard let cgImage = self.cgImage else { return [] }
 		return cgImage.stringsFromLines(imageSize: self.size)
@@ -59,7 +59,7 @@ public extension UIImage
 	 
 	 - Returns: A `String` containing all extracted text from the image.
 	 */
-	@available(iOS 13.0, tvOS 13.0, macOS 10.15, *)
+	@available(iOS 13.0, tvOS 13.0, macOS 10.15, visionOS 1.0, *)
 	func extractText() -> String {
 		guard let cgImage = self.cgImage else { return "" }
 		return cgImage.extractText(imageSize: self.size)

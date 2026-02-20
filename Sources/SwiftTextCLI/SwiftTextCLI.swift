@@ -5,6 +5,7 @@
 //  Created by Oliver Drobnik on 09.12.24.
 //
 
+#if os(macOS)
 import ArgumentParser
 import Foundation
 import ImageIO
@@ -74,7 +75,7 @@ struct OCR: AsyncParsableCommand {
 		}
 		
 		if markdown {
-			guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, *) else {
+			guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, visionOS 26.0, *) else {
 				throw ValidationError("Vision document segmentation is unavailable on this platform.")
 			}
 			let textLines = pdfDocument.textLines()
@@ -107,7 +108,7 @@ struct OCR: AsyncParsableCommand {
 		let pageSize = CGSize(width: CGFloat(cgImage.width), height: CGFloat(cgImage.height))
 		
 		if markdown {
-			if #available(iOS 26.0, tvOS 26.0, macOS 26.0, *) {
+			if #available(iOS 26.0, tvOS 26.0, macOS 26.0, visionOS 26.0, *) {
 				let textLines = cgImage.textLines(imageSize: pageSize)
 				let (blocks, lookup) = try await semanticMarkdownBlocks(for: cgImage, pageSize: pageSize, textLines: textLines)
 				var imageLookup = lookup
@@ -216,7 +217,7 @@ struct OCR: AsyncParsableCommand {
 		}
 	}
 	
-	@available(iOS 26.0, tvOS 26.0, macOS 26.0, *)
+	@available(iOS 26.0, tvOS 26.0, macOS 26.0, visionOS 26.0, *)
 	private func semanticMarkdownBlocks(for document: PDFDocument) async throws -> ([DocumentBlock], ImageLookup) {
 		var combinedBlocks = [DocumentBlock]()
 		var lookupStorage: [String: [String]] = [:]
@@ -242,7 +243,7 @@ struct OCR: AsyncParsableCommand {
 		return (combinedBlocks, ImageLookup(storage: lookupStorage))
 	}
 	
-	@available(iOS 26.0, tvOS 26.0, macOS 26.0, *)
+	@available(iOS 26.0, tvOS 26.0, macOS 26.0, visionOS 26.0, *)
 	private func semanticMarkdownBlocks(for cgImage: CGImage, pageSize: CGSize, textLines: [TextLine]) async throws -> ([DocumentBlock], ImageLookup) {
 		let semantics = try await documentSemantics(from: cgImage)
 		let grouped = TextLineSemanticComposer.composeBlocks(
@@ -415,7 +416,7 @@ struct HTML: AsyncParsableCommand {
 		}
 
 		if markdown {
-			guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, *) else {
+			guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, visionOS 26.0, *) else {
 				throw ValidationError("Vision document segmentation is unavailable on this platform.")
 			}
 			let textLines = pdfDocument.textLines()
@@ -487,7 +488,7 @@ struct HTML: AsyncParsableCommand {
 		}
 	}
 
-	@available(iOS 26.0, tvOS 26.0, macOS 26.0, *)
+	@available(iOS 26.0, tvOS 26.0, macOS 26.0, visionOS 26.0, *)
 	private func semanticMarkdownBlocks(for document: PDFDocument) async throws -> ([DocumentBlock], ImageLookup) {
 		var combinedBlocks = [DocumentBlock]()
 		var lookupStorage: [String: [String]] = [:]
@@ -645,7 +646,7 @@ struct Overlay: AsyncParsableCommand {
 		
 		let pageSize = CGSize(width: CGFloat(cgImage.width), height: CGFloat(cgImage.height))
 		
-		guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, *) else {
+		guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, visionOS 26.0, *) else {
 			throw ValidationError("Vision document segmentation is unavailable on this platform.")
 		}
 		
@@ -675,7 +676,7 @@ struct Overlay: AsyncParsableCommand {
 			throw ValidationError("Could not open PDF file: \(inputURL.path)")
 		}
 		
-		guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, *) else {
+		guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, visionOS 26.0, *) else {
 			throw ValidationError("Vision document segmentation is unavailable on this platform.")
 		}
 		
@@ -756,7 +757,7 @@ private struct ImageLookup {
 }
 
 #if canImport(Vision)
-@available(iOS 26.0, tvOS 26.0, macOS 26.0, *)
+@available(iOS 26.0, tvOS 26.0, macOS 26.0, visionOS 26.0, *)
 private extension Overlay {
 	func reconstructedBlocks(for image: CGImage, textLines: [TextLine]) async throws -> [DocumentBlock] {
 		let semantics = try await documentSemantics(from: image)
@@ -769,3 +770,20 @@ private extension Overlay {
 	}
 }
 #endif
+
+#else // !os(macOS)
+
+// SwiftTextCLI is a macOS-only command-line tool. This stub satisfies the
+// Swift compiler when the package manifest includes the executable target
+// (because Package.swift is evaluated on a macOS host, making #if os(macOS)
+// true in the manifest even when cross-compiling for iOS/tvOS/watchOS).
+import Foundation
+
+@main
+enum SwiftTextCLIStub {
+	static func main() {
+		fatalError("SwiftTextCLI is a macOS-only tool and cannot run on this platform.")
+	}
+}
+
+#endif // os(macOS)

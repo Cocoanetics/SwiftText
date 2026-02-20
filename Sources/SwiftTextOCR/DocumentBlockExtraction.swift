@@ -30,7 +30,7 @@ public enum DocumentScannerError: Error, CustomStringConvertible {
 
 #if canImport(Vision)
 public func documentBlocks(from cgImage: CGImage, applyPostProcessing: Bool = true) async throws -> (blocks: [DocumentBlock], images: [DocumentImage]) {
-	guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, *) else {
+	guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, visionOS 26.0, *) else {
 		throw DocumentScannerError.visionUnavailable
 	}
 	let pageSize = CGSize(width: CGFloat(cgImage.width), height: CGFloat(cgImage.height))
@@ -47,7 +47,7 @@ public func documentBlocks(from cgImage: CGImage, applyPostProcessing: Bool = tr
 
 /// Detects rectangular regions within a CGImage. Coordinates are returned in image space (origin at the top-left).
 public func detectedRectangles(from cgImage: CGImage) throws -> [CGRect] {
-	guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, *) else {
+	guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, visionOS 26.0, *) else {
 		throw DocumentScannerError.visionUnavailable
 	}
 	let pageSize = CGSize(width: CGFloat(cgImage.width), height: CGFloat(cgImage.height))
@@ -56,7 +56,7 @@ public func detectedRectangles(from cgImage: CGImage) throws -> [CGRect] {
 #endif
 
 #if canImport(Vision)
-@available(iOS 26.0, tvOS 26.0, macOS 26.0, *)
+@available(iOS 26.0, tvOS 26.0, macOS 26.0, visionOS 26.0, *)
 struct DocumentBlockExtractor {
 	let image: CGImage
 	let pageSize: CGSize
@@ -813,13 +813,13 @@ private func isInReadingOrder(_ lhs: CGRect, _ rhs: CGRect, page: CGRect) -> Boo
 	return lhsNormalized.minX < rhsNormalized.minX
 }
 
-@available(iOS 18.0, tvOS 18.0, macOS 15.0, *)
+@available(iOS 18.0, tvOS 18.0, macOS 15.0, visionOS 2.0, *)
 private func convertNormalizedRect(_ rect: Vision.NormalizedRect, in pageSize: CGSize) -> CGRect {
 	return rect.toImageCoordinates(from: .fullImage, imageSize: pageSize, origin: .upperLeft)
 }
 
 private func convertNormalizedBoundingBox(_ rect: CGRect, in pageSize: CGSize) -> CGRect {
-	if #available(iOS 18.0, tvOS 18.0, macOS 15.0, *) {
+	if #available(iOS 18.0, tvOS 18.0, macOS 15.0, visionOS 2.0, *) {
 		let normalized = Vision.NormalizedRect(
 			x: rect.minX,
 			y: rect.minY,
@@ -862,7 +862,7 @@ private func normalize(_ rect: CGRect, in bounds: CGRect) -> CGRect {
 	)
 }
 
-@available(iOS 26.0, tvOS 26.0, macOS 26.0, *)
+@available(iOS 26.0, tvOS 26.0, macOS 26.0, visionOS 26.0, *)
 private extension Vision.NormalizedRegion {
 	func rect(in pageSize: CGSize) -> CGRect {
 		convertNormalizedBoundingBox(normalizedPath.boundingBox, in: pageSize)
