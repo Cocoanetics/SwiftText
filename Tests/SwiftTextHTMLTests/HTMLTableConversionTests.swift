@@ -89,3 +89,94 @@ func markdownIncludesCapabilitiesTableFromGitHubStyleHTML() async throws {
 
 	#expect(markdown.contains("![Calendar](calendar.png)"))
 }
+
+@Test
+func nestedTableIsLayout() async throws {
+	let html = """
+	<table>
+		<tr><td>
+			<table>
+				<tr><td>Inner</td></tr>
+			</table>
+		</td></tr>
+	</table>
+	"""
+	let document = try await HTMLDocument(data: Data(html.utf8))
+	let markdown = document.markdown()
+
+	#expect(!markdown.contains("|"))
+}
+
+@Test
+func singleColumnIsLayout() async throws {
+	let html = """
+	<table>
+		<tr><td>Row 1</td></tr>
+		<tr><td>Row 2</td></tr>
+		<tr><td>Row 3</td></tr>
+	</table>
+	"""
+	let document = try await HTMLDocument(data: Data(html.utf8))
+	let markdown = document.markdown()
+
+	#expect(!markdown.contains("|"))
+}
+
+@Test
+func imageHeavyIsLayout() async throws {
+	let html = """
+	<table>
+		<tr>
+			<td><img src="logo.png"/></td>
+			<td><img src="icon.png"/></td>
+		</tr>
+		<tr>
+			<td><img src="photo.png"/></td>
+			<td>Some text</td>
+		</tr>
+	</table>
+	"""
+	let document = try await HTMLDocument(data: Data(html.utf8))
+	let markdown = document.markdown()
+
+	#expect(!markdown.contains("|"))
+}
+
+@Test
+func dataTableIsPreserved() async throws {
+	let html = """
+	<table>
+		<thead>
+			<tr><th>Name</th><th>Price</th><th>Qty</th></tr>
+		</thead>
+		<tbody>
+			<tr><td>Widget</td><td>$10</td><td>5</td></tr>
+			<tr><td>Gadget</td><td>$20</td><td>3</td></tr>
+		</tbody>
+	</table>
+	"""
+	let document = try await HTMLDocument(data: Data(html.utf8))
+	let markdown = document.markdown()
+
+	#expect(markdown.contains("|"))
+	#expect(markdown.contains("Name"))
+	#expect(markdown.contains("Widget"))
+}
+
+@Test
+func multiBlockCellIsLayout() async throws {
+	let html = """
+	<table>
+		<tr><td>
+			<p>Para 1</p>
+			<p>Para 2</p>
+			<div>Content</div>
+			<p>Para 3</p>
+		</td></tr>
+	</table>
+	"""
+	let document = try await HTMLDocument(data: Data(html.utf8))
+	let markdown = document.markdown()
+
+	#expect(!markdown.contains("|"))
+}

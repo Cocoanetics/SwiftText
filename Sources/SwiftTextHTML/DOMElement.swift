@@ -143,8 +143,12 @@ public class DOMElement: DOMNode
 			result += "###### " + children.map { $0.markdown(imageResolver: imageResolver) }.joined()
 
 		case "table":
-			let columns = buildTableColumns(imageResolver: imageResolver)
-			result += formatTable(columns: columns)
+			if isLayoutTable() {
+				result += renderLayoutTableMarkdown(imageResolver: imageResolver)
+			} else {
+				let columns = buildTableColumns(imageResolver: imageResolver)
+				result += formatTable(columns: columns)
+			}
 
 		case "tr":
 			let cells = children.map { $0.markdown(imageResolver: imageResolver).trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -308,6 +312,122 @@ public class DOMElement: DOMNode
 			}
 		}
 		return rows
+	}
+
+	private func isLayoutTable() -> Bool {
+		if hasNestedTable() {
+			return true
+		}
+
+		let rows = collectTableRows()
+		if rows.count <= 1 {
+			return true
+		}
+
+		let firstRowCells = tableCellElements(in: rows.first).count
+		if firstRowCells <= 1 {
+			return true
+		}
+
+		var totalCells = 0
+		var imageCells = 0
+		var blockCells = 0
+		let blockElementNames: Set<String> = ["p", "div", "table", "ul", "ol", "h1", "h2", "h3", "h4", "h5", "h6"]
+
+		for row in rows {
+			for cellElement in tableCellElements(in: row) {
+				totalCells += 1
+				let childElements = cellElement.children.compactMap { $0 as? DOMElement }
+
+				if childElements.count == 1, childElements[0].name == "img" {
+					imageCells += 1
+				}
+
+				let blockElementCount = childElements.filter { blockElementNames.contains($0.name) }.count
+				if blockElementCount >= 3 {
+					blockCells += 1
+				}
+			}
+		}
+
+		if totalCells > 0 {
+			let imageRatio = Double(imageCells) / Double(totalCells)
+			let blockRatio = Double(blockCells) / Double(totalCells)
+
+			if imageRatio > 0.5 || blockRatio > 0.3 {
+				return true
+			}
+		}
+
+		let cellCounts = rows.map { tableCellElements(in: $0).count }
+		if cellCounts.isEmpty {
+			return true
+		}
+
+		let averageCells = Double(cellCounts.reduce(0, +)) / Double(cellCounts.count)
+		let variance = cellCounts
+			.map { Double($0) - averageCells }
+			.map { $0 * $0 }
+			.reduce(0, +) / Double(cellCounts.count)
+		let standardDeviation = sqrt(variance)
+
+		if standardDeviation > 1.0 {
+			return true
+		}
+
+		return false
+	}
+
+	private func hasNestedTable() -> Bool {
+		for child in children {
+			guard let element = child as? DOMElement else { continue }
+
+			if element.name == "table" {
+				return true
+			}
+
+			if ["tr", "td", "th", "thead", "tbody", "tfoot"].contains(element.name),
+			   element.hasNestedTable()
+			{
+				return true
+			}
+		}
+		return false
+	}
+
+	private func tableCellElements(in row: DOMElement?) -> [DOMElement] {
+		guard let row else {
+			return []
+		}
+
+		return row.children.compactMap { $0 as? DOMElement }.filter { ["td", "th"].contains($0.name) }
+	}
+
+	private func renderLayoutTableMarkdown(imageResolver: ((String) -> String?)?) -> String {
+		let rows = collectTableRows()
+		guard !rows.isEmpty else {
+			return children.map { $0.markdown(imageResolver: imageResolver) }.joined()
+		}
+
+		var renderedRows: [String] = []
+
+		for row in rows {
+			let renderedCells = tableCellElements(in: row)
+				.map { cell in
+					let content = cell.markdown(imageResolver: imageResolver).trimmingCharacters(in: .whitespacesAndNewlines)
+					return normalizeTableCellContent(content)
+				}
+				.filter { !$0.isEmpty }
+
+			guard !renderedCells.isEmpty else { continue }
+			renderedRows.append(renderedCells.joined(separator: " "))
+		}
+
+		if !renderedRows.isEmpty {
+			return renderedRows.joined(separator: "\n\n")
+		}
+
+		return children.map { $0.markdown(imageResolver: imageResolver) }.joined()
 	}
 
 	private func formatTable(columns: [[String]]) -> String {
