@@ -386,14 +386,16 @@ private func markdownToHTML(_ markdown: String, paper: PaperSize, landscape: Boo
 	    background: #f5f5f5;
 	    border: 1px solid #e0e0e0;
 	    border-radius: 4px;
-	    padding: 1em;
+	    padding: 0.8em;
+	    margin: 0.8em 0;
 	    overflow: hidden;
 	    line-height: 1.2;
 	    box-sizing: border-box;
-	    max-width: 100%;
-	    font-size: 9pt;
+	    max-width: calc(100% - 2em);
+	    font-size: 10pt;
 	    white-space: pre-wrap;
 	    word-break: break-all;
+	    contain: layout;
 	}
 	pre code {
 	    background: none;
