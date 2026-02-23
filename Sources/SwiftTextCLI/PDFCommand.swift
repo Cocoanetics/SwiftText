@@ -318,16 +318,24 @@ private func markdownToHTML(_ markdown: String, paper: PaperSize, landscape: Boo
 	    font-weight: 600;
 	    margin: 1.2em 0 0.4em;
 	    line-height: 1.3;
-	    page-break-after: avoid;
-	    break-after: avoid;
-	    page-break-inside: avoid;
-	    break-inside: avoid;
 	}
 	h1 { font-size: 2em;    border-bottom: 2px solid #ddd; padding-bottom: 0.2em; }
 	h2 { font-size: 1.5em;  border-bottom: 1px solid #eee; padding-bottom: 0.1em; }
 	h3 { font-size: 1.25em; }
-	p  { margin: 0.6em 0; orphans: 2; widows: 2; }
-	ul, ol { margin: 0.6em 0; padding-left: 1.8em; }
+	/* Semantic sections (heading + content until next heading) */
+	section {
+	    page-break-inside: avoid;
+	    break-inside: avoid;
+	}
+	p  {
+	    margin: 0.6em 0;
+	    orphans: 2;
+	    widows: 2;
+	}
+	ul, ol {
+	    margin: 0.6em 0;
+	    padding-left: 1.8em;
+	}
 	li {
 	    margin: 0.2em 0;
 	    orphans: 2;
@@ -361,7 +369,13 @@ private func markdownToHTML(_ markdown: String, paper: PaperSize, landscape: Boo
 	th, td { border: 1px solid #ccc; padding: 0.4em 0.7em; text-align: left; }
 	th { background: #f0f0f0; font-weight: 600; }
 	tr:nth-child(even) td { background: #fafafa; }
-	img.\(responsiveMarkdownImageClass) { \(responsiveMarkdownImageInlineStyle) }
+	img.\(responsiveMarkdownImageClass) {
+	    \(responsiveMarkdownImageInlineStyle)
+	    page-break-before: avoid;
+	    break-before: avoid;
+	    page-break-inside: avoid;
+	    break-inside: avoid;
+	}
 	hr { border: none; border-top: 1px solid #ddd; margin: 1.2em 0; }
 	a { color: #0366d6; }
 	sup a { text-decoration: none; }
@@ -403,11 +417,28 @@ private func convertMarkdownBody(_ markdown: String, footnoteState: FootnoteRend
 	var inCode = false
 	var codeAccum: [String] = []
 	var codeLang = ""
+	var openSectionLevels: [Int] = []  // Stack of open section heading levels
 
 	// Flush any open list tags
 	func closeLists() {
 		if inUL { out += "</ul>\n"; inUL = false }
 		if inOL { out += "</ol>\n"; inOL = false }
+	}
+	
+	// Close sections at this level or higher
+	func closeSectionsAtLevel(_ level: Int) {
+		while let lastLevel = openSectionLevels.last, lastLevel >= level {
+			out += "</section>\n"
+			openSectionLevels.removeLast()
+		}
+	}
+	
+	// Close all open sections
+	func closeAllSections() {
+		while !openSectionLevels.isEmpty {
+			out += "</section>\n"
+			openSectionLevels.removeLast()
+		}
 	}
 
 	while i < lines.count {
@@ -424,6 +455,7 @@ private func convertMarkdownBody(_ markdown: String, footnoteState: FootnoteRend
 			} else {
 				// Opening fence
 				closeLists()
+				closeAllSections()
 				inCode = true
 				codeLang = String(line.dropFirst(3)).trimmingCharacters(in: .whitespaces)
 			}
@@ -434,6 +466,7 @@ private func convertMarkdownBody(_ markdown: String, footnoteState: FootnoteRend
 		// ── Footnote definition ([^id]: ...) ──────────────────────────
 		if let definitionStart = parseFootnoteDefinitionStart(line) {
 			closeLists()
+			closeAllSections()
 			let definition = parseFootnoteDefinition(
 				lines: lines,
 				startIndex: i,
@@ -456,8 +489,11 @@ private func convertMarkdownBody(_ markdown: String, footnoteState: FootnoteRend
 			for ch in line { guard ch == "#" else { break }; level += 1 }
 			if level <= 6, line.count > level, line[line.index(line.startIndex, offsetBy: level)] == " " {
 				closeLists()
+				closeSectionsAtLevel(level)
 				let text = String(line.dropFirst(level + 1)).trimmingCharacters(in: .whitespaces)
+				out += "<section>\n"
 				out += "<h\(level)>\(inlineToHTML(text, footnoteState: footnoteState))</h\(level)>\n"
+				openSectionLevels.append(level)
 				i += 1; continue
 			}
 		}
@@ -467,11 +503,13 @@ private func convertMarkdownBody(_ markdown: String, footnoteState: FootnoteRend
 		if !trimmed.isEmpty, trimmed.allSatisfy({ $0 == "-" || $0 == " " }),
 		   trimmed.filter({ $0 == "-" }).count >= 3 {
 			closeLists()
+			closeAllSections()
 			out += "<hr>\n"
 			i += 1; continue
 		}
 		if trimmed == "***" || trimmed == "___" {
 			closeLists()
+			closeAllSections()
 			out += "<hr>\n"
 			i += 1; continue
 		}
@@ -492,7 +530,10 @@ private func convertMarkdownBody(_ markdown: String, footnoteState: FootnoteRend
 		// ── Unordered list (- / * / +) ────────────────────────────────
 		if line.hasPrefix("- ") || line.hasPrefix("* ") || line.hasPrefix("+ ") {
 			if inOL { out += "</ol>\n"; inOL = false }
-			if !inUL { out += "<ul>\n"; inUL = true }
+			if !inUL {
+				out += "<ul>\n"
+				inUL = true
+			}
 			let text = String(line.dropFirst(2))
 			
 			// Check for nested list items (indented with 4 spaces or 1 tab)
@@ -535,7 +576,10 @@ private func convertMarkdownBody(_ markdown: String, footnoteState: FootnoteRend
 		   line[..<spaceIdx].hasSuffix("."),
 		   let _ = Int(String(line[..<line.index(before: spaceIdx)])) {
 			if inUL { out += "</ul>\n"; inUL = false }
-			if !inOL { out += "<ol>\n"; inOL = true }
+			if !inOL {
+				out += "<ol>\n"
+				inOL = true
+			}
 			let text = String(line[line.index(after: spaceIdx)...])
 			out += "<li>\(inlineToHTML(text, footnoteState: footnoteState))</li>\n"
 			i += 1; continue
@@ -544,6 +588,7 @@ private func convertMarkdownBody(_ markdown: String, footnoteState: FootnoteRend
 		// ── Blank line ────────────────────────────────────────────────
 		if trimmed.isEmpty {
 			closeLists()
+			// Don't close heading group on blank lines (allows spacing)
 			out += "\n"
 			i += 1; continue
 		}
@@ -592,6 +637,7 @@ private func convertMarkdownBody(_ markdown: String, footnoteState: FootnoteRend
 		}
 
 	closeLists()
+	closeAllSections()
 	// Close any unclosed code block
 	if inCode {
 		let escaped = codeAccum.map { htmlEscape($0) }.joined(separator: "\n")
