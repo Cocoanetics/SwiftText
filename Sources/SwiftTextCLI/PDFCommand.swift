@@ -318,6 +318,26 @@ private func markdownToHTML(_ markdown: String, paper: PaperSize, landscape: Boo
 	    font-weight: 600;
 	    margin: 1.2em 0 0.4em;
 	    line-height: 1.3;
+	    page-break-after: avoid;
+	    break-after: avoid;
+	    page-break-inside: avoid;
+	    break-inside: avoid;
+	}
+	/* H1, H2: Start major sections on new page */
+	h1, h2 {
+	    page-break-before: always;
+	    break-before: always;
+	}
+	/* First heading: Don't force page break */
+	section:first-of-type > h1:first-child,
+	section:first-of-type > h2:first-child {
+	    page-break-before: auto;
+	    break-before: auto;
+	}
+	/* Subsection headings: avoid breaking away from parent context */
+	h3, h4, h5, h6 {
+	    page-break-before: avoid;
+	    break-before: avoid;
 	}
 	h1 { font-size: 2em;    border-bottom: 2px solid #ddd; padding-bottom: 0.2em; }
 	h2 { font-size: 1.5em;  border-bottom: 1px solid #eee; padding-bottom: 0.1em; }
