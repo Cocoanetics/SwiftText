@@ -94,43 +94,52 @@ struct PDF: AsyncParsableCommand {
 		guard FileManager.default.fileExists(atPath: fileURL.path) else {
 			throw ValidationError("File not found: \(fileURL.path)")
 		}
-		let (html, baseURL) = try convertToHTML(fileURL: fileURL)
+		let htmlSource = try convertToHTML(fileURL: fileURL)
 		let outputURL = fileOutputURL(from: fileURL)
-		try await renderHTML(html, sourceURL: baseURL, to: outputURL)
+		try await render(htmlSource, to: outputURL)
 		print(outputURL.path)
 	}
 
 	// MARK: - Input → HTML conversion
 
-	/// Converts a file at the given URL to an HTML string plus an optional base URL
-	/// for resolving relative assets.
-	private func convertToHTML(fileURL: URL) throws -> (String, URL?) {
+	enum HTMLSource {
+		case string(String, baseURL: URL?)
+		case file(URL, readAccessRoot: URL)
+	}
+
+	/// Converts a file at the given URL to an HTML source.
+	/// For markdown/docx, writes HTML to a temp file to enable local image access via loadFileURL.
+	func convertToHTML(fileURL: URL) throws -> HTMLSource {
 		let ext = fileURL.pathExtension.lowercased()
 		let baseURL = fileURL.deletingLastPathComponent()
 
 		switch ext {
 		case "html", "htm":
-			let data = try Data(contentsOf: fileURL)
-			let html = String(data: data, encoding: .utf8)
-				?? String(data: data, encoding: .isoLatin1)
-				?? ""
-			return (html, baseURL)
+			// Native HTML files can be loaded directly
+			return .file(fileURL, readAccessRoot: baseURL)
 
-		case "md", "markdown":
-			let md = try String(contentsOf: fileURL, encoding: .utf8)
-			return (markdownToHTML(md, paper: paper, landscape: landscape), nil)
-
-		case "docx":
-			let docx = try DocxFile(url: fileURL)
-			let md = docx.markdown()
-			return (markdownToHTML(md, paper: paper, landscape: landscape), nil)
+		case "md", "markdown", "docx":
+			let html: String
+			if ext == "docx" {
+				let docx = try DocxFile(url: fileURL)
+				let md = docx.markdown()
+				html = markdownToHTML(md, paper: paper, landscape: landscape)
+			} else {
+				let md = try String(contentsOf: fileURL, encoding: .utf8)
+				html = markdownToHTML(md, paper: paper, landscape: landscape)
+			}
+			
+			// Write HTML to temp file in source directory (enables local image access)
+			let tempHTML = baseURL.appendingPathComponent(".\(UUID().uuidString).html")
+			try html.write(to: tempHTML, atomically: true, encoding: .utf8)
+			return .file(tempHTML, readAccessRoot: baseURL)
 
 		case "eml":
 			let raw = try String(contentsOf: fileURL, encoding: .utf8)
 			guard let extracted = extractHTMLFromEML(raw) else {
 				throw ValidationError("No HTML body found in EML file: \(fileURL.lastPathComponent)")
 			}
-			return (extracted, nil)
+			return .string(extracted, baseURL: nil)
 
 		default:
 			throw ValidationError(
@@ -142,6 +151,7 @@ struct PDF: AsyncParsableCommand {
 	// MARK: - WebKit rendering
 
 	/// Builds a `WKPDFConfiguration` whose rect matches the chosen paper size and orientation.
+	@MainActor
 	@available(macOS 12.0, *)
 	private func pdfConfiguration() -> WKPDFConfiguration {
 		let config = WKPDFConfiguration()
@@ -152,6 +162,36 @@ struct PDF: AsyncParsableCommand {
 			config.rect = CGRect(origin: .zero, size: size)
 		}
 		return config
+	}
+
+	/// Renders an HTMLSource to a PDF file using WebKit.
+	@MainActor
+	@available(macOS 12.0, *)
+	private func render(_ source: HTMLSource, to outputURL: URL) async throws {
+		var tempFileToCleanup: URL? = nil
+		defer {
+			if let temp = tempFileToCleanup {
+				try? FileManager.default.removeItem(at: temp)
+			}
+		}
+
+		let browser: WebKitBrowser
+		switch source {
+		case .string(let html, let baseURL):
+			browser = WebKitBrowser(htmlString: html, baseURL: baseURL)
+		case .file(let fileURL, let readAccessRoot):
+			browser = WebKitBrowser(fileURL: fileURL, readAccessRoot: readAccessRoot)
+			// Mark temp file for cleanup if it's hidden
+			if fileURL.lastPathComponent.hasPrefix(".") {
+				tempFileToCleanup = fileURL
+			}
+		}
+
+		browser.frameSize = pageSize()
+		browser.preserveFrameHeight = true
+		await browser.waitForLoadCompletion()
+		let pdfData = try await browser.exportPaginatedPDFData(paperSize: pageSize())
+		try writeData(pdfData, to: outputURL)
 	}
 
 	/// Renders an HTML string to a PDF file using WebKit.
@@ -248,6 +288,9 @@ struct PDF: AsyncParsableCommand {
 
 // MARK: - Markdown → HTML
 
+private let responsiveMarkdownImageClass = "swifttext-markdown-image"
+private let responsiveMarkdownImageInlineStyle = "display: block; width: 100%; max-width: 100%; height: auto;"
+
 /// Converts a Markdown string to a self-contained HTML document
 /// styled for print output and with CSS `@page` size directives.
 private func markdownToHTML(_ markdown: String, paper: PaperSize, landscape: Bool) -> String {
@@ -304,9 +347,15 @@ private func markdownToHTML(_ markdown: String, paper: PaperSize, landscape: Boo
 	th, td { border: 1px solid #ccc; padding: 0.4em 0.7em; text-align: left; }
 	th { background: #f0f0f0; font-weight: 600; }
 	tr:nth-child(even) td { background: #fafafa; }
-	img { max-width: 100%; height: auto; }
+	img.\(responsiveMarkdownImageClass) { \(responsiveMarkdownImageInlineStyle) }
 	hr { border: none; border-top: 1px solid #ddd; margin: 1.2em 0; }
 	a { color: #0366d6; }
+	sup a { text-decoration: none; }
+	.footnote-definition {
+	    margin: 0.8em 0;
+	    font-size: 0.95em;
+	}
+	.footnote-definition p { margin: 0.4em 0; }
 	</style>
 	</head>
 	<body>
@@ -318,8 +367,16 @@ private func markdownToHTML(_ markdown: String, paper: PaperSize, landscape: Boo
 
 /// Converts the body of a Markdown document to HTML.
 /// Handles: headings, fenced code blocks, blockquotes, unordered/ordered lists,
-/// horizontal rules, bold, italic, inline code, links, images, and paragraphs.
+/// horizontal rules, bold, italic, inline code, links, images, footnotes, and paragraphs.
 private func convertMarkdownBody(_ markdown: String) -> String {
+	let footnoteState = FootnoteRenderState()
+	footnoteState.beginCollectionPass()
+	_ = convertMarkdownBody(markdown, footnoteState: footnoteState)
+	footnoteState.beginRenderPass()
+	return convertMarkdownBody(markdown, footnoteState: footnoteState)
+}
+
+private func convertMarkdownBody(_ markdown: String, footnoteState: FootnoteRenderState) -> String {
 	let lines = markdown
 		.replacingOccurrences(of: "\r\n", with: "\n")
 		.replacingOccurrences(of: "\r",   with: "\n")
@@ -360,6 +417,25 @@ private func convertMarkdownBody(_ markdown: String) -> String {
 		}
 		if inCode { codeAccum.append(line); i += 1; continue }
 
+		// ── Footnote definition ([^id]: ...) ──────────────────────────
+		if let definitionStart = parseFootnoteDefinitionStart(line) {
+			closeLists()
+			let definition = parseFootnoteDefinition(
+				lines: lines,
+				startIndex: i,
+				definitionStart: definitionStart
+			)
+			let number = footnoteState.number(for: definition.identifier)
+			out += renderFootnoteDefinition(
+				number: number,
+				contentLines: definition.contentLines,
+				footnoteState: footnoteState
+			)
+			out += "\n"
+			i = definition.nextIndex
+			continue
+		}
+
 		// ── ATX headings (#…) ─────────────────────────────────────────
 		if line.hasPrefix("#") {
 			var level = 0
@@ -367,7 +443,7 @@ private func convertMarkdownBody(_ markdown: String) -> String {
 			if level <= 6, line.count > level, line[line.index(line.startIndex, offsetBy: level)] == " " {
 				closeLists()
 				let text = String(line.dropFirst(level + 1)).trimmingCharacters(in: .whitespaces)
-				out += "<h\(level)>\(inlineToHTML(text))</h\(level)>\n"
+				out += "<h\(level)>\(inlineToHTML(text, footnoteState: footnoteState))</h\(level)>\n"
 				i += 1; continue
 			}
 		}
@@ -394,7 +470,7 @@ private func convertMarkdownBody(_ markdown: String) -> String {
 				qLines.append(lines[i].hasPrefix("> ") ? String(lines[i].dropFirst(2)) : "")
 				i += 1
 			}
-			let inner = convertMarkdownBody(qLines.joined(separator: "\n"))
+			let inner = convertMarkdownBody(qLines.joined(separator: "\n"), footnoteState: footnoteState)
 			out += "<blockquote>\n\(inner)</blockquote>\n"
 			continue
 		}
@@ -404,7 +480,7 @@ private func convertMarkdownBody(_ markdown: String) -> String {
 			if inOL { out += "</ol>\n"; inOL = false }
 			if !inUL { out += "<ul>\n"; inUL = true }
 			let text = String(line.dropFirst(2))
-			out += "<li>\(inlineToHTML(text))</li>\n"
+			out += "<li>\(inlineToHTML(text, footnoteState: footnoteState))</li>\n"
 			i += 1; continue
 		}
 
@@ -415,7 +491,7 @@ private func convertMarkdownBody(_ markdown: String) -> String {
 			if inUL { out += "</ul>\n"; inUL = false }
 			if !inOL { out += "<ol>\n"; inOL = true }
 			let text = String(line[line.index(after: spaceIdx)...])
-			out += "<li>\(inlineToHTML(text))</li>\n"
+			out += "<li>\(inlineToHTML(text, footnoteState: footnoteState))</li>\n"
 			i += 1; continue
 		}
 
@@ -433,6 +509,7 @@ private func convertMarkdownBody(_ markdown: String) -> String {
 			let cur = lines[i]
 			let curTrimmed = cur.trimmingCharacters(in: .whitespaces)
 			if curTrimmed.isEmpty { break }
+			if parseFootnoteDefinitionStart(cur) != nil { break }
 			if cur.hasPrefix("#") || cur.hasPrefix("```") { break }
 			if cur.hasPrefix("> ") || cur == ">" { break }
 			if cur.hasPrefix("- ") || cur.hasPrefix("* ") || cur.hasPrefix("+ ") { break }
@@ -446,12 +523,12 @@ private func convertMarkdownBody(_ markdown: String) -> String {
 			   curTrimmed.filter({ $0 == "-" }).count >= 3 { break }
 			paraLines.append(cur)
 			i += 1
+			}
+			if !paraLines.isEmpty {
+				let text = paraLines.map { inlineToHTML($0, footnoteState: footnoteState) }.joined(separator: "\n")
+				out += "<p>\(text)</p>\n"
+			}
 		}
-		if !paraLines.isEmpty {
-			let text = paraLines.map { inlineToHTML($0) }.joined(separator: "\n")
-			out += "<p>\(text)</p>\n"
-		}
-	}
 
 	closeLists()
 	// Close any unclosed code block
@@ -462,25 +539,219 @@ private func convertMarkdownBody(_ markdown: String) -> String {
 	return out
 }
 
-/// Processes inline Markdown spans within a single line of text.
-private func inlineToHTML(_ text: String) -> String {
-	// Start by HTML-escaping the raw text, then selectively restore markdown spans.
-	// We process spans manually on the unescaped text to avoid escaping inside tags.
-	var s = text
-
-	// Images before links (so ![...](...) isn't parsed as a link first)
-	s = s.replacingOccurrences(
-		of: #"!\[([^\]]*)\]\(([^)]+)\)"#,
-		with: #"<img src="\#(htmlEscape("$2"))" alt="\#(htmlEscape("$1"))">"#,
-		options: .regularExpression
-	)
-	// Actually the replacingOccurrences regex doesn't run htmlEscape on captures —
-	// use a two-pass approach instead.
-	s = applyInlinePatterns(s)
-	return s
+private struct FootnoteDefinitionBlock {
+	let identifier: String
+	let contentLines: [String]
+	let nextIndex: Int
 }
 
-private func applyInlinePatterns(_ input: String) -> String {
+private final class FootnoteRenderState {
+	private var numberByIdentifier: [String: Int] = [:]
+	private var nextNumber = 1
+	private var referenceCountByNumber: [Int: Int] = [:]
+	private var renderedReferenceCountByNumber: [Int: Int] = [:]
+	private var collectingReferences = false
+
+	func beginCollectionPass() {
+		numberByIdentifier.removeAll(keepingCapacity: true)
+		nextNumber = 1
+		referenceCountByNumber.removeAll(keepingCapacity: true)
+		renderedReferenceCountByNumber.removeAll(keepingCapacity: true)
+		collectingReferences = true
+	}
+
+	func beginRenderPass() {
+		renderedReferenceCountByNumber.removeAll(keepingCapacity: true)
+		collectingReferences = false
+	}
+
+	func number(for identifier: String) -> Int {
+		if let existing = numberByIdentifier[identifier] {
+			return existing
+		}
+		let assigned = nextNumber
+		numberByIdentifier[identifier] = assigned
+		nextNumber += 1
+		return assigned
+	}
+
+	func replacementHTMLForReference(identifier: String) -> String {
+		let number = number(for: identifier)
+
+		if collectingReferences {
+			referenceCountByNumber[number, default: 0] += 1
+			return "[^\(identifier)]"
+		}
+
+		let referenceID = nextReferenceAnchorID(for: number)
+		return "<sup><a href=\"#fn-\(number)\" id=\"\(referenceID)\">[\(number)]</a></sup>"
+	}
+
+	func nextReferenceAnchorID(for number: Int) -> String {
+		let count = (renderedReferenceCountByNumber[number] ?? 0) + 1
+		renderedReferenceCountByNumber[number] = count
+		return count == 1 ? primaryReferenceAnchorID(for: number) : "\(primaryReferenceAnchorID(for: number))-\(count)"
+	}
+
+	func backlinkHTML(for number: Int) -> String? {
+		guard referenceCountByNumber[number] == 1 else { return nil }
+		return "<a href=\"#\(primaryReferenceAnchorID(for: number))\">↩</a>"
+	}
+
+	func primaryReferenceAnchorID(for number: Int) -> String {
+		"ref-\(number)"
+	}
+}
+
+private func parseFootnoteDefinitionStart(_ line: String) -> (identifier: String, content: String)? {
+	guard line.hasPrefix("[^"),
+	      let closingBracket = line.firstIndex(of: "]") else { return nil }
+	let identifierStart = line.index(line.startIndex, offsetBy: 2)
+	guard identifierStart < closingBracket else { return nil }
+	let colonIndex = line.index(after: closingBracket)
+	guard colonIndex < line.endIndex, line[colonIndex] == ":" else { return nil }
+
+	let identifier = String(line[identifierStart..<closingBracket]).trimmingCharacters(in: .whitespaces)
+	guard !identifier.isEmpty else { return nil }
+
+	let contentStart = line.index(after: colonIndex)
+	let content = contentStart < line.endIndex
+		? String(line[contentStart...]).trimmingCharacters(in: .whitespaces)
+		: ""
+	return (identifier, content)
+}
+
+private func parseFootnoteDefinition(
+	lines: [String],
+	startIndex: Int,
+	definitionStart: (identifier: String, content: String)
+) -> FootnoteDefinitionBlock {
+	var contentLines: [String] = []
+	if !definitionStart.content.isEmpty {
+		contentLines.append(definitionStart.content)
+	}
+
+	var i = startIndex + 1
+	while i < lines.count {
+		let line = lines[i]
+
+		if let continuation = stripFootnoteContinuationIndent(from: line) {
+			contentLines.append(continuation)
+			i += 1
+			continue
+		}
+
+		if line.trimmingCharacters(in: .whitespaces).isEmpty {
+			var lookahead = i + 1
+			while lookahead < lines.count && lines[lookahead].trimmingCharacters(in: .whitespaces).isEmpty {
+				lookahead += 1
+			}
+
+			if lookahead < lines.count, stripFootnoteContinuationIndent(from: lines[lookahead]) != nil {
+				contentLines.append("")
+				i += 1
+				continue
+			}
+		}
+
+		break
+	}
+
+	return FootnoteDefinitionBlock(
+		identifier: definitionStart.identifier,
+		contentLines: contentLines,
+		nextIndex: i
+	)
+}
+
+private func stripFootnoteContinuationIndent(from line: String) -> String? {
+	if line.hasPrefix("\t") {
+		return String(line.dropFirst())
+	}
+	guard line.hasPrefix("    ") else { return nil }
+	return String(line.dropFirst(4))
+}
+
+private func renderFootnoteDefinition(
+	number: Int,
+	contentLines: [String],
+	footnoteState: FootnoteRenderState
+) -> String {
+	let paragraphs = splitFootnoteParagraphs(contentLines)
+	let backlink = footnoteState.backlinkHTML(for: number)
+
+	if paragraphs.isEmpty {
+		let suffix = backlink.map { " \($0)" } ?? ""
+		return """
+		<div class="footnote-definition" id="fn-\(number)">
+		<strong>[\(number)]:</strong>\(suffix)
+		</div>
+		"""
+	}
+
+	if paragraphs.count == 1 {
+		let content = paragraphs[0]
+			.map { inlineToHTML($0, footnoteState: footnoteState) }
+			.joined(separator: "<br>\n")
+		let suffix = backlink.map { " \($0)" } ?? ""
+		return """
+		<div class="footnote-definition" id="fn-\(number)">
+		<strong>[\(number)]:</strong> \(content)\(suffix)
+		</div>
+		"""
+	}
+
+	var renderedParagraphs: [String] = []
+	for (index, lines) in paragraphs.enumerated() {
+		let content = lines
+			.map { inlineToHTML($0, footnoteState: footnoteState) }
+			.joined(separator: "<br>\n")
+		if index == 0 {
+			renderedParagraphs.append("<p><strong>[\(number)]:</strong> \(content)</p>")
+		} else if index == paragraphs.count - 1, let backlink {
+			renderedParagraphs.append("<p>\(content) \(backlink)</p>")
+		} else if index == paragraphs.count - 1 {
+			renderedParagraphs.append("<p>\(content)</p>")
+		} else {
+			renderedParagraphs.append("<p>\(content)</p>")
+		}
+	}
+
+	return """
+	<div class="footnote-definition" id="fn-\(number)">
+	\(renderedParagraphs.joined(separator: "\n"))
+	</div>
+	"""
+}
+
+private func splitFootnoteParagraphs(_ lines: [String]) -> [[String]] {
+	var paragraphs: [[String]] = []
+	var current: [String] = []
+
+	for line in lines {
+		if line.trimmingCharacters(in: .whitespaces).isEmpty {
+			if !current.isEmpty {
+				paragraphs.append(current)
+				current = []
+			}
+			continue
+		}
+		current.append(line)
+	}
+
+	if !current.isEmpty {
+		paragraphs.append(current)
+	}
+
+	return paragraphs
+}
+
+/// Processes inline Markdown spans within a single line of text.
+private func inlineToHTML(_ text: String, footnoteState: FootnoteRenderState) -> String {
+	applyInlinePatterns(text, footnoteState: footnoteState)
+}
+
+private func applyInlinePatterns(_ input: String, footnoteState: FootnoteRenderState) -> String {
 	// We escape first, then apply patterns on escaped text.
 	// This means regex backreferences contain already-escaped text, which is fine
 	// for attribute values and element content.
@@ -489,7 +760,7 @@ private func applyInlinePatterns(_ input: String) -> String {
 	// Images: ![alt](url)  — already html-escaped
 	s = s.replacingOccurrences(
 		of: #"!\[([^\]]*)\]\(([^)]+)\)"#,
-		with: #"<img src="$2" alt="$1">"#,
+		with: #"<img src="$2" alt="$1" class="\#(responsiveMarkdownImageClass)" style="\#(responsiveMarkdownImageInlineStyle)">"#,
 		options: .regularExpression
 	)
 	// Links: [text](url)
@@ -541,7 +812,39 @@ private func applyInlinePatterns(_ input: String) -> String {
 		options: .regularExpression
 	)
 
+	s = renderInlineFootnoteReferences(in: s, footnoteState: footnoteState)
+
 	return s
+}
+
+private func renderInlineFootnoteReferences(in text: String, footnoteState: FootnoteRenderState) -> String {
+	guard let regex = try? NSRegularExpression(pattern: #"\[\^([^\]]+)\]"#) else {
+		return text
+	}
+	let fullRange = NSRange(text.startIndex..<text.endIndex, in: text)
+	let matches = regex.matches(in: text, range: fullRange)
+	guard !matches.isEmpty else {
+		return text
+	}
+
+	let nsText = text as NSString
+	var rendered = ""
+	var currentIndex = 0
+
+	for match in matches {
+		let range = match.range
+		let identifierRange = match.range(at: 1)
+		guard range.location >= currentIndex else { continue }
+		rendered += nsText.substring(with: NSRange(location: currentIndex, length: range.location - currentIndex))
+
+		let identifier = nsText.substring(with: identifierRange)
+		rendered += footnoteState.replacementHTMLForReference(identifier: identifier)
+
+		currentIndex = range.location + range.length
+	}
+
+	rendered += nsText.substring(from: currentIndex)
+	return rendered
 }
 
 private func htmlEscape(_ text: String) -> String {

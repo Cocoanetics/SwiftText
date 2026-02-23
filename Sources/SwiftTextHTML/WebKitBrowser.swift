@@ -17,6 +17,8 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate
 	private var continuation: CheckedContinuation<String?, Never>?
 	private var loadContinuation: CheckedContinuation<Void, Never>?
 	private var htmlStringToLoad: String?
+	private var fileURLToLoad: URL?
+	private var readAccessRoot: URL?
 
 	/// Optional frame size override. When set, the WKWebView is created
 	/// with this size so content reflows to the target width (e.g. A4).
@@ -32,6 +34,8 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate
 	{
 		self.url = url
 		self.htmlStringToLoad = nil
+		self.fileURLToLoad = nil
+		self.readAccessRoot = nil
 		super.init()
 	}
 
@@ -43,6 +47,21 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate
 	{
 		self.url = baseURL ?? URL(string: "about:blank")!
 		self.htmlStringToLoad = htmlString
+		self.fileURLToLoad = nil
+		self.readAccessRoot = nil
+		super.init()
+	}
+
+	/// Initialise the browser by loading a local HTML file with proper file access.
+	/// - Parameters:
+	///   - fileURL: The file URL to the HTML file.
+	///   - readAccessRoot: The directory to grant read access to (for local images/assets).
+	public init(fileURL: URL, readAccessRoot: URL)
+	{
+		self.url = fileURL
+		self.htmlStringToLoad = nil
+		self.fileURLToLoad = fileURL
+		self.readAccessRoot = readAccessRoot
 		super.init()
 	}
 
@@ -156,6 +175,10 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate
 		if let html = htmlStringToLoad
 		{
 			webView.loadHTMLString(html, baseURL: url == URL(string: "about:blank") ? nil : url)
+		}
+		else if let fileURL = fileURLToLoad, let readRoot = readAccessRoot
+		{
+			webView.loadFileURL(fileURL, allowingReadAccessTo: readRoot)
 		}
 		else
 		{
