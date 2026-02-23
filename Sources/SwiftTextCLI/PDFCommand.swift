@@ -396,6 +396,8 @@ private func markdownToHTML(_ markdown: String, paper: PaperSize, landscape: Boo
 	    white-space: pre-wrap;
 	    word-break: break-all;
 	    contain: layout;
+	    page-break-inside: avoid;
+	    break-inside: avoid;
 	}
 	pre code {
 	    background: none;
