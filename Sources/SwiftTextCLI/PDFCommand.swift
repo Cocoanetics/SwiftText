@@ -387,9 +387,23 @@ private func markdownToHTML(_ markdown: String, paper: PaperSize, landscape: Boo
 	    border: 1px solid #e0e0e0;
 	    border-radius: 4px;
 	    padding: 1em;
-	    overflow: auto;
+	    overflow: hidden;
+	    line-height: 1.2;
+	    box-sizing: border-box;
+	    max-width: 100%;
+	    font-size: 9pt;
+	    white-space: pre-wrap;
+	    word-break: break-all;
 	}
-	pre code { background: none; border: none; padding: 0; font-size: inherit; }
+	pre code {
+	    background: none;
+	    border: none;
+	    padding: 0;
+	    font-size: inherit;
+	    line-height: 1.2;
+	    white-space: pre-wrap;
+	    word-break: break-all;
+	}
 	table { border-collapse: collapse; width: 100%; margin: 0.8em 0; font-size: 0.95em; }
 	th, td { border: 1px solid #ccc; padding: 0.4em 0.7em; text-align: left; }
 	th { background: #f0f0f0; font-weight: 600; }
