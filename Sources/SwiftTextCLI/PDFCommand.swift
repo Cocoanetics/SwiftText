@@ -328,6 +328,11 @@ private func markdownToHTML(_ markdown: String, paper: PaperSize, landscape: Boo
 	    page-break-before: always;
 	    break-before: always;
 	}
+	/* H3 immediately after H2: also break (keep h2+h3 group together on new page) */
+	h2 + h3 {
+	    page-break-before: always;
+	    break-before: always;
+	}
 	/* First heading: Don't force page break */
 	section:first-of-type > h1:first-child,
 	section:first-of-type > h2:first-child {
