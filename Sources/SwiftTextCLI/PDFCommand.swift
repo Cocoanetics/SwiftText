@@ -468,6 +468,38 @@ private func convertMarkdownBody(_ markdown: String, footnoteState: FootnoteRend
 		if inOL { out += "</ol>\n"; inOL = false }
 	}
 	
+	func isUnorderedListMarker(_ s: Substring) -> Bool {
+		s.hasPrefix("- ") || s.hasPrefix("* ") || s.hasPrefix("+ ")
+	}
+	
+	func isOrderedListMarker(_ s: Substring) -> Bool {
+		guard let spaceIdx = s.firstIndex(of: " ") else { return false }
+		let head = s[..<spaceIdx]
+		guard head.hasSuffix("."), head.count >= 2 else { return false }
+		return Int(String(head.dropLast())) != nil
+	}
+	
+	/// If `line` starts with any indentation and then a list marker, returns the indent width (in chars)
+	/// and the stripped line (indent removed). Supports unordered (-/*/+) and ordered (1. 2. ...).
+	func stripIndentIfListLine(_ line: String) -> (indentChars: Int, stripped: String)? {
+		var idx = line.startIndex
+		var indentChars = 0
+		while idx < line.endIndex {
+			let ch = line[idx]
+			if ch == " " || ch == "\t" {
+				indentChars += 1
+				idx = line.index(after: idx)
+				continue
+			}
+			break
+		}
+		let rest = line[idx...]
+		if isUnorderedListMarker(rest) || isOrderedListMarker(rest) {
+			return (indentChars, String(rest))
+		}
+		return nil
+	}
+	
 	// Close sections at this level or higher
 	func closeSectionsAtLevel(_ level: Int) {
 		while let lastLevel = openSectionLevels.last, lastLevel >= level {
@@ -579,24 +611,25 @@ private func convertMarkdownBody(_ markdown: String, footnoteState: FootnoteRend
 			}
 			let text = String(line.dropFirst(2))
 			
-			// Check for nested list items (indented with 4 spaces or 1 tab)
+			// Check for nested list items (indented). Preserve relative indentation by stripping
+			// only the base indent of the first nested list line.
 			var nestedLines: [String] = []
+			var baseIndent: Int? = nil
 			var j = i + 1
 			while j < lines.count {
 				let nextLine = lines[j]
-				// Match 4-space or 1-tab indented list items
-				if nextLine.hasPrefix("    -") || nextLine.hasPrefix("    *") || nextLine.hasPrefix("    +") ||
-				   nextLine.hasPrefix("\t-") || nextLine.hasPrefix("\t*") || nextLine.hasPrefix("\t+") {
-					// Strip 4 spaces or 1 tab
-					let stripped = nextLine.hasPrefix("\t") ? String(nextLine.dropFirst()) : String(nextLine.dropFirst(4))
-					nestedLines.append(stripped)
+				if let (indent, _) = stripIndentIfListLine(nextLine), indent > 0 {
+					if baseIndent == nil { baseIndent = indent }
+					guard let baseIndent else { break }
+					if indent < baseIndent { break }
+					let dropCount = baseIndent
+					let idx = nextLine.index(nextLine.startIndex, offsetBy: min(dropCount, nextLine.count))
+					nestedLines.append(String(nextLine[idx...]))
 					j += 1
 				} else if nextLine.trimmingCharacters(in: .whitespaces).isEmpty {
-					// Include blank lines in nested content
 					nestedLines.append("")
 					j += 1
 				} else {
-					// Non-nested content, stop collecting
 					break
 				}
 			}
@@ -604,7 +637,6 @@ private func convertMarkdownBody(_ markdown: String, footnoteState: FootnoteRend
 			if nestedLines.isEmpty {
 				out += "<li>\(inlineToHTML(text, footnoteState: footnoteState))</li>\n"
 			} else {
-				// Render item with nested list
 				let nested = convertMarkdownBody(nestedLines.joined(separator: "\n"), footnoteState: footnoteState)
 				out += "<li>\(inlineToHTML(text, footnoteState: footnoteState))\n\(nested)</li>\n"
 				i = j
@@ -624,7 +656,39 @@ private func convertMarkdownBody(_ markdown: String, footnoteState: FootnoteRend
 				inOL = true
 			}
 			let text = String(line[line.index(after: spaceIdx)...])
-			out += "<li>\(inlineToHTML(text, footnoteState: footnoteState))</li>\n"
+			
+			// Check for nested list items (indented). Preserve relative indentation by stripping
+			// only the base indent of the first nested list line.
+			var nestedLines: [String] = []
+			var baseIndent: Int? = nil
+			var j = i + 1
+			while j < lines.count {
+				let nextLine = lines[j]
+				if let (indent, _) = stripIndentIfListLine(nextLine), indent > 0 {
+					if baseIndent == nil { baseIndent = indent }
+					guard let baseIndent else { break }
+					if indent < baseIndent { break }
+					let dropCount = baseIndent
+					let idx = nextLine.index(nextLine.startIndex, offsetBy: min(dropCount, nextLine.count))
+					nestedLines.append(String(nextLine[idx...]))
+					j += 1
+				} else if nextLine.trimmingCharacters(in: .whitespaces).isEmpty {
+					nestedLines.append("")
+					j += 1
+				} else {
+					break
+				}
+			}
+			
+			if nestedLines.isEmpty {
+				out += "<li>\(inlineToHTML(text, footnoteState: footnoteState))</li>\n"
+			} else {
+				let nested = convertMarkdownBody(nestedLines.joined(separator: "\n"), footnoteState: footnoteState)
+				out += "<li>\(inlineToHTML(text, footnoteState: footnoteState))\n\(nested)</li>\n"
+				i = j
+				continue
+			}
+			
 			i += 1; continue
 		}
 
@@ -637,15 +701,26 @@ private func convertMarkdownBody(_ markdown: String, footnoteState: FootnoteRend
 		}
 
 		// ── Orphaned indented bullets (not nested) ────────────────────
-		// Treat 4-space indented bullets at top level as de-indented bullets
-		if line.hasPrefix("    -") || line.hasPrefix("    *") || line.hasPrefix("    +") ||
-		   line.hasPrefix("\t-") || line.hasPrefix("\t*") || line.hasPrefix("\t+") {
-			if inOL { out += "</ol>\n"; inOL = false }
-			if !inUL { out += "<ul>\n"; inUL = true }
+		// Treat 4-space or tab indented bullets at top level as de-indented bullets.
+		// (We intentionally do NOT treat indented ordered items here; those should be handled by the
+		// ordered-list nesting logic.)
+		if line.hasPrefix("    ") || line.hasPrefix("\t") {
 			let stripped = line.hasPrefix("\t") ? String(line.dropFirst()) : String(line.dropFirst(4))
-			let text = String(stripped.dropFirst(2))
-			out += "<li>\(inlineToHTML(text, footnoteState: footnoteState))</li>\n"
-			i += 1; continue
+			let rest = stripped[stripped.startIndex...]
+			if isUnorderedListMarker(rest) {
+				if inOL { out += "</ol>\n"; inOL = false }
+				if !inUL { out += "<ul>\n"; inUL = true }
+				let text = String(stripped.dropFirst(2))
+				out += "<li>\(inlineToHTML(text, footnoteState: footnoteState))</li>\n"
+				i += 1; continue
+			}
+			if isOrderedListMarker(rest), let spaceIdx = stripped.firstIndex(of: " ") {
+				if inUL { out += "</ul>\n"; inUL = false }
+				if !inOL { out += "<ol>\n"; inOL = true }
+				let text = String(stripped[stripped.index(after: spaceIdx)...])
+				out += "<li>\(inlineToHTML(text, footnoteState: footnoteState))</li>\n"
+				i += 1; continue
+			}
 		}
 
 		// ── Plain paragraph ───────────────────────────────────────────
@@ -659,10 +734,9 @@ private func convertMarkdownBody(_ markdown: String, footnoteState: FootnoteRend
 			if cur.hasPrefix("#") || cur.hasPrefix("```") { break }
 			if cur.hasPrefix("> ") || cur == ">" { break }
 			if cur.hasPrefix("- ") || cur.hasPrefix("* ") || cur.hasPrefix("+ ") { break }
-			// Indented list items (nested)
-			if cur.hasPrefix("    -") || cur.hasPrefix("    *") || cur.hasPrefix("    +") { break }
-			if cur.hasPrefix("\t-") || cur.hasPrefix("\t*") || cur.hasPrefix("\t+") { break }
-			// Ordered list check
+			// Indented list items (nested or indented ordered)
+			if let (indent, _) = stripIndentIfListLine(cur), indent > 0 { break }
+			// Ordered list check (non-indented)
 			if let sp = cur.firstIndex(of: " "),
 			   cur[..<sp].hasSuffix("."),
 			   Int(String(cur[..<cur.index(before: sp)])) != nil { break }
