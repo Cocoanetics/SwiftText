@@ -314,13 +314,27 @@ private func markdownToHTML(_ markdown: String, paper: PaperSize, landscape: Boo
 	    margin: 0;
 	    padding: 0;
 	}
-	h1, h2, h3, h4, h5, h6 { font-weight: 600; margin: 1.2em 0 0.4em; line-height: 1.3; }
+	h1, h2, h3, h4, h5, h6 {
+	    font-weight: 600;
+	    margin: 1.2em 0 0.4em;
+	    line-height: 1.3;
+	    page-break-after: avoid;
+	    break-after: avoid;
+	    page-break-inside: avoid;
+	    break-inside: avoid;
+	}
 	h1 { font-size: 2em;    border-bottom: 2px solid #ddd; padding-bottom: 0.2em; }
 	h2 { font-size: 1.5em;  border-bottom: 1px solid #eee; padding-bottom: 0.1em; }
 	h3 { font-size: 1.25em; }
-	p  { margin: 0.6em 0; }
+	p  { margin: 0.6em 0; orphans: 2; widows: 2; }
 	ul, ol { margin: 0.6em 0; padding-left: 1.8em; }
-	li { margin: 0.2em 0; }
+	li {
+	    margin: 0.2em 0;
+	    orphans: 2;
+	    widows: 2;
+	    page-break-inside: avoid;
+	    break-inside: avoid;
+	}
 	blockquote {
 	    border-left: 4px solid #ccc;
 	    padding: 0.3em 1em;
