@@ -520,20 +520,40 @@ private func convertMarkdownBody(_ markdown: String, footnoteState: FootnoteRend
 		let line = lines[i]
 
 		// ── Fenced code block (``` lang) ─────────────────────────────
-		if line.hasPrefix("```") {
+		// Supports up to 3 leading spaces (and tabs) before the fence.
+		// Also supports a single-line form like: ```bash echo hi```
+		let fenceTrimmed = line.drop(while: { $0 == " " || $0 == "\t" })
+		if fenceTrimmed.hasPrefix("```") {
 			if inCode {
 				// Closing fence
 				let escaped = codeAccum.map { htmlEscape($0) }.joined(separator: "\n")
 				let attr = codeLang.isEmpty ? "" : " class=\"language-\(htmlEscape(codeLang))\""
 				out += "<pre><code\(attr)>\(escaped)</code></pre>\n"
 				inCode = false; codeAccum = []; codeLang = ""
-			} else {
-				// Opening fence
-				closeLists()
-				closeAllSections()
-				inCode = true
-				codeLang = String(line.dropFirst(3)).trimmingCharacters(in: .whitespaces)
+				i += 1; continue
 			}
+
+			// Opening fence
+			closeLists()
+			closeAllSections()
+
+			let afterOpen = String(fenceTrimmed.dropFirst(3))
+			if let closeRange = afterOpen.range(of: "```", options: .backwards),
+			   afterOpen[closeRange.upperBound...].trimmingCharacters(in: .whitespaces).isEmpty {
+				// Single-line fenced code: ```lang code``` (non-CommonMark but common in chats)
+				let inside = String(afterOpen[..<closeRange.lowerBound]).trimmingCharacters(in: .whitespaces)
+				let parts = inside.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
+				let lang = parts.count >= 1 ? String(parts[0]) : ""
+				let code = parts.count == 2 ? String(parts[1]) : ""
+				let escaped = htmlEscape(code)
+				let attr = lang.isEmpty ? "" : " class=\"language-\(htmlEscape(lang))\""
+				out += "<pre><code\(attr)>\(escaped)</code></pre>\n"
+				i += 1; continue
+			}
+
+			// Multi-line fenced code
+			inCode = true
+			codeLang = afterOpen.trimmingCharacters(in: .whitespaces)
 			i += 1; continue
 		}
 		if inCode { codeAccum.append(line); i += 1; continue }
