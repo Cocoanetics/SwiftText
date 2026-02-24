@@ -26,7 +26,7 @@ struct SwiftTextCLI: AsyncParsableCommand {
 		commandName: "swifttext",
 		abstract: "Extract text from HTML, PDF, image, or DOCX sources.",
 		version: "1.0",
-		subcommands: [OCR.self, Docx.self, HTML.self, Overlay.self, PDF.self],
+		subcommands: [OCR.self, Docx.self, HTML.self, Overlay.self, PDF.self, Markdown.self],
 		defaultSubcommand: OCR.self
 	)
 }

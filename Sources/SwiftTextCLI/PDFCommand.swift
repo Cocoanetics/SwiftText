@@ -293,7 +293,7 @@ private let responsiveMarkdownImageInlineStyle = "display: block; width: 100%; m
 
 /// Converts a Markdown string to a self-contained HTML document
 /// styled for print output and with CSS `@page` size directives.
-private func markdownToHTML(_ markdown: String, paper: PaperSize, landscape: Bool) -> String {
+func markdownToHTML(_ markdown: String, paper: PaperSize, landscape: Bool) -> String {
 	let orientation = landscape ? "landscape" : "portrait"
 	let pageCSS = "\(paper.cssName) \(orientation)"
 	let body = convertMarkdownBody(markdown)
