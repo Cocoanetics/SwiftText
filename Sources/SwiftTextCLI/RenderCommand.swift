@@ -10,15 +10,15 @@ import ArgumentParser
 import Foundation
 import SwiftTextHTML
 
-enum MarkdownOutputFormat: String, ExpressibleByArgument, CaseIterable {
+enum RenderOutputFormat: String, ExpressibleByArgument, CaseIterable {
 	case html
 	case pdf
 }
 
 @available(macOS 10.15, macCatalyst 13, iOS 13, tvOS 13, watchOS 6, *)
-struct Markdown: AsyncParsableCommand {
+struct Render: AsyncParsableCommand {
 	static let configuration = CommandConfiguration(
-		commandName: "markdown",
+		commandName: "render",
 		abstract: "Render a Markdown file to HTML or PDF. Output format is inferred from -o extension or set via --format."
 	)
 
@@ -32,7 +32,7 @@ struct Markdown: AsyncParsableCommand {
 	var output: String?
 
 	@Option(name: .long, help: "Override output format (html|pdf). If omitted, inferred from output extension; defaults to html.")
-	var format: MarkdownOutputFormat?
+	var format: RenderOutputFormat?
 
 	@Option(name: .long, help: "Paper size for PDF/HTML print CSS: a4, letter (default: a4).")
 	var paper: PaperSize = .a4
@@ -83,7 +83,7 @@ struct Markdown: AsyncParsableCommand {
 
 	// MARK: - Helpers
 
-	private func resolvedFormat() throws -> MarkdownOutputFormat {
+	private func resolvedFormat() throws -> RenderOutputFormat {
 		if let format { return format }
 		if let output {
 			let ext = URL(fileURLWithPath: (output as NSString).expandingTildeInPath).pathExtension.lowercased()
@@ -94,7 +94,7 @@ struct Markdown: AsyncParsableCommand {
 		return .html
 	}
 
-	private func resolvedOutputURL(format: MarkdownOutputFormat) throws -> URL {
+	private func resolvedOutputURL(format: RenderOutputFormat) throws -> URL {
 		if let output {
 			let expanded = (output as NSString).expandingTildeInPath
 			return URL(fileURLWithPath: expanded)
