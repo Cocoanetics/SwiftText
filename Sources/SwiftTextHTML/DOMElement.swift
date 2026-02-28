@@ -35,6 +35,26 @@ public class DOMElement: DOMNode
 			return ""
 		}
 
+		// Guard against pathological wrapper nesting (e.g. <div><div>...)
+		// which can cause deep recursion and stack overflow.
+		// We iteratively unwrap chains of purely-structural containers.
+		if name == "div" || name == "p" {
+			var current: DOMElement = self
+			var steps = 0
+			while steps < 5000,
+				  (current.name == "div" || current.name == "p"),
+				  current.children.count == 1,
+				  let only = current.children.first as? DOMElement,
+				  (only.name == "div" || only.name == "p")
+			{
+				current = only
+				steps += 1
+			}
+			if current !== self {
+				return current.markdown(imageResolver: imageResolver)
+			}
+		}
+
 		var result = ""
 
 		switch name
