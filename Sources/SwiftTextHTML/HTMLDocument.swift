@@ -9,10 +9,10 @@ public final class HTMLDocument
 	public let root: DOMElement
 	public let baseURL: URL?
 
-	public init(data: Data, baseURL: URL? = nil) async throws
+	public init(data: Data, baseURL: URL? = nil, encoding: String.Encoding? = nil) async throws
 	{
 		self.baseURL = baseURL
-		let builder = try await DomBuilder(html: data, baseURL: baseURL)
+		let builder = try await DomBuilder(html: data, baseURL: baseURL, encoding: encoding)
 		guard let root = builder.root else {
 			throw HTMLDocumentError.missingRoot
 		}

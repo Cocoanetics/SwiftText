@@ -16,9 +16,12 @@ public final class DomBuilder
 
 	// MARK: - Initialization
 
-	public init(html: Data, baseURL: URL?) async throws
+	private let encoding: String.Encoding?
+
+	public init(html: Data, baseURL: URL?, encoding: String.Encoding? = nil) async throws
 	{
 		self.baseURL = baseURL
+		self.encoding = encoding
 		try await parseHTML(html)
 	}
 
@@ -26,8 +29,20 @@ public final class DomBuilder
 
 	private func parseHTML(_ html: Data) async throws {
 		let options: HTMLParserOptions = [.noWarning, .noError, .noNet, .recover]
-		let normalized = normalizeCharsetIfNeeded(html)
-		let parser = HTMLParser(data: normalized, encoding: .utf8, options: options)
+
+		// If the caller provides an explicit encoding hint, honor it and parse the original bytes.
+		// Otherwise we normalize common bogus legacy charset declarations when the bytes are valid UTF-8.
+		let dataToParse: Data
+		let encodingToUse: String.Encoding
+		if let encoding {
+			dataToParse = html
+			encodingToUse = encoding
+		} else {
+			dataToParse = normalizeCharsetIfNeeded(html)
+			encodingToUse = .utf8
+		}
+
+		let parser = HTMLParser(data: dataToParse, encoding: encodingToUse, options: options)
 		parser.delegate = self
 
 		let success = parser.parse()
