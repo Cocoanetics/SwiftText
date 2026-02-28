@@ -103,6 +103,7 @@ extension DomBuilder: HTMLParserDelegate
 		}
 
 		let element = DOMElement(name: elementName, attributes: attributeDict)
+		element.isTransparentWrapper = isTransparentWrapperTag(elementName, attributes: attributeDict)
 
 		if let current = currentElement
 		{
@@ -153,6 +154,34 @@ extension DomBuilder: HTMLParserDelegate
 
 	public func parser(_ parser: HTMLParser, parseErrorOccurred parseError: Error) {
 		self.parseError = parseError
+	}
+}
+
+// MARK: - Transparent wrapper tagging
+
+private extension DomBuilder {
+	func isTransparentWrapperTag(_ name: String, attributes: [String: String]) -> Bool {
+		let tag = name.lowercased()
+
+		// Conservative set: common email/layout wrappers.
+		guard ["div", "p", "span", "font", "center"].contains(tag) else {
+			return false
+		}
+
+		// If it carries semantics, do not treat as transparent.
+		let semanticKeys: Set<String> = ["id", "href", "src", "name", "role"]
+		for (k, _) in attributes {
+			let key = k.lowercased()
+			if semanticKeys.contains(key) { return false }
+			if key.hasPrefix("aria-") { return false }
+			if key.hasPrefix("data-") { return false }
+			// Allow purely presentational attributes.
+			if ["style", "class", "lang"].contains(key) { continue }
+			// Unknown attribute => be conservative.
+			return false
+		}
+
+		return true
 	}
 }
 

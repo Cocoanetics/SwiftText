@@ -8,6 +8,11 @@ public class DOMElement: DOMNode
 	public let attributes: [AnyHashable: Any]
 	public var children: [DOMNode]
 
+	/// Marks elements that are considered layout-only wrappers for Markdown rendering.
+	/// (e.g. deeply nested div/span towers in HTML emails). When true, the Markdown renderer
+	/// may treat single-child wrapper chains as transparent to avoid deep recursion.
+	public var isTransparentWrapper: Bool = false
+
 	// MARK: - Initialization
 
 	init(name: String, attributes: [AnyHashable: Any] = [:]) {
@@ -35,17 +40,17 @@ public class DOMElement: DOMNode
 			return ""
 		}
 
-		// Guard against pathological wrapper nesting (e.g. <div><div>...)
-		// which can cause deep recursion and stack overflow.
-		// We iteratively unwrap chains of purely-structural containers.
-		if name == "div" || name == "p" {
+		// Guard against pathological wrapper nesting (e.g. <div><span><div>...) which can cause
+		// deep recursion and stack overflow. The DOM builder can mark layout-only wrappers as
+		// `isTransparentWrapper`. Here we iteratively unwrap single-child wrapper chains.
+		if isTransparentWrapper {
 			var current: DOMElement = self
 			var steps = 0
 			while steps < 5000,
-				  (current.name == "div" || current.name == "p"),
+				  current.isTransparentWrapper,
 				  current.children.count == 1,
 				  let only = current.children.first as? DOMElement,
-				  (only.name == "div" || only.name == "p")
+				  only.isTransparentWrapper
 			{
 				current = only
 				steps += 1
