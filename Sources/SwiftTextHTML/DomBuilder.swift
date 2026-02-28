@@ -26,7 +26,8 @@ public final class DomBuilder
 
 	private func parseHTML(_ html: Data) async throws {
 		let options: HTMLParserOptions = [.noWarning, .noError, .noNet, .recover]
-		let parser = HTMLParser(data: html, encoding: .utf8, options: options)
+		let normalized = normalizeCharsetIfNeeded(html)
+		let parser = HTMLParser(data: normalized, encoding: .utf8, options: options)
 		parser.delegate = self
 
 		let success = parser.parse()
@@ -36,6 +37,31 @@ public final class DomBuilder
 			}
 			throw DomBuilderError.parsingFailed(HTMLParserFallbackError.parseFailed)
 		}
+	}
+
+	/// Some HTML (notably email bodies) declares `charset=iso-8859-1` (or similar)
+	/// while the actual bytes are valid UTF-8. libxml/HTMLParser will honor the declared
+	/// charset and produce mojibake (e.g. "fÃ¼r" instead of "für").
+	///
+	/// If the HTML bytes are valid UTF-8, we rewrite common legacy charset declarations
+	/// to `utf-8` before parsing so that entities/text decode correctly.
+	private func normalizeCharsetIfNeeded(_ html: Data) -> Data {
+		guard let utf8 = String(data: html, encoding: .utf8) else {
+			return html
+		}
+
+		// Only rewrite if the document explicitly claims a legacy single-byte charset.
+		let pattern = "(?i)charset\\s*=\\s*(iso-8859-1|windows-1252|latin1)"
+		guard utf8.range(of: pattern, options: .regularExpression) != nil else {
+			return html
+		}
+
+		let rewritten = utf8.replacingOccurrences(
+			of: pattern,
+			with: "charset=utf-8",
+			options: .regularExpression
+		)
+		return Data(rewritten.utf8)
 	}
 }
 
