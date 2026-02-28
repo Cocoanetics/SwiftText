@@ -281,9 +281,17 @@ struct HTML: AsyncParsableCommand {
 	@Flag(name: .long, help: "When using --webkit, export a PDF and parse that instead of HTML.")
 	var viaPdf: Bool = false
 
+	@Option(name: .long, help: "Force character set for decoding HTML (e.g. utf-8, iso-8859-1, windows-1252). Not supported with --webkit.")
+	var charset: String?
+
+
 	func run() async throws {
 		if viaPdf && !webkit {
 			throw ValidationError("--via-pdf requires --webkit.")
+		}
+
+		if charset != nil && webkit {
+			throw ValidationError("--charset is not supported with --webkit (WebKit returns UTF-8 HTML).")
 		}
 
 		if webkit && viaPdf {
@@ -299,7 +307,16 @@ struct HTML: AsyncParsableCommand {
 		}
 
 		let (data, baseURL) = try await loadHTMLData(from: source)
-		let document = try await HTMLDocument(data: data, baseURL: baseURL)
+		let forcedEncoding: String.Encoding?
+		if let charset {
+			forcedEncoding = stringEncoding(for: charset)
+			if forcedEncoding == nil {
+				throw ValidationError("Unknown/unsupported charset: \(charset)")
+			}
+		} else {
+			forcedEncoding = nil
+		}
+		let document = try await HTMLDocument(data: data, baseURL: baseURL, encoding: forcedEncoding)
 		let output: String
 		if markdown {
 			let folderURL = resolveOutputDirectory(from: saveImages)
