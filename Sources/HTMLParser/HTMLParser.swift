@@ -40,10 +40,20 @@ public class HTMLParser
 	private var parserError: Error?
 	private var isAborting = false
 
+	/// One-time registration of the C error callback.
+	private static let registerCallback: Void = {
+		htmlparser_register_error_callback { ctx, msg in
+			guard let context = ctx, let message = msg else { return }
+			let parser = Unmanaged<HTMLParser>.fromOpaque(context).takeUnretainedValue()
+			parser.handleError(String(cString: message))
+		}
+	}()
+
 	// MARK: - Init / Deinit
 
 	public init(data: Data, encoding: String.Encoding, options: HTMLParserOptions = [.recover, .noNet, .compact, .noBlanks])
 	{
+		_ = HTMLParser.registerCallback
 		self.data = data
 		self.encoding = encoding
 		self.options = options
@@ -224,12 +234,4 @@ public class HTMLParser
 		self.parserError = error
 		delegate?.parser(self, parseErrorOccurred: error)
 	}
-}
-
-// Extern declaration called from C error bridge
-@_cdecl("swift_error_handler")
-func swift_error_handler(_ ctx: UnsafeMutableRawPointer?, _ msg: UnsafePointer<CChar>?) {
-	guard let context = ctx, let message = msg else { return }
-	let parser = Unmanaged<HTMLParser>.fromOpaque(context).takeUnretainedValue()
-	parser.handleError(String(cString: message))
 }

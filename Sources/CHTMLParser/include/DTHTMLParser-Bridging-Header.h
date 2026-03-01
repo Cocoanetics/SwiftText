@@ -15,10 +15,16 @@
 #include <libxml/HTMLparser.h>
 #endif
 
-// Function to format variadic arguments into a string and call a Swift handler
+// Callback type for forwarding formatted error messages to Swift
+typedef void (*htmlparser_error_callback)(void *ctx, const char *msg);
+
+// Register the Swift error callback (must be called before parsing)
+void htmlparser_register_error_callback(htmlparser_error_callback callback);
+
+// Function to format variadic arguments into a string and call the registered callback
 void htmlparser_error_sax_handler(void *ctx, const char *msg, ...);
 
-// Function to set the error handler
+// Function to set the error handler in a SAX handler struct
 void htmlparser_set_error_handler(htmlSAXHandlerPtr sax_handler);
 
 #endif /* DTHTMLParser_Bridging_Header_h */
