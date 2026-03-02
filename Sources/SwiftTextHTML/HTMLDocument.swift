@@ -19,9 +19,20 @@ public final class HTMLDocument
 		self.root = root
 	}
 
+	private var contentRoot: DOMElement {
+		// Prefer proper <html>...</html> content when present. Some email clients append
+		// footers after </html>; we intentionally ignore those for Markdown extraction.
+		if root.name.lowercased() == "document" {
+			if let html = root.children.compactMap({ $0 as? DOMElement }).first(where: { $0.name.lowercased() == "html" }) {
+				return html
+			}
+		}
+		return root
+	}
+
 	public func markdown() -> String
 	{
-		root.markdown(imageResolver: resolveMarkdownImageSource).trimmingCharacters(in: .whitespacesAndNewlines)
+		contentRoot.markdown(imageResolver: resolveMarkdownImageSource).trimmingCharacters(in: .whitespacesAndNewlines)
 	}
 
 	public func markdown(saveImagesAt folderURL: URL?) async throws -> String
@@ -31,7 +42,7 @@ public final class HTMLDocument
 		}
 
 		var sources: [String] = []
-		collectImageSources(from: root, into: &sources)
+		collectImageSources(from: contentRoot, into: &sources)
 		let imageMap = try await downloadImages(sources: sources, to: folderURL)
 		return root.markdown(imageResolver: { source in
 			imageMap[source]
@@ -40,7 +51,7 @@ public final class HTMLDocument
 
 	public func text() -> String
 	{
-		root.text().trimmingCharacters(in: .whitespacesAndNewlines)
+		contentRoot.text().trimmingCharacters(in: .whitespacesAndNewlines)
 	}
 
 	private func collectImageSources(from node: DOMNode, into sources: inout [String]) {

@@ -22,6 +22,15 @@ public final class DomBuilder
 	{
 		self.baseURL = baseURL
 		self.encoding = encoding
+
+		// Always build under a stable synthetic root so that malformed HTML with
+		// multiple top-level elements (e.g. content after </html>) doesn't overwrite
+		// the root and lose the actual document body.
+		let documentRoot = DOMElement(name: "document", attributes: [:])
+		documentRoot.isTransparentWrapper = true
+		self.root = documentRoot
+		self.currentElement = documentRoot
+
 		try await parseHTML(html)
 	}
 
@@ -110,10 +119,6 @@ extension DomBuilder: HTMLParserDelegate
 			current.addChild(element)
 			elementStack.append(current)
 		}
-		else
-		{
-			root = element
-		}
 
 		currentElement = element
 	}
@@ -130,7 +135,7 @@ extension DomBuilder: HTMLParserDelegate
 		{
 			if isWhiteSpace,
 			   let currentElement,
-			   ["ul", "ol", "body", "div", "blockquote", "tr", "table"].contains(currentElement.name)
+			   ["ul", "ol", "body", "div", "blockquote", "tr", "table", "document"].contains(currentElement.name)
 			{
 				return
 			}
@@ -145,7 +150,8 @@ extension DomBuilder: HTMLParserDelegate
 	public func parser(_ parser: HTMLParser, didEndElement elementName: String) {
 		guard !elementStack.isEmpty else
 		{
-			currentElement = nil
+			// Malformed HTML may emit extra end tags; fall back to synthetic root.
+			currentElement = root
 			return
 		}
 
