@@ -104,6 +104,31 @@ public enum MarkdownToHTML {
 		return html.joined(separator: "\n")
 	}
 
+	/// Converts a Markdown string to a complete HTML document.
+	///
+	/// Wraps the converted fragment in `<!DOCTYPE html><html>…</html>` with an optional
+	/// `<style>` block injected into `<head>`.
+	///
+	/// - Parameters:
+	///   - markdown: The Markdown source text.
+	///   - stylesheet: Optional CSS to include in a `<style>` tag. Pass `nil` to omit.
+	/// - Returns: A complete HTML document string.
+	public static func document(_ markdown: String, stylesheet: String? = nil) -> String {
+		let body = convert(markdown)
+		let styleTag = stylesheet.map { "<style>\n\($0)\n</style>\n" } ?? ""
+		return """
+		<!DOCTYPE html>
+		<html>
+		<head>
+		<meta charset="utf-8">
+		\(styleTag)</head>
+		<body>
+		\(body)
+		</body>
+		</html>
+		"""
+	}
+
 	/// Strips Markdown formatting to produce plain text.
 	public static func stripToPlainText(_ markdown: String) -> String {
 		var text = markdown
