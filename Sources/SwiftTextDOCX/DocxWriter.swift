@@ -184,7 +184,7 @@ public final class DocxWriter {
 			pPr += "<w:pStyle w:val=\"\(xmlEscape(style))\"/>"
 		}
 		if quoteDepth > 0 {
-			let indent = quoteDepth * 720 // 0.5 inch per level
+			let indent = quoteDepth * 360 // 0.25 inch per level
 			pPr += "<w:ind w:left=\"\(indent)\"/>"
 			if style == nil {
 				pPr += "<w:pBdr><w:left w:val=\"single\" w:sz=\"12\" w:space=\"4\" w:color=\"CCCCCC\"/></w:pBdr>"
@@ -197,7 +197,7 @@ public final class DocxWriter {
 	private func listParagraph(runs: [Run], numId: Int, ilvl: Int, quoteDepth: Int) -> String {
 		var indentXML = ""
 		if quoteDepth > 0 {
-			let indent = quoteDepth * 720
+			let indent = quoteDepth * 360
 			indentXML = "<w:ind w:left=\"\(indent + (ilvl + 1) * 720)\"/>"
 		}
 		let pPr = """
@@ -213,12 +213,13 @@ public final class DocxWriter {
 	private func codeBlockParagraphs(_ text: String, quoteDepth: Int) -> String {
 		let lines = text.components(separatedBy: "\n")
 		var xml = ""
-		let baseIndent = quoteDepth * 720
+		let baseIndent = quoteDepth * 360
 		let codeIndent = baseIndent + 360 // left padding inside the block
 
 		for (index, line) in lines.enumerated() {
 			var pPr = "<w:pStyle w:val=\"CodeBlock\"/>"
-			pPr += "<w:spacing w:after=\"0\" w:line=\"240\" w:lineRule=\"auto\"/>"
+			let afterSpacing = (index == lines.count - 1) ? "200" : "0"
+			pPr += "<w:spacing w:before=\"0\" w:after=\"\(afterSpacing)\" w:line=\"240\" w:lineRule=\"auto\"/>"
 			pPr += "<w:ind w:left=\"\(codeIndent)\" w:right=\"360\"/>"
 			pPr += "<w:shd w:val=\"clear\" w:color=\"auto\" w:fill=\"F5F5F5\"/>"
 
@@ -245,7 +246,7 @@ public final class DocxWriter {
 	private func horizontalRuleParagraph(quoteDepth: Int) -> String {
 		var indentXML = ""
 		if quoteDepth > 0 {
-			indentXML = "<w:ind w:left=\"\(quoteDepth * 720)\"/>"
+			indentXML = "<w:ind w:left=\"\(quoteDepth * 360)\"/>"
 		}
 		return """
 		<w:p><w:pPr>\
