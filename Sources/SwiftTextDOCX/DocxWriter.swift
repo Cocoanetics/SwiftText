@@ -91,6 +91,8 @@ public final class DocxWriter {
 		let documentXML = wrapDocument(bodyXML)
 		let stylesXML = generateStyles()
 		let numberingXML = generateNumbering()
+		let settingsXML = generateSettings()
+		let fontTableXML = generateFontTable()
 
 		// Create ZIP archive (remove existing file first)
 		let dir = url.deletingLastPathComponent()
@@ -109,6 +111,8 @@ public final class DocxWriter {
 		try addEntry(archive, path: "word/document.xml", content: documentXML)
 		try addEntry(archive, path: "word/styles.xml", content: stylesXML)
 		try addEntry(archive, path: "word/numbering.xml", content: numberingXML)
+		try addEntry(archive, path: "word/settings.xml", content: settingsXML)
+		try addEntry(archive, path: "word/fontTable.xml", content: fontTableXML)
 	}
 
 	// MARK: - Archive Helpers
@@ -312,6 +316,8 @@ public final class DocxWriter {
 		<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
 		<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
 		<Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>
+		<Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/>
+		<Override PartName="/word/fontTable.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.fontTable+xml"/>
 		</Types>
 		"""
 	}
@@ -331,6 +337,8 @@ public final class DocxWriter {
 		<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
 		<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
 		<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>
+		<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/>
+		<Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/fontTable" Target="fontTable.xml"/>
 
 		"""
 		for link in hyperlinks {
@@ -516,6 +524,46 @@ public final class DocxWriter {
 			</w:lvl>
 			"""
 		}.joined(separator: "\n")
+	}
+
+	// MARK: - Settings
+
+	private func generateSettings() -> String {
+		"""
+		<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+		<w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+		<w:view w:val="print"/>
+		<w:displayBackgroundShape/>
+		<w:defaultTabStop w:val="720"/>
+		<w:autoHyphenation w:val="0"/>
+		<w:evenAndOddHeaders w:val="0"/>
+		<w:compat>
+		<w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/>
+		</w:compat>
+		</w:settings>
+		"""
+	}
+
+	// MARK: - Font Table
+
+	private func generateFontTable() -> String {
+		"""
+		<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+		<w:fonts xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+		<w:font w:name="Times New Roman">
+		<w:charset w:val="00"/><w:family w:val="roman"/><w:pitch w:val="variable"/>
+		</w:font>
+		<w:font w:name="Helvetica Neue">
+		<w:charset w:val="00"/><w:family w:val="swiss"/><w:pitch w:val="variable"/>
+		</w:font>
+		<w:font w:name="Courier New">
+		<w:charset w:val="00"/><w:family w:val="modern"/><w:pitch w:val="fixed"/>
+		</w:font>
+		<w:font w:name="Arial">
+		<w:charset w:val="00"/><w:family w:val="swiss"/><w:pitch w:val="variable"/>
+		</w:font>
+		</w:fonts>
+		"""
 	}
 
 	// MARK: - Utilities
