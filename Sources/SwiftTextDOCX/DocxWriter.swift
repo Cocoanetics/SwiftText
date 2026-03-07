@@ -381,14 +381,20 @@ public final class DocxWriter {
 		<w:name w:val="Code Block"/>
 		<w:next w:val="CodeBlock"/>
 		<w:pPr>
-		<w:shd w:val="clear" w:color="auto" w:fill="F5F5F5"/>
+		<w:widowControl w:val="1"/>
+		<w:shd w:val="clear" w:color="auto" w:fill="f5f5f5"/>
 		<w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/>
 		<w:ind w:left="0" w:right="0" w:firstLine="0"/>
+		<w:jc w:val="left"/>
+		<w:outlineLvl w:val="9"/>
 		</w:pPr>
 		<w:rPr>
 		<w:rFonts w:ascii="Courier New" w:hAnsi="Courier New" w:cs="Courier New"/>
-		<w:sz w:val="20"/><w:szCs w:val="20"/>
+		<w:b w:val="0"/><w:bCs w:val="0"/>
+		<w:i w:val="0"/><w:iCs w:val="0"/>
 		<w:color w:val="222222"/>
+		<w:sz w:val="20"/><w:szCs w:val="20"/>
+		<w:shd w:val="nil" w:color="auto" w:fill="auto"/>
 		</w:rPr>
 		</w:style>
 
