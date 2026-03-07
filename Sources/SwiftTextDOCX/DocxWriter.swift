@@ -221,10 +221,9 @@ public final class DocxWriter {
 		pPr += "<w:bottom w:val=\"single\" w:sz=\"8\" w:space=\"6\" w:color=\"000000\" w:shadow=\"0\" w:frame=\"0\"/>"
 		pPr += "<w:right w:val=\"single\" w:sz=\"8\" w:space=\"6\" w:color=\"000000\" w:shadow=\"0\" w:frame=\"0\"/>"
 		pPr += "</w:pBdr>"
-		pPr += "<w:spacing w:after=\"200\"/>"
-		if quoteDepth > 0 {
-			pPr += "<w:ind w:left=\"\(quoteDepth * 360)\"/>"
-		}
+		pPr += "<w:spacing w:before=\"120\" w:after=\"200\"/>"
+		let baseIndent = quoteDepth * 360
+		pPr += "<w:ind w:left=\"\(baseIndent + 240)\" w:right=\"240\"/>"
 
 		let codeRPr = "<w:rPr><w:rFonts w:ascii=\"Courier New\" w:hAnsi=\"Courier New\" w:cs=\"Courier New\"/><w:sz w:val=\"20\"/><w:szCs w:val=\"20\"/></w:rPr>"
 
