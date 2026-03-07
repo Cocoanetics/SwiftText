@@ -212,35 +212,32 @@ public final class DocxWriter {
 
 	private func codeBlockParagraphs(_ text: String, quoteDepth: Int) -> String {
 		let lines = text.components(separatedBy: "\n")
-		var xml = ""
-		let baseIndent = quoteDepth * 360
-		let codeIndent = baseIndent + 360 // left padding inside the block
 
-		for (index, line) in lines.enumerated() {
-			var pPr = "<w:pStyle w:val=\"CodeBlock\"/>"
-			let afterSpacing = (index == lines.count - 1) ? "200" : "0"
-			pPr += "<w:spacing w:before=\"0\" w:after=\"\(afterSpacing)\" w:line=\"240\" w:lineRule=\"auto\"/>"
-			pPr += "<w:ind w:left=\"\(codeIndent)\" w:right=\"360\"/>"
-			pPr += "<w:shd w:val=\"clear\" w:color=\"auto\" w:fill=\"F5F5F5\"/>"
-
-			// Borders: top on first line, bottom on last line, left+right on all
-			var borders = "<w:left w:val=\"single\" w:sz=\"4\" w:space=\"4\" w:color=\"E0E0E0\"/>"
-			borders += "<w:right w:val=\"single\" w:sz=\"4\" w:space=\"4\" w:color=\"E0E0E0\"/>"
-			if index == 0 {
-				borders += "<w:top w:val=\"single\" w:sz=\"4\" w:space=\"4\" w:color=\"E0E0E0\"/>"
-			}
-			if index == lines.count - 1 {
-				borders += "<w:bottom w:val=\"single\" w:sz=\"4\" w:space=\"4\" w:color=\"E0E0E0\"/>"
-			} else {
-				// Between lines: suppress paragraph border gaps
-				borders += "<w:between w:val=\"none\" w:sz=\"0\" w:space=\"0\" w:color=\"auto\"/>"
-			}
-			pPr += "<w:pBdr>\(borders)</w:pBdr>"
-
-			let run = "<w:r><w:rPr><w:rFonts w:ascii=\"Courier New\" w:hAnsi=\"Courier New\" w:cs=\"Courier New\"/><w:sz w:val=\"20\"/><w:szCs w:val=\"20\"/></w:rPr><w:t xml:space=\"preserve\">\(xmlEscape(line))</w:t></w:r>"
-			xml += "<w:p><w:pPr>\(pPr)</w:pPr>\(run)</w:p>\n"
+		// Single paragraph with line breaks — avoids border gaps between paragraphs.
+		var pPr = "<w:pStyle w:val=\"CodeBlock\"/>"
+		pPr += "<w:pBdr>"
+		pPr += "<w:top w:val=\"single\" w:sz=\"8\" w:space=\"6\" w:color=\"000000\" w:shadow=\"0\" w:frame=\"0\"/>"
+		pPr += "<w:left w:val=\"single\" w:sz=\"8\" w:space=\"6\" w:color=\"000000\" w:shadow=\"0\" w:frame=\"0\"/>"
+		pPr += "<w:bottom w:val=\"single\" w:sz=\"8\" w:space=\"6\" w:color=\"000000\" w:shadow=\"0\" w:frame=\"0\"/>"
+		pPr += "<w:right w:val=\"single\" w:sz=\"8\" w:space=\"6\" w:color=\"000000\" w:shadow=\"0\" w:frame=\"0\"/>"
+		pPr += "</w:pBdr>"
+		pPr += "<w:spacing w:after=\"200\"/>"
+		if quoteDepth > 0 {
+			pPr += "<w:ind w:left=\"\(quoteDepth * 360)\"/>"
 		}
-		return xml
+
+		let codeRPr = "<w:rPr><w:rFonts w:ascii=\"Courier New\" w:hAnsi=\"Courier New\" w:cs=\"Courier New\"/><w:sz w:val=\"20\"/><w:szCs w:val=\"20\"/></w:rPr>"
+
+		var runs = ""
+		for (index, line) in lines.enumerated() {
+			if index > 0 {
+				// Line break within the same paragraph
+				runs += "<w:r><w:br w:type=\"textWrapping\"/></w:r>"
+			}
+			runs += "<w:r>\(codeRPr)<w:t xml:space=\"preserve\">\(xmlEscape(line))</w:t></w:r>"
+		}
+
+		return "<w:p><w:pPr>\(pPr)</w:pPr>\(runs)</w:p>\n"
 	}
 
 	private func horizontalRuleParagraph(quoteDepth: Int) -> String {
