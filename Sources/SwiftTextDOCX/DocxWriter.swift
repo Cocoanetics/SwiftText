@@ -215,11 +215,12 @@ public final class DocxWriter {
 
 		// Single paragraph with line breaks — avoids border gaps between paragraphs.
 		var pPr = "<w:pStyle w:val=\"CodeBlock\"/>"
+		pPr += "<w:shd w:val=\"clear\" w:color=\"auto\" w:fill=\"F5F5F5\"/>"
 		pPr += "<w:pBdr>"
-		pPr += "<w:top w:val=\"single\" w:sz=\"8\" w:space=\"10\" w:color=\"000000\" w:shadow=\"0\" w:frame=\"0\"/>"
-		pPr += "<w:left w:val=\"single\" w:sz=\"8\" w:space=\"10\" w:color=\"000000\" w:shadow=\"0\" w:frame=\"0\"/>"
-		pPr += "<w:bottom w:val=\"single\" w:sz=\"8\" w:space=\"10\" w:color=\"000000\" w:shadow=\"0\" w:frame=\"0\"/>"
-		pPr += "<w:right w:val=\"single\" w:sz=\"8\" w:space=\"10\" w:color=\"000000\" w:shadow=\"0\" w:frame=\"0\"/>"
+		pPr += "<w:top w:val=\"single\" w:sz=\"8\" w:space=\"6\" w:color=\"000000\" w:shadow=\"0\" w:frame=\"0\"/>"
+		pPr += "<w:left w:val=\"single\" w:sz=\"8\" w:space=\"6\" w:color=\"000000\" w:shadow=\"0\" w:frame=\"0\"/>"
+		pPr += "<w:bottom w:val=\"single\" w:sz=\"8\" w:space=\"6\" w:color=\"000000\" w:shadow=\"0\" w:frame=\"0\"/>"
+		pPr += "<w:right w:val=\"single\" w:sz=\"8\" w:space=\"6\" w:color=\"000000\" w:shadow=\"0\" w:frame=\"0\"/>"
 		pPr += "</w:pBdr>"
 		pPr += "<w:spacing w:after=\"200\"/>"
 		if quoteDepth > 0 {
