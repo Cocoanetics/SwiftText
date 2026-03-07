@@ -233,7 +233,7 @@ public final class DocxWriter {
 			if quoteDepth > 0 {
 				pPr += "<w:ind w:left=\"\(quoteDepth * 360)\"/>"
 			}
-			let run = "<w:r><w:rPr><w:rFonts w:ascii=\"Courier New\" w:hAnsi=\"Courier New\" w:cs=\"Courier New\"/><w:sz w:val=\"20\"/><w:szCs w:val=\"20\"/></w:rPr><w:t xml:space=\"preserve\">\(xmlEscape(line))</w:t></w:r>"
+			let run = "<w:r><w:t xml:space=\"preserve\">\(xmlEscape(line))</w:t></w:r>"
 			xml += "<w:p><w:pPr>\(pPr)</w:pPr>\(run)</w:p>\n"
 		}
 		return xml
