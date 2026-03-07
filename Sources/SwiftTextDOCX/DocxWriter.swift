@@ -55,8 +55,10 @@ public final class DocxWriter {
 	private var hyperlinkCounter = 0
 
 	/// Tracks numbering instances for list continuity.
-	private var nextNumId = 1
+	private var nextNumId = 0
 	private var lastListType: ListType? = nil
+	/// Maps each concrete numId to its abstract numbering id (0=bullet, 1=decimal).
+	private var numInstances: [(numId: Int, abstractNumId: Int)] = []
 
 	private enum ListType: Equatable {
 		case ordered
@@ -75,8 +77,9 @@ public final class DocxWriter {
 		// Reset state
 		hyperlinks = []
 		hyperlinkCounter = 0
-		nextNumId = 1
+		nextNumId = 0
 		lastListType = nil
+		numInstances = []
 
 		// Build document body XML
 		let bodyXML = generateBodyXML()
@@ -146,10 +149,11 @@ public final class DocxWriter {
 			let listType: ListType = ordered ? .ordered : .unordered
 			if lastListType != listType {
 				nextNumId += 1
+				let abstractNumId = ordered ? 1 : 0
+				numInstances.append((numId: nextNumId, abstractNumId: abstractNumId))
 				lastListType = listType
 			}
-			let abstractNumId = ordered ? 1 : 0
-			return listParagraph(runs: runs, numId: nextNumId, ilvl: level, abstractNumId: abstractNumId, quoteDepth: quoteDepth)
+			return listParagraph(runs: runs, numId: nextNumId, ilvl: level, quoteDepth: quoteDepth)
 
 		case .codeBlock(_, let text):
 			lastListType = nil
@@ -187,7 +191,7 @@ public final class DocxWriter {
 		return "<w:p>\(pPrXML)\(renderRuns(runs))</w:p>\n"
 	}
 
-	private func listParagraph(runs: [Run], numId: Int, ilvl: Int, abstractNumId: Int, quoteDepth: Int) -> String {
+	private func listParagraph(runs: [Run], numId: Int, ilvl: Int, quoteDepth: Int) -> String {
 		var indentXML = ""
 		if quoteDepth > 0 {
 			let indent = quoteDepth * 720
@@ -422,15 +426,16 @@ public final class DocxWriter {
 		\(decimalLevels())
 		</w:abstractNum>
 
-		<!-- Concrete numbering instances (up to a generous cap) -->
-		\((1...20).map { "<w:num w:numId=\"\($0)\"><w:abstractNumId w:val=\"\($0 % 2 == 0 ? 1 : 0)\"/></w:num>" }.joined(separator: "\n"))
+		<!-- Concrete numbering instances -->
+		\(numInstances.map { "<w:num w:numId=\"\($0.numId)\"><w:abstractNumId w:val=\"\($0.abstractNumId)\"/></w:num>" }.joined(separator: "\n"))
 
 		</w:numbering>
 		"""
 	}
 
 	private func bulletLevels() -> String {
-		let symbols = ["\\uF0B7", "o", "\\uF0A7"] // bullet, circle, diamond
+		// Use Unicode bullet characters with standard fonts (cross-platform safe).
+		let symbols = ["\u{2022}", "\u{25CB}", "\u{25AA}"] // •, ○, ▪
 		return (0..<9).map { lvl in
 			let symbol = symbols[lvl % symbols.count]
 			let indent = (lvl + 1) * 720
@@ -442,7 +447,7 @@ public final class DocxWriter {
 			<w:lvlText w:val="\(symbol)"/>
 			<w:lvlJc w:val="left"/>
 			<w:pPr><w:ind w:left="\(indent)" w:hanging="\(hanging)"/></w:pPr>
-			<w:rPr><w:rFonts w:ascii="Symbol" w:hAnsi="Symbol" w:hint="default"/></w:rPr>
+			<w:rPr><w:rFonts w:ascii="Helvetica Neue" w:hAnsi="Helvetica Neue" w:hint="default"/></w:rPr>
 			</w:lvl>
 			"""
 		}.joined(separator: "\n")
