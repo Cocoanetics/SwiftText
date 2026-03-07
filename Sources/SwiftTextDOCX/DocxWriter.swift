@@ -1,6 +1,37 @@
 import Foundation
 import ZIPFoundation
 
+/// Page configuration for DOCX output.
+public struct DocxPageSetup: Sendable {
+	/// Page width in twips (1 inch = 1440 twips).
+	public let width: Int
+	/// Page height in twips.
+	public let height: Int
+	/// Margin on each side in twips.
+	public let margin: Int
+	/// Whether the page is landscape.
+	public let landscape: Bool
+
+	/// Content width (page width minus left and right margins).
+	public var contentWidth: Int { width - 2 * margin }
+
+	/// A4 portrait with 2cm margins (default).
+	public static let a4 = DocxPageSetup(width: 11906, height: 16838, margin: 1134, landscape: false)
+	/// A4 landscape with 2cm margins.
+	public static let a4Landscape = DocxPageSetup(width: 16838, height: 11906, margin: 1134, landscape: true)
+	/// US Letter portrait with 1-inch margins.
+	public static let letter = DocxPageSetup(width: 12240, height: 15840, margin: 1440, landscape: false)
+	/// US Letter landscape with 1-inch margins.
+	public static let letterLandscape = DocxPageSetup(width: 15840, height: 12240, margin: 1440, landscape: true)
+
+	public init(width: Int, height: Int, margin: Int, landscape: Bool = false) {
+		self.width = width
+		self.height = height
+		self.margin = margin
+		self.landscape = landscape
+	}
+}
+
 /// Generates DOCX (Office Open XML) files from structured block content.
 ///
 /// Usage:
@@ -47,6 +78,9 @@ public final class DocxWriter {
 
 	/// The blocks to render into the DOCX document.
 	public var blocks: [Block] = []
+
+	/// Page setup (paper size, margins, orientation). Defaults to A4 portrait.
+	public var pageSetup: DocxPageSetup = .a4
 
 	// MARK: - Private State
 
@@ -131,11 +165,12 @@ public final class DocxWriter {
 		for block in blocks {
 			xml += renderBlock(block, quoteDepth: 0)
 		}
-		// Section properties (A4 portrait, 2cm margins)
+		let orient = pageSetup.landscape ? "landscape" : "portrait"
+		let m = pageSetup.margin
 		xml += """
 		<w:sectPr>
-		<w:pgSz w:w="11906" w:h="16838" w:orient="portrait"/>
-		<w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="709" w:footer="709" w:gutter="0"/>
+		<w:pgSz w:w="\(pageSetup.width)" w:h="\(pageSetup.height)" w:orient="\(orient)"/>
+		<w:pgMar w:top="\(m)" w:right="\(m)" w:bottom="\(m)" w:left="\(m)" w:header="709" w:footer="709" w:gutter="0"/>
 		</w:sectPr>
 		"""
 		return xml
@@ -214,9 +249,6 @@ public final class DocxWriter {
 		return "<w:p>\(pPr)\(renderRuns(runs))</w:p>\n"
 	}
 
-	/// Page content width in twips (page width minus left+right margins).
-	private static let contentWidth = 11906 - 2 * 1134 // 9638
-
 	private func codeBlockParagraphs(_ text: String, quoteDepth: Int) -> String {
 		let lines = text.components(separatedBy: "\n")
 
@@ -231,7 +263,7 @@ public final class DocxWriter {
 		let cellBorder = "w:val=\"single\" w:color=\"000000\" w:sz=\"2\" w:space=\"0\""
 		let tblBorder = "w:val=\"single\" w:color=\"ffffff\" w:sz=\"8\" w:space=\"0\" w:shadow=\"0\" w:frame=\"0\""
 		let indent = 108 + quoteDepth * 360
-		let cellWidth = Self.contentWidth - indent
+		let cellWidth = pageSetup.contentWidth - indent
 
 		return """
 		<w:tbl>

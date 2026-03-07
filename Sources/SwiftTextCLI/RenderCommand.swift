@@ -81,7 +81,7 @@ struct Render: AsyncParsableCommand {
 			try await renderPDF(html: html, baseURL: baseURL, outputURL: outputURL)
 			print(outputURL.path)
 		case .docx:
-			try MarkdownToDocx.convert(markdownText, to: outputURL)
+			try MarkdownToDocx.convert(markdownText, to: outputURL, pageSetup: docxPageSetup())
 			print(outputURL.path)
 		}
 	}
@@ -147,6 +147,15 @@ struct Render: AsyncParsableCommand {
 		let dir = url.deletingLastPathComponent()
 		try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 		try s.write(to: url, atomically: true, encoding: .utf8)
+	}
+
+	private func docxPageSetup() -> DocxPageSetup {
+		switch (paper, landscape) {
+		case (.a4, false):     return .a4
+		case (.a4, true):      return .a4Landscape
+		case (.letter, false): return .letter
+		case (.letter, true):  return .letterLandscape
+		}
 	}
 
 	private func pageSize() -> CGSize {

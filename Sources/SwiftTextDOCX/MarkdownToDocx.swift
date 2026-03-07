@@ -12,10 +12,12 @@ public enum MarkdownToDocx {
 	/// - Parameters:
 	///   - markdown: The Markdown source text.
 	///   - url: Destination file URL for the `.docx` output.
-	public static func convert(_ markdown: String, to url: URL) throws {
+	///   - pageSetup: Page configuration (paper size, margins, orientation). Defaults to A4 portrait.
+	public static func convert(_ markdown: String, to url: URL, pageSetup: DocxPageSetup = .a4) throws {
 		let blocks = parseBlocks(markdown)
 		let writer = DocxWriter()
 		writer.blocks = blocks
+		writer.pageSetup = pageSetup
 		try writer.write(to: url)
 	}
 
