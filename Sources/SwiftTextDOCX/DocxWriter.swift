@@ -353,15 +353,35 @@ public final class DocxWriter {
 		<w:rFonts w:ascii="Helvetica Neue" w:hAnsi="Helvetica Neue" w:cs="Arial"/>
 		<w:sz w:val="22"/><w:szCs w:val="22"/>
 		<w:color w:val="222222"/>
+		<w:u w:val="none" w:color="auto"/>
+		<w:bdr w:val="nil"/>
+		<w:vertAlign w:val="baseline"/>
 		<w:lang w:val="en-US"/>
 		</w:rPr></w:rPrDefault>
 		<w:pPrDefault><w:pPr>
-		<w:spacing w:after="120" w:line="276" w:lineRule="auto"/>
+		<w:widowControl w:val="1"/>
+		<w:pBdr>
+		<w:top w:val="nil"/>
+		<w:left w:val="nil"/>
+		<w:bottom w:val="nil"/>
+		<w:right w:val="nil"/>
+		<w:between w:val="nil"/>
+		<w:bar w:val="nil"/>
+		</w:pBdr>
+		<w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/>
+		<w:ind w:left="0" w:right="0" w:firstLine="0"/>
+		<w:jc w:val="left"/>
 		</w:pPr></w:pPrDefault>
 		</w:docDefaults>
 
 		<w:style w:type="paragraph" w:default="1" w:styleId="Normal">
 		<w:name w:val="Normal"/>
+		<w:pPr>
+		<w:spacing w:after="120" w:line="276" w:lineRule="auto"/>
+		</w:pPr>
+		<w:rPr>
+		<w:sz w:val="22"/><w:szCs w:val="22"/>
+		</w:rPr>
 		</w:style>
 
 		\(headingStyle(level: 1, size: 48, borderBottom: true, borderSize: 12))
