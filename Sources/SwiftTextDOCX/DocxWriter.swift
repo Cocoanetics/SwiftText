@@ -92,9 +92,12 @@ public final class DocxWriter {
 		let stylesXML = generateStyles()
 		let numberingXML = generateNumbering()
 
-		// Create ZIP archive
+		// Create ZIP archive (remove existing file first)
 		let dir = url.deletingLastPathComponent()
 		try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+		if FileManager.default.fileExists(atPath: url.path) {
+			try FileManager.default.removeItem(at: url)
+		}
 
 		guard let archive = Archive(url: url, accessMode: .create) else {
 			throw DocxWriterError.archiveCreationFailed
