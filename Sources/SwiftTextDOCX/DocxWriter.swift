@@ -213,13 +213,29 @@ public final class DocxWriter {
 	private func codeBlockParagraphs(_ text: String, quoteDepth: Int) -> String {
 		let lines = text.components(separatedBy: "\n")
 		var xml = ""
-		for line in lines {
+		let baseIndent = quoteDepth * 720
+		let codeIndent = baseIndent + 360 // left padding inside the block
+
+		for (index, line) in lines.enumerated() {
 			var pPr = "<w:pStyle w:val=\"CodeBlock\"/>"
 			pPr += "<w:spacing w:after=\"0\" w:line=\"240\" w:lineRule=\"auto\"/>"
-			if quoteDepth > 0 {
-				let indent = quoteDepth * 720
-				pPr += "<w:ind w:left=\"\(indent)\"/>"
+			pPr += "<w:ind w:left=\"\(codeIndent)\" w:right=\"360\"/>"
+			pPr += "<w:shd w:val=\"clear\" w:color=\"auto\" w:fill=\"F5F5F5\"/>"
+
+			// Borders: top on first line, bottom on last line, left+right on all
+			var borders = "<w:left w:val=\"single\" w:sz=\"4\" w:space=\"4\" w:color=\"E0E0E0\"/>"
+			borders += "<w:right w:val=\"single\" w:sz=\"4\" w:space=\"4\" w:color=\"E0E0E0\"/>"
+			if index == 0 {
+				borders += "<w:top w:val=\"single\" w:sz=\"4\" w:space=\"4\" w:color=\"E0E0E0\"/>"
 			}
+			if index == lines.count - 1 {
+				borders += "<w:bottom w:val=\"single\" w:sz=\"4\" w:space=\"4\" w:color=\"E0E0E0\"/>"
+			} else {
+				// Between lines: suppress paragraph border gaps
+				borders += "<w:between w:val=\"none\" w:sz=\"0\" w:space=\"0\" w:color=\"auto\"/>"
+			}
+			pPr += "<w:pBdr>\(borders)</w:pBdr>"
+
 			let run = "<w:r><w:rPr><w:rFonts w:ascii=\"Courier New\" w:hAnsi=\"Courier New\" w:cs=\"Courier New\"/><w:sz w:val=\"20\"/><w:szCs w:val=\"20\"/></w:rPr><w:t xml:space=\"preserve\">\(xmlEscape(line))</w:t></w:r>"
 			xml += "<w:p><w:pPr>\(pPr)</w:pPr>\(run)</w:p>\n"
 		}
@@ -257,8 +273,7 @@ public final class DocxWriter {
 				if run.italic { rPr += "<w:i/><w:iCs/>" }
 				if run.code {
 					rPr += "<w:rFonts w:ascii=\"Courier New\" w:hAnsi=\"Courier New\" w:cs=\"Courier New\"/>"
-					rPr += "<w:sz w:val=\"20\"/><w:szCs w:val=\"20\"/>"
-					rPr += "<w:shd w:val=\"clear\" w:color=\"auto\" w:fill=\"F5F5F5\"/>"
+					rPr += "<w:sz w:val=\"21\"/><w:szCs w:val=\"21\"/>"
 				}
 				let rPrXML = rPr.isEmpty ? "" : "<w:rPr>\(rPr)</w:rPr>"
 				xml += "<w:r>\(rPrXML)<w:t xml:space=\"preserve\">\(xmlEscape(run.text))</w:t></w:r>"
