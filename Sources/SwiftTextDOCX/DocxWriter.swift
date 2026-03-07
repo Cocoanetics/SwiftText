@@ -214,33 +214,69 @@ public final class DocxWriter {
 		return "<w:p>\(pPr)\(renderRuns(runs))</w:p>\n"
 	}
 
+	/// Page content width in twips (page width minus left+right margins).
+	private static let contentWidth = 11906 - 2 * 1134 // 9638
+
 	private func codeBlockParagraphs(_ text: String, quoteDepth: Int) -> String {
 		let lines = text.components(separatedBy: "\n")
-		var xml = ""
 
-		let borderXML = """
-		<w:pBdr>\
-		<w:top w:val="single" w:color="000000" w:sz="2" w:space="5" w:shadow="0" w:frame="0"/>\
-		<w:left w:val="single" w:color="000000" w:sz="2" w:space="5" w:shadow="0" w:frame="0"/>\
-		<w:bottom w:val="single" w:color="000000" w:sz="2" w:space="5" w:shadow="0" w:frame="0"/>\
-		<w:right w:val="single" w:color="000000" w:sz="2" w:space="5" w:shadow="0" w:frame="0"/>\
-		</w:pBdr>
-		"""
-
-		for (index, line) in lines.enumerated() {
-			var pPr = "<w:pStyle w:val=\"CodeBlock\"/>"
-			pPr += borderXML
-			// Only last line gets after-spacing for separation from next block
-			if index == lines.count - 1 {
-				pPr += "<w:spacing w:after=\"200\"/>"
-			}
-			if quoteDepth > 0 {
-				pPr += "<w:ind w:left=\"\(quoteDepth * 360)\"/>"
-			}
+		// Build code paragraphs inside the table cell
+		var paragraphs = ""
+		for line in lines {
 			let run = "<w:r><w:t xml:space=\"preserve\">\(xmlEscape(line))</w:t></w:r>"
-			xml += "<w:p><w:pPr>\(pPr)</w:pPr>\(run)</w:p>\n"
+			paragraphs += "<w:p><w:pPr><w:pStyle w:val=\"CodeBlock\"/></w:pPr>\(run)</w:p>\n"
 		}
-		return xml
+
+		// Single-cell table with cell margins for true inner padding
+		let cellBorder = "w:val=\"single\" w:color=\"000000\" w:sz=\"2\" w:space=\"0\""
+		let tblBorder = "w:val=\"single\" w:color=\"ffffff\" w:sz=\"8\" w:space=\"0\" w:shadow=\"0\" w:frame=\"0\""
+		let indent = 108 + quoteDepth * 360
+		let cellWidth = Self.contentWidth - indent
+
+		return """
+		<w:tbl>
+		<w:tblPr>
+		<w:tblW w:w="\(cellWidth)" w:type="dxa"/>
+		<w:jc w:val="left"/>
+		<w:tblInd w:w="\(indent)" w:type="dxa"/>
+		<w:tblBorders>
+		<w:top \(tblBorder)/>
+		<w:left \(tblBorder)/>
+		<w:bottom \(tblBorder)/>
+		<w:right \(tblBorder)/>
+		<w:insideH \(tblBorder)/>
+		<w:insideV \(tblBorder)/>
+		</w:tblBorders>
+		<w:tblLayout w:type="fixed"/>
+		</w:tblPr>
+		<w:tblGrid>
+		<w:gridCol w:w="\(cellWidth)"/>
+		</w:tblGrid>
+		<w:tr>
+		<w:tc>
+		<w:tcPr>
+		<w:tcW w:type="dxa" w:w="\(cellWidth)"/>
+		<w:tcBorders>
+		<w:top \(cellBorder)/>
+		<w:left \(cellBorder)/>
+		<w:bottom \(cellBorder)/>
+		<w:right \(cellBorder)/>
+		</w:tcBorders>
+		<w:shd w:val="clear" w:color="auto" w:fill="f5f5f5"/>
+		<w:tcMar>
+		<w:top w:type="dxa" w:w="80"/>
+		<w:left w:type="dxa" w:w="80"/>
+		<w:bottom w:type="dxa" w:w="80"/>
+		<w:right w:type="dxa" w:w="80"/>
+		</w:tcMar>
+		<w:vAlign w:val="top"/>
+		</w:tcPr>
+		\(paragraphs)
+		</w:tc>
+		</w:tr>
+		</w:tbl>
+
+		"""
 	}
 
 	private func horizontalRuleParagraph(quoteDepth: Int) -> String {
