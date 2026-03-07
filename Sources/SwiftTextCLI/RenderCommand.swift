@@ -8,18 +8,20 @@
 #if os(macOS)
 import ArgumentParser
 import Foundation
+import SwiftTextDOCX
 import SwiftTextHTML
 
 enum RenderOutputFormat: String, ExpressibleByArgument, CaseIterable {
 	case html
 	case pdf
+	case docx
 }
 
 @available(macOS 10.15, macCatalyst 13, iOS 13, tvOS 13, watchOS 6, *)
 struct Render: AsyncParsableCommand {
 	static let configuration = CommandConfiguration(
 		commandName: "render",
-		abstract: "Render a Markdown file to HTML or PDF. Output format is inferred from -o extension or set via --format."
+		abstract: "Render a Markdown file to HTML, PDF, or DOCX. Output format is inferred from -o extension or set via --format."
 	)
 
 	@Argument(help: "Path to a .md/.markdown file. Omit when using --stdin.")
@@ -31,7 +33,7 @@ struct Render: AsyncParsableCommand {
 	@Option(name: .shortAndLong, help: "Output path (.html or .pdf). If omitted, defaults to input filename with the chosen extension (or output.html when using --stdin).")
 	var output: String?
 
-	@Option(name: .long, help: "Override output format (html|pdf). If omitted, inferred from output extension; defaults to html.")
+	@Option(name: .long, help: "Override output format (html|pdf|docx). If omitted, inferred from output extension; defaults to html.")
 	var format: RenderOutputFormat?
 
 	@Option(name: .long, help: "Paper size for PDF/HTML print CSS: a4, letter (default: a4).")
@@ -78,6 +80,9 @@ struct Render: AsyncParsableCommand {
 			let html = markdownToHTML(markdownText, paper: paper, landscape: landscape)
 			try await renderPDF(html: html, baseURL: baseURL, outputURL: outputURL)
 			print(outputURL.path)
+		case .docx:
+			try MarkdownToDocx.convert(markdownText, to: outputURL)
+			print(outputURL.path)
 		}
 	}
 
@@ -89,7 +94,8 @@ struct Render: AsyncParsableCommand {
 			let ext = URL(fileURLWithPath: (output as NSString).expandingTildeInPath).pathExtension.lowercased()
 			if ext == "pdf" { return .pdf }
 			if ext == "html" || ext == "htm" { return .html }
-			throw ValidationError("Cannot infer format from output extension '.\(ext)'. Use --format html|pdf.")
+			if ext == "docx" { return .docx }
+			throw ValidationError("Cannot infer format from output extension '.\(ext)'. Use --format html|pdf|docx.")
 		}
 		return .html
 	}
@@ -102,14 +108,22 @@ struct Render: AsyncParsableCommand {
 
 		if let input {
 			let fileURL = resolvedFileURL(input)
-			let ext = (format == .pdf) ? "pdf" : "html"
+			let ext = extensionForFormat(format)
 			return fileURL.deletingPathExtension().appendingPathExtension(ext)
 		}
 
-		let ext = (format == .pdf) ? "pdf" : "html"
+		let ext = extensionForFormat(format)
 		return URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
 			.appendingPathComponent("output")
 			.appendingPathExtension(ext)
+	}
+
+	private func extensionForFormat(_ format: RenderOutputFormat) -> String {
+		switch format {
+		case .html: return "html"
+		case .pdf: return "pdf"
+		case .docx: return "docx"
+		}
 	}
 
 	private func resolvedFileURL(_ path: String) -> URL {
