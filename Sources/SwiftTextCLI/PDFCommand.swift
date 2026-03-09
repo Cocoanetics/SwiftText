@@ -827,7 +827,14 @@ private func convertMarkdownBody(_ markdown: String, footnoteState: FootnoteRend
 			i += 1
 			}
 			if !paraLines.isEmpty {
-				let text = paraLines.map { inlineToHTML($0, footnoteState: footnoteState) }.joined(separator: "\n")
+				let text = paraLines.map { line -> String in
+					let formatted = inlineToHTML(line, footnoteState: footnoteState)
+					// Markdown line break: two or more trailing spaces → <br>
+					if line.hasSuffix("  ") {
+						return formatted + "<br>"
+					}
+					return formatted
+				}.joined(separator: "\n")
 				out += "<p>\(text)</p>\n"
 			}
 		}
