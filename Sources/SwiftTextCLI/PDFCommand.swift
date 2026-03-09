@@ -289,7 +289,7 @@ struct PDF: AsyncParsableCommand {
 // MARK: - Markdown → HTML
 
 private let responsiveMarkdownImageClass = "swifttext-markdown-image"
-private let responsiveMarkdownImageInlineStyle = "display: block; width: 100%; max-width: 100%; height: auto;"
+private let responsiveMarkdownImageInlineStyle = "display: block; max-width: 100%; height: auto;"
 
 /// Converts a Markdown string to a self-contained HTML document
 /// styled for print output and with CSS `@page` size directives.
@@ -311,8 +311,12 @@ func markdownToHTML(_ markdown: String, paper: PaperSize, landscape: Bool) -> St
 	    font-size: 11pt;
 	    line-height: 1.6;
 	    color: #222;
-	    margin: 0;
-	    padding: 0;
+	    max-width: 960px;
+	    margin: 0 auto;
+	    padding: 2em;
+	}
+	@media print {
+	    body { max-width: none; padding: 0; margin: 0; }
 	}
 	h1, h2, h3, h4, h5, h6 {
 	    font-weight: 600;
@@ -418,6 +422,9 @@ func markdownToHTML(_ markdown: String, paper: PaperSize, landscape: Bool) -> St
 	    break-before: avoid;
 	    page-break-inside: avoid;
 	    break-inside: avoid;
+	}
+	@media print {
+	    img.\(responsiveMarkdownImageClass) { width: 100%; max-width: 100%; }
 	}
 	hr { border: none; border-top: 1px solid #ddd; margin: 1.2em 0; }
 	a { color: #0366d6; }
@@ -620,6 +627,58 @@ private func convertMarkdownBody(_ markdown: String, footnoteState: FootnoteRend
 			let inner = convertMarkdownBody(qLines.joined(separator: "\n"), footnoteState: footnoteState)
 			out += "<blockquote>\n\(inner)</blockquote>\n"
 			continue
+		}
+
+		// ── Pipe table (| col | col |) ────────────────────────────────
+		if trimmed.hasPrefix("|"), trimmed.hasSuffix("|"),
+		   i + 1 < lines.count {
+			let nextTrimmed = lines[i + 1].trimmingCharacters(in: .whitespaces)
+			// Check if second line is a separator row (|---|---|)
+			if nextTrimmed.hasPrefix("|"), nextTrimmed.hasSuffix("|"),
+			   nextTrimmed.contains("-") {
+				let sepCells = nextTrimmed.split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces) }
+				let isSeparator = sepCells.allSatisfy { cell in
+					let stripped = cell.replacingOccurrences(of: ":", with: "").replacingOccurrences(of: "-", with: "")
+					return stripped.isEmpty && cell.contains("-")
+				}
+				if isSeparator {
+					closeLists()
+					closeAllSections()
+					// Parse alignment from separator
+					let alignments: [String] = sepCells.map { cell in
+						let left = cell.hasPrefix(":")
+						let right = cell.hasSuffix(":")
+						if left && right { return " style=\"text-align: center;\"" }
+						if right { return " style=\"text-align: right;\"" }
+						return ""
+					}
+					// Header row
+					let headerCells = trimmed.split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces) }
+					out += "<table>\n<thead><tr>\n"
+					for (ci, cell) in headerCells.enumerated() {
+						let align = ci < alignments.count ? alignments[ci] : ""
+						out += "<th\(align)>\(inlineToHTML(cell, footnoteState: footnoteState))</th>"
+					}
+					out += "\n</tr></thead>\n<tbody>\n"
+					// Skip header and separator
+					i += 2
+					// Body rows
+					while i < lines.count {
+						let rowTrimmed = lines[i].trimmingCharacters(in: .whitespaces)
+						guard rowTrimmed.hasPrefix("|"), rowTrimmed.hasSuffix("|") else { break }
+						let rowCells = rowTrimmed.split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces) }
+						out += "<tr>"
+						for (ci, cell) in rowCells.enumerated() {
+							let align = ci < alignments.count ? alignments[ci] : ""
+							out += "<td\(align)>\(inlineToHTML(cell, footnoteState: footnoteState))</td>"
+						}
+						out += "</tr>\n"
+						i += 1
+					}
+					out += "</tbody></table>\n"
+					continue
+				}
+			}
 		}
 
 		// ── Unordered list (- / * / +) ────────────────────────────────
