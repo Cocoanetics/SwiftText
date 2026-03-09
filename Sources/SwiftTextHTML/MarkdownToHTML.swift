@@ -86,12 +86,62 @@ public enum MarkdownToHTML {
 				continue
 			}
 
+			// Pipe table (| col | col |)
+			if trimmed.hasPrefix("|"), trimmed.hasSuffix("|"),
+			   i + 1 < lines.count {
+				let nextTrimmed = lines[i + 1].trimmingCharacters(in: .whitespaces)
+				if nextTrimmed.hasPrefix("|"), nextTrimmed.hasSuffix("|"),
+				   nextTrimmed.contains("-") {
+					let sepCells = nextTrimmed.split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces) }
+					let isSeparator = sepCells.allSatisfy { cell in
+						let stripped = cell.replacingOccurrences(of: ":", with: "").replacingOccurrences(of: "-", with: "")
+						return stripped.isEmpty && cell.contains("-")
+					}
+					if isSeparator {
+						// Parse alignment from separator
+						let alignments: [String] = sepCells.map { cell in
+							let left = cell.hasPrefix(":")
+							let right = cell.hasSuffix(":")
+							if left && right { return " style=\"text-align: center;\"" }
+							if right { return " style=\"text-align: right;\"" }
+							return ""
+						}
+						// Header row
+						let headerCells = trimmed.split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces) }
+						var table = "<table>\n<thead><tr>"
+						for (ci, cell) in headerCells.enumerated() {
+							let align = ci < alignments.count ? alignments[ci] : ""
+							table += "<th\(align)>\(inlineFormat(cell))</th>"
+						}
+						table += "</tr></thead>\n<tbody>\n"
+						// Skip header and separator
+						i += 2
+						// Body rows
+						while i < lines.count {
+							let rowTrimmed = lines[i].trimmingCharacters(in: .whitespaces)
+							guard rowTrimmed.hasPrefix("|"), rowTrimmed.hasSuffix("|") else { break }
+							let rowCells = rowTrimmed.split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces) }
+							table += "<tr>"
+							for (ci, cell) in rowCells.enumerated() {
+								let align = ci < alignments.count ? alignments[ci] : ""
+								table += "<td\(align)>\(inlineFormat(cell))</td>"
+							}
+							table += "</tr>\n"
+							i += 1
+						}
+						table += "</tbody></table>"
+						html.append(table)
+						continue
+					}
+				}
+			}
+
 			// Paragraph — collect consecutive non-blank, non-special lines
 			var paraLines: [String] = []
 			while i < lines.count {
 				let pl = lines[i]
 				let pt = pl.trimmingCharacters(in: .whitespaces)
-				if pt.isEmpty || pt.hasPrefix("#") || pt.hasPrefix(">") || isHorizontalRule(pt) || isUnorderedListItem(pt) || orderedListContent(pt) != nil {
+				if pt.isEmpty || pt.hasPrefix("#") || pt.hasPrefix(">") || isHorizontalRule(pt) || isUnorderedListItem(pt) || orderedListContent(pt) != nil || isPipeTableStart(lines: lines, at: i) {
 					break
 				}
 				paraLines.append(pl)
@@ -220,6 +270,19 @@ public enum MarkdownToHTML {
 		guard stripped.count >= 3 else { return false }
 		let chars = Set(stripped)
 		return chars.count == 1 && (chars.contains("-") || chars.contains("*") || chars.contains("_"))
+	}
+
+	private static func isPipeTableStart(lines: [String], at index: Int) -> Bool {
+		let trimmed = lines[index].trimmingCharacters(in: .whitespaces)
+		guard trimmed.hasPrefix("|"), trimmed.hasSuffix("|"),
+			  index + 1 < lines.count else { return false }
+		let next = lines[index + 1].trimmingCharacters(in: .whitespaces)
+		guard next.hasPrefix("|"), next.hasSuffix("|"), next.contains("-") else { return false }
+		let cells = next.split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces) }
+		return cells.allSatisfy { cell in
+			let stripped = cell.replacingOccurrences(of: ":", with: "").replacingOccurrences(of: "-", with: "")
+			return stripped.isEmpty && cell.contains("-")
+		}
 	}
 
 	private static func isUnorderedListItem(_ line: String) -> Bool {
