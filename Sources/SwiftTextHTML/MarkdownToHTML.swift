@@ -154,24 +154,69 @@ public enum MarkdownToHTML {
 		return html.joined(separator: "\n")
 	}
 
+	/// Default stylesheet for Markdown HTML output.
+	///
+	/// Provides sensible styling for all supported elements: body, headings, paragraphs,
+	/// lists, blockquotes, code blocks, tables, images, and horizontal rules.
+	public static let defaultStylesheet = """
+	body {
+	    font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+	    font-size: 11pt;
+	    line-height: 1.6;
+	    color: #222;
+	    max-width: 960px;
+	    margin: 0 auto;
+	    padding: 2em;
+	}
+	h1, h2, h3, h4, h5, h6 { font-weight: 600; margin: 1.2em 0 0.4em; line-height: 1.3; }
+	h1 { font-size: 2em; border-bottom: 2px solid #ddd; padding-bottom: 0.2em; }
+	h2 { font-size: 1.5em; border-bottom: 1px solid #eee; padding-bottom: 0.1em; }
+	h3 { font-size: 1.25em; }
+	p { margin: 0.6em 0; }
+	ul, ol { margin: 0.6em 0; padding-left: 1.8em; }
+	li { margin: 0.2em 0; }
+	blockquote { border-left: 4px solid #ccc; padding: 0.3em 1em; margin: 0.6em 0; color: #555; }
+	code {
+	    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+	    font-size: 0.88em; background: #f5f5f5; border: 1px solid #e0e0e0;
+	    border-radius: 3px; padding: 0.1em 0.4em;
+	}
+	pre {
+	    background: #f5f5f5; border: 1px solid #e0e0e0; border-radius: 4px;
+	    padding: 0.8em; margin: 0.8em 0; overflow: auto; line-height: 1.2;
+	    font-size: 10pt; white-space: pre-wrap; word-break: break-all;
+	}
+	pre code { background: none; border: none; padding: 0; font-size: inherit; }
+	table { border-collapse: collapse; width: 100%; margin: 0.8em 0; font-size: 0.95em; }
+	th, td { border: 1px solid #999; padding: 0.4em 0.7em; text-align: left; }
+	th { background: #f0f0f0; font-weight: 600; }
+	tr:nth-child(even) td { background: #f9f9f9; }
+	img { max-width: 100%; height: auto; }
+	hr { border: none; border-top: 1px solid #ddd; margin: 1.2em 0; }
+	a { color: #0366d6; }
+	"""
+
 	/// Converts a Markdown string to a complete HTML document.
 	///
-	/// Wraps the converted fragment in `<!DOCTYPE html><html>…</html>` with an optional
-	/// `<style>` block injected into `<head>`.
+	/// Wraps the converted fragment in `<!DOCTYPE html><html>…</html>` with a
+	/// `<style>` block. Uses ``defaultStylesheet`` when no custom stylesheet is provided.
 	///
 	/// - Parameters:
 	///   - markdown: The Markdown source text.
-	///   - stylesheet: Optional CSS to include in a `<style>` tag. Pass `nil` to omit.
+	///   - stylesheet: CSS to include in a `<style>` tag. Defaults to ``defaultStylesheet``.
 	/// - Returns: A complete HTML document string.
 	public static func document(_ markdown: String, stylesheet: String? = nil) -> String {
 		let body = convert(markdown)
-		let styleTag = stylesheet.map { "<style>\n\($0)\n</style>\n" } ?? ""
+		let css = stylesheet ?? defaultStylesheet
 		return """
 		<!DOCTYPE html>
 		<html>
 		<head>
 		<meta charset="utf-8">
-		\(styleTag)</head>
+		<style>
+		\(css)
+		</style>
+		</head>
 		<body>
 		\(body)
 		</body>
