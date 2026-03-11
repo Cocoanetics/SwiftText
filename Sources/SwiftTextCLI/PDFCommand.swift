@@ -414,7 +414,7 @@ func markdownToHTML(_ markdown: String, paper: PaperSize, landscape: Bool) -> St
 	}
 	table { border-collapse: collapse; width: 100%; margin: 0.8em 0; font-size: 0.95em; }
 	th, td { border: 1px solid #999; padding: 0.4em 0.7em; text-align: left; }
-	th { background: #f0f0f0; font-weight: 600; }
+	th { background: #dcdcdc; font-weight: 600; }
 	tr:nth-child(even) td { background: #f9f9f9; }
 	img.\(responsiveMarkdownImageClass) {
 	    \(responsiveMarkdownImageInlineStyle)
