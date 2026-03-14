@@ -187,7 +187,7 @@ public enum MarkdownToHTML {
 	    font-size: 10pt; white-space: pre-wrap; word-break: break-all;
 	}
 	pre code { background: none; border: none; padding: 0; font-size: inherit; }
-	table { border-collapse: collapse; width: 100%; margin: 0.8em 0; font-size: 0.95em; }
+	table { border-collapse: collapse; margin: 0.8em 0; font-size: 0.95em; }
 	th, td { border: 1px solid #999; padding: 0.4em 0.7em; text-align: left; }
 	th { background: #dcdcdc; font-weight: 600; }
 	tr:nth-child(even) td { background: #f9f9f9; }
