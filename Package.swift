@@ -32,7 +32,14 @@ let macOSTargets: [Target] = [
 			"SwiftTextDOCX",
 			.product(name: "ArgumentParser", package: "swift-argument-parser"),
 		],
-		path: "Sources/SwiftTextCLI"
+		path: "Sources/SwiftTextCLI",
+		plugins: [
+			.plugin(name: "VersionGeneratorPlugin")
+		]
+	),
+	.plugin(
+		name: "VersionGeneratorPlugin",
+		capability: .buildTool()
 	),
 	.testTarget(
 		name: "SwiftTextOCRTests",
