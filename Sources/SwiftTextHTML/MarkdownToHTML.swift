@@ -19,15 +19,23 @@ public enum MarkdownToHTML {
 		let lines = markdown.components(separatedBy: "\n")
 		var html: [String] = []
 		var i = 0
+		var blankCount = 0  // Track consecutive blank lines
 
 		while i < lines.count {
 			let line = lines[i]
 
-			// Blank line — skip (paragraph breaks handled by grouping)
+			// Blank line — count for paragraph separation
 			if line.trimmingCharacters(in: .whitespaces).isEmpty {
+				blankCount += 1
 				i += 1
+				// If we have 2+ blank lines, emit an empty paragraph
+				if blankCount >= 2 {
+					html.append("<p></p>")
+					blankCount = 0
+				}
 				continue
 			}
+			blankCount = 0  // Reset on non-blank line
 
 			// Heading
 			if let heading = parseHeading(line) {
