@@ -47,6 +47,13 @@ public final class DocxWriter {
 
 	// MARK: - Public Types
 
+	/// Column alignment for tables.
+	public enum ColumnAlignment: Sendable {
+		case left
+		case center
+		case right
+	}
+
 	/// A block-level element in the document.
 	public enum Block {
 		case heading(level: Int, runs: [Run])
@@ -55,6 +62,7 @@ public final class DocxWriter {
 		case codeBlock(language: String?, text: String)
 		case blockquote(blocks: [Block])
 		case horizontalRule
+		case table(headers: [[Run]], rows: [[[Run]]], alignments: [ColumnAlignment])
 	}
 
 	/// A styled span of inline text.
@@ -212,6 +220,10 @@ public final class DocxWriter {
 		case .horizontalRule:
 			lastListType = nil
 			return horizontalRuleParagraph(quoteDepth: quoteDepth)
+
+		case .table(let headers, let rows, let alignments):
+			lastListType = nil
+			return tableXML(headers: headers, rows: rows, alignments: alignments, quoteDepth: quoteDepth)
 		}
 	}
 
@@ -323,6 +335,97 @@ public final class DocxWriter {
 		</w:pPr></w:p>
 
 		"""
+	}
+
+	// MARK: - Table Rendering
+
+	private func tableXML(headers: [[Run]], rows: [[[Run]]], alignments: [ColumnAlignment], quoteDepth: Int) -> String {
+		let columnCount = max(headers.count, rows.first?.count ?? 0)
+		guard columnCount > 0 else { return "" }
+
+		// Calculate column widths (evenly distributed)
+		let indent = quoteDepth * 360
+		let availableWidth = pageSetup.contentWidth - indent
+		let colWidth = availableWidth / columnCount
+
+		var xml = "<w:tbl>\n"
+
+		// Table properties
+		xml += "<w:tblPr>\n"
+		xml += "<w:tblW w:w=\"\(availableWidth)\" w:type=\"dxa\"/>\n"
+		if indent > 0 {
+			xml += "<w:tblInd w:w=\"\(indent)\" w:type=\"dxa\"/>\n"
+		}
+		xml += "<w:tblBorders>\n"
+		xml += "<w:top w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"999999\"/>\n"
+		xml += "<w:left w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"999999\"/>\n"
+		xml += "<w:bottom w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"999999\"/>\n"
+		xml += "<w:right w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"999999\"/>\n"
+		xml += "<w:insideH w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"999999\"/>\n"
+		xml += "<w:insideV w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"999999\"/>\n"
+		xml += "</w:tblBorders>\n"
+		xml += "<w:tblLayout w:type=\"fixed\"/>\n"
+		xml += "</w:tblPr>\n"
+
+		// Table grid
+		xml += "<w:tblGrid>\n"
+		for _ in 0..<columnCount {
+			xml += "<w:gridCol w:w=\"\(colWidth)\"/>\n"
+		}
+		xml += "</w:tblGrid>\n"
+
+		// Helper function to get alignment XML
+		func alignmentXML(for index: Int) -> String {
+			guard index < alignments.count else { return "" }
+			switch alignments[index] {
+			case .left: return ""
+			case .center: return "<w:jc w:val=\"center\"/>"
+			case .right: return "<w:jc w:val=\"right\"/>"
+			}
+		}
+
+		// Header row
+		xml += "<w:tr>\n"
+		for (ci, cellRuns) in headers.enumerated() {
+			xml += "<w:tc>\n"
+			xml += "<w:tcPr>\n"
+			xml += "<w:tcW w:w=\"\(colWidth)\" w:type=\"dxa\"/>\n"
+			xml += "<w:shd w:val=\"clear\" w:color=\"auto\" w:fill=\"DCDCDC\"/>\n"  // Header background
+			xml += "</w:tcPr>\n"
+			// Cell paragraph with bold text
+			let align = alignmentXML(for: ci)
+			xml += "<w:p><w:pPr>\(align)</w:pPr>"
+			for run in cellRuns {
+				xml += "<w:r><w:rPr><w:b/><w:bCs/></w:rPr><w:t xml:space=\"preserve\">\(xmlEscape(run.text))</w:t></w:r>"
+			}
+			xml += "</w:p>\n"
+			xml += "</w:tc>\n"
+		}
+		xml += "</w:tr>\n"
+
+		// Body rows
+		for (ri, row) in rows.enumerated() {
+			xml += "<w:tr>\n"
+			let isEvenRow = ri % 2 == 1  // 0-indexed, so odd index = even row (2nd, 4th, etc.)
+			for (ci, cellRuns) in row.enumerated() {
+				xml += "<w:tc>\n"
+				xml += "<w:tcPr>\n"
+				xml += "<w:tcW w:w=\"\(colWidth)\" w:type=\"dxa\"/>\n"
+				if isEvenRow {
+					xml += "<w:shd w:val=\"clear\" w:color=\"auto\" w:fill=\"F9F9F9\"/>\n"  // Striped row
+				}
+				xml += "</w:tcPr>\n"
+				let align = alignmentXML(for: ci)
+				xml += "<w:p><w:pPr>\(align)</w:pPr>"
+				xml += renderRuns(cellRuns)
+				xml += "</w:p>\n"
+				xml += "</w:tc>\n"
+			}
+			xml += "</w:tr>\n"
+		}
+
+		xml += "</w:tbl>\n"
+		return xml
 	}
 
 	// MARK: - Run Rendering

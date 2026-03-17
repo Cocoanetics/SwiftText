@@ -62,6 +62,47 @@ public enum MarkdownToDocx {
 				continue
 			}
 
+			// Pipe table (| col | col |)
+			if trimmed.hasPrefix("|"), trimmed.hasSuffix("|"),
+			   i + 1 < lines.count {
+				let nextTrimmed = lines[i + 1].trimmingCharacters(in: .whitespaces)
+				if nextTrimmed.hasPrefix("|"), nextTrimmed.hasSuffix("|"),
+				   nextTrimmed.contains("-") {
+					let sepCells = nextTrimmed.split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces) }
+					let isSeparator = sepCells.allSatisfy { cell in
+						let stripped = cell.replacingOccurrences(of: ":", with: "").replacingOccurrences(of: "-", with: "")
+						return stripped.isEmpty && cell.contains("-")
+					}
+					if isSeparator {
+						// Parse alignment from separator
+						let alignments: [DocxWriter.ColumnAlignment] = sepCells.map { cell in
+							let left = cell.hasPrefix(":")
+							let right = cell.hasSuffix(":")
+							if left && right { return .center }
+							if right { return .right }
+							return .left
+						}
+						// Header row
+						let headerCells = trimmed.split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces) }
+						let headers: [[DocxWriter.Run]] = headerCells.map { parseInline($0) }
+						// Skip header and separator
+						i += 2
+						// Body rows
+						var rows: [[[DocxWriter.Run]]] = []
+						while i < lines.count {
+							let rowTrimmed = lines[i].trimmingCharacters(in: .whitespaces)
+							guard rowTrimmed.hasPrefix("|"), rowTrimmed.hasSuffix("|") else { break }
+							let rowCells = rowTrimmed.split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces) }
+							let row: [[DocxWriter.Run]] = rowCells.map { parseInline($0) }
+							rows.append(row)
+							i += 1
+						}
+						blocks.append(.table(headers: headers, rows: rows, alignments: alignments))
+						continue
+					}
+				}
+			}
+
 			// Horizontal rule
 			if isHorizontalRule(trimmed) {
 				blocks.append(.horizontalRule)
