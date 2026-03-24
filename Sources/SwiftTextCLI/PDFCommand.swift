@@ -575,12 +575,13 @@ private func convertMarkdownBody(_ markdown: String, footnoteState: FootnoteRend
 				definitionStart: definitionStart
 			)
 			let number = footnoteState.number(for: definition.identifier)
-			out += renderFootnoteDefinition(
+			// Collect the definition for deferred rendering (sorted by number at the end)
+			let html = renderFootnoteDefinition(
 				number: number,
 				contentLines: definition.contentLines,
 				footnoteState: footnoteState
 			)
-			out += "\n"
+			footnoteState.collectDefinition(number: number, html: html)
 			i = definition.nextIndex
 			continue
 		}
@@ -839,6 +840,13 @@ private func convertMarkdownBody(_ markdown: String, footnoteState: FootnoteRend
 		let escaped = codeAccum.map { htmlEscape($0) }.joined(separator: "\n")
 		out += "<pre><code>\(escaped)</code></pre>\n"
 	}
+	
+	// Render collected footnote definitions (sorted by assigned number)
+	let footnotes = footnoteState.renderCollectedDefinitions()
+	if !footnotes.isEmpty {
+		out += "\n" + footnotes + "\n"
+	}
+	
 	return out
 }
 
@@ -854,18 +862,34 @@ private final class FootnoteRenderState {
 	private var referenceCountByNumber: [Int: Int] = [:]
 	private var renderedReferenceCountByNumber: [Int: Int] = [:]
 	private var collectingReferences = false
+	
+	// Collected footnote definitions for deferred rendering
+	private var collectedDefinitions: [(number: Int, html: String)] = []
 
 	func beginCollectionPass() {
 		numberByIdentifier.removeAll(keepingCapacity: true)
 		nextNumber = 1
 		referenceCountByNumber.removeAll(keepingCapacity: true)
 		renderedReferenceCountByNumber.removeAll(keepingCapacity: true)
+		collectedDefinitions.removeAll(keepingCapacity: true)
 		collectingReferences = true
 	}
 
 	func beginRenderPass() {
 		renderedReferenceCountByNumber.removeAll(keepingCapacity: true)
+		collectedDefinitions.removeAll(keepingCapacity: true)
 		collectingReferences = false
+	}
+	
+	func collectDefinition(number: Int, html: String) {
+		collectedDefinitions.append((number: number, html: html))
+	}
+	
+	func renderCollectedDefinitions() -> String {
+		guard !collectedDefinitions.isEmpty else { return "" }
+		// Sort by assigned number and render
+		let sorted = collectedDefinitions.sorted { $0.number < $1.number }
+		return sorted.map { $0.html }.joined(separator: "\n")
 	}
 
 	func number(for identifier: String) -> Int {
@@ -898,7 +922,8 @@ private final class FootnoteRenderState {
 
 	func backlinkHTML(for number: Int) -> String? {
 		guard referenceCountByNumber[number] == 1 else { return nil }
-		return "<a href=\"#\(primaryReferenceAnchorID(for: number))\">↩</a>"
+		// No backlink character in PDF output (the ↩ symbol doesn't render reliably)
+		return ""
 	}
 
 	func primaryReferenceAnchorID(for number: Int) -> String {
