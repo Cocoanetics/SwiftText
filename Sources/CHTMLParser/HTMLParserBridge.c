@@ -1,9 +1,6 @@
 // DTHTMLParserBridge.c
 
 #include "DTHTMLParser-Bridging-Header.h"
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
 
 #if __has_include(<libxml/HTMLparser.h>)
 #include <libxml/HTMLparser.h>
@@ -13,74 +10,249 @@
 #include <libxml/HTMLparser.h>
 #endif
 
-// Registered callback — set from Swift before parsing begins.
-static htmlparser_error_callback _error_callback = NULL;
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
 
-/**
- Register the Swift error callback.
-
- @param callback A function pointer that receives (ctx, formatted_msg).
- */
-void htmlparser_register_error_callback(htmlparser_error_callback callback)
+struct swifttext_html_parser
 {
-	_error_callback = callback;
+	htmlParserCtxtPtr context;
+	htmlSAXHandler handler;
+	void *swift_context;
+	htmlparser_sax_callbacks callbacks;
+};
+
+static struct swifttext_html_parser *htmlparser_from_ctx(void *ctx)
+{
+	return (struct swifttext_html_parser *)ctx;
 }
 
-/**
- Handles SAX parser errors by formatting the error message and passing it
- to the registered Swift callback.
-
- @param ctx A context pointer passed to the handler.
- @param msg A format string for the error message.
- @param ... Additional arguments for the format string.
-
- @discussion
- This function is necessary when using Swift because Swift's native error handling and
- string formatting mechanisms are different from those in C. By creating a C function
- that formats the error message and then calls a Swift callback via a function pointer,
- we can seamlessly integrate C-based error handling with Swift's error management system.
- Using a function pointer (instead of the previous `extern` / `@_cdecl` approach)
- avoids undefined-symbol linker errors in Xcode archive (release) builds where
- cross-module `@_cdecl` symbols may be stripped.
- */
-void htmlparser_error_sax_handler(void *ctx, const char *msg, ...)
+static void htmlparser_start_document_bridge(void *ctx)
 {
-	if (ctx == NULL || _error_callback == NULL) return;
+	struct swifttext_html_parser *parser = htmlparser_from_ctx(ctx);
+	if (parser != NULL && parser->callbacks.startDocument != NULL)
+	{
+		parser->callbacks.startDocument(parser->swift_context);
+	}
+}
+
+static void htmlparser_end_document_bridge(void *ctx)
+{
+	struct swifttext_html_parser *parser = htmlparser_from_ctx(ctx);
+	if (parser != NULL && parser->callbacks.endDocument != NULL)
+	{
+		parser->callbacks.endDocument(parser->swift_context);
+	}
+}
+
+static void htmlparser_start_element_bridge(void *ctx, const xmlChar *name, const xmlChar **atts)
+{
+	struct swifttext_html_parser *parser = htmlparser_from_ctx(ctx);
+	if (parser != NULL && parser->callbacks.startElement != NULL)
+	{
+		parser->callbacks.startElement(parser->swift_context, (const char *)name, (const char **)atts);
+	}
+}
+
+static void htmlparser_end_element_bridge(void *ctx, const xmlChar *name)
+{
+	struct swifttext_html_parser *parser = htmlparser_from_ctx(ctx);
+	if (parser != NULL && parser->callbacks.endElement != NULL)
+	{
+		parser->callbacks.endElement(parser->swift_context, (const char *)name);
+	}
+}
+
+static void htmlparser_characters_bridge(void *ctx, const xmlChar *chars, int len)
+{
+	struct swifttext_html_parser *parser = htmlparser_from_ctx(ctx);
+	if (parser != NULL && parser->callbacks.characters != NULL)
+	{
+		parser->callbacks.characters(parser->swift_context, chars, (int32_t)len);
+	}
+}
+
+static void htmlparser_comment_bridge(void *ctx, const xmlChar *value)
+{
+	struct swifttext_html_parser *parser = htmlparser_from_ctx(ctx);
+	if (parser != NULL && parser->callbacks.comment != NULL)
+	{
+		parser->callbacks.comment(parser->swift_context, (const char *)value);
+	}
+}
+
+static void htmlparser_cdata_bridge(void *ctx, const xmlChar *value, int len)
+{
+	struct swifttext_html_parser *parser = htmlparser_from_ctx(ctx);
+	if (parser != NULL && parser->callbacks.cdataBlock != NULL)
+	{
+		parser->callbacks.cdataBlock(parser->swift_context, value, (int32_t)len);
+	}
+}
+
+static void htmlparser_processing_instruction_bridge(void *ctx, const xmlChar *target, const xmlChar *data)
+{
+	struct swifttext_html_parser *parser = htmlparser_from_ctx(ctx);
+	if (parser != NULL && parser->callbacks.processingInstruction != NULL)
+	{
+		parser->callbacks.processingInstruction(parser->swift_context, (const char *)target, (const char *)data);
+	}
+}
+
+static void htmlparser_error_bridge(void *ctx, const char *msg, ...)
+{
+	struct swifttext_html_parser *parser = htmlparser_from_ctx(ctx);
+	if (parser == NULL || parser->callbacks.error == NULL)
+	{
+		return;
+	}
 
 	va_list args;
 	va_start(args, msg);
-
-	// Determine the length of the formatted string
 	int length = vsnprintf(NULL, 0, msg, args);
 	va_end(args);
 
-	if (length < 0) return;
+	if (length < 0)
+	{
+		return;
+	}
 
-	// Allocate memory for the formatted string
-	char *formattedMsg = (char *)malloc((length + 1) * sizeof(char));
-	if (!formattedMsg) return;
+	char *formatted_message = (char *)malloc((size_t)length + 1);
+	if (formatted_message == NULL)
+	{
+		return;
+	}
 
-	// Format the string
 	va_start(args, msg);
-	vsnprintf(formattedMsg, length + 1, msg, args);
+	vsnprintf(formatted_message, (size_t)length + 1, msg, args);
 	va_end(args);
 
-	// Call the registered Swift callback
-	_error_callback(ctx, formattedMsg);
-
-	// Free the allocated memory
-	free(formattedMsg);
+	parser->callbacks.error(parser->swift_context, formatted_message);
+	free(formatted_message);
 }
 
-/**
- Sets the error handler in the SAX handler structure.
-
- @param sax_handler A pointer to the SAX handler structure.
- */
-void htmlparser_set_error_handler(htmlSAXHandlerPtr sax_handler)
+htmlparser_parser_t htmlparser_create(
+	const void *buffer,
+	int32_t size,
+	void *swift_context,
+	htmlparser_sax_callbacks callbacks,
+	int32_t encoding
+)
 {
-	if (sax_handler != NULL)
+	struct swifttext_html_parser *parser = calloc(1, sizeof(struct swifttext_html_parser));
+	if (parser == NULL)
 	{
-		sax_handler->error = (errorSAXFunc)htmlparser_error_sax_handler;
+		return NULL;
 	}
+
+	parser->swift_context = swift_context;
+	parser->callbacks = callbacks;
+
+	parser->handler.startDocument = htmlparser_start_document_bridge;
+	parser->handler.endDocument = htmlparser_end_document_bridge;
+	parser->handler.startElement = htmlparser_start_element_bridge;
+	parser->handler.endElement = htmlparser_end_element_bridge;
+	parser->handler.characters = htmlparser_characters_bridge;
+	parser->handler.comment = htmlparser_comment_bridge;
+	parser->handler.cdataBlock = htmlparser_cdata_bridge;
+	parser->handler.processingInstruction = htmlparser_processing_instruction_bridge;
+	parser->handler.error = (errorSAXFunc)htmlparser_error_bridge;
+
+	xmlCharEncoding char_encoding = XML_CHAR_ENCODING_NONE;
+	if (encoding == HTMLPARSER_ENCODING_UTF8)
+	{
+		char_encoding = XML_CHAR_ENCODING_UTF8;
+	}
+
+	parser->context = htmlCreatePushParserCtxt(
+		&parser->handler,
+		parser,
+		buffer,
+		size,
+		NULL,
+		char_encoding
+	);
+
+	if (parser->context == NULL)
+	{
+		free(parser);
+		return NULL;
+	}
+
+	return parser;
+}
+
+void htmlparser_free(htmlparser_parser_t parser)
+{
+	if (parser == NULL)
+	{
+		return;
+	}
+
+	if (parser->context != NULL)
+	{
+		htmlFreeParserCtxt(parser->context);
+	}
+
+	free(parser);
+}
+
+int32_t htmlparser_parse(htmlparser_parser_t parser, int32_t options)
+{
+	if (parser == NULL || parser->context == NULL)
+	{
+		return -1;
+	}
+
+	htmlCtxtUseOptions(parser->context, options);
+	return (int32_t)htmlParseDocument(parser->context);
+}
+
+void htmlparser_stop(htmlparser_parser_t parser)
+{
+	if (parser != NULL && parser->context != NULL)
+	{
+		xmlStopParser(parser->context);
+		parser->context = NULL;
+	}
+}
+
+int32_t htmlparser_line_number(htmlparser_parser_t parser)
+{
+	if (parser == NULL)
+	{
+		return 0;
+	}
+
+	return (int32_t)xmlSAX2GetLineNumber(parser->context);
+}
+
+int32_t htmlparser_column_number(htmlparser_parser_t parser)
+{
+	if (parser == NULL)
+	{
+		return 0;
+	}
+
+	return (int32_t)xmlSAX2GetColumnNumber(parser->context);
+}
+
+const char *htmlparser_system_id(htmlparser_parser_t parser)
+{
+	if (parser == NULL)
+	{
+		return NULL;
+	}
+
+	return (const char *)xmlSAX2GetSystemId(parser->context);
+}
+
+const char *htmlparser_public_id(htmlparser_parser_t parser)
+{
+	if (parser == NULL)
+	{
+		return NULL;
+	}
+
+	return (const char *)xmlSAX2GetPublicId(parser->context);
 }
