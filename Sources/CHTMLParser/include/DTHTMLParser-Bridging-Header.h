@@ -3,16 +3,22 @@
 #ifndef DTHTMLParser_Bridging_Header_h
 #define DTHTMLParser_Bridging_Header_h
 
-// On macOS the SDK exposes libxml2 at <libxml/...>.
-// On Linux (libxml2-dev) the headers live under /usr/include/libxml2/,
-// and CLibXML2's pkg-config cflags add -I/usr/include/libxml2, so
-// <libxml/HTMLparser.h> resolves correctly on both platforms.
-#if __has_include(<libxml/HTMLparser.h>)
-#include <libxml/HTMLparser.h>
-#elif __has_include(<libxml2/libxml/HTMLparser.h>)
-#include <libxml2/libxml/HTMLparser.h>
+// Keep libxml2 out of CHTMLParser's *public* module interface on Linux.
+// Swift 6.3 bundles its own ICU, and exposing system libxml2 transitively via
+// this header causes a UErrorCode module clash on Ubuntu 24.04.
+//
+// On Darwin we still import libxml2 here because there is no separate CLibXML2
+// SwiftPM system module in this package.
+#if defined(__linux__)
+typedef struct _xmlSAXHandler * htmlSAXHandlerPtr;
 #else
-#include <libxml/HTMLparser.h>
+  #if __has_include(<libxml/HTMLparser.h>)
+  #include <libxml/HTMLparser.h>
+  #elif __has_include(<libxml2/libxml/HTMLparser.h>)
+  #include <libxml2/libxml/HTMLparser.h>
+  #else
+  #include <libxml/HTMLparser.h>
+  #endif
 #endif
 
 // Callback type for forwarding formatted error messages to Swift

@@ -5,6 +5,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#if __has_include(<libxml/HTMLparser.h>)
+#include <libxml/HTMLparser.h>
+#elif __has_include(<libxml2/libxml/HTMLparser.h>)
+#include <libxml2/libxml/HTMLparser.h>
+#else
+#include <libxml/HTMLparser.h>
+#endif
+
 // Registered callback — set from Swift before parsing begins.
 static htmlparser_error_callback _error_callback = NULL;
 

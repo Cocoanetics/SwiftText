@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(CLibXML2)
+import CLibXML2
+#endif
 import CHTMLParser
 
 // Pure-Swift OptionSet for libxml2 HTML parser options.

@@ -94,7 +94,7 @@ let htmlTargets: [Target] = [
 	),
 	.target(
 		name: "HTMLParser",
-		dependencies: ["CHTMLParser"],
+		dependencies: ["CHTMLParser"] + cHTMLParserDeps,
 		path: "Sources/HTMLParser"
 	),
 	.target(
