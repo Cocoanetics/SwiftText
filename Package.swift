@@ -104,7 +104,7 @@ let htmlTargets: [Target] = [
 	),
 	.testTarget(
 		name: "SwiftTextHTMLTests",
-		dependencies: ["SwiftTextHTML"],
+		dependencies: ["SwiftTextHTML", "SwiftTextCore"],
 		path: "Tests/SwiftTextHTMLTests"
 	),
 ] + xmlSystemTargets
