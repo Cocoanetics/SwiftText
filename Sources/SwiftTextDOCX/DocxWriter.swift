@@ -143,7 +143,10 @@ public final class DocxWriter {
 			try FileManager.default.removeItem(at: url)
 		}
 
-		guard let archive = Archive(url: url, accessMode: .create) else {
+		let archive: Archive
+		do {
+			archive = try Archive(url: url, accessMode: .create)
+		} catch {
 			throw DocxWriterError.archiveCreationFailed
 		}
 
