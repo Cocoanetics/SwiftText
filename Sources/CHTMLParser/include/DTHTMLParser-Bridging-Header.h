@@ -3,35 +3,54 @@
 #ifndef DTHTMLParser_Bridging_Header_h
 #define DTHTMLParser_Bridging_Header_h
 
-// Keep libxml2 out of CHTMLParser's *public* module interface on Linux.
-// Swift 6.3 bundles its own ICU, and exposing system libxml2 transitively via
-// this header causes a UErrorCode module clash on Ubuntu 24.04.
-//
-// On Darwin we still import libxml2 here because there is no separate CLibXML2
-// SwiftPM system module in this package.
-#if defined(__linux__)
-typedef struct _xmlSAXHandler * htmlSAXHandlerPtr;
-#else
-  #if __has_include(<libxml/HTMLparser.h>)
-  #include <libxml/HTMLparser.h>
-  #elif __has_include(<libxml2/libxml/HTMLparser.h>)
-  #include <libxml2/libxml/HTMLparser.h>
-  #else
-  #include <libxml/HTMLparser.h>
-  #endif
-#endif
+#include <stdint.h>
 
-// Callback type for forwarding formatted error messages to Swift
+// Keep libxml2 headers out of CHTMLParser's public module interface. On Linux,
+// importing libxml2 transitively also imports the system ICU headers, which
+// collides with Swift 6.3 Foundation's bundled ICU module.
+typedef struct swifttext_html_parser * htmlparser_parser_t;
+
+typedef void (*htmlparser_start_document_callback)(void *ctx);
+typedef void (*htmlparser_end_document_callback)(void *ctx);
+typedef void (*htmlparser_start_element_callback)(void *ctx, const char *name, const char **atts);
+typedef void (*htmlparser_end_element_callback)(void *ctx, const char *name);
+typedef void (*htmlparser_characters_callback)(void *ctx, const unsigned char *chars, int32_t len);
+typedef void (*htmlparser_comment_callback)(void *ctx, const char *comment);
+typedef void (*htmlparser_cdata_callback)(void *ctx, const unsigned char *value, int32_t len);
+typedef void (*htmlparser_processing_instruction_callback)(void *ctx, const char *target, const char *data);
 typedef void (*htmlparser_error_callback)(void *ctx, const char *msg);
 
-// Register the Swift error callback (must be called before parsing)
-void htmlparser_register_error_callback(htmlparser_error_callback callback);
+typedef struct htmlparser_sax_callbacks {
+	htmlparser_start_document_callback startDocument;
+	htmlparser_end_document_callback endDocument;
+	htmlparser_start_element_callback startElement;
+	htmlparser_end_element_callback endElement;
+	htmlparser_characters_callback characters;
+	htmlparser_comment_callback comment;
+	htmlparser_cdata_callback cdataBlock;
+	htmlparser_processing_instruction_callback processingInstruction;
+	htmlparser_error_callback error;
+} htmlparser_sax_callbacks;
 
-// Function to format variadic arguments into a string and call the registered callback
-void htmlparser_error_sax_handler(void *ctx, const char *msg, ...);
+enum {
+	HTMLPARSER_ENCODING_NONE = 0,
+	HTMLPARSER_ENCODING_UTF8 = 1,
+};
 
-// Function to set the error handler in a SAX handler struct
-void htmlparser_set_error_handler(htmlSAXHandlerPtr sax_handler);
+htmlparser_parser_t htmlparser_create(
+	const void *buffer,
+	int32_t size,
+	void *swift_context,
+	htmlparser_sax_callbacks callbacks,
+	int32_t encoding
+);
+
+void htmlparser_free(htmlparser_parser_t parser);
+int32_t htmlparser_parse(htmlparser_parser_t parser, int32_t options);
+void htmlparser_stop(htmlparser_parser_t parser);
+int32_t htmlparser_line_number(htmlparser_parser_t parser);
+int32_t htmlparser_column_number(htmlparser_parser_t parser);
+const char *htmlparser_system_id(htmlparser_parser_t parser);
+const char *htmlparser_public_id(htmlparser_parser_t parser);
 
 #endif /* DTHTMLParser_Bridging_Header_h */
-
