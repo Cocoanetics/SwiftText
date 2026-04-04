@@ -1,0 +1,4 @@
+module CHTMLParser {
+    header "DTHTMLParser-Bridging-Header.h"
+    export *
+}
