@@ -61,7 +61,6 @@ public enum UnicodeAbuseSanitizer {
 		let keptTagIndices = validTagIndices(in: scalars)
 		var result: [UnicodeScalar] = []
 		var combiningCount = 0
-		var variationSelectorCount = 0
 		var hasTrimmedCombiningMarks = false
 		var nonZWJScalarCount = 0
 
@@ -81,9 +80,8 @@ public enum UnicodeAbuseSanitizer {
 			}
 
 			if isVariationSelector(scalar) {
-				if variationSelectorCount < maximumAllowedVariationSelectors {
+				if canAppendVariationSelector(to: result) {
 					result.append(scalar)
-					variationSelectorCount += 1
 				}
 				continue
 			}
@@ -159,6 +157,13 @@ public enum UnicodeAbuseSanitizer {
 
 	private static func isCombiningMark(_ scalar: UnicodeScalar) -> Bool {
 		CharacterSet.nonBaseCharacters.contains(scalar)
+	}
+
+	private static func canAppendVariationSelector(to scalars: [UnicodeScalar]) -> Bool {
+		guard let previousScalar = scalars.last else {
+			return false
+		}
+		return !isVariationSelector(previousScalar)
 	}
 
 	private static func isVariationSelector(_ scalar: UnicodeScalar) -> Bool {

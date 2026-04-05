@@ -33,4 +33,21 @@ struct UnicodeAbuseSanitizerTests {
 		#expect(result.text == source)
 		#expect(!result.report.containsAbuse)
 	}
+
+	@Test
+	func preservesVariationSelectorsInValidEmojiZWJSequences() {
+		let source = "Comment: 👁️‍🗨️"
+		let result = UnicodeAbuseSanitizer.sanitize(source)
+
+		#expect(result.text == source)
+		#expect(!result.report.containsAbuse)
+	}
+
+	@Test
+	func trimsRepeatedVariationSelectorSpam() {
+		let source = "Alert: ⚠️\u{FE0F}\u{FE0F}"
+		let result = UnicodeAbuseSanitizer.sanitize(source)
+
+		#expect(result.text == "Alert: ⚠️")
+	}
 }
