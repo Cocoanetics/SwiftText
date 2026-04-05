@@ -2,6 +2,7 @@ import Foundation
 #if canImport(FoundationNetworking)
 import FoundationNetworking
 #endif
+import SwiftTextCore
 import SwiftTextHTML
 import Testing
 
@@ -28,6 +29,25 @@ func markdownResolvesRelativeImageURLsAgainstBaseURL() async throws {
 	let document = try await HTMLDocument(data: Data(html.utf8), baseURL: baseURL)
 	let markdown = document.markdown()
 	#expect(markdown.contains("![Calendar](https://github.com/mattt/iMCP/raw/main/Assets/calendar.svg)"))
+}
+
+@Test
+func extractedHTMLTextCanBeSanitizedExplicitly() async throws {
+	let html = """
+	<html>
+	<body>
+		<p>Hello\u{202E} there\u{202C}</p>
+	</body>
+	</html>
+	"""
+	let document = try await HTMLDocument(data: Data(html.utf8))
+
+	let rawText = document.text()
+	let sanitization = UnicodeAbuseSanitizer.sanitize(rawText)
+
+	#expect(rawText.contains("\u{202E}"))
+	#expect(sanitization.text == "Hello there")
+	#expect(sanitization.report.hasBidiOverrides)
 }
 
 #if os(macOS)

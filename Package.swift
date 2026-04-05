@@ -104,7 +104,7 @@ let htmlTargets: [Target] = [
 	),
 	.testTarget(
 		name: "SwiftTextHTMLTests",
-		dependencies: ["SwiftTextHTML"],
+		dependencies: ["SwiftTextHTML", "SwiftTextCore"],
 		path: "Tests/SwiftTextHTMLTests"
 	),
 ] + xmlSystemTargets
@@ -119,6 +119,10 @@ let packageProducts: [Product] = [
 		targets: ["SwiftText"]
 	),
 	.library(
+		name: "SwiftTextCore",
+		targets: ["SwiftTextCore"]
+	),
+	.library(
 		name: "SwiftTextDOCX",
 		targets: ["SwiftTextDOCX"]
 	),
@@ -129,6 +133,10 @@ let swiftTextDependencies: [Target.Dependency] = [
 ] + swiftTextHTMLDeps + swiftTextExtraDeps
 
 let packageTargets: [Target] = [
+	.target(
+		name: "SwiftTextCore",
+		path: "Sources/SwiftTextCore"
+	),
 	.target(
 		name: "SwiftText",
 		dependencies: swiftTextDependencies,
@@ -148,6 +156,11 @@ let packageTargets: [Target] = [
 		resources: [
 			.process("Resources"),
 		]
+	),
+	.testTarget(
+		name: "SwiftTextCoreTests",
+		dependencies: ["SwiftTextCore"],
+		path: "Tests/SwiftTextCoreTests"
 	),
 ] + htmlTargets + macOSTargets
 
