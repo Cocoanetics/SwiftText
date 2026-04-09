@@ -77,6 +77,20 @@
                ReferencedContainer = "container:">
             </BuildableReference>
          </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "YES"
+            buildForProfiling = "YES"
+            buildForArchiving = "YES"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "SwiftTextCore"
+               BuildableName = "SwiftTextCore"
+               BlueprintName = "SwiftTextCore"
+               ReferencedContainer = "container:">
+            </BuildableReference>
+         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction
@@ -123,6 +137,16 @@
                BlueprintIdentifier = "SwiftTextHTMLTests"
                BuildableName = "SwiftTextHTMLTests"
                BlueprintName = "SwiftTextHTMLTests"
+               ReferencedContainer = "container:">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "SwiftTextCoreTests"
+               BuildableName = "SwiftTextCoreTests"
+               BlueprintName = "SwiftTextCoreTests"
                ReferencedContainer = "container:">
             </BuildableReference>
          </TestableReference>
