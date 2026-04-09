@@ -18,23 +18,20 @@ public struct HTMLParserOptions: OptionSet, Sendable
 	public static let compact   = HTMLParserOptions(rawValue: 1 << 6)
 }
 
-public struct HTMLParserError: Error
+public struct HTMLParserError: Error, Sendable, Equatable
 {
 	public let message: String
 }
 
-public class HTMLParser
+public class HTMLParser: @unchecked Sendable
 {
-	public weak var delegate: (any HTMLParserDelegate)?
-
-	private var data: Data
-	private var encoding: String.Encoding
-	private var options: HTMLParserOptions
-
-	private var parserContext: htmlparser_parser_t?
-	private var accumulateBuffer: String?
-	private var parserError: Error?
-	private var isAborting = false
+	private let data: Data
+	private let encoding: String.Encoding
+	private let options: HTMLParserOptions
+	private let runContextLock = NSLock()
+	private var activeRunContext: HTMLParserRunContext?
+	private var parserError: HTMLParserError?
+	var lastParseSucceeded = false
 
 	public init(data: Data, encoding: String.Encoding, options: HTMLParserOptions = [.recover, .noNet, .compact, .noBlanks])
 	{
@@ -43,27 +40,39 @@ public class HTMLParser
 		self.options = options
 	}
 
-	deinit {
-		if let context = parserContext {
-			htmlparser_free(context)
-		}
-	}
-
 	public var lineNumber: Int {
-		Int(htmlparser_line_number(parserContext))
+		guard let context = currentParserContext else {
+			return 0
+		}
+
+		return Int(htmlparser_line_number(context))
 	}
 
 	public var columnNumber: Int {
-		Int(htmlparser_column_number(parserContext))
+		guard let context = currentParserContext else {
+			return 0
+		}
+
+		return Int(htmlparser_column_number(context))
 	}
 
 	public var systemID: String? {
-		guard let systemID = htmlparser_system_id(parserContext) else { return nil }
+		guard let context = currentParserContext,
+			  let systemID = htmlparser_system_id(context)
+		else {
+			return nil
+		}
+
 		return String(cString: systemID)
 	}
 
 	public var publicID: String? {
-		guard let publicID = htmlparser_public_id(parserContext) else { return nil }
+		guard let context = currentParserContext,
+			  let publicID = htmlparser_public_id(context)
+		else {
+			return nil
+		}
+
 		return String(cString: publicID)
 	}
 
@@ -71,59 +80,64 @@ public class HTMLParser
 		parserError
 	}
 
-	@discardableResult
-	public func parse() -> Bool
+	public func parseEvents() -> AsyncStream<HTMLParserEvent>
 	{
-		var charEnc = Int32(HTMLPARSER_ENCODING_NONE)
-		if encoding == .utf8 {
-			charEnc = Int32(HTMLPARSER_ENCODING_UTF8)
-		}
+		AsyncStream(bufferingPolicy: .unbounded) { continuation in
+			let task = Task { [weak self] in
+				guard let self else {
+					continuation.finish()
+					return
+				}
 
-		let callbacks = makeCallbacks()
-		data.withUnsafeBytes { (ptr: UnsafeRawBufferPointer) in
-			parserContext = htmlparser_create(
-				ptr.baseAddress,
-				Int32(ptr.count),
-				Unmanaged.passUnretained(self).toOpaque(),
-				callbacks,
-				charEnc
-			)
-		}
+				let runContext = HTMLParserRunContext { event in
+					continuation.yield(event)
+				}
 
-		let result = htmlparser_parse(parserContext, options.rawValue)
-		return result == 0 && !isAborting
+				_ = self.parseSynchronously(emittingWith: runContext)
+				continuation.finish()
+			}
+
+			continuation.onTermination = { [weak self] _ in
+				self?.abortParsing()
+				task.cancel()
+			}
+		}
 	}
 
 	public func abortParsing()
 	{
-		if let context = parserContext {
-			htmlparser_stop(context)
-			htmlparser_free(context)
-			parserContext = nil
-		}
+		runContextLock.lock()
+		let activeRunContext = activeRunContext
+		runContextLock.unlock()
 
-		isAborting = true
-
-		if let delegate, let error = parserError {
-			delegate.parser(self, parseErrorOccurred: error)
-		}
+		activeRunContext?.abort()
 	}
 
 	private func makeCallbacks() -> htmlparser_sax_callbacks
 	{
 		htmlparser_sax_callbacks(
 			startDocument: { context in
-				let parser = Unmanaged<HTMLParser>.fromOpaque(context!).takeUnretainedValue()
-				parser.delegate?.parserDidStartDocument(parser)
+				guard let context else { return }
+				let runContext = Unmanaged<HTMLParserRunContext>.fromOpaque(context).takeUnretainedValue()
+				guard !runContext.abortIfCancelled() else { return }
+
+				runContext.emit(.startDocument)
 			},
 			endDocument: { context in
-				let parser = Unmanaged<HTMLParser>.fromOpaque(context!).takeUnretainedValue()
-				parser.delegate?.parserDidEndDocument(parser)
+				guard let context else { return }
+				let runContext = Unmanaged<HTMLParserRunContext>.fromOpaque(context).takeUnretainedValue()
+				guard !runContext.abortIfCancelled() else { return }
+
+				runContext.flushAccumulatedCharacters()
+				runContext.emit(.endDocument)
 			},
 			startElement: { context, name, atts in
-				let parser = Unmanaged<HTMLParser>.fromOpaque(context!).takeUnretainedValue()
-				parser.resetAccumulateBufferAndReportCharacters()
-				let elementName = String(cString: name!)
+				guard let context, let name else { return }
+				let runContext = Unmanaged<HTMLParserRunContext>.fromOpaque(context).takeUnretainedValue()
+				guard !runContext.abortIfCancelled() else { return }
+
+				runContext.flushAccumulatedCharacters()
+				let elementName = String(cString: name)
 				var attributes = [String: String]()
 				var i = 0
 				while let att = atts?[i] {
@@ -135,67 +149,210 @@ public class HTMLParser
 					}
 					i += 1
 				}
-				parser.delegate?.parser(parser, didStartElement: elementName, attributes: attributes)
+				runContext.emit(.startElement(name: elementName, attributes: attributes))
 			},
 			endElement: { context, name in
-				let parser = Unmanaged<HTMLParser>.fromOpaque(context!).takeUnretainedValue()
-				parser.resetAccumulateBufferAndReportCharacters()
-				let elementName = String(cString: name!)
-				parser.delegate?.parser(parser, didEndElement: elementName)
+				guard let context, let name else { return }
+				let runContext = Unmanaged<HTMLParserRunContext>.fromOpaque(context).takeUnretainedValue()
+				guard !runContext.abortIfCancelled() else { return }
+
+				runContext.flushAccumulatedCharacters()
+				let elementName = String(cString: name)
+				runContext.emit(.endElement(name: elementName))
 			},
 			characters: { context, chars, len in
-				let parser = Unmanaged<HTMLParser>.fromOpaque(context!).takeUnretainedValue()
-				parser.accumulateCharacters(chars, length: len)
+				guard let context else { return }
+				let runContext = Unmanaged<HTMLParserRunContext>.fromOpaque(context).takeUnretainedValue()
+				guard !runContext.abortIfCancelled() else { return }
+
+				runContext.accumulateCharacters(chars, length: len)
 			},
 			comment: { context, chars in
-				let parser = Unmanaged<HTMLParser>.fromOpaque(context!).takeUnretainedValue()
-				let comment = String(cString: chars!)
-				parser.delegate?.parser(parser, foundComment: comment)
+				guard let context, let chars else { return }
+				let runContext = Unmanaged<HTMLParserRunContext>.fromOpaque(context).takeUnretainedValue()
+				guard !runContext.abortIfCancelled() else { return }
+
+				runContext.flushAccumulatedCharacters()
+				let comment = String(cString: chars)
+				runContext.emit(.comment(comment))
 			},
 			cdataBlock: { context, value, len in
-				let parser = Unmanaged<HTMLParser>.fromOpaque(context!).takeUnretainedValue()
-				let data = Data(bytes: value!, count: Int(len))
-				parser.delegate?.parser(parser, foundCDATA: data)
+				guard let context, let value else { return }
+				let runContext = Unmanaged<HTMLParserRunContext>.fromOpaque(context).takeUnretainedValue()
+				guard !runContext.abortIfCancelled() else { return }
+
+				runContext.flushAccumulatedCharacters()
+				let data = Data(bytes: value, count: Int(len))
+				runContext.emit(.cdata(data))
 			},
 			processingInstruction: { context, target, data in
-				let parser = Unmanaged<HTMLParser>.fromOpaque(context!).takeUnretainedValue()
-				let targetString = String(cString: target!)
-				let dataString = String(cString: data!)
-				parser.delegate?.parser(parser, foundProcessingInstructionWithTarget: targetString, data: dataString)
+				guard let context, let target, let data else { return }
+				let runContext = Unmanaged<HTMLParserRunContext>.fromOpaque(context).takeUnretainedValue()
+				guard !runContext.abortIfCancelled() else { return }
+
+				runContext.flushAccumulatedCharacters()
+				let targetString = String(cString: target)
+				let dataString = String(cString: data)
+				runContext.emit(.processingInstruction(target: targetString, data: dataString))
 			},
 			error: { context, message in
 				guard let context, let message else { return }
-				let parser = Unmanaged<HTMLParser>.fromOpaque(context).takeUnretainedValue()
-				parser.handleError(String(cString: message))
+				let runContext = Unmanaged<HTMLParserRunContext>.fromOpaque(context).takeUnretainedValue()
+				guard !runContext.abortIfCancelled() else { return }
+
+				runContext.flushAccumulatedCharacters()
+				runContext.record(error: HTMLParserError(message: String(cString: message)))
 			}
 		)
 	}
 
-	private func resetAccumulateBufferAndReportCharacters()
+	private var currentParserContext: htmlparser_parser_t?
 	{
-		if let buffer = accumulateBuffer, !buffer.isEmpty {
-			delegate?.parser(self, foundCharacters: buffer)
-			accumulateBuffer = nil
-		}
+		runContextLock.lock()
+		let context = activeRunContext?.parserContext
+		runContextLock.unlock()
+		return context
 	}
 
-	private func accumulateCharacters(_ characters: UnsafePointer<UInt8>?, length: Int32)
+	@discardableResult
+	func parseSynchronously(emittingWith runContext: HTMLParserRunContext) -> Bool
 	{
-		guard let characters else { return }
-		let buf = UnsafeBufferPointer(start: characters, count: Int(length))
-		if let str = String(bytes: buf, encoding: .utf8) {
-			if accumulateBuffer == nil {
-				accumulateBuffer = str
-			} else {
-				accumulateBuffer?.append(str)
+		parserError = nil
+		lastParseSucceeded = false
+
+		guard !Task.isCancelled else {
+			runContext.abort()
+			return false
+		}
+
+		var charEnc = Int32(HTMLPARSER_ENCODING_NONE)
+		if encoding == .utf8 {
+			charEnc = Int32(HTMLPARSER_ENCODING_UTF8)
+		}
+
+		let callbacks = makeCallbacks()
+		runContextLock.lock()
+		activeRunContext = runContext
+		runContextLock.unlock()
+
+		defer {
+			if let context = runContext.parserContext {
+				htmlparser_free(context)
+				runContext.parserContext = nil
 			}
+
+			runContextLock.lock()
+			if activeRunContext === runContext {
+				activeRunContext = nil
+			}
+			runContextLock.unlock()
+
+			parserError = runContext.parserError
+		}
+
+		data.withUnsafeBytes { (ptr: UnsafeRawBufferPointer) in
+			runContext.parserContext = htmlparser_create(
+				ptr.baseAddress,
+				Int32(ptr.count),
+				Unmanaged.passUnretained(runContext).toOpaque(),
+				callbacks,
+				charEnc
+			)
+		}
+
+		guard runContext.parserContext != nil else {
+			runContext.record(error: HTMLParserError(message: "Failed to create HTML parser context"))
+			return false
+		}
+
+		let result = htmlparser_parse(runContext.parserContext, options.rawValue)
+		runContext.flushAccumulatedCharacters()
+
+		if result != 0, runContext.parserError == nil, !runContext.isAborting {
+			runContext.record(error: HTMLParserError(message: "HTML parsing failed"))
+		}
+
+		let success = result == 0 && !runContext.isAborting && runContext.parserError == nil
+		lastParseSucceeded = success
+		return success
+	}
+}
+
+final class HTMLParserRunContext
+{
+	private let emitEvent: (HTMLParserEvent) -> Void
+
+	var parserContext: htmlparser_parser_t?
+	var parserError: HTMLParserError?
+	var isAborting = false
+	private var accumulateBuffer: String?
+
+	init(emitEvent: @escaping (HTMLParserEvent) -> Void)
+	{
+		self.emitEvent = emitEvent
+	}
+
+	func abort()
+	{
+		guard !isAborting else {
+			return
+		}
+
+		isAborting = true
+
+		if let parserContext {
+			htmlparser_stop(parserContext)
 		}
 	}
 
-	func handleError(_ errorMessage: String)
+	func abortIfCancelled() -> Bool
 	{
-		let error = HTMLParserError(message: errorMessage)
+		guard Task.isCancelled else {
+			return false
+		}
+
+		abort()
+		return true
+	}
+
+	func emit(_ event: HTMLParserEvent)
+	{
+		emitEvent(event)
+	}
+
+	func flushAccumulatedCharacters()
+	{
+		if let accumulateBuffer, !accumulateBuffer.isEmpty {
+			emit(.characters(accumulateBuffer))
+			self.accumulateBuffer = nil
+		}
+	}
+
+	func accumulateCharacters(_ characters: UnsafePointer<UInt8>?, length: Int32)
+	{
+		guard let characters else {
+			return
+		}
+
+		let buffer = UnsafeBufferPointer(start: characters, count: Int(length))
+		guard let string = String(bytes: buffer, encoding: .utf8) else {
+			return
+		}
+
+		if accumulateBuffer == nil {
+			accumulateBuffer = string
+		} else {
+			accumulateBuffer?.append(string)
+		}
+	}
+
+	func record(error: HTMLParserError)
+	{
+		guard parserError == nil else {
+			return
+		}
+
 		parserError = error
-		delegate?.parser(self, parseErrorOccurred: error)
+		emit(.parseError(error))
 	}
 }

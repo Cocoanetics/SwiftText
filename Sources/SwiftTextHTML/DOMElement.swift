@@ -1,6 +1,6 @@
 import Foundation
 
-public class DOMElement: DOMNode
+public class DOMElement: DOMNode, @unchecked Sendable
 {
 	// MARK: - Public Properties
 

@@ -7,29 +7,15 @@ public final class DomBuilder
 
 	public private(set) var root: DOMElement?
 
-	// MARK: - Internal State
-
-	private var currentElement: DOMElement?
-	private var elementStack: [DOMElement] = []
-	private let baseURL: URL?
-	private var parseError: Error?
-
 	// MARK: - Initialization
 
+	private let baseURL: URL?
 	private let encoding: String.Encoding?
 
 	public init(html: Data, baseURL: URL?, encoding: String.Encoding? = nil) async throws
 	{
 		self.baseURL = baseURL
 		self.encoding = encoding
-
-		// Always build under a stable synthetic root so that malformed HTML with
-		// multiple top-level elements (e.g. content after </html>) doesn't overwrite
-		// the root and lose the actual document body.
-		let documentRoot = DOMElement(name: "document", attributes: [:])
-		documentRoot.isTransparentWrapper = true
-		self.root = documentRoot
-		self.currentElement = documentRoot
 
 		try await parseHTML(html)
 	}
@@ -52,13 +38,20 @@ public final class DomBuilder
 		}
 
 		let parser = HTMLParser(data: dataToParse, encoding: encodingToUse, options: options)
-		parser.delegate = self
 
-		let success = parser.parse()
-		if !success, root == nil {
-			if let parseError = parseError ?? parser.error {
+		let state = DOMBuilderState(baseURL: baseURL)
+
+		for await event in parser.parseEvents() {
+			await state.apply(event)
+		}
+
+		root = await state.rootElement()
+
+		if root == nil {
+			if let parseError = await state.recordedParseError() ?? (parser.error as? HTMLParserError) {
 				throw DomBuilderError.parsingFailed(parseError)
 			}
+
 			throw DomBuilderError.parsingFailed(HTMLParserFallbackError.parseFailed)
 		}
 	}
@@ -89,108 +82,6 @@ public final class DomBuilder
 	}
 }
 
-// MARK: - HTMLParserDelegate
-
-extension DomBuilder: HTMLParserDelegate
-{
-	public func parser(_ parser: HTMLParser, didStartElement elementName: String, attributes attributeDict: [String: String]) {
-		var attributeDict = attributeDict
-
-		if elementName == "a"
-		{
-			if let href = attributeDict["href"]
-			{
-				if href.hasPrefix("javascript:")
-				{
-					attributeDict["href"] = nil
-				}
-				else if let url = URL(string: href, relativeTo: baseURL)
-				{
-					attributeDict["href"] = url.absoluteString
-				}
-			}
-		}
-
-		let element = DOMElement(name: elementName, attributes: attributeDict)
-		element.isTransparentWrapper = isTransparentWrapperTag(elementName, attributes: attributeDict)
-
-		if let current = currentElement
-		{
-			current.addChild(element)
-			elementStack.append(current)
-		}
-
-		currentElement = element
-	}
-
-	public func parser(_ parser: HTMLParser, foundCharacters string: String) {
-		let isWhiteSpace = string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-
-		if (["pre", "code"].contains(currentElement?.name ?? ""))
-		{
-			let textNode = DOMText(text: string, preserveWhitespace: true)
-			currentElement?.addChild(textNode)
-		}
-		else
-		{
-			if isWhiteSpace,
-			   let currentElement,
-			   ["ul", "ol", "body", "div", "blockquote", "tr", "table", "document"].contains(currentElement.name)
-			{
-				return
-			}
-			else
-			{
-				let textNode = DOMText(text: string, preserveWhitespace: false)
-				currentElement?.addChild(textNode)
-			}
-		}
-	}
-
-	public func parser(_ parser: HTMLParser, didEndElement elementName: String) {
-		guard !elementStack.isEmpty else
-		{
-			// Malformed HTML may emit extra end tags; fall back to synthetic root.
-			currentElement = root
-			return
-		}
-
-		currentElement = elementStack.removeLast()
-	}
-
-	public func parser(_ parser: HTMLParser, parseErrorOccurred parseError: Error) {
-		self.parseError = parseError
-	}
-}
-
-// MARK: - Transparent wrapper tagging
-
-private extension DomBuilder {
-	func isTransparentWrapperTag(_ name: String, attributes: [String: String]) -> Bool {
-		let tag = name.lowercased()
-
-		// Conservative set: common email/layout wrappers.
-		guard ["div", "p", "span", "font", "center"].contains(tag) else {
-			return false
-		}
-
-		// If it carries semantics, do not treat as transparent.
-		let semanticKeys: Set<String> = ["id", "href", "src", "name", "role"]
-		for (k, _) in attributes {
-			let key = k.lowercased()
-			if semanticKeys.contains(key) { return false }
-			if key.hasPrefix("aria-") { return false }
-			if key.hasPrefix("data-") { return false }
-			// Allow purely presentational attributes.
-			if ["style", "class", "lang"].contains(key) { continue }
-			// Unknown attribute => be conservative.
-			return false
-		}
-
-		return true
-	}
-}
-
 // MARK: - Errors
 
 public enum DomBuilderError: Error
@@ -201,4 +92,128 @@ public enum DomBuilderError: Error
 private enum HTMLParserFallbackError: Error
 {
 	case parseFailed
+}
+
+private actor DOMBuilderState
+{
+	private let baseURL: URL?
+	private let root: DOMElement
+	private var currentElement: DOMElement
+	private var elementStack: [DOMElement] = []
+	private var parseError: HTMLParserError?
+
+	init(baseURL: URL?)
+	{
+		self.baseURL = baseURL
+
+		let documentRoot = DOMElement(name: "document", attributes: [:])
+		documentRoot.isTransparentWrapper = true
+		self.root = documentRoot
+		self.currentElement = documentRoot
+	}
+
+	func apply(_ event: HTMLParserEvent)
+	{
+		switch event
+		{
+		case .startDocument, .endDocument, .comment, .cdata, .processingInstruction:
+			return
+
+		case let .startElement(name, attributes):
+			handleStartElement(name, attributes: attributes)
+
+		case let .endElement(name):
+			handleEndElement(name)
+
+		case let .characters(string):
+			handleCharacters(string)
+
+		case let .parseError(error):
+			parseError = error
+		}
+	}
+
+	func rootElement() -> DOMElement
+	{
+		root
+	}
+
+	func recordedParseError() -> HTMLParserError?
+	{
+		parseError
+	}
+}
+
+private extension DOMBuilderState
+{
+	func handleStartElement(_ elementName: String, attributes: [String: String])
+	{
+		var attributes = attributes
+
+		if elementName == "a",
+		   let href = attributes["href"]
+		{
+			if href.hasPrefix("javascript:") {
+				attributes["href"] = nil
+			} else if let url = URL(string: href, relativeTo: baseURL) {
+				attributes["href"] = url.absoluteString
+			}
+		}
+
+		let element = DOMElement(name: elementName, attributes: attributes)
+		element.isTransparentWrapper = isTransparentWrapperTag(elementName, attributes: attributes)
+
+		currentElement.addChild(element)
+		elementStack.append(currentElement)
+		currentElement = element
+	}
+
+	func handleCharacters(_ string: String)
+	{
+		let isWhitespace = string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+
+		if ["pre", "code"].contains(currentElement.name) {
+			currentElement.addChild(DOMText(text: string, preserveWhitespace: true))
+			return
+		}
+
+		if isWhitespace,
+		   ["ul", "ol", "body", "div", "blockquote", "tr", "table", "document"].contains(currentElement.name)
+		{
+			return
+		}
+
+		currentElement.addChild(DOMText(text: string, preserveWhitespace: false))
+	}
+
+	func handleEndElement(_ _: String)
+	{
+		guard !elementStack.isEmpty else {
+			currentElement = root
+			return
+		}
+
+		currentElement = elementStack.removeLast()
+	}
+
+	func isTransparentWrapperTag(_ name: String, attributes: [String: String]) -> Bool
+	{
+		let tag = name.lowercased()
+
+		guard ["div", "p", "span", "font", "center"].contains(tag) else {
+			return false
+		}
+
+		let semanticKeys: Set<String> = ["id", "href", "src", "name", "role"]
+		for (key, _) in attributes {
+			let lowercasedKey = key.lowercased()
+			if semanticKeys.contains(lowercasedKey) { return false }
+			if lowercasedKey.hasPrefix("aria-") { return false }
+			if lowercasedKey.hasPrefix("data-") { return false }
+			if ["style", "class", "lang"].contains(lowercasedKey) { continue }
+			return false
+		}
+
+		return true
+	}
 }

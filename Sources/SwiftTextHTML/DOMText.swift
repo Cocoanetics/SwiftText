@@ -1,6 +1,6 @@
 import Foundation
 
-final class DOMText: DOMNode
+final class DOMText: DOMNode, @unchecked Sendable
 {
 	let name: String
 	let textValue: String
