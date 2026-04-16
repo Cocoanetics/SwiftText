@@ -61,6 +61,40 @@ struct MarkdownToHTMLTests {
 		#expect(html.contains("<li>First</li>"))
 	}
 
+	@Test func fencedCodeBlock() {
+		let input = "```\nlet x = 1\n```"
+		let html = MarkdownToHTML.convert(input)
+		#expect(html == "<pre><code>let x = 1</code></pre>")
+	}
+
+	@Test func fencedCodeBlockWithLanguage() {
+		let input = "```json\n{\n  \"test\": 1\n}\n```"
+		let html = MarkdownToHTML.convert(input)
+		#expect(html.contains("<pre><code class=\"language-json\">"))
+		#expect(html.contains("  \"test\": 1"))
+		#expect(html.contains("</code></pre>"))
+	}
+
+	@Test func fencedCodeBlockPreservesIndentation() {
+		let input = "```python\ndef foo():\n    return 42\n```"
+		let html = MarkdownToHTML.convert(input)
+		#expect(html.contains("    return 42"))
+	}
+
+	@Test func fencedCodeBlockEscapesHTML() {
+		let input = "```html\n<div>&amp;</div>\n```"
+		let html = MarkdownToHTML.convert(input)
+		#expect(html.contains("&lt;div&gt;&amp;amp;&lt;/div&gt;"))
+	}
+
+	@Test func fencedCodeBlockAmongParagraphs() {
+		let input = "Before.\n\n```\ncode\n```\n\nAfter."
+		let html = MarkdownToHTML.convert(input)
+		#expect(html.contains("<p>Before.</p>"))
+		#expect(html.contains("<pre><code>code</code></pre>"))
+		#expect(html.contains("<p>After.</p>"))
+	}
+
 	@Test func horizontalRule() {
 		#expect(MarkdownToHTML.convert("---") == "<hr>")
 		#expect(MarkdownToHTML.convert("***") == "<hr>")

@@ -52,6 +52,28 @@ public enum MarkdownToHTML {
 				continue
 			}
 
+			// Fenced code block
+			if trimmed.hasPrefix("```") {
+				let language = String(trimmed.dropFirst(3)).trimmingCharacters(in: .whitespaces)
+				i += 1
+				var codeLines: [String] = []
+				while i < lines.count {
+					if lines[i].trimmingCharacters(in: .whitespaces).hasPrefix("```") {
+						i += 1
+						break
+					}
+					codeLines.append(lines[i])
+					i += 1
+				}
+				let code = escapeHTML(codeLines.joined(separator: "\n"))
+				if language.isEmpty {
+					html.append("<pre><code>\(code)</code></pre>")
+				} else {
+					html.append("<pre><code class=\"language-\(language)\">\(code)</code></pre>")
+				}
+				continue
+			}
+
 			// Blockquote block
 			if trimmed.hasPrefix(">") {
 				var quoteLines: [String] = []
@@ -149,7 +171,7 @@ public enum MarkdownToHTML {
 			while i < lines.count {
 				let pl = lines[i]
 				let pt = pl.trimmingCharacters(in: .whitespaces)
-				if pt.isEmpty || pt.hasPrefix("#") || pt.hasPrefix(">") || isHorizontalRule(pt) || isUnorderedListItem(pt) || orderedListContent(pt) != nil || isPipeTableStart(lines: lines, at: i) {
+				if pt.isEmpty || pt.hasPrefix("#") || pt.hasPrefix(">") || pt.hasPrefix("```") || isHorizontalRule(pt) || isUnorderedListItem(pt) || orderedListContent(pt) != nil || isPipeTableStart(lines: lines, at: i) {
 					break
 				}
 				paraLines.append(pl)
