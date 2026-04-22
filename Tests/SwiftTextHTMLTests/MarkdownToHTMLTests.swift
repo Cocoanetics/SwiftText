@@ -46,6 +46,22 @@ struct MarkdownToHTMLTests {
 		#expect(html.contains("Quoted text"))
 	}
 
+	@Test func githubAlertBox() {
+		let markdown = "> [!NOTE]\n> Highlights information that users should take into account."
+		let html = MarkdownToHTML.convert(markdown)
+		#expect(html.contains(#"<aside class="markdown-alert markdown-alert-note" data-alert="note" role="note">"#))
+		#expect(html.contains(#"<p class="markdown-alert-title">Note</p>"#))
+		#expect(html.contains("Highlights information that users should take into account."))
+	}
+
+	@Test func githubAlertBoxWithInlineMarkerContent() {
+		let markdown = "> [!WARNING] Proceed carefully"
+		let html = MarkdownToHTML.convert(markdown)
+		#expect(html.contains(#"markdown-alert-warning"#))
+		#expect(html.contains(#"role="alert""#))
+		#expect(html.contains("Proceed carefully"))
+	}
+
 	@Test func unorderedList() {
 		let input = "- Apple\n- Banana\n- Cherry"
 		let html = MarkdownToHTML.convert(input)

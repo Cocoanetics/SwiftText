@@ -84,8 +84,7 @@ public enum MarkdownToHTML {
 					quoteLines.append(content)
 					i += 1
 				}
-				let inner = convert(quoteLines.joined(separator: "\n"))
-				html.append("<blockquote>\(inner)</blockquote>")
+				html.append(renderBlockquote(quoteLines))
 				continue
 			}
 
@@ -206,6 +205,23 @@ public enum MarkdownToHTML {
 	ul, ol { margin: 0.6em 0; padding-left: 1.8em; }
 	li { margin: 0.2em 0; }
 	blockquote { border-left: 4px solid #ccc; padding: 0.3em 1em; margin: 0.6em 0; color: #555; }
+	.markdown-alert {
+	    border-left-width: 4px;
+	    border-left-style: solid;
+	    border-radius: 6px;
+	    margin: 0.8em 0;
+	    padding: 0.75em 1em;
+	}
+	.markdown-alert-title {
+	    font-weight: 600;
+	    margin: 0 0 0.35em;
+	}
+	.markdown-alert > :last-child { margin-bottom: 0; }
+	.markdown-alert-note { background: #ddf4ff; border-left-color: #0969da; color: #0a3069; }
+	.markdown-alert-tip { background: #dafbe1; border-left-color: #1a7f37; color: #116329; }
+	.markdown-alert-important { background: #fbefff; border-left-color: #8250df; color: #5521b5; }
+	.markdown-alert-warning { background: #fff8c5; border-left-color: #9a6700; color: #7d4e00; }
+	.markdown-alert-caution { background: #ffebe9; border-left-color: #cf222e; color: #a40e26; }
 	code {
 	    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
 	    font-size: 0.88em; background: #f5f5f5; border: 1px solid #e0e0e0;
@@ -371,6 +387,64 @@ public enum MarkdownToHTML {
 		let afterDot = line.index(after: dotIndex)
 		guard afterDot < line.endIndex, line[afterDot] == " " else { return nil }
 		return String(line[line.index(after: afterDot)...])
+	}
+
+	private static func renderBlockquote(_ quoteLines: [String]) -> String {
+		if let alert = parseAlertBlockquote(quoteLines) {
+			let inner = alert.content.isEmpty ? "" : convert(alert.content.joined(separator: "\n"))
+			return #"<aside class="markdown-alert markdown-alert-\#(alert.type.cssClass)" data-alert="\#(alert.type.cssClass)" role="\#(alert.type.ariaRole)"><p class="markdown-alert-title">\#(alert.type.title)</p>\#(inner)</aside>"#
+		}
+
+		let inner = convert(quoteLines.joined(separator: "\n"))
+		return "<blockquote>\(inner)</blockquote>"
+	}
+
+	private static func parseAlertBlockquote(_ quoteLines: [String]) -> (type: MarkdownAlertType, content: [String])? {
+		guard let firstLine = quoteLines.first?.trimmingCharacters(in: .whitespaces),
+		      let type = MarkdownAlertType(markerLine: firstLine) else {
+			return nil
+		}
+
+		var content = Array(quoteLines.dropFirst())
+		if let markerEnd = firstLine.firstIndex(of: "]") {
+			let remainder = firstLine[firstLine.index(after: markerEnd)...].trimmingCharacters(in: .whitespaces)
+			if !remainder.isEmpty {
+				content.insert(remainder, at: 0)
+			}
+		}
+
+		return (type, content)
+	}
+
+	private enum MarkdownAlertType: String {
+		case note = "NOTE"
+		case tip = "TIP"
+		case important = "IMPORTANT"
+		case warning = "WARNING"
+		case caution = "CAUTION"
+
+		init?(markerLine: String) {
+			guard markerLine.hasPrefix("[!"), let close = markerLine.firstIndex(of: "]") else { return nil }
+			let rawValue = String(markerLine[markerLine.index(markerLine.startIndex, offsetBy: 2)..<close])
+			self.init(rawValue: rawValue.uppercased())
+		}
+
+		var cssClass: String { rawValue.lowercased() }
+		var title: String {
+			switch self {
+			case .note: return "Note"
+			case .tip: return "Tip"
+			case .important: return "Important"
+			case .warning: return "Warning"
+			case .caution: return "Caution"
+			}
+		}
+		var ariaRole: String {
+			switch self {
+			case .warning, .caution: return "alert"
+			case .note, .tip, .important: return "note"
+			}
+		}
 	}
 
 	// MARK: - Inline Formatting
