@@ -105,14 +105,19 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
-      - name: Build & test (Android emulator)
+      - name: Build (Android cross-compile)
         uses: skiptools/swift-android-action@v2
         with:
           swift-version: "6.3"
           # Default GitHub Linux runner has ~14 GiB free; SDK + NDK + emulator
           # together push past that without cleanup.
           free-disk-space: true
-          # Restrict to the swift-markdown experiment so libxml2 (not provided
-          # by the Android SDK) doesn't stop the investigation.
+          # Build-only: the action's default is `swift build --target X --build-tests`
+          # which SwiftPM rejects as mutually exclusive flags. We're scoping to a
+          # single target (`SwiftTextMarkdownExperiment`) to avoid the existing
+          # libxml2 dep on `SwiftTextHTML` (not provided by the Android SDK), and
+          # the goal here is portability of the swift-markdown / swift-cmark
+          # toolchain — not running tests on the emulator.
+          build-tests: false
+          run-tests: false
           swift-build-flags: "--target SwiftTextMarkdownExperiment"
-          swift-test-flags: "--filter SwiftTextMarkdownExperimentTests"
