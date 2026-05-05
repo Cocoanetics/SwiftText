@@ -156,7 +156,14 @@ private struct HTMLRenderer: MarkupVisitor {
 	}
 
 	mutating func visitListItem(_ listItem: ListItem) {
-		output += "<li>"
+		switch listItem.checkbox {
+		case .checked:
+			output += #"<li class="task-list-item"><input type="checkbox" disabled checked> "#
+		case .unchecked:
+			output += #"<li class="task-list-item"><input type="checkbox" disabled> "#
+		case .none:
+			output += "<li>"
+		}
 		// If the only child is a single paragraph, unwrap it so output matches
 		// the existing renderer's `<li>foo</li>` shape rather than `<li><p>foo</p></li>`.
 		let blocks = Array(listItem.children)
@@ -245,27 +252,57 @@ private struct HTMLRenderer: MarkupVisitor {
 		var kind: String
 		var title: String
 		var role: String
+		var markerTerminator: Character  // `]` for `[!NOTE]`, `:` for DocC `Note:`
 		var body: BlockQuote
 	}
 
 	private func githubAlert(in quote: BlockQuote) -> GitHubAlert? {
+		// GitHub's `[!NOTE]` syntax — bracket-bang on its own line.
+		if let bracketed = bracketedAlertToken(in: quote) {
+			return alert(forToken: bracketed, terminator: "]", in: quote)
+		}
+		// DocC-style `Note:` / `Tip:` plain-text tag. swift-markdown's `Aside`
+		// node would resolve this for us, but we want to emit it through the
+		// same `<aside class="markdown-alert-...">` shape as GitHub alerts so
+		// styling stays consistent.
+		if let docc = doccAsideToken(in: quote) {
+			return alert(forToken: docc, terminator: ":", in: quote)
+		}
+		return nil
+	}
+
+	private func bracketedAlertToken(in quote: BlockQuote) -> String? {
 		guard let firstParagraph = quote.child(at: 0) as? Paragraph else { return nil }
 		guard let firstText = firstParagraph.child(at: 0) as? Text else { return nil }
 		let raw = firstText.string
 		guard raw.hasPrefix("[!") else { return nil }
-		guard let closingBracket = raw.firstIndex(of: "]") else { return nil }
-		let token = String(raw[raw.index(raw.startIndex, offsetBy: 2)..<closingBracket]).uppercased()
+		guard let closing = raw.firstIndex(of: "]") else { return nil }
+		return String(raw[raw.index(raw.startIndex, offsetBy: 2)..<closing])
+	}
+
+	private func doccAsideToken(in quote: BlockQuote) -> String? {
+		guard let firstParagraph = quote.child(at: 0) as? Paragraph else { return nil }
+		guard let firstText = firstParagraph.child(at: 0) as? Text else { return nil }
+		guard let colon = firstText.string.firstIndex(of: ":") else { return nil }
+		let token = String(firstText.string[..<colon])
+		// DocC tags are single-word identifiers without whitespace.
+		guard !token.isEmpty, !token.contains(where: { $0.isWhitespace }) else { return nil }
+		return token
+	}
+
+	private func alert(forToken token: String, terminator: Character, in quote: BlockQuote) -> GitHubAlert? {
 		let role: String
 		let title: String
-		switch token {
+		switch token.uppercased() {
 		case "NOTE": (title, role) = ("Note", "note")
 		case "TIP": (title, role) = ("Tip", "note")
 		case "IMPORTANT": (title, role) = ("Important", "note")
 		case "WARNING": (title, role) = ("Warning", "alert")
 		case "CAUTION": (title, role) = ("Caution", "alert")
+		case "EXPERIMENT": (title, role) = ("Experiment", "note")
 		default: return nil
 		}
-		return GitHubAlert(kind: token.lowercased(), title: title, role: role, body: quote)
+		return GitHubAlert(kind: token.lowercased(), title: title, role: role, markerTerminator: terminator, body: quote)
 	}
 
 	private mutating func emitGitHubAlert(_ alert: GitHubAlert) {
@@ -283,7 +320,7 @@ private struct HTMLRenderer: MarkupVisitor {
 				guard !inlineChildren.isEmpty else { continue }
 				if let firstText = inlineChildren.first as? Text {
 					var stripped = firstText.string
-					if let closing = stripped.firstIndex(of: "]") {
+					if let closing = stripped.firstIndex(of: alert.markerTerminator) {
 						stripped.removeSubrange(stripped.startIndex...closing)
 						if stripped.hasPrefix(" ") { stripped.removeFirst() }
 					}

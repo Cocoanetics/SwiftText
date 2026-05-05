@@ -81,6 +81,9 @@ public enum MarkdownToHTML {
 	img { max-width: 100%; height: auto; }
 	hr { border: none; border-top: 1px solid #ddd; margin: 1.2em 0; }
 	a { color: #0366d6; }
+	del { color: #777; }
+	li.task-list-item { list-style: none; margin-left: -1.2em; }
+	li.task-list-item input[type="checkbox"] { margin-right: 0.4em; vertical-align: middle; }
 	"""
 
 	/// Converts a Markdown string to a complete HTML document.
