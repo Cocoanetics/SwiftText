@@ -137,4 +137,20 @@ struct DocxWriterTests {
 			#expect(Bool(false), "Expected blockquote")
 		}
 	}
+
+	@Test("Inline parser keeps formatted alt text on images")
+	func inlineParserImageAltText() {
+		// Regression for PR #16 review: alt text wrapped in emphasis was
+		// dropped, leaving only the `[image]` placeholder.
+		let runs = MarkdownToDocx.parseInline("Caption: ![*logo*](https://x/logo.png) here")
+		let imageRun = runs.first(where: { $0.text == "logo" })
+		#expect(imageRun != nil, "Expected the image's emphasized alt text to survive as a run")
+		#expect(imageRun?.italic == true, "Image runs continue to render as italic placeholders")
+	}
+
+	@Test("Inline parser preserves multi-segment image alt text")
+	func inlineParserImageAltMultiSegment() {
+		let runs = MarkdownToDocx.parseInline("![alt **bold** more](https://x.png)")
+		#expect(runs.contains(where: { $0.text == "alt bold more" }))
+	}
 }

@@ -1,5 +1,6 @@
 import Foundation
 import Markdown
+import SwiftTextMarkdown
 
 /// Builds `DocxWriter.Block` and `DocxWriter.Run` values from a swift-markdown
 /// AST. Internal helper for `MarkdownToDocx`.
@@ -75,8 +76,11 @@ private struct RunCollector {
 			}
 		case let image as Image:
 			// Legacy renderer emitted images as italic placeholder text. Keep
-			// that behavior — DOCX writer doesn't yet inline images.
-			let alt = image.children.compactMap { ($0 as? Text)?.string }.joined()
+			// that behavior — DOCX writer doesn't yet inline images. Walk all
+			// descendants so alt text from nested inline formatting is
+			// preserved (e.g. `![*logo*](...)` keeps "logo" instead of
+			// falling through to the `[image]` placeholder).
+			let alt = reverseSmartPunct(swiftMarkdownPlainText(of: image))
 			let display = alt.isEmpty ? "[image]" : alt
 			runs.append(DocxWriter.Run(text: display, italic: true))
 		case let inlineHTML as InlineHTML:

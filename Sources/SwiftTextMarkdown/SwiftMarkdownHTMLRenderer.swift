@@ -119,10 +119,10 @@ private struct HTMLRenderer: MarkupVisitor {
 
 	mutating func visitImage(_ image: Image) {
 		let src = image.source ?? ""
-		var alt = ""
-		for child in image.children {
-			if let text = child as? Text { alt += text.string }
-		}
+		// Walk all descendants so alt text from nested inline formatting
+		// (e.g. `![*diagram*](img.png)` or `![link [label]](...)`) is
+		// preserved rather than silently dropped.
+		let alt = reverseSmartPunctuation(swiftMarkdownPlainText(of: image))
 		output += "<img src=\"\(escapeAttribute(src))\" alt=\"\(escapeAttribute(alt))\">"
 	}
 
