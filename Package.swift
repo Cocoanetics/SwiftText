@@ -16,6 +16,7 @@ let macOSProducts: [Product] = [
 let macOSTargets: [Target] = [
 	.target(
 		name: "SwiftTextOCR",
+		dependencies: ["SwiftTextMarkdown"],
 		path: "Sources/SwiftTextOCR"
 	),
 	.target(
@@ -43,7 +44,11 @@ let macOSTargets: [Target] = [
 	),
 	.testTarget(
 		name: "SwiftTextOCRTests",
-		dependencies: ["SwiftTextOCR", "SwiftTextPDF"],
+		dependencies: [
+			"SwiftTextOCR",
+			"SwiftTextPDF",
+			.product(name: "Markdown", package: "swift-markdown"),
+		],
 		path: "Tests/SwiftTextOCRTests"
 	),
 ]
@@ -81,8 +86,11 @@ let xmlSystemTargets: [Target] = []
 #endif
 
 // HTMLParser is cross-platform: libxml2 HTML parsing works fine on Linux.
+// SwiftTextMarkdown is platform-agnostic (built on swift-cmark), so it ships
+// alongside SwiftTextHTML rather than being gated by it.
 let htmlProducts: [Product] = [
 	.library(name: "SwiftTextHTML", targets: ["SwiftTextHTML"]),
+	.library(name: "SwiftTextMarkdown", targets: ["SwiftTextMarkdown"]),
 ]
 let htmlTargets: [Target] = [
 	.target(
@@ -99,13 +107,25 @@ let htmlTargets: [Target] = [
 	),
 	.target(
 		name: "SwiftTextHTML",
-		dependencies: ["HTMLParser", "CHTMLParser"],
+		dependencies: ["HTMLParser", "CHTMLParser", "SwiftTextMarkdown"],
 		path: "Sources/SwiftTextHTML"
+	),
+	.target(
+		name: "SwiftTextMarkdown",
+		dependencies: [
+			.product(name: "Markdown", package: "swift-markdown"),
+		],
+		path: "Sources/SwiftTextMarkdown"
 	),
 	.testTarget(
 		name: "SwiftTextHTMLTests",
-		dependencies: ["SwiftTextHTML", "SwiftTextCore"],
+		dependencies: ["SwiftTextHTML", "SwiftTextMarkdown", "SwiftTextCore"],
 		path: "Tests/SwiftTextHTMLTests"
+	),
+	.testTarget(
+		name: "SwiftTextMarkdownTests",
+		dependencies: ["SwiftTextMarkdown"],
+		path: "Tests/SwiftTextMarkdownTests"
 	),
 ] + xmlSystemTargets
 
@@ -145,6 +165,7 @@ let packageTargets: [Target] = [
 	.target(
 		name: "SwiftTextDOCX",
 		dependencies: [
+			"SwiftTextMarkdown",
 			.product(name: "ZIPFoundation", package: "ZIPFoundation"),
 		],
 		path: "Sources/SwiftTextDOCX"
@@ -183,6 +204,7 @@ let package = Package(
 	dependencies: [
 		.package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0"),
 		.package(url: "https://github.com/weichsel/ZIPFoundation.git", from: "0.9.12"),
+		.package(url: "https://github.com/swiftlang/swift-markdown.git", from: "0.7.0"),
 	],
 	targets: packageTargets
 )

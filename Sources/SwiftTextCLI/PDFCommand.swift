@@ -378,6 +378,25 @@ func markdownToHTML(_ markdown: String, paper: PaperSize, landscape: Bool) -> St
 	    margin: 0.6em 0;
 	    color: #555;
 	}
+	.markdown-alert {
+	    border-left-width: 4px;
+	    border-left-style: solid;
+	    border-radius: 6px;
+	    margin: 0.8em 0;
+	    padding: 0.75em 1em;
+	    page-break-inside: avoid;
+	    break-inside: avoid;
+	}
+	.markdown-alert-title {
+	    font-weight: 600;
+	    margin: 0 0 0.35em;
+	}
+	.markdown-alert > :last-child { margin-bottom: 0; }
+	.markdown-alert-note { background: #ddf4ff; border-left-color: #0969da; color: #0a3069; }
+	.markdown-alert-tip { background: #dafbe1; border-left-color: #1a7f37; color: #116329; }
+	.markdown-alert-important { background: #fbefff; border-left-color: #8250df; color: #5521b5; }
+	.markdown-alert-warning { background: #fff8c5; border-left-color: #9a6700; color: #7d4e00; }
+	.markdown-alert-caution { background: #ffebe9; border-left-color: #cf222e; color: #a40e26; }
 	code {
 	    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
 	    font-size: 0.88em;
@@ -625,8 +644,7 @@ private func convertMarkdownBody(_ markdown: String, footnoteState: FootnoteRend
 				qLines.append(lines[i].hasPrefix("> ") ? String(lines[i].dropFirst(2)) : "")
 				i += 1
 			}
-			let inner = convertMarkdownBody(qLines.joined(separator: "\n"), footnoteState: footnoteState)
-			out += "<blockquote>\n\(inner)</blockquote>\n"
+			out += renderBlockquoteHTML(qLines, footnoteState: footnoteState)
 			continue
 		}
 
@@ -848,6 +866,66 @@ private func convertMarkdownBody(_ markdown: String, footnoteState: FootnoteRend
 	}
 	
 	return out
+}
+
+private func renderBlockquoteHTML(_ quoteLines: [String], footnoteState: FootnoteRenderState) -> String {
+	if let alert = parseAlertBlockquote(quoteLines) {
+		let inner = alert.content.isEmpty ? "" : convertMarkdownBody(alert.content.joined(separator: "\n"), footnoteState: footnoteState)
+		return "<aside class=\"markdown-alert markdown-alert-\(alert.type.cssClass)\" data-alert=\"\(alert.type.cssClass)\" role=\"\(alert.type.ariaRole)\">\n"
+			+ "<p class=\"markdown-alert-title\">\(alert.type.title)</p>\n"
+			+ "\(inner)</aside>\n"
+	}
+
+	let inner = convertMarkdownBody(quoteLines.joined(separator: "\n"), footnoteState: footnoteState)
+	return "<blockquote>\n\(inner)</blockquote>\n"
+}
+
+private func parseAlertBlockquote(_ quoteLines: [String]) -> (type: MarkdownAlertType, content: [String])? {
+	guard let firstLine = quoteLines.first?.trimmingCharacters(in: .whitespaces),
+	      let type = MarkdownAlertType(markerLine: firstLine) else {
+		return nil
+	}
+
+	var content = Array(quoteLines.dropFirst())
+	if let markerEnd = firstLine.firstIndex(of: "]") {
+		let remainder = firstLine[firstLine.index(after: markerEnd)...].trimmingCharacters(in: .whitespaces)
+		if !remainder.isEmpty {
+			content.insert(remainder, at: 0)
+		}
+	}
+
+	return (type, content)
+}
+
+private enum MarkdownAlertType: String {
+	case note = "NOTE"
+	case tip = "TIP"
+	case important = "IMPORTANT"
+	case warning = "WARNING"
+	case caution = "CAUTION"
+
+	init?(markerLine: String) {
+		guard markerLine.hasPrefix("[!"), let close = markerLine.firstIndex(of: "]") else { return nil }
+		let rawValue = String(markerLine[markerLine.index(markerLine.startIndex, offsetBy: 2)..<close])
+		self.init(rawValue: rawValue.uppercased())
+	}
+
+	var cssClass: String { rawValue.lowercased() }
+	var title: String {
+		switch self {
+		case .note: return "Note"
+		case .tip: return "Tip"
+		case .important: return "Important"
+		case .warning: return "Warning"
+		case .caution: return "Caution"
+		}
+	}
+	var ariaRole: String {
+		switch self {
+		case .warning, .caution: return "alert"
+		case .note, .tip, .important: return "note"
+		}
+	}
 }
 
 private struct FootnoteDefinitionBlock {
