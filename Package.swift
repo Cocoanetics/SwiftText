@@ -81,9 +81,11 @@ let xmlSystemTargets: [Target] = []
 #endif
 
 // HTMLParser is cross-platform: libxml2 HTML parsing works fine on Linux.
+// SwiftTextMarkdown is platform-agnostic (built on swift-cmark), so it ships
+// alongside SwiftTextHTML rather than being gated by it.
 let htmlProducts: [Product] = [
 	.library(name: "SwiftTextHTML", targets: ["SwiftTextHTML"]),
-	.library(name: "SwiftTextMarkdownExperiment", targets: ["SwiftTextMarkdownExperiment"]),
+	.library(name: "SwiftTextMarkdown", targets: ["SwiftTextMarkdown"]),
 ]
 let htmlTargets: [Target] = [
 	.target(
@@ -104,11 +106,11 @@ let htmlTargets: [Target] = [
 		path: "Sources/SwiftTextHTML"
 	),
 	.target(
-		name: "SwiftTextMarkdownExperiment",
+		name: "SwiftTextMarkdown",
 		dependencies: [
 			.product(name: "Markdown", package: "swift-markdown"),
 		],
-		path: "Sources/SwiftTextMarkdownExperiment"
+		path: "Sources/SwiftTextMarkdown"
 	),
 	.testTarget(
 		name: "SwiftTextHTMLTests",
@@ -116,9 +118,9 @@ let htmlTargets: [Target] = [
 		path: "Tests/SwiftTextHTMLTests"
 	),
 	.testTarget(
-		name: "SwiftTextMarkdownExperimentTests",
-		dependencies: ["SwiftTextMarkdownExperiment"],
-		path: "Tests/SwiftTextMarkdownExperimentTests"
+		name: "SwiftTextMarkdownTests",
+		dependencies: ["SwiftTextMarkdown"],
+		path: "Tests/SwiftTextMarkdownTests"
 	),
 ] + xmlSystemTargets
 

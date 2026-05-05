@@ -71,13 +71,12 @@ jobs:
             -destination "platform=iOS Simulator,name=iPhone 17,OS=latest" \
             -skipPackagePluginValidation
 
-  # Windows job — investigates swift-markdown / swift-cmark portability under
-  # issue #15. We scope to the SwiftTextMarkdownExperiment target on purpose:
-  # the existing SwiftTextHTML target depends on libxml2 via vcpkg, which is a
-  # separate existing concern. This job exists specifically to prove that the
-  # swift-markdown dependency chain (swift-cmark, CAtomic, the unsafe-flags
-  # Windows static-define) resolves and builds on the same toolchain we'd ship
-  # in production (Swift 6.3.1 via SwiftyLab/setup-swift).
+  # Windows job — verifies swift-markdown / swift-cmark portability. We scope
+  # to the SwiftTextMarkdown target on purpose: the existing SwiftTextHTML
+  # target depends on libxml2 via vcpkg, which is a separate, pre-existing
+  # concern. This job specifically proves that the swift-markdown dependency
+  # chain (swift-cmark, CAtomic, the Windows static-define) resolves and
+  # builds on the production toolchain (Swift 6.3.1 via SwiftyLab/setup-swift).
   build-windows-swift-markdown:
     runs-on: windows-latest
     timeout-minutes: 30
@@ -91,13 +90,13 @@ jobs:
         run: swift --version
       - name: Resolve dependencies
         run: swift package resolve
-      - name: Build (swift-markdown experimental target)
+      - name: Build (SwiftTextMarkdown)
         # Build-only, matching the Android job. The goal is verifying that the
         # swift-markdown / swift-cmark cross-compile produces a working object
         # graph on Windows — not running tests. (`swift test --filter` would
         # still build all test targets including SwiftTextHTML, which needs
         # libxml2 via vcpkg, an unrelated, pre-existing concern.)
-        run: swift build -v --target SwiftTextMarkdownExperiment
+        run: swift build -v --target SwiftTextMarkdown
 
   # Android job — same scope as Windows. Uses skiptools/swift-android-action,
   # which provisions the Swift Android SDK and runs SwiftPM against an x86_64
@@ -117,10 +116,10 @@ jobs:
           free-disk-space: true
           # Build-only: the action's default is `swift build --target X --build-tests`
           # which SwiftPM rejects as mutually exclusive flags. We're scoping to a
-          # single target (`SwiftTextMarkdownExperiment`) to avoid the existing
-          # libxml2 dep on `SwiftTextHTML` (not provided by the Android SDK), and
-          # the goal here is portability of the swift-markdown / swift-cmark
-          # toolchain — not running tests on the emulator.
+          # single target (`SwiftTextMarkdown`) to avoid the existing libxml2 dep
+          # on `SwiftTextHTML` (not provided by the Android SDK), and the goal
+          # here is portability of the swift-markdown / swift-cmark toolchain —
+          # not running tests on the emulator.
           build-tests: false
           run-tests: false
-          swift-build-flags: "--target SwiftTextMarkdownExperiment"
+          swift-build-flags: "--target SwiftTextMarkdown"

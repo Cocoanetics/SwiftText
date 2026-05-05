@@ -1,7 +1,7 @@
 import Testing
-@testable import SwiftTextMarkdownExperiment
+@testable import SwiftTextMarkdown
 
-@Suite("SwiftMarkdownHTMLRenderer (issue #15 prototype)")
+@Suite("SwiftMarkdownHTMLRenderer")
 struct SwiftMarkdownHTMLRendererTests {
 
 	@Test func headings() {

@@ -1,11 +1,12 @@
 import Foundation
 import Markdown
 
-/// Experimental Markdown -> HTML renderer using swift-markdown's AST.
+/// Markdown -> HTML renderer built on swift-markdown's AST.
 ///
-/// Built as part of the issue #15 investigation. Mirrors the output shape of
-/// `SwiftTextHTML.MarkdownToHTML.convert` closely enough that we can compare
-/// the two implementations side-by-side on the existing fixture set.
+/// Mirrors the output shape of `SwiftTextHTML.MarkdownToHTML.convert` closely
+/// enough that the two implementations can be diffed on the same fixture set
+/// during the migration. The hand-rolled parser will be retired once this
+/// reaches byte-exact parity (see issue #15).
 ///
 /// Notable behaviors:
 /// - `Document.parse` is invoked with `.parseBlockDirectives` disabled so DocC
