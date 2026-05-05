@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import Markdown
 import Testing
 
 @testable import SwiftTextOCR
@@ -137,19 +138,22 @@ struct SwiftTextOCRTests {
 			return nil
 		}
 		
+		// MarkupFormatter emits tables without cell padding — still valid
+		// CommonMark and parses to the same AST; just a different surface form
+		// from the legacy hand-rolled emitter.
 		let expected = """
 		Hello paragraph.
-		
+
 		1. First item
 		2. Second item
-		
-		| A1 | B1 |
-		| --- | --- |
-		| A2 | B2 |
-		
+
+		|A1|B1|
+		|--|--|
+		|A2|B2|
+
 		![Image](image-1.png)
 		"""
-		
+
 		#expect(markdown == expected)
 	}
 	
@@ -184,11 +188,43 @@ struct SwiftTextOCRTests {
 	@Test func testTextLineString() async throws {
 		let line1 = TextLine(fragments: [TextFragment(bounds: CGRect(x: 0, y: 0, width: 100, height: 12), string: "First line")])
 		let line2 = TextLine(fragments: [TextFragment(bounds: CGRect(x: 0, y: 14, width: 100, height: 12), string: "Second line")])
-		
+
 		let lines = [line1, line2]
 		let result = lines.string()
-		
+
 		#expect(result.contains("First line"))
 		#expect(result.contains("Second line"))
+	}
+
+	@Test func testMarkdownRendererRoundTripsThroughAST() async throws {
+		// The AST returned by `document(from:)` should round-trip stably through
+		// `MarkupFormatter`: feeding the formatted output back through the parser
+		// should produce structurally identical Markdown. This guards against
+		// future emission changes that produce CommonMark-invalid output or rely
+		// on extensions the parser doesn't recognize.
+		let paragraphBlock = DocumentBlock(
+			bounds: CGRect(x: 0, y: 0, width: 100, height: 20),
+			kind: .paragraph(.init(text: "Hello paragraph.", lines: []))
+		)
+		let listBlock = DocumentBlock(
+			bounds: CGRect(x: 0, y: 30, width: 100, height: 30),
+			kind: .list(.init(
+				marker: .decimal,
+				items: [
+					.init(text: "First item", markerString: "1.", bounds: .zero, lines: []),
+					.init(text: "Second item", markerString: "2.", bounds: .zero, lines: [])
+				]
+			))
+		)
+
+		let renderedOnce = DocumentBlockMarkdownRenderer.markdown(from: [paragraphBlock, listBlock])
+
+		// Parse the formatter output and re-format it. A stable AST means the
+		// second pass produces the same string.
+		let renderedTwice = Markdown.Document(parsing: renderedOnce, options: []).format(
+			options: Markdown.MarkupFormatter.Options(orderedListNumerals: .incrementing(start: 1))
+		)
+
+		#expect(renderedOnce == renderedTwice)
 	}
 }

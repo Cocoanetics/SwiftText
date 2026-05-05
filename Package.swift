@@ -16,6 +16,7 @@ let macOSProducts: [Product] = [
 let macOSTargets: [Target] = [
 	.target(
 		name: "SwiftTextOCR",
+		dependencies: ["SwiftTextMarkdown"],
 		path: "Sources/SwiftTextOCR"
 	),
 	.target(
@@ -43,7 +44,11 @@ let macOSTargets: [Target] = [
 	),
 	.testTarget(
 		name: "SwiftTextOCRTests",
-		dependencies: ["SwiftTextOCR", "SwiftTextPDF"],
+		dependencies: [
+			"SwiftTextOCR",
+			"SwiftTextPDF",
+			.product(name: "Markdown", package: "swift-markdown"),
+		],
 		path: "Tests/SwiftTextOCRTests"
 	),
 ]
