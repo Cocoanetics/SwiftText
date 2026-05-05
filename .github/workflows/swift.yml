@@ -10,6 +10,13 @@ on:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
+# Cancel earlier runs of this workflow on the same branch as soon as a new
+# commit comes in — Windows in particular is slow (vcpkg install + cmark
+# build are not cheap on a cold runner) and stacking runs wastes capacity.
+concurrency:
+  group: swift-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
 
   build-macos:
@@ -28,11 +35,13 @@ jobs:
 
   build-linux:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
+    container:
+      image: swift:6.3-jammy
     steps:
       - uses: actions/checkout@v6
       - name: Install libxml2 dev
-        run: sudo apt-get update && sudo apt-get install -y libxml2-dev
+        run: apt-get update && apt-get install -y libxml2-dev pkg-config
       - name: Verify Swift version
         run: swift --version
       - name: Build & Test (Linux)
@@ -61,3 +70,49 @@ jobs:
             -scheme SwiftText-Package \
             -destination "platform=iOS Simulator,name=iPhone 17,OS=latest" \
             -skipPackagePluginValidation
+
+  # Windows job — investigates swift-markdown / swift-cmark portability under
+  # issue #15. We scope to the SwiftTextMarkdownExperiment target on purpose:
+  # the existing SwiftTextHTML target depends on libxml2 via vcpkg, which is a
+  # separate existing concern. This job exists specifically to prove that the
+  # swift-markdown dependency chain (swift-cmark, CAtomic, the unsafe-flags
+  # Windows static-define) resolves and builds on the same toolchain we'd ship
+  # in production (Swift 6.3.1 via SwiftyLab/setup-swift).
+  build-windows-swift-markdown:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - name: Setup Swift
+        uses: SwiftyLab/setup-swift@latest
+        with:
+          swift-version: "6.3.1"
+      - name: Verify Swift version
+        run: swift --version
+      - name: Resolve dependencies
+        run: swift package resolve
+      - name: Build (swift-markdown experimental target)
+        run: swift build -v --target SwiftTextMarkdownExperiment
+      - name: Test (swift-markdown experimental target)
+        run: swift test -v --filter SwiftTextMarkdownExperimentTests
+
+  # Android job — same scope as Windows. Uses skiptools/swift-android-action,
+  # which provisions the Swift Android SDK and runs SwiftPM against an x86_64
+  # emulator. cmark-gfm is portable C; this job confirms the bionic libc
+  # toolchain produces a working build.
+  build-android-swift-markdown:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build & test (Android emulator)
+        uses: skiptools/swift-android-action@v2
+        with:
+          swift-version: "6.3"
+          # Default GitHub Linux runner has ~14 GiB free; SDK + NDK + emulator
+          # together push past that without cleanup.
+          free-disk-space: true
+          # Restrict to the swift-markdown experiment so libxml2 (not provided
+          # by the Android SDK) doesn't stop the investigation.
+          swift-build-flags: "--target SwiftTextMarkdownExperiment"
+          swift-test-flags: "--filter SwiftTextMarkdownExperimentTests"

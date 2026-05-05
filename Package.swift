@@ -83,6 +83,7 @@ let xmlSystemTargets: [Target] = []
 // HTMLParser is cross-platform: libxml2 HTML parsing works fine on Linux.
 let htmlProducts: [Product] = [
 	.library(name: "SwiftTextHTML", targets: ["SwiftTextHTML"]),
+	.library(name: "SwiftTextMarkdownExperiment", targets: ["SwiftTextMarkdownExperiment"]),
 ]
 let htmlTargets: [Target] = [
 	.target(
@@ -102,10 +103,22 @@ let htmlTargets: [Target] = [
 		dependencies: ["HTMLParser", "CHTMLParser"],
 		path: "Sources/SwiftTextHTML"
 	),
+	.target(
+		name: "SwiftTextMarkdownExperiment",
+		dependencies: [
+			.product(name: "Markdown", package: "swift-markdown"),
+		],
+		path: "Sources/SwiftTextMarkdownExperiment"
+	),
 	.testTarget(
 		name: "SwiftTextHTMLTests",
 		dependencies: ["SwiftTextHTML", "SwiftTextCore"],
 		path: "Tests/SwiftTextHTMLTests"
+	),
+	.testTarget(
+		name: "SwiftTextMarkdownExperimentTests",
+		dependencies: ["SwiftTextMarkdownExperiment"],
+		path: "Tests/SwiftTextMarkdownExperimentTests"
 	),
 ] + xmlSystemTargets
 
@@ -183,6 +196,7 @@ let package = Package(
 	dependencies: [
 		.package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0"),
 		.package(url: "https://github.com/weichsel/ZIPFoundation.git", from: "0.9.12"),
+		.package(url: "https://github.com/swiftlang/swift-markdown.git", from: "0.7.0"),
 	],
 	targets: packageTargets
 )
