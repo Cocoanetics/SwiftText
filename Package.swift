@@ -160,6 +160,7 @@ let packageTargets: [Target] = [
 	.target(
 		name: "SwiftTextDOCX",
 		dependencies: [
+			"SwiftTextMarkdown",
 			.product(name: "ZIPFoundation", package: "ZIPFoundation"),
 		],
 		path: "Sources/SwiftTextDOCX"
