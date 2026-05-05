@@ -102,7 +102,7 @@ let htmlTargets: [Target] = [
 	),
 	.target(
 		name: "SwiftTextHTML",
-		dependencies: ["HTMLParser", "CHTMLParser"],
+		dependencies: ["HTMLParser", "CHTMLParser", "SwiftTextMarkdown"],
 		path: "Sources/SwiftTextHTML"
 	),
 	.target(
@@ -114,7 +114,7 @@ let htmlTargets: [Target] = [
 	),
 	.testTarget(
 		name: "SwiftTextHTMLTests",
-		dependencies: ["SwiftTextHTML", "SwiftTextCore"],
+		dependencies: ["SwiftTextHTML", "SwiftTextMarkdown", "SwiftTextCore"],
 		path: "Tests/SwiftTextHTMLTests"
 	),
 	.testTarget(

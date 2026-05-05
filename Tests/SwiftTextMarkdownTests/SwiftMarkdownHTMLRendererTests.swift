@@ -82,9 +82,7 @@ struct SwiftMarkdownHTMLRendererTests {
 	@Test func fencedCodeBlockWithLanguage() {
 		let html = SwiftMarkdownHTMLRenderer.convert("```json\n{\n  \"test\": 1\n}\n```")
 		#expect(html.contains("<pre><code class=\"language-json\">"))
-		// swift-markdown / cmark-gfm escapes `"` to `&quot;` even inside <code>;
-		// our hand-rolled parser leaves the `"` literal. Capture the actual behavior.
-		#expect(html.contains("  &quot;test&quot;: 1"))
+		#expect(html.contains("  \"test\": 1"))
 		#expect(html.contains("</code></pre>"))
 	}
 
@@ -113,14 +111,11 @@ struct SwiftMarkdownHTMLRendererTests {
 
 	@Test func htmlEscaping() {
 		let html = SwiftMarkdownHTMLRenderer.convert("Use <div> & \"quotes\"")
-		// Divergence vs MarkdownToHTML: swift-markdown / cmark treats `<div>` as raw
-		// HTML per CommonMark, so it disappears from the AST as an InlineHTML node
-		// (we don't render those). Our hand-rolled parser escapes `<` literally.
-		#expect(!html.contains("&lt;div&gt;"))
+		#expect(html.contains("&lt;div&gt;"))
 		#expect(html.contains("&amp;"))
-		// Divergence: cmark-gfm enables smart punctuation by default, turning
-		// straight quotes into typographic quotes.
-		#expect(html.contains("\u{201C}quotes\u{201D}"))
+		// Smart-punctuation reversal restores the literal straight quotes.
+		#expect(!html.contains("\u{201C}"))
+		#expect(!html.contains("\u{201D}"))
 	}
 
 	// MARK: - Coverage tests beyond the current parser
