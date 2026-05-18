@@ -24,6 +24,14 @@ public enum MarkdownToHTML {
 		SwiftMarkdownHTMLRenderer.convert(markdown)
 	}
 
+	/// Converts a Markdown string to an HTML fragment, additionally expanding
+	/// `[^id]` references and `[^id]: …` definition blocks into anchored
+	/// footnotes. swift-markdown doesn't parse footnotes natively; this entry
+	/// point layers extraction + AST rewriting on top of ``convert(_:)``.
+	public static func convertWithFootnotes(_ markdown: String) -> String {
+		MarkdownFootnoteRenderer.convert(markdown)
+	}
+
 	/// Default stylesheet for Markdown HTML output.
 	///
 	/// Provides sensible styling for all supported elements: body, headings, paragraphs,

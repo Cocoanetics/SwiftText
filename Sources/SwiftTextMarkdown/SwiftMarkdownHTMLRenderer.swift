@@ -22,6 +22,13 @@ public enum SwiftMarkdownHTMLRenderer {
 
 	public static func convert(_ markdown: String) -> String {
 		let document = Document(parsing: markdown, options: [])
+		return convert(document: document)
+	}
+
+	/// Renders an already-parsed `Document` to the same HTML fragment shape as
+	/// ``convert(_:)``. Use this entry point when you need to rewrite the AST
+	/// (e.g. with a `MarkupRewriter`) before rendering.
+	public static func convert(document: Document) -> String {
 		var renderer = HTMLRenderer()
 		renderer.visit(document)
 		return renderer.flush()
