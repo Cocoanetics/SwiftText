@@ -293,9 +293,7 @@ struct PDF: AsyncParsableCommand {
 func markdownToHTML(_ markdown: String, paper: PaperSize, landscape: Bool) -> String {
 	let orientation = landscape ? "landscape" : "portrait"
 	let pageCSS = "\(paper.cssName) \(orientation)"
-	// swift-markdown via SwiftTextHTML handles the parsing; the footnote layer
-	// rewrites `[^id]` references and `[^id]: …` blocks on top.
-	let body = MarkdownToHTML.convertWithFootnotes(markdown)
+	let body = MarkdownToHTML.convert(markdown)
 	return """
 	<!DOCTYPE html>
 	<html lang="en">

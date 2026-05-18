@@ -20,15 +20,13 @@ public enum MarkdownToHTML {
 	// MARK: - Public API
 
 	/// Converts a Markdown string to an HTML fragment.
+	///
+	/// Inputs that don't use the `[^id]` / `[^id]: …` footnote syntax round-trip
+	/// through swift-markdown's renderer unchanged — the footnote layer's fast
+	/// path skips straight to ``SwiftMarkdownHTMLRenderer/convert(_:)``. Inputs
+	/// that do use it get definitions extracted, references rewritten in the
+	/// AST, and a `<div class="footnote-definition">` block appended.
 	public static func convert(_ markdown: String) -> String {
-		SwiftMarkdownHTMLRenderer.convert(markdown)
-	}
-
-	/// Converts a Markdown string to an HTML fragment, additionally expanding
-	/// `[^id]` references and `[^id]: …` definition blocks into anchored
-	/// footnotes. swift-markdown doesn't parse footnotes natively; this entry
-	/// point layers extraction + AST rewriting on top of ``convert(_:)``.
-	public static func convertWithFootnotes(_ markdown: String) -> String {
 		MarkdownFootnoteRenderer.convert(markdown)
 	}
 
