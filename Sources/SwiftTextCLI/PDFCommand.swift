@@ -327,35 +327,9 @@ func markdownToHTML(_ markdown: String, paper: PaperSize, landscape: Bool) -> St
 	    page-break-inside: avoid;
 	    break-inside: avoid;
 	}
-	/* H1, H2: Start major sections on new page */
-	h1, h2 {
-	    page-break-before: always;
-	    break-before: always;
-	}
-	/* H3 immediately after H2: also break (keep h2+h3 group together on new page) */
-	h2 + h3 {
-	    page-break-before: always;
-	    break-before: always;
-	}
-	/* First heading: Don't force page break */
-	section:first-of-type > h1:first-child,
-	section:first-of-type > h2:first-child {
-	    page-break-before: auto;
-	    break-before: auto;
-	}
-	/* Subsection headings: avoid breaking away from parent context */
-	h3, h4, h5, h6 {
-	    page-break-before: avoid;
-	    break-before: avoid;
-	}
 	h1 { font-size: 2em;    border-bottom: 2px solid #ddd; padding-bottom: 0.2em; }
 	h2 { font-size: 1.5em;  border-bottom: 1px solid #eee; padding-bottom: 0.1em; }
 	h3 { font-size: 1.25em; }
-	/* Semantic sections (heading + content until next heading) */
-	section {
-	    page-break-inside: avoid;
-	    break-inside: avoid;
-	}
 	p  {
 	    margin: 0.6em 0;
 	    orphans: 2;
