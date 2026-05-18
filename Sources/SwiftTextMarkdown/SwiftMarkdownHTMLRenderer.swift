@@ -3,12 +3,15 @@ import Markdown
 
 /// Markdown -> HTML renderer built on swift-markdown's AST.
 ///
-/// Output is byte-compatible with `SwiftTextHTML.MarkdownToHTML.convert` for
-/// every input the existing fixture set covers. Beyond parity, this renderer
-/// also handles strikethrough, task lists, autolinks, nested lists with mixed
-/// markers, setext headings, indented code blocks, link reference definitions,
-/// and DocC-style asides (`> Tip:`) — all of which the hand-rolled parser
-/// doesn't recognize.
+/// Handles the GFM superset that cmark-gfm exposes — paragraphs, headings,
+/// emphasis, links, images, lists (including task lists and nested lists with
+/// mixed markers), code, fenced + indented code blocks, tables with column
+/// alignment, blockquotes, GitHub/DocC alert callouts, autolinks, setext
+/// headings, link reference definitions, and strikethrough.
+///
+/// This renderer does NOT handle the `[^id]` / `[^id]: …` footnote extension
+/// — swift-markdown deliberately doesn't enable it. Footnote support lives in
+/// ``MarkdownFootnoteRenderer``, which wraps this renderer.
 ///
 /// Notable behaviors:
 /// - GitHub alert syntax (`> [!NOTE]`) is detected after parsing by inspecting
@@ -22,6 +25,13 @@ public enum SwiftMarkdownHTMLRenderer {
 
 	public static func convert(_ markdown: String) -> String {
 		let document = Document(parsing: markdown, options: [])
+		return convert(document: document)
+	}
+
+	/// Renders an already-parsed `Document` to the same HTML fragment shape as
+	/// ``convert(_:)``. Use this entry point when you need to rewrite the AST
+	/// (e.g. with a `MarkupRewriter`) before rendering.
+	public static func convert(document: Document) -> String {
 		var renderer = HTMLRenderer()
 		renderer.visit(document)
 		return renderer.flush()
