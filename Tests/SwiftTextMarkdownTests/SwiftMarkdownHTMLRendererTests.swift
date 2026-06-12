@@ -147,4 +147,33 @@ struct SwiftMarkdownHTMLRendererTests {
 		#expect(html.contains(#"<li class="task-list-item"><input type="checkbox" disabled> Todo</li>"#))
 		#expect(html.contains(#"<li class="task-list-item"><input type="checkbox" disabled checked> Done</li>"#))
 	}
+
+	@Test func rawHTMLEscapedByDefault() {
+		let block = SwiftMarkdownHTMLRenderer.convert("<p align=\"center\"><img src=\"logo.png\"></p>")
+		#expect(block.contains("&lt;p align=\"center\"&gt;"))
+		#expect(!block.contains("<img"))
+
+		let inline = SwiftMarkdownHTMLRenderer.convert("before <kbd>K</kbd> after")
+		#expect(inline.contains("&lt;kbd&gt;K&lt;/kbd&gt;"))
+	}
+
+	@Test func rawHTMLPassThroughOption() {
+		// block-level raw HTML is emitted verbatim
+		let block = SwiftMarkdownHTMLRenderer.convert(
+			"<p align=\"center\"> <img src=\"Documentation/Logo.png\" alt=\"Logo\" width=\"400\"/> </p>",
+			options: .passThroughRawHTML)
+		#expect(block.contains("<p align=\"center\">"))
+		#expect(block.contains("<img src=\"Documentation/Logo.png\" alt=\"Logo\" width=\"400\"/>"))
+
+		// inline raw HTML inside a paragraph is emitted verbatim too
+		let inline = SwiftMarkdownHTMLRenderer.convert(
+			"press <kbd>K</kbd> to continue", options: .passThroughRawHTML)
+		#expect(inline.contains("press <kbd>K</kbd> to continue"))
+
+		// markdown-level escaping of text is unaffected
+		let mixed = SwiftMarkdownHTMLRenderer.convert(
+			"a < b and <sub>x</sub>", options: .passThroughRawHTML)
+		#expect(mixed.contains("a &lt; b"))
+		#expect(mixed.contains("<sub>x</sub>"))
+	}
 }
