@@ -59,33 +59,8 @@ let swiftTextExtraDeps: [Target.Dependency] = [
 let ocrTestDeps: [Target.Dependency] = []
 #endif
 
-// libxml2 system library:
-//   - On Linux: resolved via pkg-config "libxml-2.0" which provides
-//     -I/usr/include/libxml2 and -lxml2.  CHTMLParser depends on CLibXML2
-//     so those flags propagate automatically.
-//   - On macOS: libxml2 is part of the SDK; link directly with -lxml2.
-//   - On Windows: installed via vcpkg; headers/libs found via INCLUDE/LIB env vars.
-#if os(Linux)
-let cHTMLParserDeps: [Target.Dependency] = [.target(name: "CLibXML2")]
-let cHTMLParserLinker: [LinkerSetting] = []
-let xmlSystemTargets: [Target] = [
-	.systemLibrary(
-		name: "CLibXML2",
-		pkgConfig: "libxml-2.0",
-		providers: [.apt(["libxml2-dev"])]
-	),
-]
-#elseif os(Windows)
-let cHTMLParserDeps: [Target.Dependency] = []
-let cHTMLParserLinker: [LinkerSetting] = [.linkedLibrary("libxml2")]
-let xmlSystemTargets: [Target] = []
-#else
-let cHTMLParserDeps: [Target.Dependency] = []
-let cHTMLParserLinker: [LinkerSetting] = [.linkedLibrary("xml2")]
-let xmlSystemTargets: [Target] = []
-#endif
-
-// HTMLParser is cross-platform: libxml2 HTML parsing works fine on Linux.
+// HTML parsing comes from XMLKit's HTMLParser module (libxml2-backed,
+// cross-platform — Linux needs libxml2-dev/pkg-config, vcpkg on Windows).
 // SwiftTextMarkdown is platform-agnostic (built on swift-cmark), so it ships
 // alongside SwiftTextHTML rather than being gated by it.
 let htmlProducts: [Product] = [
@@ -94,20 +69,14 @@ let htmlProducts: [Product] = [
 ]
 let htmlTargets: [Target] = [
 	.target(
-		name: "CHTMLParser",
-		dependencies: cHTMLParserDeps,
-		path: "Sources/CHTMLParser",
-		publicHeadersPath: "include",
-		linkerSettings: cHTMLParserLinker
-	),
-	.target(
-		name: "HTMLParser",
-		dependencies: ["CHTMLParser"],
-		path: "Sources/HTMLParser"
-	),
-	.target(
 		name: "SwiftTextHTML",
-		dependencies: ["HTMLParser", "CHTMLParser", "SwiftTextMarkdown"],
+		dependencies: [
+			// Single-trait condition, same reasoning as ZIPFoundation below. HTML
+			// must be active wherever SwiftTextHTML compiles; the CLI default trait
+			// transitively enables it for plain `swift build`.
+			.product(name: "HTMLParser", package: "XMLKit", condition: .when(traits: ["HTML"])),
+			"SwiftTextMarkdown",
+		],
 		path: "Sources/SwiftTextHTML"
 	),
 	.target(
@@ -127,7 +96,7 @@ let htmlTargets: [Target] = [
 		dependencies: ["SwiftTextMarkdown"],
 		path: "Tests/SwiftTextMarkdownTests"
 	),
-] + xmlSystemTargets
+]
 
 let swiftTextHTMLDeps: [Target.Dependency] = [
 	.target(name: "SwiftTextHTML", condition: .when(traits: ["HTML"])),
@@ -203,9 +172,10 @@ let package = Package(
 		.trait(name: "HTML", description: "HTML parsing"),
 		.trait(name: "PDF", description: "PDF text extraction", enabledTraits: ["OCR"]),
 		.trait(name: "DOCX", description: "DOCX extraction"),
-		// CLI enables DOCX because SwiftTextCLI links SwiftTextDOCX, whose ZIPFoundation
-		// dependency is guarded by the DOCX trait.
-		.trait(name: "CLI", description: "swifttext command-line tool dependencies", enabledTraits: ["DOCX"]),
+		// CLI enables DOCX and HTML because SwiftTextCLI links SwiftTextDOCX and
+		// SwiftTextHTML, whose external products (ZIPFoundation, XMLKit's HTMLParser)
+		// are guarded by those traits.
+		.trait(name: "CLI", description: "swifttext command-line tool dependencies", enabledTraits: ["DOCX", "HTML"]),
 		// "CLI" must be a default trait: the SwiftTextCLI and SwiftTextDOCX targets are
 		// always part of the manifest, so a plain `swift build` needs their external
 		// products (ArgumentParser, ZIPFoundation) active to compile. Consumers that
@@ -217,6 +187,7 @@ let package = Package(
 		.package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0"),
 		.package(url: "https://github.com/weichsel/ZIPFoundation.git", from: "0.9.12"),
 		.package(url: "https://github.com/swiftlang/swift-markdown.git", from: "0.7.0"),
+		.package(url: "https://github.com/Cocoanetics/XMLKit.git", from: "1.0.0"),
 	],
 	targets: packageTargets
 )

@@ -1,5 +1,5 @@
 {
-  "originHash" : "0c36e5a4d1ff83880e891a09cb1a3240fc95db763b5f7c54d90e483b593dc11f",
+  "originHash" : "9296d64a90e0d9767c5edeeef4fe85481be01d397d5243327a1002451b4de7c8",
   "pins" : [
     {
       "identity" : "swift-argument-parser",
@@ -26,6 +26,15 @@
       "state" : {
         "revision" : "7d9a5ce307528578dfa777d505496bd5f544ad94",
         "version" : "0.7.3"
+      }
+    },
+    {
+      "identity" : "xmlkit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/Cocoanetics/XMLKit.git",
+      "state" : {
+        "revision" : "af0be5973bae9a20f4ea2ed3e39401e22a4212cb",
+        "version" : "1.0.0"
       }
     },
     {
