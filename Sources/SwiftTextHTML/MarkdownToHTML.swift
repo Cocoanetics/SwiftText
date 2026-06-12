@@ -19,15 +19,21 @@ public enum MarkdownToHTML {
 
 	// MARK: - Public API
 
+	/// Rendering options, re-exported from ``SwiftMarkdownHTMLRenderer/Options``.
+	///
+	/// Pass ``SwiftMarkdownHTMLRenderer/Options/passThroughRawHTML`` to emit raw
+	/// HTML embedded in the Markdown verbatim instead of escaping it.
+	public typealias Options = SwiftMarkdownHTMLRenderer.Options
+
 	/// Converts a Markdown string to an HTML fragment.
 	///
 	/// Inputs that don't use the `[^id]` / `[^id]: …` footnote syntax round-trip
 	/// through swift-markdown's renderer unchanged — the footnote layer's fast
-	/// path skips straight to ``SwiftMarkdownHTMLRenderer/convert(_:)``. Inputs
-	/// that do use it get definitions extracted, references rewritten in the
-	/// AST, and a `<div class="footnote-definition">` block appended.
-	public static func convert(_ markdown: String) -> String {
-		MarkdownFootnoteRenderer.convert(markdown)
+	/// path skips straight to ``SwiftMarkdownHTMLRenderer/convert(_:options:)``.
+	/// Inputs that do use it get definitions extracted, references rewritten in
+	/// the AST, and a `<div class="footnote-definition">` block appended.
+	public static func convert(_ markdown: String, options: Options = []) -> String {
+		MarkdownFootnoteRenderer.convert(markdown, options: options)
 	}
 
 	/// Default stylesheet for Markdown HTML output.
@@ -90,6 +96,12 @@ public enum MarkdownToHTML {
 	del { color: #777; }
 	li.task-list-item { list-style: none; margin-left: -1.2em; }
 	li.task-list-item input[type="checkbox"] { margin-right: 0.4em; vertical-align: middle; }
+	sup a { text-decoration: none; }
+	.footnote-definition {
+	    margin: 0.8em 0;
+	    font-size: 0.95em;
+	}
+	.footnote-definition p { margin: 0.4em 0; }
 	"""
 
 	/// Converts a Markdown string to a complete HTML document.
@@ -100,9 +112,12 @@ public enum MarkdownToHTML {
 	/// - Parameters:
 	///   - markdown: The Markdown source text.
 	///   - stylesheet: CSS to include in a `<style>` tag. Defaults to ``defaultStylesheet``.
+	///   - options: Rendering options forwarded to ``convert(_:options:)``.
 	/// - Returns: A complete HTML document string.
-	public static func document(_ markdown: String, stylesheet: String? = nil) -> String {
-		let body = convert(markdown)
+	public static func document(
+		_ markdown: String, stylesheet: String? = nil, options: Options = []
+	) -> String {
+		let body = convert(markdown, options: options)
 		let css = stylesheet ?? defaultStylesheet
 		return """
 		<!DOCTYPE html>

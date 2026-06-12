@@ -23,16 +23,30 @@ import Markdown
 /// - Output is the inline HTML fragment — no `<html>`/`<body>` wrapper.
 public enum SwiftMarkdownHTMLRenderer {
 
-	public static func convert(_ markdown: String) -> String {
+	/// Rendering options.
+	public struct Options: OptionSet, Sendable {
+		public let rawValue: Int
+		public init(rawValue: Int) { self.rawValue = rawValue }
+
+		/// Emits raw HTML (inline and block) verbatim instead of escaping it.
+		///
+		/// GitHub-rendered Markdown — READMEs, release notes, comments —
+		/// routinely embeds HTML like `<p align="center"><img …></p>` or
+		/// `<details>`. cmark calls this mode "unsafe": only use it when the
+		/// output is sanitized or displayed without script execution.
+		public static let passThroughRawHTML = Options(rawValue: 1 << 0)
+	}
+
+	public static func convert(_ markdown: String, options: Options = []) -> String {
 		let document = Document(parsing: markdown, options: [])
-		return convert(document: document)
+		return convert(document: document, options: options)
 	}
 
 	/// Renders an already-parsed `Document` to the same HTML fragment shape as
 	/// ``convert(_:)``. Use this entry point when you need to rewrite the AST
 	/// (e.g. with a `MarkupRewriter`) before rendering.
-	public static func convert(document: Document) -> String {
-		var renderer = HTMLRenderer()
+	public static func convert(document: Document, options: Options = []) -> String {
+		var renderer = HTMLRenderer(options: options)
 		renderer.visit(document)
 		return renderer.flush()
 	}
@@ -40,6 +54,12 @@ public enum SwiftMarkdownHTMLRenderer {
 
 private struct HTMLRenderer: MarkupVisitor {
 	typealias Result = Void
+
+	let options: SwiftMarkdownHTMLRenderer.Options
+
+	init(options: SwiftMarkdownHTMLRenderer.Options) {
+		self.options = options
+	}
 
 	private var output: String = ""
 	private var alignmentStack: [[Table.ColumnAlignment?]] = []
@@ -107,6 +127,10 @@ private struct HTMLRenderer: MarkupVisitor {
 	}
 
 	mutating func visitInlineHTML(_ inlineHTML: InlineHTML) {
+		if options.contains(.passThroughRawHTML) {
+			output += inlineHTML.rawHTML
+			return
+		}
 		// Legacy parser escapes raw HTML markers literally during inlineFormat
 		// (the `&<>` substitution runs before regex matching). Match that so an
 		// input like `<div>` becomes `&lt;div&gt;` rather than disappearing.
@@ -114,9 +138,13 @@ private struct HTMLRenderer: MarkupVisitor {
 	}
 
 	mutating func visitHTMLBlock(_ htmlBlock: HTMLBlock) {
-		// Same policy as inline HTML — escape and emit literal characters.
 		var raw = htmlBlock.rawHTML
 		while raw.hasSuffix("\n") { raw.removeLast() }
+		if options.contains(.passThroughRawHTML) {
+			output += raw
+			return
+		}
+		// Same policy as inline HTML — escape and emit literal characters.
 		output += escapeHTMLNotQuote(raw)
 	}
 

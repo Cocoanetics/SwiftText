@@ -27,12 +27,14 @@ public enum MarkdownFootnoteRenderer {
 
 	/// Converts Markdown to an HTML fragment, expanding `[^id]` footnote
 	/// references and `[^id]: …` definition blocks.
-	public static func convert(_ markdown: String) -> String {
+	public static func convert(
+		_ markdown: String, options: SwiftMarkdownHTMLRenderer.Options = []
+	) -> String {
 		let (cleaned, definitions) = extractDefinitions(from: markdown)
 
 		// Fast path: no definitions at all -> nothing to rewrite, render directly.
 		if definitions.isEmpty {
-			return SwiftMarkdownHTMLRenderer.convert(cleaned)
+			return SwiftMarkdownHTMLRenderer.convert(cleaned, options: options)
 		}
 
 		let state = FootnoteState(definitionIDs: definitions.map { $0.id })
@@ -41,20 +43,31 @@ public enum MarkdownFootnoteRenderer {
 		let bodyDocument = Document(parsing: cleaned, options: [])
 		var bodyRewriter = FootnoteReferenceRewriter(state: state)
 		let rewrittenBody = bodyRewriter.visit(bodyDocument) as? Document ?? bodyDocument
-		let bodyHTML = SwiftMarkdownHTMLRenderer.convert(document: rewrittenBody)
+		let bodyHTML = SwiftMarkdownHTMLRenderer.convert(document: rewrittenBody, options: options)
 
 		// Render each definition body, rewriting nested references too.
+		// Rendering a definition can assign a number to a definition that was
+		// only ever referenced from another definition's body — and that other
+		// definition may appear earlier in the source. Re-scan until no pass
+		// renders anything new so such chains resolve regardless of source order.
 		var renderedDefinitions: [(number: Int, html: String)] = []
-		for definition in definitions {
-			guard let number = state.number(forID: definition.id) else {
-				// Definition was never referenced — skip it entirely.
-				continue
+		var renderedIDs = Set<String>()
+		var renderedNewDefinition = true
+		while renderedNewDefinition {
+			renderedNewDefinition = false
+			for definition in definitions where !renderedIDs.contains(definition.id) {
+				guard let number = state.number(forID: definition.id) else {
+					// Definition not referenced (yet) — skip it.
+					continue
+				}
+				let defDocument = Document(parsing: definition.body, options: [])
+				var defRewriter = FootnoteReferenceRewriter(state: state)
+				let rewrittenDef = defRewriter.visit(defDocument) as? Document ?? defDocument
+				let defBodyHTML = SwiftMarkdownHTMLRenderer.convert(document: rewrittenDef, options: options)
+				renderedDefinitions.append((number, defBodyHTML))
+				renderedIDs.insert(definition.id)
+				renderedNewDefinition = true
 			}
-			let defDocument = Document(parsing: definition.body, options: [])
-			var defRewriter = FootnoteReferenceRewriter(state: state)
-			let rewrittenDef = defRewriter.visit(defDocument) as? Document ?? defDocument
-			let defBodyHTML = SwiftMarkdownHTMLRenderer.convert(document: rewrittenDef)
-			renderedDefinitions.append((number, defBodyHTML))
 		}
 
 		// Two-pass sentinel expansion so nested refs inside definition bodies

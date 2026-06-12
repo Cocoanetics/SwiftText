@@ -134,4 +134,25 @@ struct MarkdownToHTMLTests {
 		#expect(text.contains("bold"))
 		#expect(text.contains("link"))
 	}
+
+	@Test func footnotes() {
+		let html = MarkdownToHTML.convert("Hello[^a].\n\n[^a]: The note")
+		#expect(html.contains("<sup><a href=\"#fn-1\" id=\"ref-1\">[1]</a></sup>"))
+		#expect(html.contains("<div class=\"footnote-definition\" id=\"fn-1\"><strong>[1]:</strong> The note</div>"))
+	}
+
+	@Test func rawHTMLPassThroughOption() {
+		let input = "Press <kbd>K</kbd> to open[^k].\n\n[^k]: A note"
+		#expect(MarkdownToHTML.convert(input).contains("&lt;kbd&gt;K&lt;/kbd&gt;"))
+
+		let html = MarkdownToHTML.convert(input, options: .passThroughRawHTML)
+		#expect(html.contains("Press <kbd>K</kbd> to open"))
+		#expect(html.contains("<div class=\"footnote-definition\" id=\"fn-1\"><strong>[1]:</strong> A note</div>"))
+	}
+
+	@Test func documentForwardsOptions() {
+		let html = MarkdownToHTML.document("press <kbd>K</kbd>", options: .passThroughRawHTML)
+		#expect(html.contains("press <kbd>K</kbd>"))
+		#expect(html.hasPrefix("<!DOCTYPE html>"))
+	}
 }
