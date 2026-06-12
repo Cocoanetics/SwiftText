@@ -91,11 +91,13 @@ Umbrella module (single import), with traits:
 )
 ```
 
-SwiftText defaults to `OCR` only. Enable traits as needed:
+SwiftText defaults to `OCR` plus `CLI` (the dependencies of the bundled `swifttext` tool; `CLI` also enables `DOCX`). Enable traits as needed:
 
 ```swift
 traits: [.defaults, "HTML", "PDF", "DOCX"]
 ```
+
+Listing traits explicitly (without `.defaults`) keeps dependency resolution lean: SwiftPM only fetches the packages the enabled traits actually need. For example, `traits: ["HTML"]` resolves just swift-markdown — neither swift-argument-parser nor ZIPFoundation is fetched or pinned.
 
 ## Usage
 
