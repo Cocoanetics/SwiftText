@@ -91,7 +91,7 @@ Umbrella module (single import), with traits:
 )
 ```
 
-SwiftText defaults to `OCR` plus `CLI` (the dependencies of the bundled `swifttext` tool). Enable traits as needed:
+SwiftText defaults to `OCR` plus `CLI` (the dependencies of the bundled `swifttext` tool; `CLI` also enables `DOCX`). Enable traits as needed:
 
 ```swift
 traits: [.defaults, "HTML", "PDF", "DOCX"]

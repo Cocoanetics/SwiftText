@@ -166,9 +166,11 @@ let packageTargets: [Target] = [
 		name: "SwiftTextDOCX",
 		dependencies: [
 			"SwiftTextMarkdown",
-			// "CLI" included because SwiftTextCLI depends on this target, so building
-			// the CLI requires ZIPFoundation even when the DOCX trait is disabled.
-			.product(name: "ZIPFoundation", package: "ZIPFoundation", condition: .when(traits: ["DOCX", "CLI"])),
+			// Single-trait condition on purpose: Swift 6.2's SwiftPM requires ALL listed
+			// traits to be enabled (6.3 changed this to any-of), so an OR-set like
+			// ["DOCX", "CLI"] would drop ZIPFoundation on 6.2 toolchains. The CLI case
+			// is covered by the CLI trait transitively enabling DOCX instead.
+			.product(name: "ZIPFoundation", package: "ZIPFoundation", condition: .when(traits: ["DOCX"])),
 		],
 		path: "Sources/SwiftTextDOCX"
 	),
@@ -201,7 +203,9 @@ let package = Package(
 		.trait(name: "HTML", description: "HTML parsing"),
 		.trait(name: "PDF", description: "PDF text extraction", enabledTraits: ["OCR"]),
 		.trait(name: "DOCX", description: "DOCX extraction"),
-		.trait(name: "CLI", description: "swifttext command-line tool dependencies"),
+		// CLI enables DOCX because SwiftTextCLI links SwiftTextDOCX, whose ZIPFoundation
+		// dependency is guarded by the DOCX trait.
+		.trait(name: "CLI", description: "swifttext command-line tool dependencies", enabledTraits: ["DOCX"]),
 		// "CLI" must be a default trait: the SwiftTextCLI and SwiftTextDOCX targets are
 		// always part of the manifest, so a plain `swift build` needs their external
 		// products (ArgumentParser, ZIPFoundation) active to compile. Consumers that
