@@ -31,7 +31,7 @@ let macOSTargets: [Target] = [
 			"SwiftTextOCR",
 			"SwiftTextPDF",
 			"SwiftTextDOCX",
-			.product(name: "ArgumentParser", package: "swift-argument-parser"),
+			.product(name: "ArgumentParser", package: "swift-argument-parser", condition: .when(traits: ["CLI"])),
 		],
 		path: "Sources/SwiftTextCLI",
 		plugins: [
@@ -166,7 +166,9 @@ let packageTargets: [Target] = [
 		name: "SwiftTextDOCX",
 		dependencies: [
 			"SwiftTextMarkdown",
-			.product(name: "ZIPFoundation", package: "ZIPFoundation"),
+			// "CLI" included because SwiftTextCLI depends on this target, so building
+			// the CLI requires ZIPFoundation even when the DOCX trait is disabled.
+			.product(name: "ZIPFoundation", package: "ZIPFoundation", condition: .when(traits: ["DOCX", "CLI"])),
 		],
 		path: "Sources/SwiftTextDOCX"
 	),
@@ -199,7 +201,13 @@ let package = Package(
 		.trait(name: "HTML", description: "HTML parsing"),
 		.trait(name: "PDF", description: "PDF text extraction", enabledTraits: ["OCR"]),
 		.trait(name: "DOCX", description: "DOCX extraction"),
-		.default(enabledTraits: ["OCR"]),
+		.trait(name: "CLI", description: "swifttext command-line tool dependencies"),
+		// "CLI" must be a default trait: the SwiftTextCLI and SwiftTextDOCX targets are
+		// always part of the manifest, so a plain `swift build` needs their external
+		// products (ArgumentParser, ZIPFoundation) active to compile. Consumers that
+		// specify explicit traits (e.g. ["HTML"]) drop the defaults, which lets SwiftPM
+		// prune both packages from their dependency resolution.
+		.default(enabledTraits: ["OCR", "CLI"]),
 	],
 	dependencies: [
 		.package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0"),
