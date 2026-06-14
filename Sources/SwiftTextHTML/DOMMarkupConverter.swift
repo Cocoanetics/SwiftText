@@ -97,8 +97,12 @@ struct DOMMarkupConverter {
 
 	private func isBlockLevel(_ node: DOMNode) -> Bool {
 		guard let element = node as? DOMElement else { return false }
-		let name = element.name.lowercased()
-		return Self.skippedTags.contains(name) || Self.blockTags.contains(name)
+		// Skipped tags are non-rendering, NOT block-level: treating them as block
+		// would flush the inline buffer and split the surrounding paragraph (e.g.
+		// `<p>Hello<script>…</script>world</p>` must stay one paragraph). Both
+		// blockMarkup and inlineMarkup already drop skipped tags to nothing, so
+		// classifying them as inline simply omits the subtree without a break.
+		return Self.blockTags.contains(element.name.lowercased())
 	}
 
 	// MARK: - Block context
@@ -495,17 +499,37 @@ struct DOMMarkupConverter {
 		return result
 	}
 
-	/// Layout tables don't map to a Markdown table; flatten each cell's blocks in
-	/// reading order (matching the previous renderer's "no pipes" behavior).
+	/// Layout tables don't map to a Markdown table. A row whose cells hold only
+	/// inline content is joined into a single space-separated paragraph (matching
+	/// the previous renderer's `A B` output for label/value or icon/text pairs);
+	/// rows with block-level cell content fall back to emitting those blocks
+	/// directly. Either way no pipe table is produced.
 	private func layoutTableBlocks(from element: DOMElement) -> [BlockMarkup] {
 		let rows = collectTableRows(from: element)
 		var blocks: [BlockMarkup] = []
 		for row in rows {
-			for cell in tableCellElements(in: row) {
-				blocks.append(contentsOf: blockChildren(of: cell))
+			let cells = tableCellElements(in: row)
+			if cells.contains(where: cellContainsBlock) {
+				for cell in cells {
+					blocks.append(contentsOf: blockChildren(of: cell))
+				}
+			} else {
+				var inlines: [InlineMarkup] = []
+				for cell in cells {
+					let cellInlines = trimInlines(inlineChildren(of: cell))
+					guard !cellInlines.isEmpty else { continue }
+					if !inlines.isEmpty { inlines.append(Text(" ")) }
+					inlines.append(contentsOf: cellInlines)
+				}
+				let trimmed = trimInlines(inlines)
+				if !trimmed.isEmpty { blocks.append(Paragraph(trimmed)) }
 			}
 		}
 		return blocks.isEmpty ? blockChildren(of: element) : blocks
+	}
+
+	private func cellContainsBlock(_ cell: DOMElement) -> Bool {
+		cell.children.contains { isBlockLevel($0) }
 	}
 
 	private func collectTableRows(from element: DOMElement) -> [DOMElement] {

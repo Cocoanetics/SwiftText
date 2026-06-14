@@ -180,3 +180,12 @@ func multiBlockCellIsLayout() async throws {
 
 	#expect(!markdown.contains("|"))
 }
+
+@Test
+func layoutTableRowJoinsInlineCellsWithSpace() async throws {
+	// A single-row table is layout; its inline cells join into one paragraph with
+	// a space (label/value, icon/text) rather than one paragraph per cell.
+	let html = "<table><tr><td>A</td><td>B</td></tr></table>"
+	let document = try await HTMLDocument(data: Data(html.utf8))
+	#expect(document.markdown() == "A B")
+}
