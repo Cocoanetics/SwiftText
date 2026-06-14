@@ -50,6 +50,15 @@ func extractedHTMLTextCanBeSanitizedExplicitly() async throws {
 	#expect(sanitization.report.hasBidiOverrides)
 }
 
+@Test
+func skippedInlineTagDoesNotSplitParagraph() async throws {
+	// A non-rendering tag inside inline content must be dropped without splitting
+	// the paragraph around it.
+	let html = "<html><body><p>Hello<script>var x = 1;</script>world</p></body></html>"
+	let document = try await HTMLDocument(data: Data(html.utf8))
+	#expect(document.markdown() == "Helloworld")
+}
+
 #if os(macOS)
 @Test
 @MainActor
