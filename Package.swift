@@ -76,6 +76,11 @@ let htmlTargets: [Target] = [
 			// transitively enables it for plain `swift build`.
 			.product(name: "HTMLParser", package: "XMLKit", condition: .when(traits: ["HTML"])),
 			"SwiftTextMarkdown",
+			// The HTML→Markdown path builds a swift-markdown AST from the DOM and
+			// renders it with MarkupFormatter, so it needs the Markdown module
+			// directly (not just transitively via SwiftTextMarkdown). swift-markdown
+			// is platform-agnostic and always resolved, so this isn't trait-gated.
+			.product(name: "Markdown", package: "swift-markdown"),
 		],
 		path: "Sources/SwiftTextHTML"
 	),
@@ -186,7 +191,7 @@ let package = Package(
 	dependencies: [
 		.package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0"),
 		.package(url: "https://github.com/weichsel/ZIPFoundation.git", from: "0.9.12"),
-		.package(url: "https://github.com/swiftlang/swift-markdown.git", from: "0.7.0"),
+		.package(url: "https://github.com/swiftlang/swift-markdown.git", from: "0.8.0"),
 		.package(url: "https://github.com/Cocoanetics/XMLKit.git", from: "1.0.0"),
 	],
 	targets: packageTargets
