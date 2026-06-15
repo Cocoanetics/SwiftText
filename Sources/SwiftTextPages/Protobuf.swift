@@ -193,9 +193,22 @@ struct ProtobufWriter {
 	/// Appends a 32-bit little-endian field (wire type 5).
 	mutating func fixed32Field(_ number: Int, _ value: UInt32) {
 		appendTag(number, 5)
+		bytes.append(contentsOf: ProtobufWriter.fixed32(value))
+	}
+
+	/// The 4 little-endian bytes of a fixed32 value (no field tag).
+	static func fixed32(_ value: UInt32) -> [UInt8] {
+		var raw = [UInt8]()
 		for shift in stride(from: 0, through: 24, by: 8) {
-			bytes.append(UInt8((value >> shift) & 0xFF))
+			raw.append(UInt8((value >> shift) & 0xFF))
 		}
+		return raw
+	}
+
+	/// Appends a wire-type-5 field from its raw 4-byte little-endian value.
+	mutating func appendFixed32(_ number: Int, _ raw: [UInt8]) {
+		appendTag(number, 5)
+		bytes.append(contentsOf: raw)
 	}
 
 	/// Appends a 64-bit little-endian field (wire type 1).

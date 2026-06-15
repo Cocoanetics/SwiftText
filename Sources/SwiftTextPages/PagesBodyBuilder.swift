@@ -130,7 +130,10 @@ final class CharacterStyleRegistry {
 
 	private var blockQuoteStyleID: UInt64?
 
-	/// A block-quote paragraph style: inherits Body, indented and italic. Synthesized once.
+	/// A block-quote paragraph style: inherits Body, rendered italic. Synthesized
+	/// once. (A synthesized style's char_properties apply; its para_properties do
+	/// not — so no left indent here. Referencing a real style for the indent
+	/// crashes Pages on the special "Default" style, so italic is the safe signal.)
 	func blockQuoteParagraphStyle() -> UInt64 {
 		if let id = blockQuoteStyleID { return id }
 		let id = nextID
@@ -144,28 +147,21 @@ final class CharacterStyleRegistry {
 	var maxIdentifier: UInt64 { nextID - 1 }
 	var didSynthesize: Bool { !synthesizedObjects.isEmpty }
 
-	/// A `ParagraphStyleArchive` payload inheriting Body, with a left indent and
-	/// italic text — the block-quote style.
+	/// A minimal `ParagraphStyleArchive` inheriting Body, italic — for block quotes.
 	private static func blockQuotePayload() -> [UInt8] {
 		var parentReference = ProtobufWriter()
-		parentReference.varintField(1, PagesStyleID.body)            // inherit from Body
+		parentReference.varintField(1, PagesStyleID.body)
 		var styleSuper = ProtobufWriter()
 		styleSuper.stringField(1, "SwiftText Block Quote")
 		styleSuper.messageField(5, parentReference.bytes)
 
 		var charProperties = ProtobufWriter()
-		charProperties.varintField(2, 1)                             // italic
-
-		var paragraphProperties = ProtobufWriter()
-		paragraphProperties.fixed32Field(11, Float(36).bitPattern)   // left_indent (0.5")
-		paragraphProperties.fixed32Field(19, Float(8).bitPattern)    // space_after
-		paragraphProperties.fixed32Field(20, Float(8).bitPattern)    // space_before
+		charProperties.varintField(2, 1)                  // italic
 
 		var archive = ProtobufWriter()
 		archive.messageField(1, styleSuper.bytes)
-		archive.varintField(10, 57)                                  // marker present on built-in para styles
+		archive.varintField(10, 57)
 		archive.messageField(11, charProperties.bytes)
-		archive.messageField(12, paragraphProperties.bytes)
 		return archive.bytes
 	}
 
@@ -313,41 +309,54 @@ enum PagesBodySerializer {
 		return writer.bytes
 	}
 
-	/// Returns a paragraph-style payload with its paragraph spacing set: within the
-	/// para_properties (field 12), `space_after` (field 19) and `space_before`
-	/// (field 20), in points. Other fields are preserved.
+	/// `TSWP.ParagraphStylePropertiesArchive` (the style's field 12) field numbers.
+	private enum ParaProperty {
+		static let firstLineIndent = 7
+		static let leftIndent = 11
+		static let spaceAfter = 20
+		static let spaceBefore = 21
+	}
+
+	/// Returns a paragraph-style payload with its paragraph spacing set (in points)
+	/// inside the para_properties (field 12). Other fields are preserved.
 	static func settingSpacing(in stylePayload: [UInt8], spaceBefore: Float, spaceAfter: Float) -> [UInt8] {
+		editingParaProperties(in: stylePayload) { writer, present in
+			present.insert(ParaProperty.spaceAfter)
+			present.insert(ParaProperty.spaceBefore)
+			writer[ParaProperty.spaceAfter] = ProtobufWriter.fixed32(spaceAfter.bitPattern)
+			writer[ParaProperty.spaceBefore] = ProtobufWriter.fixed32(spaceBefore.bitPattern)
+		}
+	}
+
+	/// Rewrites a paragraph style's para_properties (field 12) via `mutate`, which
+	/// receives a map of field-number → raw fixed32 bytes to set and the set of
+	/// field numbers it touches (so existing ones are replaced and new ones added).
+	private static func editingParaProperties(in stylePayload: [UInt8], _ mutate: (inout [Int: [UInt8]], inout Set<Int>) -> Void) -> [UInt8] {
+		var overrides = [Int: [UInt8]]()
+		var touched = Set<Int>()
+		mutate(&overrides, &touched)
+
 		let style = ProtobufMessage(stylePayload)
 		var writer = ProtobufWriter()
 		for field in style.fields {
 			if field.number == 12, case .lengthDelimited(let paraProperties) = field.value {
-				writer.bytesField(12, paragraphProperties(paraProperties, spaceBefore: spaceBefore, spaceAfter: spaceAfter))
+				let message = ProtobufMessage(paraProperties)
+				var inner = ProtobufWriter()
+				for property in message.fields {
+					if let raw = overrides[property.number] {
+						inner.appendFixed32(property.number, raw)
+					} else {
+						inner.append(property)
+					}
+				}
+				for number in touched where !message.fields.contains(where: { $0.number == number }) {
+					inner.appendFixed32(number, overrides[number]!)
+				}
+				writer.bytesField(12, inner.bytes)
 			} else {
 				writer.append(field)
 			}
 		}
-		return writer.bytes
-	}
-
-	private static func paragraphProperties(_ payload: [UInt8], spaceBefore: Float, spaceAfter: Float) -> [UInt8] {
-		let message = ProtobufMessage(payload)
-		var writer = ProtobufWriter()
-		var wroteAfter = false
-		var wroteBefore = false
-		for field in message.fields {
-			switch field.number {
-			case 19:
-				writer.fixed32Field(19, spaceAfter.bitPattern)
-				wroteAfter = true
-			case 20:
-				writer.fixed32Field(20, spaceBefore.bitPattern)
-				wroteBefore = true
-			default:
-				writer.append(field)
-			}
-		}
-		if !wroteAfter { writer.fixed32Field(19, spaceAfter.bitPattern) }
-		if !wroteBefore { writer.fixed32Field(20, spaceBefore.bitPattern) }
 		return writer.bytes
 	}
 
