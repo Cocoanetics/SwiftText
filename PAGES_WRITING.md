@@ -48,7 +48,7 @@ Status as built (all validated opening + rendering in Pages 14.5; 214 tests gree
 | Block quotes | synthesized indented+italic paragraph style | ◐ italic works; left-indent field still TBD |
 | Horizontal rule | full-width box-drawing line | ◐ visual, not a native rule object |
 | Images | italic placeholder text (alt or `[image]`) | ✅ (matches DOCX exactly) |
-| Links | underlined (built-in Link char style) | ◐ styled, not yet a clickable URL attachment |
+| Links | **clickable** hyperlink (TSWP type 2032 object + `#11` smart-field run table) + underline | ✅ |
 | Tables | tab-separated rows, bold header | ◐ content preserved; not a native TST table grid |
 | Inline HTML / HTML blocks | raw text / dropped | ✅ (matches DOCX) |
 
@@ -65,8 +65,9 @@ is committed Swift data (`Generated/BlankPagesTemplate.swift`, from
 - **Native tables** — reproduce the iWork `TST` table model (a `Tables/` component +
   table/cell/tile objects). Today's writer renders table *content* as tab-separated
   text so nothing is lost.
-- **Clickable hyperlinks** — a `TSWP` hyperlink/smart-field attachment carrying the
-  URL. Today links are styled (underlined) but not clickable.
+- ~~Clickable hyperlinks~~ — **done**: each link emits a `TSWP` hyperlink object
+  (type 2032: `#1`={smart-field UUID}, `#2`=URL) referenced from a `#11` smart-field
+  run table over the link's character range (byte-pattern-identical to a Pages-authored link).
 - **Block-quote left indent** and **nested-list visual indent** — find the exact
   `para_properties`/list-style indent fields (functionally the structure is correct
   and round-trips; the visual indent needs the right field numbers).

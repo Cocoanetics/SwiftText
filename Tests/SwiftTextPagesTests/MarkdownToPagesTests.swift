@@ -63,4 +63,21 @@ struct MarkdownToPagesTests {
 		#expect(markdown.contains("Apples"))      // table body cell
 		#expect(markdown.contains("Pears"))
 	}
+
+	@Test("A link becomes a clickable hyperlink object (type 2032) referenced from the body")
+	func linkProducesHyperlinkObject() throws {
+		let url = FileManager.default.temporaryDirectory
+			.appendingPathComponent("swifttext-link-\(UUID().uuidString).pages")
+		defer { try? FileManager.default.removeItem(at: url) }
+		try MarkdownToPages.convert("See [Cocoanetics](https://www.cocoanetics.com).", to: url)
+
+		// The Document component must carry a TSWP hyperlink object (type 2032)
+		// whose field 2 is the destination URL.
+		let entries = try PagesContainer.entries(at: url, prefix: "Index/", suffix: ".iwa")
+		let documentData = try #require(entries.first { $0.path.hasSuffix("Document.iwa") }?.data)
+		let hyperlinks = try IWAArchive.objects(from: documentData).filter { $0.type == 2032 }
+		#expect(hyperlinks.count == 1)
+		let urlField = hyperlinks.first.flatMap { ProtobufMessage($0.payload).bytes(2) }
+		#expect(urlField.map { String(decoding: $0, as: UTF8.self) } == "https://www.cocoanetics.com")
+	}
 }

@@ -58,11 +58,19 @@ struct BodyParagraph {
 	var blockQuote: Bool = false
 	/// Inline style spans, as UTF-16 ranges within `text`.
 	var runs: [StyledRun] = []
+	/// Hyperlink spans, as UTF-16 ranges within `text` plus the destination URL.
+	var links: [LinkSpan] = []
 
 	struct StyledRun {
 		var start: Int       // UTF-16 offset within the paragraph
 		var length: Int      // UTF-16 length
 		var style: InlineStyle
+	}
+
+	struct LinkSpan {
+		var start: Int       // UTF-16 offset within the paragraph
+		var length: Int      // UTF-16 length
+		var url: String
 	}
 }
 
@@ -99,6 +107,25 @@ final class CharacterStyleRegistry {
 		synthesizedObjects.append(IWAObject(identifier: id, type: 2021, payload: Self.characterStylePayload(for: style)))
 		cache[style] = id
 		return id
+	}
+
+	/// Synthesizes a hyperlink object (`TSWP` smart field, type 2032) carrying the
+	/// URL, and returns its identifier. One per link span.
+	func hyperlinkObject(url: String) -> UInt64 {
+		let id = nextID
+		nextID += 1
+		synthesizedObjects.append(IWAObject(identifier: id, type: 2032, payload: Self.hyperlinkPayload(url: url)))
+		return id
+	}
+
+	private static func hyperlinkPayload(url: String) -> [UInt8] {
+		// #1 = { #1: a unique smart-field UUID }, #2 = the destination URL.
+		var fieldIdentifier = ProtobufWriter()
+		fieldIdentifier.stringField(1, UUID().uuidString)
+		var archive = ProtobufWriter()
+		archive.messageField(1, fieldIdentifier.bytes)
+		archive.stringField(2, url)
+		return archive.bytes
 	}
 
 	private var blockQuoteStyleID: UInt64?
@@ -234,6 +261,27 @@ enum PagesBodySerializer {
 			characterEntries = normalizedRunEntries(characterEntries)
 		}
 
+		// 3b. Smart-field run table (#11): map each link's range to a synthesized
+		// hyperlink object (type 2032). Same partition shape as the char table.
+		var linkSpans = [(start: Int, end: Int, url: String)]()
+		for (index, paragraph) in paragraphs.enumerated() {
+			let start = paragraphStarts[index]
+			for link in paragraph.links where link.length > 0 {
+				linkSpans.append((start + link.start, start + link.start + link.length, link.url))
+			}
+		}
+		var hyperlinkEntries = [(index: Int, styleID: UInt64?)]()
+		if !linkSpans.isEmpty {
+			linkSpans.sort { $0.start < $1.start }
+			hyperlinkEntries.append((0, nil))
+			for span in linkSpans {
+				let objectID = registry.hyperlinkObject(url: span.url)
+				hyperlinkEntries.append((span.start, objectID))
+				hyperlinkEntries.append((span.end, nil))
+			}
+			hyperlinkEntries = normalizedRunEntries(hyperlinkEntries)
+		}
+
 		// 4. Rebuild the storage payload: keep all template fields, override text + tables.
 		var provided: [Int: [UInt8]] = [
 			3: Array(fullText.utf8),
@@ -243,6 +291,9 @@ enum PagesBodySerializer {
 		]
 		if !characterEntries.isEmpty {
 			provided[8] = runTable(characterEntries)
+		}
+		if !hyperlinkEntries.isEmpty {
+			provided[11] = runTable(hyperlinkEntries)
 		}
 
 		let template = ProtobufMessage(templatePayload)

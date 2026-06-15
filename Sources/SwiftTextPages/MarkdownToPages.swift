@@ -41,6 +41,7 @@ enum MarkdownPagesBuilder {
 private struct InlineCollector {
 	private(set) var text = ""
 	private(set) var runs: [BodyParagraph.StyledRun] = []
+	private(set) var links: [BodyParagraph.LinkSpan] = []
 	private var style: InlineStyle
 
 	init(base: InlineStyle = InlineStyle()) {
@@ -71,9 +72,14 @@ private struct InlineCollector {
 			codeStyle.code = true
 			append(inlineCode.code, style: codeStyle)
 		case let link as Link:
-			// Style the link text (underline). A clickable URL attachment is a
-			// separate, heavier construct; the visible styling matches here.
+			// Underline the link text (Link char style) and record the span so the
+			// serializer can attach a clickable hyperlink object to that range.
+			let start = text.utf16.count
 			withStyle({ $0.link = true }) { $0.collect(from: link) }
+			let length = text.utf16.count - start
+			if length > 0, let url = link.destination, !url.isEmpty {
+				links.append(.init(start: start, length: length, url: url))
+			}
 		case let image as Image:
 			// Match the DOCX writer: images become italic placeholder text.
 			let alt = reverseSmartPunct(swiftMarkdownPlainText(of: image))
@@ -132,7 +138,8 @@ private struct BlockVisitor: MarkupVisitor {
 			text: collector.text,
 			paragraphStyle: PagesStyleID.body,
 			blockQuote: blockQuoteDepth > 0,
-			runs: collector.runs
+			runs: collector.runs,
+			links: collector.links
 		))
 	}
 
@@ -142,7 +149,8 @@ private struct BlockVisitor: MarkupVisitor {
 		paragraphs.append(BodyParagraph(
 			text: collector.text,
 			paragraphStyle: Self.headingStyle(level: heading.level),
-			runs: collector.runs
+			runs: collector.runs,
+			links: collector.links
 		))
 	}
 
@@ -207,7 +215,8 @@ private struct BlockVisitor: MarkupVisitor {
 			paragraphStyle: PagesStyleID.body,
 			listStyle: ordered ? PagesStyleID.numberedList : PagesStyleID.bulletList,
 			listLevel: level,
-			runs: collector.runs
+			runs: collector.runs,
+			links: collector.links
 		))
 
 		listDepth = level + 1
@@ -225,7 +234,7 @@ private struct BlockVisitor: MarkupVisitor {
 				if index > 0 { collector.appendLiteral("\t") }
 				collector.collect(from: cell)
 			}
-			paragraphs.append(BodyParagraph(text: collector.text, paragraphStyle: PagesStyleID.body, runs: collector.runs))
+			paragraphs.append(BodyParagraph(text: collector.text, paragraphStyle: PagesStyleID.body, runs: collector.runs, links: collector.links))
 		}
 		appendRow(Array(table.head.cells), header: true)
 		for row in table.body.rows {
