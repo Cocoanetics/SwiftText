@@ -69,9 +69,11 @@ enum IWAArchive {
 		}
 
 		while pos < stream.count {
-			guard let archiveInfoLength = readVarint() else { break }
+			// Bound-check lengths against the remaining bytes before converting to
+			// Int, so a corrupt oversized varint degrades gracefully instead of
+			// trapping (this stream comes from untrusted archives).
+			guard let archiveInfoLength = readVarint(), archiveInfoLength <= UInt64(stream.count - pos) else { break }
 			let end = pos + Int(archiveInfoLength)
-			guard end <= stream.count else { break }
 			let archiveInfo = ProtobufMessage(Array(stream[pos..<end]))
 			pos = end
 
@@ -79,9 +81,9 @@ enum IWAArchive {
 			// Each MessageInfo describes one payload message that follows, in order.
 			for messageInfo in archiveInfo.messages(2) {
 				let type = messageInfo.varint(1) ?? 0
-				let length = Int(messageInfo.varint(3) ?? 0)
-				let payloadEnd = pos + length
-				guard payloadEnd <= stream.count else { return objects }
+				let length = messageInfo.varint(3) ?? 0
+				guard length <= UInt64(stream.count - pos) else { return objects }
+				let payloadEnd = pos + Int(length)
 				objects.append(IWAObject(identifier: identifier, type: type, payload: Array(stream[pos..<payloadEnd])))
 				pos = payloadEnd
 			}

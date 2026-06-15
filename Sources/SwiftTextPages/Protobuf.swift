@@ -118,8 +118,10 @@ struct ProtobufMessage {
 				pos += 8
 			case 2:
 				guard let length = readVarint() else { return fields }
+				// Bound-check against the remaining bytes *before* converting to Int,
+				// so a corrupt oversized length can't trap on the conversion/addition.
+				guard length <= UInt64(bytes.count - pos) else { return fields }
 				let end = pos + Int(length)
-				guard end <= bytes.count else { return fields }
 				fields.append(ProtobufField(number: number, value: .lengthDelimited(Array(bytes[pos..<end]))))
 				pos = end
 			case 5:

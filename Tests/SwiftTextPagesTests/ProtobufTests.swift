@@ -55,4 +55,13 @@ struct ProtobufTests {
 		#expect(message.bytes(3) == nil)
 		#expect(message.fields.isEmpty)
 	}
+
+	@Test("Does not trap on a corrupt oversized length")
+	func oversizedLengthIsRejected() {
+		// field 2, length = UInt64.max (a 10-byte varint) — far beyond the buffer.
+		// Must degrade gracefully rather than trap converting/adding the length.
+		let message = ProtobufMessage([0x12, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x01])
+		#expect(message.bytes(2) == nil)
+		#expect(message.fields.isEmpty)
+	}
 }
