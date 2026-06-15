@@ -45,7 +45,7 @@ Status as built (all validated opening + rendering in Pages 14.5; 214 tests gree
 | `inline code` / code blocks | synthesized monospace (Menlo) char style | ✅ |
 | ~~strikethrough~~ | built-in Strikethrough char style | ✅ (DOCX drops it) |
 | Lists (bullet/numbered, nested) | Bullet/Numbered list styles; nesting **level** encoded | ✅ functional (visual indent of nested levels is a list-style refinement) |
-| Block quotes | synthesized indented+italic paragraph style | ◐ italic works; left-indent field still TBD |
+| Block quotes | synthesized italic paragraph style | ◐ italic (not indented — see note) |
 | Horizontal rule | full-width box-drawing line | ◐ visual, not a native rule object |
 | Images | italic placeholder text (alt or `[image]`) | ✅ (matches DOCX exactly) |
 | Links | **clickable** hyperlink (TSWP type 2032 object + `#11` smart-field run table) + underline | ✅ |
@@ -68,9 +68,13 @@ is committed Swift data (`Generated/BlankPagesTemplate.swift`, from
 - ~~Clickable hyperlinks~~ — **done**: each link emits a `TSWP` hyperlink object
   (type 2032: `#1`={smart-field UUID}, `#2`=URL) referenced from a `#11` smart-field
   run table over the link's character range (byte-pattern-identical to a Pages-authored link).
-- **Block-quote left indent** and **nested-list visual indent** — find the exact
-  `para_properties`/list-style indent fields (functionally the structure is correct
-  and round-trips; the visual indent needs the right field numbers).
+- **Block-quote / nested-list left indent** — **blocked**, not just unfinished:
+  a *synthesized* paragraph style's `char_properties` apply but its `para_properties`
+  (indent) do **not**; and editing the real "Default" style (1731490) and referencing
+  it directly makes **Pages crash** (`CFHash` on NULL in TSText). So block quotes are
+  italic but not indented. A safe indent likely needs a real, normally-referenceable
+  style edited in place (paragraph spacing already works this way via `space_after`=20
+  / `space_before`=21 on the real Body/heading styles) — to be explored carefully.
 
 ---
 
