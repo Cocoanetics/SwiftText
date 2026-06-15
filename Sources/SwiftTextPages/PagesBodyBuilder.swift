@@ -20,6 +20,13 @@ enum PagesStyleID {
 	static let strikethroughChar: UInt64 = 1731542
 	static let italicChar: UInt64 = 1731544
 
+	/// "Subtitle" — a normal, referenceable style unused by the Markdown writer, so
+	/// it's repurposed as the block-quote style: its payload is overwritten with a
+	/// copy of Body plus a left indent (a real style's para_properties apply, unlike
+	/// a synthesized one's, and a normal style is safe to reference — unlike the
+	/// special "Default" style, which crashes Pages).
+	static let blockQuote: UInt64 = 1731497
+
 	// List styles (TSWP.ListStyleArchive, type 2023)
 	static let listNone: UInt64 = 1731481
 	static let bulletList: UInt64 = 1731482
@@ -128,42 +135,9 @@ final class CharacterStyleRegistry {
 		return archive.bytes
 	}
 
-	private var blockQuoteStyleID: UInt64?
-
-	/// A block-quote paragraph style: inherits Body, rendered italic. Synthesized
-	/// once. (A synthesized style's char_properties apply; its para_properties do
-	/// not — so no left indent here. Referencing a real style for the indent
-	/// crashes Pages on the special "Default" style, so italic is the safe signal.)
-	func blockQuoteParagraphStyle() -> UInt64 {
-		if let id = blockQuoteStyleID { return id }
-		let id = nextID
-		nextID += 1
-		synthesizedObjects.append(IWAObject(identifier: id, type: 2022, payload: Self.blockQuotePayload()))
-		blockQuoteStyleID = id
-		return id
-	}
-
 	/// The highest synthesized identifier (for bumping the package's id high-water mark).
 	var maxIdentifier: UInt64 { nextID - 1 }
 	var didSynthesize: Bool { !synthesizedObjects.isEmpty }
-
-	/// A minimal `ParagraphStyleArchive` inheriting Body, italic — for block quotes.
-	private static func blockQuotePayload() -> [UInt8] {
-		var parentReference = ProtobufWriter()
-		parentReference.varintField(1, PagesStyleID.body)
-		var styleSuper = ProtobufWriter()
-		styleSuper.stringField(1, "SwiftText Block Quote")
-		styleSuper.messageField(5, parentReference.bytes)
-
-		var charProperties = ProtobufWriter()
-		charProperties.varintField(2, 1)                  // italic
-
-		var archive = ProtobufWriter()
-		archive.messageField(1, styleSuper.bytes)
-		archive.varintField(10, 57)
-		archive.messageField(11, charProperties.bytes)
-		return archive.bytes
-	}
 
 	/// Builds a `CharacterStyleArchive` payload mirroring the template's built-in
 	/// character styles: a `TSS.StyleArchive` super (name + parent stylesheet
@@ -229,7 +203,7 @@ enum PagesBodySerializer {
 		var listStyleEntries = [(index: Int, styleID: UInt64?)]()
 		for (index, paragraph) in paragraphs.enumerated() {
 			let start = paragraphStarts[index]
-			let styleID = paragraph.blockQuote ? registry.blockQuoteParagraphStyle() : paragraph.paragraphStyle
+			let styleID = paragraph.blockQuote ? PagesStyleID.blockQuote : paragraph.paragraphStyle
 			paragraphStyleEntries.append((start, styleID))
 			paragraphDataEntries.append((start, paragraph.listLevel))
 			listStyleEntries.append((start, paragraph.listStyle ?? PagesStyleID.listNone))
@@ -326,6 +300,76 @@ enum PagesBodySerializer {
 			writer[ParaProperty.spaceAfter] = ProtobufWriter.fixed32(spaceAfter.bitPattern)
 			writer[ParaProperty.spaceBefore] = ProtobufWriter.fixed32(spaceBefore.bitPattern)
 		}
+	}
+
+	/// Returns a paragraph-style payload with a left indent (points) in its
+	/// para_properties (field 12) — sets both first-line and left indent. Other
+	/// fields preserved.
+	static func settingLeftIndent(in stylePayload: [UInt8], points: Float) -> [UInt8] {
+		editingParaProperties(in: stylePayload) { overrides, touched in
+			touched.insert(ParaProperty.leftIndent)
+			touched.insert(ParaProperty.firstLineIndent)
+			overrides[ParaProperty.leftIndent] = ProtobufWriter.fixed32(points.bitPattern)
+			overrides[ParaProperty.firstLineIndent] = ProtobufWriter.fixed32(points.bitPattern)
+		}
+	}
+
+	/// Returns a style payload with italic set in its char_properties (field 11).
+	static func settingItalic(in stylePayload: [UInt8]) -> [UInt8] {
+		let style = ProtobufMessage(stylePayload)
+		var writer = ProtobufWriter()
+		var wroteCharProperties = false
+		for field in style.fields {
+			if field.number == 11, case .lengthDelimited(let charProperties) = field.value {
+				let message = ProtobufMessage(charProperties)
+				var inner = ProtobufWriter()
+				var setItalic = false
+				for property in message.fields {
+					if property.number == 2 { inner.varintField(2, 1); setItalic = true }
+					else { inner.append(property) }
+				}
+				if !setItalic { inner.varintField(2, 1) }
+				writer.bytesField(11, inner.bytes)
+				wroteCharProperties = true
+			} else {
+				writer.append(field)
+			}
+		}
+		if !wroteCharProperties {
+			var charProperties = ProtobufWriter()
+			charProperties.varintField(2, 1)
+			writer.messageField(11, charProperties.bytes)
+		}
+		return writer.bytes
+	}
+
+	/// Returns a style payload with its `TSS.StyleArchive` super (field 1) name
+	/// (sub-field 1) and identifier (sub-field 2) replaced — so a style cloned from
+	/// another doesn't collide on the stylesheet's identifier map.
+	static func settingStyleIdentity(in stylePayload: [UInt8], name: String, identifier: String) -> [UInt8] {
+		let style = ProtobufMessage(stylePayload)
+		var writer = ProtobufWriter()
+		for field in style.fields {
+			if field.number == 1, case .lengthDelimited(let superBytes) = field.value {
+				let styleSuper = ProtobufMessage(superBytes)
+				var inner = ProtobufWriter()
+				var wroteName = false
+				var wroteIdentifier = false
+				for property in styleSuper.fields {
+					switch property.number {
+					case 1: inner.stringField(1, name); wroteName = true
+					case 2: inner.stringField(2, identifier); wroteIdentifier = true
+					default: inner.append(property)
+					}
+				}
+				if !wroteName { inner.stringField(1, name) }
+				if !wroteIdentifier { inner.stringField(2, identifier) }
+				writer.bytesField(1, inner.bytes)
+			} else {
+				writer.append(field)
+			}
+		}
+		return writer.bytes
 	}
 
 	/// Rewrites a paragraph style's para_properties (field 12) via `mutate`, which

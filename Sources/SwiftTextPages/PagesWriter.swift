@@ -94,6 +94,17 @@ public final class PagesWriter {
 				PagesBodySerializer.settingSpacing(in: payload, spaceBefore: spec.before, spaceAfter: spec.after)
 			}
 		}
+		// Repurpose the (unused) "Subtitle" style as an indented block-quote style by
+		// overwriting it with a copy of the (known-safe) Body style plus a left indent
+		// and a unique identifier. Editing/referencing a real style applies its
+		// para_properties without the crash the special "Default" style caused.
+		if let body = try IWAArchive.objects(from: data).first(where: { $0.identifier == PagesStyleID.body })?.payload {
+			var blockQuote = PagesBodySerializer.settingStyleIdentity(in: body, name: "Block Quote", identifier: "swifttext-block-quote")
+			blockQuote = PagesBodySerializer.settingSpacing(in: blockQuote, spaceBefore: 8, spaceAfter: 8)
+			blockQuote = PagesBodySerializer.settingLeftIndent(in: blockQuote, points: 36)
+			blockQuote = PagesBodySerializer.settingItalic(in: blockQuote)
+			data = try IWAArchive.replacingPayload(in: data, objectID: PagesStyleID.blockQuote) { _ in blockQuote }
+		}
 		return [UInt8](data)
 	}
 
