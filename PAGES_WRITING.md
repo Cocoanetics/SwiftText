@@ -73,6 +73,21 @@ is committed Swift data (`Generated/BlankPagesTemplate.swift`, from
   template fragment and clone+adapt (rows/cols/cell text). Large + crash-prone (a
   malformed TST graph makes Pages refuse to open / crash), so it's a dedicated
   effort — verify each stage opens in Pages before committing.
+
+  **Cell-storage format (dissected, `Table.pages` = 4 cols × 5 rows):**
+  - **Cell text** is a shared-string list in `Tables/DataList.iwa` (`TST.TableDataList`,
+    type **6005**): `#1` list-id, `#2` count, repeated `#3 { #1 key, #2 1, #3 string }`
+    (the sample's are "H1".."H4","row1",…). Trivial to (re)generate.
+  - **Grid** is `Tables/Tile.iwa` (`TST.Tile`, type **6002**): `#4` = row count; one
+    repeated `#5` per row `{ #1 rowIndex, #2 colCount, #3/#4/#7 fixed column/offset
+    tables (510-byte, 0xFF-padded), #6 packed per-cell records referencing DataList
+    string keys as 4-byte LE ints }`. **Regenerating `#6` for arbitrary dimensions is
+    the hard part** — a packed binary, not protobuf.
+  - Most other objects (six ~8 KB `6003` table *styles*, `6008`s, `HeaderStorageBucket`s)
+    are static → clone verbatim. So the real work is: emit `DataList` strings + the
+    packed `Tile` `#6` for the Markdown rows/cols, set `TableModelArchive` (6001)
+    row/col counts, clone the rest, anchor `TableInfoArchive` (6000) in the body, and
+    register every `Tables/` component in `PackageMetadata`.
 - ~~Clickable hyperlinks~~ — **done**: each link emits a `TSWP` hyperlink object
   (type 2032: `#1`={smart-field UUID}, `#2`=URL) referenced from a `#11` smart-field
   run table over the link's character range (byte-pattern-identical to a Pages-authored link).
