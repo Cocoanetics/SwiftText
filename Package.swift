@@ -163,6 +163,11 @@ let packageTargets: [Target] = [
 			// Protocol Buffers decoding are implemented in-target, so ZIPFoundation
 			// is the only external dependency.
 			.product(name: "ZIPFoundation", package: "ZIPFoundation", condition: .when(traits: ["PAGES"])),
+			// Markdown → Pages writing parses with swift-markdown and reuses the
+			// shared plain-text helper. Both are platform-agnostic and always
+			// resolved (as in SwiftTextDOCX), so they are not trait-gated.
+			"SwiftTextMarkdown",
+			.product(name: "Markdown", package: "swift-markdown"),
 		],
 		path: "Sources/SwiftTextPages"
 	),
