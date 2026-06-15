@@ -138,3 +138,98 @@ struct ProtobufMessage {
 		return fields
 	}
 }
+
+/// Builds Protocol Buffers wire-format messages — the encode counterpart to
+/// ``ProtobufMessage``.
+///
+/// Schema-less like the reader: callers append fields by number and wire type,
+/// in the order iWork emits them, and read the assembled bytes from ``bytes``.
+/// This is the foundation for writing `.iwa` payloads (ArchiveInfo/MessageInfo
+/// framing today; object payloads as the writer grows).
+struct ProtobufWriter {
+	/// The message bytes assembled so far.
+	private(set) var bytes = [UInt8]()
+
+	/// Encodes a value as a base-128 varint (no field tag).
+	static func varint(_ value: UInt64) -> [UInt8] {
+		var result = [UInt8]()
+		var remaining = value
+		repeat {
+			var byte = UInt8(remaining & 0x7F)
+			remaining >>= 7
+			if remaining > 0 { byte |= 0x80 }
+			result.append(byte)
+		} while remaining > 0
+		return result
+	}
+
+	private mutating func appendTag(_ number: Int, _ wireType: UInt8) {
+		bytes.append(contentsOf: ProtobufWriter.varint(UInt64(number) << 3 | UInt64(wireType)))
+	}
+
+	/// Appends a varint field (wire type 0).
+	mutating func varintField(_ number: Int, _ value: UInt64) {
+		appendTag(number, 0)
+		bytes.append(contentsOf: ProtobufWriter.varint(value))
+	}
+
+	/// Appends a length-delimited field (wire type 2) carrying raw bytes.
+	mutating func bytesField(_ number: Int, _ data: [UInt8]) {
+		appendTag(number, 2)
+		bytes.append(contentsOf: ProtobufWriter.varint(UInt64(data.count)))
+		bytes.append(contentsOf: data)
+	}
+
+	/// Appends a length-delimited field carrying a nested message's bytes.
+	mutating func messageField(_ number: Int, _ message: [UInt8]) {
+		bytesField(number, message)
+	}
+
+	/// Appends a length-delimited field carrying a UTF-8 string.
+	mutating func stringField(_ number: Int, _ string: String) {
+		bytesField(number, Array(string.utf8))
+	}
+
+	/// Appends a 32-bit little-endian field (wire type 5).
+	mutating func fixed32Field(_ number: Int, _ value: UInt32) {
+		appendTag(number, 5)
+		for shift in stride(from: 0, through: 24, by: 8) {
+			bytes.append(UInt8((value >> shift) & 0xFF))
+		}
+	}
+
+	/// Appends a 64-bit little-endian field (wire type 1).
+	mutating func fixed64Field(_ number: Int, _ value: UInt64) {
+		appendTag(number, 1)
+		for shift in stride(from: 0, through: 56, by: 8) {
+			bytes.append(UInt8((value >> UInt64(shift)) & 0xFF))
+		}
+	}
+
+	/// Appends a packed repeated varint field (wire type 2 holding back-to-back
+	/// varints) — the form iWork uses for `MessageInfo.object_references`.
+	mutating func packedVarintField(_ number: Int, _ values: [UInt64]) {
+		var packed = [UInt8]()
+		for value in values { packed.append(contentsOf: ProtobufWriter.varint(value)) }
+		bytesField(number, packed)
+	}
+
+	/// Re-emits a field decoded by ``ProtobufMessage`` verbatim. Lets a caller
+	/// round-trip a message field-by-field, substituting only the fields it wants
+	/// to change — used to rewrite an `ArchiveInfo`/`MessageInfo` while preserving
+	/// every other field exactly (e.g. `object_references`).
+	mutating func append(_ field: ProtobufField) {
+		switch field.value {
+		case .varint(let value):
+			varintField(field.number, value)
+		case .lengthDelimited(let bytes):
+			bytesField(field.number, bytes)
+		case .fixed64(let raw):
+			appendTag(field.number, 1)
+			bytes.append(contentsOf: raw)
+		case .fixed32(let raw):
+			appendTag(field.number, 5)
+			bytes.append(contentsOf: raw)
+		}
+	}
+}
