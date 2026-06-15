@@ -99,8 +99,15 @@ is committed Swift data (`Generated/BlankPagesTemplate.swift`, from
     entry = `{ #1 key, #2 1, #3 string }`, with the list's `#2` = maxKey+1. So a
     generator builds, per row: `#6` = C cloned 28-byte cells (key patched), `#7`/`#4`
     = the offset tables for C, `#3` = C col-metas, `#2` = C; and `Tile.#4` = row count.
-    **Still TBD:** the `TableModelArchive` (6001) row/col counts and the row-height /
-    column-width DataLists must be regenerated to match (decoder tools in `Scripts/`).
+  - **TableModelArchive (6001) — decoded.** Lives in `CalculationEngine-*.iwa` (not
+    `Document.iwa`). `#6` = **row count**, `#7` = **column count**, `#8` = table name
+    ("Table 1"), `#1` = a UUID. It also holds ~10 **dimension-dependent reference
+    lists** (e.g. `#18–21`, `#24–27`, `#65–68` are per-*column* object refs; `#60–64`
+    per-*row*) pointing at the ~26 `Tables/` DataLists (cell strings, row heights,
+    column widths, styles, formats). So changing R×C means regenerating not just the
+    cell DataList + Tile, but the model's row/col counts **and** these per-row/per-col
+    reference lists **and** the row-height/column-width DataLists — all consistent.
+    Reverse-engineering is now complete; what remains is purely the (sizable) build.
   - **Body anchor (decoded):** the body `StorageArchive`'s text (`#3`) has a `U+FFFC`
     char at the table position, and **field `#9` is the attachment run table** —
     `{ #1 { #1 charIndex, #2 { #1 attachmentObjectId } } }` — mapping that offset to
