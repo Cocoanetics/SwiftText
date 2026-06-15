@@ -94,7 +94,13 @@ is committed Swift data (`Generated/BlankPagesTemplate.swift`, from
     the `type 2003` drawable attachment. Also: the table delta over the blank template
     is small in `Document.iwa` (just the one `2003` object); everything else is the
     `Tables/` components + CalculationEngine objects (a static table may open without
-    the calc objects — worth testing first). The attachment chain continues:
+    the calc objects — worth testing first). **PROVEN feasible (2026-06-15):** a real
+    table written through our Snappy+framing+STORED-zip — `Table.pages` re-emitted with
+    its `DataList` (6005) cell strings rewritten — opens in Pages and renders a native
+    grid with the new cell text (Fruit/Qty/… headers, Apple/Pear/… rows), no crash. So
+    cell *content* is fully controllable via the DataList; the remaining work is
+    arbitrary dimensions (regenerate the `Tile` `#6`) + injecting the table into the
+    blank template. The attachment chain continues:
     `type 2003` drawable-attachment object (sample
     id 1734389) whose `#1` → `TableInfoArchive` (6000) → `TableModelArchive` (6001) →
     Tile/DataList cells. The table's object ids (1733xxx–1734xxx) sit above the blank
