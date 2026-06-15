@@ -88,6 +88,14 @@ is committed Swift data (`Generated/BlankPagesTemplate.swift`, from
     packed `Tile` `#6` for the Markdown rows/cols, set `TableModelArchive` (6001)
     row/col counts, clone the rest, anchor `TableInfoArchive` (6000) in the body, and
     register every `Tables/` component in `PackageMetadata`.
+  - **Body anchor chain (decoded):** body text has a `U+FFFC` attachment char; an
+    attachment run table maps it to a `type 2003` drawable-attachment object (sample
+    id 1734389) whose `#1` → `TableInfoArchive` (6000) → `TableModelArchive` (6001) →
+    Tile/DataList cells. The table's object ids (1733xxx–1734xxx) sit above the blank
+    template's range (≤1732620), so injecting them needs no id remapping — but bump
+    `PackageMetadata.#1` (id high-water mark). The CalculationEngine gains ~35 table
+    objects to clone too. **Full graph is now reverse-engineered; what remains is the
+    (crash-prone) implementation + per-stage Pages verification.**
 - ~~Clickable hyperlinks~~ — **done**: each link emits a `TSWP` hyperlink object
   (type 2032: `#1`={smart-field UUID}, `#2`=URL) referenced from a `#11` smart-field
   run table over the link's character range (byte-pattern-identical to a Pages-authored link).
