@@ -47,7 +47,45 @@ Extracts text and basic structure from DOCX archives using:
 
 Features:
 - Plain text paragraph extraction
-- Markdown output with headings, emphasis, and lists
+- Markdown output with headings, emphasis (bold/italic/strikethrough), lists, and
+  footnotes
+
+### SwiftTextPages
+
+Extracts text and structure from Apple Pages (iWork) documents. The modern
+`.pages` format stores content as iWork Archive (`.iwa`) objects, and this
+module decodes them entirely on its own — **no Pages.app, no `textutil`, and no
+Apple frameworks are required**, so it runs on every platform:
+
+- **ZIPFoundation** to read the `.pages` archive (the only external dependency,
+  already shared with SwiftTextDOCX)
+- **Snappy** block decompression — implemented in-module
+- **Protocol Buffers** wire decoding — implemented in-module
+
+Features:
+- Plain text paragraph extraction
+- Markdown output with headings inferred from the document's typography (modern)
+  or from paragraph-style names (legacy)
+- Inline **bold**/*italic*/~~strikethrough~~ emphasis and bullet/numbered lists
+  (with nesting)
+- Footnotes as `[^N]` references with definitions collected at the end
+- Reads modern `.iwa` documents in all three on-disk layouts: a flat Zip, a
+  package directory with a loose `Index/`, and a package directory with a nested
+  `Index.zip`
+- Reads legacy iWork '09 documents (a single uncompressed `index.xml`)
+- Extraction of the document's embedded **content** images from the `Data/`
+  folder — downscaled previews (`…-small…`) and theme decorations (preset image
+  fills, list-bullet glyphs) are filtered out by default, and files are written
+  under cleaned names (pass `includingThumbnailsAndAssets: true` to get everything)
+- **Inline image references** in Markdown: each inline image becomes a
+  `![](name)` link at its position in the text, and the name matches the file
+  `extractImages`/`--save-images` writes — so saving images alongside the
+  Markdown yields working links. (Floating, non-inline images aren't linked but
+  are still extracted.)
+
+> Note: both the modern (iWork '13+) `.iwa` format and the legacy iWork '09
+> `index.xml` format are supported. The rare gzipped legacy variant
+> (`index.xml.gz`) is reported with a clear error rather than mis-parsed.
 
 ## Installation
 
@@ -70,7 +108,8 @@ Individual products (import only what you need):
 		.product(name: "SwiftTextHTML", package: "SwiftText"),
 		.product(name: "SwiftTextOCR", package: "SwiftText"),
 		.product(name: "SwiftTextPDF", package: "SwiftText"),
-		.product(name: "SwiftTextDOCX", package: "SwiftText")
+		.product(name: "SwiftTextDOCX", package: "SwiftText"),
+		.product(name: "SwiftTextPages", package: "SwiftText")
 	]
 )
 ```
@@ -81,7 +120,7 @@ Umbrella module (single import), with traits:
 .package(
 	url: "https://github.com/your-repo/SwiftText.git",
 	branch: "main",
-	traits: [.defaults, "HTML", "PDF", "DOCX"]
+	traits: [.defaults, "HTML", "PDF", "DOCX", "PAGES"]
 ),
 .target(
 	name: "YourTarget",
@@ -91,10 +130,10 @@ Umbrella module (single import), with traits:
 )
 ```
 
-SwiftText defaults to `OCR` plus `CLI` (the dependencies of the bundled `swifttext` tool; `CLI` also enables `DOCX`). Enable traits as needed:
+SwiftText defaults to `OCR` plus `CLI` (the dependencies of the bundled `swifttext` tool; `CLI` also enables `DOCX`, `PAGES`, and `HTML`). Enable traits as needed:
 
 ```swift
-traits: [.defaults, "HTML", "PDF", "DOCX"]
+traits: [.defaults, "HTML", "PDF", "DOCX", "PAGES"]
 ```
 
 Listing traits explicitly (without `.defaults`) keeps dependency resolution lean: SwiftPM only fetches the packages the enabled traits actually need. For example, `traits: ["HTML"]` resolves just swift-markdown — neither swift-argument-parser nor ZIPFoundation is fetched or pinned.
@@ -197,6 +236,21 @@ let plainText = docx.plainText()
 let markdown = docx.markdown()
 ```
 
+#### Pages
+
+```swift
+import SwiftTextPages
+
+let url = URL(fileURLWithPath: "/path/to/document.pages")
+let pages = try PagesFile(url: url)
+
+let plainText = pages.plainText()
+let markdown = pages.markdown()
+
+// Optionally extract embedded images from the document's Data/ folder
+let imageURLs = try pages.extractImages(to: URL(fileURLWithPath: "./images"))
+```
+
 ### Command Line Tool
 
 Build and run the CLI:
@@ -210,6 +264,7 @@ Options:
 - **ocr** `--markdown`/`-m` (Vision segmentation), `--save-images <dir>`, `--output-path <file>`/`-o`
 - **html** `--markdown`/`-m`, `--save-images <dir>`, `--output-path <file>`/`-o`, `--webkit`, `--via-pdf`
 - **docx** `--markdown`/`-m` (headings and lists), `--output-path <file>`/`-o`, `--save-images`
+- **pages** `--markdown`/`-m` (inferred headings), `--output-path <file>`/`-o`, `--save-images`
 - **overlay** `--output-path <file>`/`-o`, `--dpi <value>`, `--raw`
 
 Examples:
@@ -242,6 +297,15 @@ swifttext docx --output-path ./contract.txt ~/Documents/contract.docx
 
 # Extract embedded images to the output directory or current directory
 swifttext docx --save-images ~/Documents/contract.docx
+
+# Extract plain text from a Pages document
+swifttext pages ~/Documents/notes.pages
+
+# Extract Markdown (with inferred headings) from a Pages document
+swifttext pages --markdown ~/Documents/notes.pages
+
+# Markdown with inline image links, saving the referenced images alongside it
+swifttext pages --markdown --save-images --output-path ./notes.md ~/Documents/notes.pages
 
 # Render an overlay PDF for inspection
 swifttext overlay --dpi 300 ~/Documents/report.pdf

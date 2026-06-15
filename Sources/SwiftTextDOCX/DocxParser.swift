@@ -22,14 +22,16 @@ final class DocxParser {
 		let documentData = try data(for: documentEntry, in: archive)
 		let stylesData = try dataIfAvailable(named: "word/styles.xml", in: archive)
 		let numberingData = try dataIfAvailable(named: "word/numbering.xml", in: archive)
+		let footnotesData = try dataIfAvailable(named: "word/footnotes.xml", in: archive)
 		return try parseDocumentXML(
 			from: documentData,
 			stylesData: stylesData,
-			numberingData: numberingData
+			numberingData: numberingData,
+			footnotesData: footnotesData
 		)
 	}
 
-	private func parseDocumentXML(from data: Data, stylesData: Data?, numberingData: Data?) throws -> DocxDocument {
+	private func parseDocumentXML(from data: Data, stylesData: Data?, numberingData: Data?, footnotesData: Data?) throws -> DocxDocument {
 		let styleCatalog: DocxDocument.StyleCatalog
 		if let stylesData {
 			styleCatalog = try parseStylesXML(from: stylesData)
@@ -42,8 +44,14 @@ final class DocxParser {
 		} else {
 			numberingCatalog = DocxDocument.NumberingCatalog()
 		}
+		let footnotesByID: [String: String]
+		if let footnotesData {
+			footnotesByID = parseFootnotesXML(from: footnotesData)
+		} else {
+			footnotesByID = [:]
+		}
 
-		let extractor = DocumentExtractor()
+		let extractor = DocumentExtractor(footnotesByID: footnotesByID)
 		let parser = XMLParser(data: data)
 		parser.delegate = extractor
 		guard parser.parse() else {
@@ -53,6 +61,16 @@ final class DocxParser {
 		document.styles = styleCatalog
 		document.numbering = numberingCatalog
 		return document
+	}
+
+	/// Parses `word/footnotes.xml` into `[footnote id: text]`, skipping the
+	/// separator/continuation pseudo-footnotes.
+	private func parseFootnotesXML(from data: Data) -> [String: String] {
+		let extractor = FootnotesExtractor()
+		let parser = XMLParser(data: data)
+		parser.delegate = extractor
+		guard parser.parse() else { return [:] }
+		return extractor.footnotesByID
 	}
 
 	private func parseStylesXML(from data: Data) throws -> DocxDocument.StyleCatalog {
@@ -96,6 +114,9 @@ private final class DocumentExtractor: NSObject, XMLParserDelegate {
 	}
 
 	private(set) var document = DocxDocument()
+	private let footnotesByID: [String: String]
+	private var footnoteNumberByID: [String: Int] = [:]
+	private var footnoteCounter = 0
 	private var currentParagraph: DocxDocument.Paragraph?
 	private var currentRunText = ""
 	private var insideTextTag = false
@@ -107,6 +128,10 @@ private final class DocumentExtractor: NSObject, XMLParserDelegate {
 	private var formatTargetStack = [FormatTarget]()
 	private var pendingNumberingLevel: Int?
 	private var pendingNumberingId: Int?
+
+	init(footnotesByID: [String: String]) {
+		self.footnotesByID = footnotesByID
+	}
 
 	private var currentState: DocxDocument.FormatState {
 		formatStack.last ?? paragraphFormat
@@ -147,6 +172,10 @@ private final class DocumentExtractor: NSObject, XMLParserDelegate {
 			setBold(attributes: attributeDict)
 		case "w:i", "i":
 			setItalic(attributes: attributeDict)
+		case "w:strike", "strike", "w:dstrike", "dstrike":
+			setStrike(attributes: attributeDict)
+		case "w:footnoteReference", "footnoteReference":
+			appendFootnoteReference(attributes: attributeDict)
 		case "w:rPr", "rPr":
 			if insideRun {
 				formatTargetStack.append(.run)
@@ -187,6 +216,10 @@ private final class DocumentExtractor: NSObject, XMLParserDelegate {
 				setBold(attributes: attributeDict, namespaced: true)
 			} else if elementName.hasSuffix(":i") {
 				setItalic(attributes: attributeDict, namespaced: true)
+			} else if elementName.hasSuffix(":strike") || elementName.hasSuffix(":dstrike") {
+				setStrike(attributes: attributeDict, namespaced: true)
+			} else if elementName.hasSuffix(":footnoteReference") {
+				appendFootnoteReference(attributes: attributeDict)
 			} else if elementName.hasSuffix(":rPr") {
 				if insideRun {
 					formatTargetStack.append(.run)
@@ -315,6 +348,35 @@ private final class DocumentExtractor: NSObject, XMLParserDelegate {
 				state.italic = val.lowercased() != "false" && val.lowercased() != "0"
 			} else {
 				state.italic = true
+			}
+		}
+	}
+
+	private func appendFootnoteReference(attributes: [String: String]) {
+		guard let id = attributeValue(from: attributes, for: ["w:id", "id"]) else { return }
+		flushRunText()
+		let number: Int
+		if let existing = footnoteNumberByID[id] {
+			number = existing
+		} else {
+			footnoteCounter += 1
+			number = footnoteCounter
+			footnoteNumberByID[id] = number
+			document.footnotes.append(DocxDocument.Footnote(number: number, text: footnotesByID[id] ?? ""))
+		}
+		updateCurrentParagraph { $0.appendFootnote(number: number) }
+	}
+
+	private func setStrike(attributes: [String: String], namespaced: Bool = false) {
+		guard let target = formatTargetStack.last else {
+			return
+		}
+		updateCurrentState(target: target) { state in
+			let val = attributeValue(from: attributes, for: namespaced ? ["w:val", "val"] : ["val", "w:val"])
+			if let val {
+				state.strike = val.lowercased() != "false" && val.lowercased() != "0"
+			} else {
+				state.strike = true
 			}
 		}
 	}
@@ -541,6 +603,58 @@ private final class NumberingExtractor: NSObject, XMLParserDelegate {
 				format: format,
 				text: text
 			)
+		}
+	}
+}
+
+private final class FootnotesExtractor: NSObject, XMLParserDelegate {
+	private(set) var footnotesByID: [String: String] = [:]
+	private var currentID: String?
+	private var skip = false
+	private var currentText = ""
+	private var insideText = false
+
+	func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes attributeDict: [String: String] = [:]) {
+		switch localName(from: elementName) {
+		case "footnote":
+			currentID = attributeValue(from: attributeDict, for: ["w:id", "id"])
+			let type = attributeValue(from: attributeDict, for: ["w:type", "type"])
+			// Separator/continuation pseudo-footnotes are not real content.
+			skip = (type == "separator" || type == "continuationSeparator")
+			currentText = ""
+		case "t":
+			insideText = true
+		case "tab", "br", "cr":
+			if !skip { currentText += " " }
+		default:
+			break
+		}
+	}
+
+	func parser(_ parser: XMLParser, foundCharacters string: String) {
+		guard insideText, !skip else { return }
+		currentText += string
+	}
+
+	func parser(_ parser: XMLParser, didEndElement elementName: String, namespaceURI: String?, qualifiedName qName: String?) {
+		switch localName(from: elementName) {
+		case "t":
+			insideText = false
+		case "footnote":
+			if let id = currentID, !skip {
+				let text = currentText
+					.replacingOccurrences(of: "\n", with: " ")
+					.replacingOccurrences(of: "\t", with: " ")
+					.trimmingCharacters(in: .whitespacesAndNewlines)
+				if !text.isEmpty {
+					footnotesByID[id] = text
+				}
+			}
+			currentID = nil
+			skip = false
+			insideText = false
+		default:
+			break
 		}
 	}
 }

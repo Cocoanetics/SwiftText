@@ -36,7 +36,15 @@ public final class DocxFile {
 	/// Returns a Markdown string with headings, lists, and inline emphasis.
 	public func markdown() -> String {
 		let paragraphs = document.renderedParagraphs(style: .markdown)
-		return DocxTextOutput.join(paragraphs)
+		var output = DocxTextOutput.join(paragraphs)
+		if !document.footnotes.isEmpty {
+			let definitions = document.footnotes
+				.sorted { $0.number < $1.number }
+				.map { "[^\($0.number)]: \($0.text)" }
+				.joined(separator: "\n")
+			output += (output.isEmpty ? "" : "\n\n") + definitions
+		}
+		return output
 	}
 
 	/// Extracts embedded images from the DOCX archive to the given directory.
