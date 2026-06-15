@@ -13,6 +13,7 @@ import PDFKit
 import SwiftTextHTML
 import SwiftTextPDF
 import SwiftTextDOCX
+import SwiftTextPages
 import SwiftTextOCR
 #if canImport(Vision)
 import Vision
@@ -24,9 +25,9 @@ import UniformTypeIdentifiers
 struct SwiftTextCLI: AsyncParsableCommand {
 	static let configuration = CommandConfiguration(
 		commandName: "swifttext",
-		abstract: "Extract text from HTML, PDF, image, or DOCX sources.",
+		abstract: "Extract text from HTML, PDF, image, DOCX, or Pages sources.",
 		version: swiftTextVersion,
-		subcommands: [OCR.self, Docx.self, HTML.self, Overlay.self, PDF.self, Render.self],
+		subcommands: [OCR.self, Docx.self, Pages.self, HTML.self, Overlay.self, PDF.self, Render.self],
 		defaultSubcommand: OCR.self
 	)
 }
@@ -588,6 +589,66 @@ struct Docx: AsyncParsableCommand {
 		if saveImages {
 			let destination = resolvedImageDirectory()
 			_ = try docx.extractImages(to: destination)
+		}
+	}
+
+	private func writeOutputIfNeeded(_ contents: String) throws {
+		if let outputPath {
+			let expanded = (outputPath as NSString).expandingTildeInPath
+			let url = URL(fileURLWithPath: expanded)
+			let dir = url.deletingLastPathComponent()
+			try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+			try contents.write(to: url, atomically: true, encoding: .utf8)
+			return
+		}
+
+		print(contents)
+	}
+
+	private func resolvedImageDirectory() -> URL {
+		if let outputPath {
+			let expanded = (outputPath as NSString).expandingTildeInPath
+			return URL(fileURLWithPath: expanded).deletingLastPathComponent()
+		}
+
+		return URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
+	}
+}
+
+@available(macOS 10.15, macCatalyst 13, iOS 13, tvOS 13, watchOS 6, *)
+struct Pages: AsyncParsableCommand {
+	static let configuration = CommandConfiguration(
+		commandName: "pages",
+		abstract: "Extract text from Apple Pages (iWork) files."
+	)
+
+	@Argument(help: "Path to the .pages file.")
+	var path: String
+
+	@Flag(name: .shortAndLong, help: "Output Markdown with inferred headings.")
+	var markdown: Bool = false
+
+	@Option(name: .shortAndLong, help: "Write output to a file instead of stdout.")
+	var outputPath: String?
+
+	@Flag(name: .long, help: "Extract embedded images to the output directory or current directory.")
+	var saveImages: Bool = false
+
+	func run() async throws {
+		let fileURL = resolvedURL(from: path)
+		guard FileManager.default.fileExists(atPath: fileURL.path) else {
+			throw ValidationError("File not found: \(fileURL.path)")
+		}
+
+		let pages = try PagesFile(url: fileURL)
+		let output = markdown ? pages.markdown() : pages.plainText()
+		if !output.isEmpty {
+			try writeOutputIfNeeded(output)
+		}
+
+		if saveImages {
+			let destination = resolvedImageDirectory()
+			_ = try pages.extractImages(to: destination)
 		}
 	}
 

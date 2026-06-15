@@ -4,10 +4,18 @@ import Foundation
 public struct DocxDocument {
 	/// The paragraphs in document order.
 	public internal(set) var paragraphs: [Paragraph] = []
+	/// The document's footnotes, numbered in reference order.
+	public internal(set) var footnotes: [Footnote] = []
 	internal var styles = StyleCatalog()
 	internal var numbering = NumberingCatalog()
 
 	public init() {}
+
+	/// A footnote's number and its (single-line) text.
+	public struct Footnote {
+		public let number: Int
+		public let text: String
+	}
 
 	/// Returns plain text for each paragraph with formatting removed.
 	public func plainTextParagraphs() -> [String] {
@@ -76,12 +84,17 @@ public struct DocxDocument {
 			guard !text.isEmpty else {
 				return
 			}
-			let newRun = Run(text: text, bold: formatting.bold, italic: formatting.italic)
-			if let last = runs.last, last.bold == newRun.bold, last.italic == newRun.italic {
+			let newRun = Run(text: text, bold: formatting.bold, italic: formatting.italic, strike: formatting.strike)
+			if let last = runs.last, last.footnoteNumber == nil,
+			   last.bold == newRun.bold, last.italic == newRun.italic, last.strike == newRun.strike {
 				runs[runs.count - 1].text += newRun.text
 			} else {
 				runs.append(newRun)
 			}
+		}
+
+		internal mutating func appendFootnote(number: Int) {
+			runs.append(Run(text: "", bold: false, italic: false, strike: false, footnoteNumber: number))
 		}
 
 		internal var isEmpty: Bool {
@@ -119,26 +132,38 @@ public struct DocxDocument {
 		public var text: String
 		public let bold: Bool
 		public let italic: Bool
+		public let strike: Bool
+		/// When set, this run is a footnote reference rendered as `[^number]`.
+		public var footnoteNumber: Int? = nil
 
-		/// Returns the run text with Markdown bold/italic markers applied.
+		/// Returns the run text with Markdown bold/italic/strikethrough markers
+		/// applied. Strikethrough (`~~`) wraps any emphasis markers.
 		public func markedUp() -> String {
+			if let footnoteNumber {
+				return "[^\(footnoteNumber)]"
+			}
 			guard !text.isEmpty else {
 				return ""
+			}
+			guard bold || italic || strike else {
+				return text
 			}
 			let components = splitWhitespace(from: text)
 			guard !components.core.isEmpty else {
 				return text
 			}
-			switch (bold, italic) {
-			case (true, true):
-				return components.leading + "***\(components.core)***" + components.trailing
-			case (true, false):
-				return components.leading + "**\(components.core)**" + components.trailing
-			case (false, true):
-				return components.leading + "*\(components.core)*" + components.trailing
-			default:
-				return text
+			var core = components.core
+			if bold && italic {
+				core = "***\(core)***"
+			} else if bold {
+				core = "**\(core)**"
+			} else if italic {
+				core = "*\(core)*"
 			}
+			if strike {
+				core = "~~\(core)~~"
+			}
+			return components.leading + core + components.trailing
 		}
 
 		private func splitWhitespace(from value: String) -> (leading: String, core: String, trailing: String) {
@@ -171,6 +196,7 @@ public struct DocxDocument {
 	internal struct FormatState {
 		var bold = false
 		var italic = false
+		var strike = false
 	}
 
 	internal struct StyleCatalog {

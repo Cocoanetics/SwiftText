@@ -9,3 +9,7 @@
 #if DOCX
 @_exported import SwiftTextDOCX
 #endif
+
+#if PAGES
+@_exported import SwiftTextPages
+#endif

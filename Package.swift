@@ -31,6 +31,7 @@ let macOSTargets: [Target] = [
 			"SwiftTextOCR",
 			"SwiftTextPDF",
 			"SwiftTextDOCX",
+			"SwiftTextPages",
 			.product(name: "ArgumentParser", package: "swift-argument-parser", condition: .when(traits: ["CLI"])),
 		],
 		path: "Sources/SwiftTextCLI",
@@ -120,10 +121,15 @@ let packageProducts: [Product] = [
 		name: "SwiftTextDOCX",
 		targets: ["SwiftTextDOCX"]
 	),
+	.library(
+		name: "SwiftTextPages",
+		targets: ["SwiftTextPages"]
+	),
 ] + htmlProducts + macOSProducts
 
 let swiftTextDependencies: [Target.Dependency] = [
 	.target(name: "SwiftTextDOCX", condition: .when(traits: ["DOCX"])),
+	.target(name: "SwiftTextPages", condition: .when(traits: ["PAGES"])),
 ] + swiftTextHTMLDeps + swiftTextExtraDeps
 
 let packageTargets: [Target] = [
@@ -148,10 +154,30 @@ let packageTargets: [Target] = [
 		],
 		path: "Sources/SwiftTextDOCX"
 	),
+	.target(
+		name: "SwiftTextPages",
+		dependencies: [
+			// Same single-trait reasoning as SwiftTextDOCX's ZIPFoundation
+			// dependency: Pages files are Zip archives, and the CLI default trait
+			// enables PAGES transitively for a plain `swift build`. Snappy and
+			// Protocol Buffers decoding are implemented in-target, so ZIPFoundation
+			// is the only external dependency.
+			.product(name: "ZIPFoundation", package: "ZIPFoundation", condition: .when(traits: ["PAGES"])),
+		],
+		path: "Sources/SwiftTextPages"
+	),
 	.testTarget(
 		name: "SwiftTextDOCXTests",
 		dependencies: ["SwiftTextDOCX"],
 		path: "Tests/SwiftTextDOCXTests",
+		resources: [
+			.process("Resources"),
+		]
+	),
+	.testTarget(
+		name: "SwiftTextPagesTests",
+		dependencies: ["SwiftTextPages"],
+		path: "Tests/SwiftTextPagesTests",
 		resources: [
 			.process("Resources"),
 		]
@@ -177,10 +203,11 @@ let package = Package(
 		.trait(name: "HTML", description: "HTML parsing"),
 		.trait(name: "PDF", description: "PDF text extraction", enabledTraits: ["OCR"]),
 		.trait(name: "DOCX", description: "DOCX extraction"),
-		// CLI enables DOCX and HTML because SwiftTextCLI links SwiftTextDOCX and
-		// SwiftTextHTML, whose external products (ZIPFoundation, XMLKit's HTMLParser)
-		// are guarded by those traits.
-		.trait(name: "CLI", description: "swifttext command-line tool dependencies", enabledTraits: ["DOCX", "HTML"]),
+		.trait(name: "PAGES", description: "Pages (iWork) extraction"),
+		// CLI enables DOCX, PAGES, and HTML because SwiftTextCLI links
+		// SwiftTextDOCX, SwiftTextPages, and SwiftTextHTML, whose external products
+		// (ZIPFoundation, XMLKit's HTMLParser) are guarded by those traits.
+		.trait(name: "CLI", description: "swifttext command-line tool dependencies", enabledTraits: ["DOCX", "PAGES", "HTML"]),
 		// "CLI" must be a default trait: the SwiftTextCLI and SwiftTextDOCX targets are
 		// always part of the manifest, so a plain `swift build` needs their external
 		// products (ArgumentParser, ZIPFoundation) active to compile. Consumers that
