@@ -88,6 +88,19 @@ is committed Swift data (`Generated/BlankPagesTemplate.swift`, from
     packed `Tile` `#6` for the Markdown rows/cols, set `TableModelArchive` (6001)
     row/col counts, clone the rest, anchor `TableInfoArchive` (6000) in the body, and
     register every `Tables/` component in `PackageMetadata`.
+  - **Cell record format (decoded precisely, 2026-06-15):** within a `Tile` row
+    (`#5`): `#3` = C × 12-byte per-column metadata (`04 00 00 00` + 8 zero bytes per
+    col); `#4` = uint16 offsets into `#3` (`0,12,24,…` + `0xFFFF` pad, 510 B); `#6` =
+    the cell records; `#7` = uint16 **byte-offsets of each cell into `#6`** (`0,28,56,…`
+    + `0xFFFF` pad) — so a text cell record is **28 bytes**. A 28-byte string cell:
+    `05 03 00 00 00 00 00 00 | <styleword> | <key u32 @ bytes 12–15> | <12 const bytes>`,
+    where the **`u32` at offset 12 is the DataList string key**, and `<styleword>` is
+    `48 10 02 00` for header cells / `08 10 02 00` for body cells. `DataList` (6005)
+    entry = `{ #1 key, #2 1, #3 string }`, with the list's `#2` = maxKey+1. So a
+    generator builds, per row: `#6` = C cloned 28-byte cells (key patched), `#7`/`#4`
+    = the offset tables for C, `#3` = C col-metas, `#2` = C; and `Tile.#4` = row count.
+    **Still TBD:** the `TableModelArchive` (6001) row/col counts and the row-height /
+    column-width DataLists must be regenerated to match (decoder tools in `Scripts/`).
   - **Body anchor (decoded):** the body `StorageArchive`'s text (`#3`) has a `U+FFFC`
     char at the table position, and **field `#9` is the attachment run table** —
     `{ #1 { #1 charIndex, #2 { #1 attachmentObjectId } } }` — mapping that offset to
