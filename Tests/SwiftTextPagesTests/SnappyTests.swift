@@ -38,4 +38,35 @@ struct SnappyTests {
 			_ = try Snappy.decompress(bytes)
 		}
 	}
+
+	@Test("Compression round-trips through the decompressor")
+	func compressRoundTrip() throws {
+		// Deterministic pseudo-random (≈ incompressible) bytes.
+		var state: UInt64 = 0x2545_F491_4F6C_DD1D
+		var pseudoRandom = [UInt8]()
+		for _ in 0..<8000 {
+			state = state &* 6364136223846793005 &+ 1442695040888963407
+			pseudoRandom.append(UInt8((state >> 32) & 0xFF))
+		}
+
+		let cases: [[UInt8]] = [
+			[],
+			[0x2A],
+			Array("hello".utf8),
+			Array("the quick brown fox jumps over the lazy dog".utf8),
+			Array(repeating: 0x41, count: 5000),                  // long run (RLE-style)
+			(0..<4000).map { UInt8(0x61 + ($0 % 6)) },            // periodic "abcdef…"
+			pseudoRandom,                                         // incompressible
+			pseudoRandom + Array(repeating: 0x7E, count: 70000),  // spans more than one window
+		]
+		for input in cases {
+			#expect(try Snappy.decompress(Snappy.compress(input)) == input)
+		}
+	}
+
+	@Test("Actually compresses repetitive data")
+	func compressionShrinksRepetitiveData() {
+		let input = Array(repeating: UInt8(0x41), count: 5000)
+		#expect(Snappy.compress(input).count < input.count)
+	}
 }
