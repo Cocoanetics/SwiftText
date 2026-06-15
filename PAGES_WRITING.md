@@ -62,9 +62,17 @@ is committed Swift data (`Generated/BlankPagesTemplate.swift`, from
 `Scripts/GeneratePagesTemplate.swift`).
 
 **Remaining below full DOCX parity** (larger, separable efforts):
-- **Native tables** — reproduce the iWork `TST` table model (a `Tables/` component +
-  table/cell/tile objects). Today's writer renders table *content* as tab-separated
-  text so nothing is lost.
+- **Native tables** — reproduce the iWork `TST` table model. Today's writer renders
+  table *content* as tab-separated text (nothing lost). Dissected graph for a 2×3
+  table (`Table.pages`): in `Document.iwa` a `TableInfoArchive` (type 6000, the body
+  attachment) → `TableModelArchive` (type 6001) → six ~8.3 KB style objects (6003) +
+  several 6008s; plus ~30 `Index/Tables/*.iwa` component files (`DataList-*`,
+  `HeaderStorageBucket-*`, `Tile-*`) holding the packed cell storage; the
+  CalculationEngine grows 8→43 objects; and every new component needs a
+  `ComponentInfo` in `PackageMetadata`. Approach: capture this table as a second
+  template fragment and clone+adapt (rows/cols/cell text). Large + crash-prone (a
+  malformed TST graph makes Pages refuse to open / crash), so it's a dedicated
+  effort — verify each stage opens in Pages before committing.
 - ~~Clickable hyperlinks~~ — **done**: each link emits a `TSWP` hyperlink object
   (type 2032: `#1`={smart-field UUID}, `#2`=URL) referenced from a `#11` smart-field
   run table over the link's character range (byte-pattern-identical to a Pages-authored link).
