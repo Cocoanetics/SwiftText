@@ -88,8 +88,14 @@ is committed Swift data (`Generated/BlankPagesTemplate.swift`, from
     packed `Tile` `#6` for the Markdown rows/cols, set `TableModelArchive` (6001)
     row/col counts, clone the rest, anchor `TableInfoArchive` (6000) in the body, and
     register every `Tables/` component in `PackageMetadata`.
-  - **Body anchor chain (decoded):** body text has a `U+FFFC` attachment char; an
-    attachment run table maps it to a `type 2003` drawable-attachment object (sample
+  - **Body anchor (decoded):** the body `StorageArchive`'s text (`#3`) has a `U+FFFC`
+    char at the table position, and **field `#9` is the attachment run table** —
+    `{ #1 { #1 charIndex, #2 { #1 attachmentObjectId } } }` — mapping that offset to
+    the `type 2003` drawable attachment. Also: the table delta over the blank template
+    is small in `Document.iwa` (just the one `2003` object); everything else is the
+    `Tables/` components + CalculationEngine objects (a static table may open without
+    the calc objects — worth testing first). The attachment chain continues:
+    `type 2003` drawable-attachment object (sample
     id 1734389) whose `#1` → `TableInfoArchive` (6000) → `TableModelArchive` (6001) →
     Tile/DataList cells. The table's object ids (1733xxx–1734xxx) sit above the blank
     template's range (≤1732620), so injecting them needs no id remapping — but bump
