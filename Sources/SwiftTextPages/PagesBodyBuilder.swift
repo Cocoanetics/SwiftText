@@ -177,9 +177,14 @@ final class CharacterStyleRegistry {
 		if style.strikethrough { charProperties.varintField(12, 1) }
 		if style.code {
 			charProperties.stringField(5, "Menlo-Regular")              // monospace font
-			// A light gray text-background highlight (char_properties #26), like inline
-			// `code` on the web.
-			charProperties.bytesField(26, PagesBodySerializer.colorBytes(red: 0.94, green: 0.94, blue: 0.95))
+			// Inline `code` reads as a distinct color in a fixed-width font (no
+			// background highlight). Color renders from tsdFill (#46); #7 kept for
+			// round-trip — see settingTextColor.
+			let c = PagesBodySerializer.codeTextColor
+			let colorBytes = PagesBodySerializer.colorBytes(red: c.r, green: c.g, blue: c.b)
+			charProperties.bytesField(7, colorBytes)
+			var fill = ProtobufWriter(); fill.bytesField(1, colorBytes)
+			charProperties.bytesField(46, fill.bytes)
 		}
 
 		var archive = ProtobufWriter()
@@ -433,6 +438,10 @@ enum PagesBodySerializer {
 	/// byte-for-byte what Pages writes in its own templates (verified against modern cv).
 	/// `font_color_null` (#6 of char_properties) and `tsdFill_null` (#45) are dropped so
 	/// both color slots are honored.
+	/// The text color for code — inline and block — a dark red that reads clearly on
+	/// white in a fixed-width font (the alternative to background shading).
+	static let codeTextColor: (r: Float, g: Float, b: Float) = (0.64, 0.08, 0.08)
+
 	/// A `TSP.Color` in the exact byte layout Pages writes for rendered color:
 	/// `model=1` (RGB), `r/g/b`, `a=1` (#6), `rgbspace=1` (#12, sRGB), trailing `#13=1`.
 	/// Verified byte-for-byte against Apple's own templates.
@@ -475,32 +484,6 @@ enum PagesBodySerializer {
 			inner.stringField(5, name)
 			return inner.bytes
 		}
-	}
-
-	/// Returns a style payload with a paragraph background fill (shading) — the
-	/// `para_properties` `fill` (field 6, a `TSP.Color`), with `fill_null` (#5) cleared.
-	/// The color uses the same byte layout Pages writes for text color.
-	static func settingParagraphFill(in stylePayload: [UInt8], red: Float, green: Float, blue: Float) -> [UInt8] {
-		let colorBytes = Self.colorBytes(red: red, green: green, blue: blue)
-
-		let style = ProtobufMessage(stylePayload)
-		var writer = ProtobufWriter()
-		var wrote = false
-		for field in style.fields {
-			guard field.number == 12, case .lengthDelimited(let paraProperties) = field.value else { writer.append(field); continue }
-			var inner = ProtobufWriter()
-			for property in ProtobufMessage(paraProperties).fields where property.number != 5 && property.number != 6 {
-				inner.append(property)                          // keep all but fill_null / old fill
-			}
-			inner.bytesField(6, colorBytes)
-			writer.bytesField(12, inner.bytes)
-			wrote = true
-		}
-		if !wrote {                                             // no para_properties yet — add one
-			var inner = ProtobufWriter(); inner.bytesField(6, colorBytes)
-			writer.bytesField(12, inner.bytes)
-		}
-		return writer.bytes
 	}
 
 	/// Returns a style payload with italic set in its char_properties (field 11).

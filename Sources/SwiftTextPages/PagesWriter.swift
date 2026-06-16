@@ -193,16 +193,18 @@ public final class PagesWriter {
 			data = try IWAArchive.replacingPayload(in: data, objectID: PagesStyleID.heading4) { _ in heading4 }
 
 			// Code block ("preformatted"): a copy of Body in a monospace face, a touch
-			// smaller, with tight line spacing, a small left inset, and a light gray
-			// background fill — the Pages counterpart to the HTML/PDF `pre` block.
+			// smaller, tight line spacing, a left inset, distinct code color, and clear
+			// space before/after (the whole block is one paragraph with soft line breaks,
+			// so this spacing is a margin around the block, not a gap between lines).
 			// Repurposes the unused "Caption" style (real style ⇒ its para_properties apply).
+			let code = PagesBodySerializer.codeTextColor
 			var codeBlock = PagesBodySerializer.settingStyleIdentity(in: body, name: "Code Block", identifier: PagesStyleIdentifier.codeBlock)
 			codeBlock = PagesBodySerializer.settingFontName(in: codeBlock, name: "Menlo-Regular")
 			codeBlock = PagesBodySerializer.settingFontSize(in: codeBlock, points: 10)
-			codeBlock = PagesBodySerializer.settingLineSpacing(in: codeBlock, multiple: 1.1)
-			codeBlock = PagesBodySerializer.settingLeftIndent(in: codeBlock, points: 8)
-			codeBlock = PagesBodySerializer.settingSpacing(in: codeBlock, spaceBefore: 8, spaceAfter: 8)
-			codeBlock = PagesBodySerializer.settingParagraphFill(in: codeBlock, red: 0.94, green: 0.94, blue: 0.95)
+			codeBlock = PagesBodySerializer.settingLineSpacing(in: codeBlock, multiple: 1.2)
+			codeBlock = PagesBodySerializer.settingLeftIndent(in: codeBlock, points: 12)
+			codeBlock = PagesBodySerializer.settingSpacing(in: codeBlock, spaceBefore: 12, spaceAfter: 12)
+			codeBlock = PagesBodySerializer.settingTextColor(in: codeBlock, red: code.r, green: code.g, blue: code.b)
 			data = try IWAArchive.replacingPayload(in: data, objectID: PagesStyleID.codeBlock) { _ in codeBlock }
 		}
 		return [UInt8](data)

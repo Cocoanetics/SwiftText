@@ -64,7 +64,7 @@ struct StylesheetTests {
         #expect(cp.bold == true)
     }
 
-    @Test("Code block is a dedicated monospace style with a background fill")
+    @Test("Code block is a dedicated monospace, colored style (no background shading)")
     func codeBlockStyle() throws {
         let styles = try generatedStyles("```\nlet x = 1\n```\n")
         let code = try #require(styles[PagesStyleID.codeBlock])
@@ -72,9 +72,14 @@ struct StylesheetTests {
 
         // Monospace face lives in the style (no per-run override needed).
         #expect(para.charProperties?.fontName == "Menlo-Regular")
-        // A paragraph background fill (shading) — the "pre" look.
-        #expect(para.paraProperties?.fill != nil)
-        // Named so it's editable in Pages and recognizable on round-trip.
+        // Code reads as a distinct color (rendered via the fill) — not background shading.
+        let color = try #require(para.charProperties?.tsdFill?.color)
+        #expect((color.r ?? 0) > 0.5)
+        #expect((color.g ?? 1) < 0.2)
+        #expect(para.paraProperties?.fill == nil)            // no paragraph background
+        // Real margin around the block, and a named, round-trippable style.
+        #expect((para.paraProperties?.spaceBefore ?? 0) > 0)
+        #expect((para.paraProperties?.spaceAfter ?? 0) > 0)
         #expect(para.super?.styleIdentifier == "swifttext-code-block")
     }
 
