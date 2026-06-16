@@ -30,16 +30,22 @@ struct StylesheetTests {
     func blockQuoteIsGray() throws {
         let styles = try generatedStyles("> A quoted line.\n")
         let quote = try #require(styles[PagesStyleID.blockQuote])
-
         let para = TSWP_ParagraphStyleArchive(ProtobufMessage(quote.payload))
+
+        // Pages RENDERS text color from the modern fill (tsdFill, char_properties #46),
+        // not the legacy font_color (#7) — so the fill is what must be gray.
+        let fill = try #require(para.charProperties?.tsdFill?.color)
+        #expect(abs((fill.r ?? 0) - 0.4) < 0.01)
+        #expect(abs((fill.g ?? 0) - 0.4) < 0.01)
+        #expect(abs((fill.b ?? 0) - 0.4) < 0.01)
+        #expect(fill.model == 1)           // RGB
+        #expect(fill.rgbspace == 1)        // sRGB
+
+        // The legacy font_color is kept in sync (round-trip / older readers).
         let color = try #require(para.charProperties?.fontColor)
-        // Gray, in the exact component layout Pages uses for rendered color.
         #expect(abs((color.r ?? 0) - 0.4) < 0.01)
-        #expect(abs((color.g ?? 0) - 0.4) < 0.01)
         #expect(abs((color.b ?? 0) - 0.4) < 0.01)
-        #expect(color.model == 1)          // RGB
-        #expect(color.rgbspace == 1)       // sRGB
-        #expect(abs((color.a ?? 0) - 1) < 0.01)
+
         #expect(para.charProperties?.italic == true)
         // A real left indent lives in the paragraph properties.
         #expect(para.paraProperties != nil)

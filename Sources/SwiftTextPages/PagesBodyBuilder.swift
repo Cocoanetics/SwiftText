@@ -403,12 +403,17 @@ enum PagesBodySerializer {
 		}
 	}
 
-	/// Returns a style payload with `font_color` (char_properties field 7, a `TSP.Color`)
-	/// set to the given RGB components. The component layout — `model=1` (RGB),
-	/// `space=1` (sRGB), `a=1`, with the field numbers below — is exactly what Pages
-	/// writes for the colored text in its own templates (verified against modern cv /
-	/// classic letter), so it renders identically. The matching `font_color_null` flag
-	/// (field 6) is dropped, since Pages omits it whenever a real color is present.
+	/// Returns a style payload whose text renders in the given RGB color.
+	///
+	/// The subtle part: Pages renders text color from the *modern fill* —
+	/// `char_properties` field 46, a `TSD.FillArchive` whose field 1 is the color —
+	/// **not** the legacy `font_color` (field 7). A style carrying only field 7 renders
+	/// black (the fill, copied from the source style, wins). So we write the fill *and*
+	/// keep field 7 for round-tripping and older readers. The `TSP.Color` layout
+	/// (`model=1` RGB, `r/g/b`, `a=1` #6, `rgbspace=1` #12, trailing `#13=1`) is
+	/// byte-for-byte what Pages writes in its own templates (verified against modern cv).
+	/// `font_color_null` (#6 of char_properties) and `tsdFill_null` (#45) are dropped so
+	/// both color slots are honored.
 	static func settingTextColor(in stylePayload: [UInt8], red: Float, green: Float, blue: Float) -> [UInt8] {
 		var color = ProtobufWriter()
 		color.varintField(1, 1)                              // model = rgb
@@ -417,10 +422,18 @@ enum PagesBodySerializer {
 		color.fixed32Field(5, blue.bitPattern)
 		color.fixed32Field(6, Float(1).bitPattern)           // alpha
 		color.varintField(12, 1)                             // rgbspace = sRGB
+		color.fixed32Field(13, Float(1).bitPattern)          // opacity flag Pages always writes
+		let colorBytes = color.bytes
+
+		var fill = ProtobufWriter()
+		fill.bytesField(1, colorBytes)                       // TSD.FillArchive.color
+		let fillBytes = fill.bytes
+
 		return editCharProperties(in: stylePayload) { fields in
 			var inner = ProtobufWriter()
-			for field in fields where field.number != 6 && field.number != 7 { inner.append(field) }
-			inner.bytesField(7, color.bytes)
+			for field in fields where ![6, 7, 45, 46].contains(field.number) { inner.append(field) }
+			inner.bytesField(7, colorBytes)                  // font_color (legacy / round-trip)
+			inner.bytesField(46, fillBytes)                  // tsdFill (what Pages actually renders)
 			return inner.bytes
 		}
 	}
