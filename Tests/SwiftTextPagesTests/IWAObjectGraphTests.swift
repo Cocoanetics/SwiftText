@@ -23,7 +23,7 @@ struct IWAObjectGraphTests {
 		let rebuilt = graph.package()
 		for (a, b) in zip(original.files, rebuilt.files) {
 			#expect(a.path == b.path)
-			if case .iwa(let ra) = a.content, case .iwa(let rb) = b.content {
+			if case .iwa(let ra, _) = a.content, case .iwa(let rb, _) = b.content {
 				#expect(ra.count == rb.count)
 				for (x, y) in zip(ra, rb) { #expect(x.framed == y.framed) }
 			}

@@ -76,10 +76,12 @@ enum IWAReferenceScanner {
 /// this model is app-agnostic; an app layer (e.g. a Pages document builder) supplies the
 /// app-specific root object (`TP`/`TN`/`KN`) and wires it into the shared content.
 struct IWAObjectGraph {
-	/// One `Index/*.iwa` component: a path and its records, in archive order.
+	/// One `Index/*.iwa` component: a path, its records (in archive order), and the
+	/// original compressed bytes it was read from (for verbatim re-emit when unchanged).
 	struct Component {
 		var path: String
 		var records: [IWARecord]
+		var originalBytes: [UInt8]?
 	}
 
 	/// The IWA components, in package order.
@@ -96,7 +98,7 @@ struct IWAObjectGraph {
 		var rawFiles = [(path: String, bytes: [UInt8])]()
 		for file in package.files {
 			switch file.content {
-			case .iwa(let records): components.append(Component(path: file.path, records: records))
+			case .iwa(let records, let original): components.append(Component(path: file.path, records: records, originalBytes: original))
 			case .raw(let bytes): rawFiles.append((file.path, bytes))
 			}
 		}
@@ -108,7 +110,7 @@ struct IWAObjectGraph {
 	/// unchanged records keep Apple's original framing.
 	func package() -> IWAPackage {
 		var files = [(path: String, content: IWAPackage.Content)]()
-		for component in components { files.append((component.path, .iwa(component.records))) }
+		for component in components { files.append((component.path, .iwa(component.records, original: component.originalBytes))) }
 		for raw in rawFiles { files.append((raw.path, .raw(raw.bytes))) }
 		return IWAPackage(files: files)
 	}

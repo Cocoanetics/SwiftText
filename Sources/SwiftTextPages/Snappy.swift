@@ -103,56 +103,112 @@ enum Snappy {
 
 	/// Compresses bytes into a single raw Snappy block (varint length + element
 	/// stream), the form an IWA chunk wraps.
+	///
+	/// This is a faithful port of Google Snappy's `Compress`/`CompressFragment` —
+	/// the same encoder iWork uses — so its output is **byte-identical** to Apple's,
+	/// not merely a valid alternative encoding. Matching it exactly (variable
+	/// per-fragment hash-table size, the `skip` search heuristic, the post-match hash
+	/// insertions, and the 64/60/remainder copy chunking) is what lets a `.pages`
+	/// round-trip with full byte parity.
 	static func compress(_ input: [UInt8]) -> [UInt8] {
 		var output = [UInt8]()
 		appendVarint(UInt64(input.count), to: &output)
-		// Match within 64 KiB windows so back-reference offsets stay ≤ 65535
-		// (1- or 2-byte copy forms); the reference compressor does the same.
-		let windowSize = 1 << 16
-		var windowStart = 0
-		while windowStart < input.count {
-			let windowEnd = min(windowStart + windowSize, input.count)
-			compressWindow(input, from: windowStart, to: windowEnd, into: &output)
-			windowStart = windowEnd
+		// Snappy compresses in fragments of at most 64 KiB; each is an independent
+		// scan with its own hash table (iWork already chunks at 64 KiB, so usually
+		// one fragment per call, but the general loop matches `Compress` exactly).
+		let kBlockSize = 1 << 16
+		var start = 0
+		while start < input.count {
+			let end = min(start + kBlockSize, input.count)
+			compressFragment(input, start, end, into: &output)
+			start = end
 		}
 		return output
 	}
 
-	/// Emits literals and back-reference copies for one window, finding matches
-	/// with a hash table over 4-byte sequences.
-	private static func compressWindow(_ input: [UInt8], from start: Int, to end: Int, into output: inout [UInt8]) {
-		var nextEmit = start
-		if end - start >= 4 {
-			let logTableSize = 14
-			var table = [Int](repeating: -1, count: 1 << logTableSize)
-			let shift = UInt32(32 - logTableSize)
-			let matchLimit = end - 4 // last index from which 4 bytes can be read
-			var index = start
-			while index <= matchLimit {
-				let word = load32(input, index)
-				let hash = Int((word &* 0x1e35a7bd) >> shift)
-				let candidate = table[hash]
-				table[hash] = index
-				if candidate >= start, candidate < index, index - candidate <= 65535, load32(input, candidate) == word {
-					emitLiteral(input, from: nextEmit, to: index, into: &output)
-					var matched = 4
-					while index + matched < end, input[candidate + matched] == input[index + matched] {
-						matched += 1
-					}
-					emitCopy(offset: index - candidate, length: matched, into: &output)
-					index += matched
-					nextEmit = index
-				} else {
-					index += 1
-				}
-			}
-		}
-		emitLiteral(input, from: nextEmit, to: end, into: &output)
+	/// Snappy's hash-table size for a fragment: the smallest power of two ≥ the
+	/// fragment length, starting at 256 and capped at 2¹⁴ (16384).
+	private static func hashTableSize(_ fragmentSize: Int) -> Int {
+		var size = 256
+		while size < (1 << 14) && size < fragmentSize { size <<= 1 }
+		return size
 	}
 
 	private static func load32(_ input: [UInt8], _ index: Int) -> UInt32 {
 		UInt32(input[index]) | (UInt32(input[index + 1]) << 8)
 			| (UInt32(input[index + 2]) << 16) | (UInt32(input[index + 3]) << 24)
+	}
+
+	/// `(bytes * 0x1e35a7bd) >> shift` — Snappy's `HashBytes`.
+	private static func hash(_ input: [UInt8], _ index: Int, _ shift: UInt32) -> Int {
+		Int((load32(input, index) &* 0x1e35a7bd) >> shift)
+	}
+
+	/// Bytes that match starting at `s1`/`s2`, bounded by the fragment `end`.
+	private static func findMatchLength(_ input: [UInt8], _ s1: Int, _ s2: Int, _ end: Int) -> Int {
+		var matched = 0
+		while s2 + matched < end, input[s1 + matched] == input[s2 + matched] { matched += 1 }
+		return matched
+	}
+
+	/// A faithful port of Snappy's `CompressFragment` for one ≤ 64 KiB fragment.
+	private static func compressFragment(_ input: [UInt8], _ start: Int, _ end: Int, into output: inout [UInt8]) {
+		let fragmentSize = end - start
+		let tableSize = hashTableSize(fragmentSize)
+		let shift = UInt32(32 - tableSize.trailingZeroBitCount)   // log2(tableSize) for a power of two
+		var table = [Int](repeating: 0, count: tableSize)         // positions relative to `start`; 0 ⇒ start
+		var nextEmit = start
+		let kInputMargin = 15
+
+		if fragmentSize >= kInputMargin {
+			let ipLimit = end - kInputMargin
+			var ip = start + 1
+			var nextHash = hash(input, ip, shift)
+
+			outer: while true {
+				var skip = 32
+				var nextIP = ip
+				var candidate = 0
+				// Search forward (skipping ahead on misses) for a 4-byte match.
+				while true {
+					ip = nextIP
+					let h = nextHash
+					let bytesBetween = skip >> 5
+					skip += bytesBetween
+					nextIP = ip + bytesBetween
+					if nextIP > ipLimit { break outer }
+					nextHash = hash(input, nextIP, shift)
+					candidate = start + table[h]
+					table[h] = ip - start
+					if load32(input, ip) == load32(input, candidate) { break }
+				}
+
+				// Emit the literal run [nextEmit, ip), then one or more copies.
+				emitLiteral(input, from: nextEmit, to: ip, into: &output)
+
+				while true {
+					let base = ip
+					let matched = 4 + findMatchLength(input, candidate + 4, ip + 4, end)
+					ip += matched
+					emitCopy(offset: base - candidate, length: matched, into: &output)
+					nextEmit = ip
+					if ip >= ipLimit { break outer }
+					// Insert hashes for ip-1 and ip; continue copying if ip matches.
+					let prevHash = hash(input, ip - 1, shift)
+					table[prevHash] = (ip - 1) - start
+					let curHash = hash(input, ip, shift)
+					candidate = start + table[curHash]
+					table[curHash] = ip - start
+					if load32(input, ip) != load32(input, candidate) {
+						nextHash = hash(input, ip + 1, shift)
+						ip += 1
+						break
+					}
+				}
+			}
+		}
+		// Emit any trailing bytes as a final literal.
+		if nextEmit < end { emitLiteral(input, from: nextEmit, to: end, into: &output) }
 	}
 
 	private static func appendVarint(_ value: UInt64, to output: inout [UInt8]) {
@@ -184,23 +240,25 @@ enum Snappy {
 		output.append(contentsOf: input[from..<to])
 	}
 
+	/// Snappy's `EmitCopy`: long copies are split 64…(60)…remainder so the decoder
+	/// always keeps ≥ 4 bytes in hand; each piece is a 1- or 2-byte-offset element.
 	private static func emitCopy(offset: Int, length: Int, into output: inout [UInt8]) {
-		var remaining = length
-		while remaining > 0 {
-			if remaining >= 4, remaining <= 11, offset <= 2047 {
-				// 1-byte-offset copy (tag type 01).
-				let tag = ((offset >> 8) << 5) | ((remaining - 4) << 2) | 0x01
-				output.append(UInt8(tag))
-				output.append(UInt8(offset & 0xFF))
-				remaining = 0
-			} else {
-				// 2-byte-offset copy (tag type 10), max 64 bytes per element.
-				let take = min(remaining, 64)
-				output.append(UInt8(((take - 1) << 2) | 0x02))
-				output.append(UInt8(offset & 0xFF))
-				output.append(UInt8((offset >> 8) & 0xFF))
-				remaining -= take
-			}
+		var len = length
+		while len >= 68 { emitCopyAtMost64(offset: offset, length: 64, into: &output); len -= 64 }
+		if len > 64 { emitCopyAtMost64(offset: offset, length: 60, into: &output); len -= 60 }
+		emitCopyAtMost64(offset: offset, length: len, into: &output)
+	}
+
+	private static func emitCopyAtMost64(offset: Int, length: Int, into output: inout [UInt8]) {
+		if length < 12, offset < 2048 {
+			// 1-byte-offset copy (tag type 01).
+			output.append(UInt8(0x01 | ((length - 4) << 2) | ((offset >> 8) << 5)))
+			output.append(UInt8(offset & 0xFF))
+		} else {
+			// 2-byte-offset copy (tag type 10).
+			output.append(UInt8(0x02 | ((length - 1) << 2)))
+			output.append(UInt8(offset & 0xFF))
+			output.append(UInt8((offset >> 8) & 0xFF))
 		}
 	}
 }

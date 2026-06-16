@@ -70,17 +70,37 @@ struct IWARecord {
 /// Read a document in, optionally rebuild object payloads through the typed models, and
 /// write a valid package back out — the foundation for programmatic ("cold") synthesis.
 struct IWAPackage {
-	enum Content { case iwa([IWARecord]); case raw([UInt8]) }
+	/// An `.iwa` component carries its parsed records *and* the original compressed
+	/// bytes it was read from. On write, a component whose records are all unchanged is
+	/// re-emitted verbatim from `original` — a writer never recompresses what it didn't
+	/// touch, which also gives an exact byte-parity round-trip (Apple's Snappy output is
+	/// not uniquely determined, so re-compressing identical content needn't match it).
+	enum Content { case iwa([IWARecord], original: [UInt8]?); case raw([UInt8]) }
 	var files: [(path: String, content: Content)]
+	/// Per-entry ZIP metadata (timestamps, extra fields, version) captured when read
+	/// from a flat package, so writing reproduces the container byte-for-byte. Empty
+	/// for packages read from loose entries (the writer then uses Apple-like defaults).
+	var zipMeta: [String: StoredZipWriter.Metadata] = [:]
+
+	/// Reads a flat (STORED-zip) `.pages` straight from its bytes, capturing both the
+	/// object graph and the ZIP container metadata for a byte-faithful round-trip.
+	/// Returns nil if `data` isn't a flat zip (e.g. a directory package).
+	static func read(zip data: [UInt8]) -> IWAPackage? {
+		guard let entries = ZipReader.read(data) else { return nil }
+		var package = read(entries.map { ($0.path, $0.data) })
+		for entry in entries { package.zipMeta[entry.path] = entry.meta }
+		return package
+	}
 
 	/// Parses `entries` (path + raw bytes) into a package. `Index/*.iwa` files are parsed
-	/// into records; any file that isn't standard Snappy/Protobuf IWA is kept raw.
+	/// into records (keeping the original bytes for verbatim re-emit); any file that isn't
+	/// standard Snappy/Protobuf IWA is kept raw.
 	static func read(_ entries: [(path: String, bytes: [UInt8])]) -> IWAPackage {
 		var files = [(path: String, content: Content)]()
 		for entry in entries {
 			if entry.path.hasPrefix("Index/"), entry.path.hasSuffix(".iwa"),
 			   let records = try? parseRecords(Data(entry.bytes)) {
-				files.append((entry.path, .iwa(records)))
+				files.append((entry.path, .iwa(records, original: entry.bytes)))
 			} else {
 				files.append((entry.path, .raw(entry.bytes)))
 			}
@@ -93,7 +113,7 @@ struct IWAPackage {
 	/// object layer. Unmodeled objects are left byte-for-byte unchanged.
 	mutating func reencodeThroughModels() {
 		for i in files.indices {
-			guard case .iwa(var records) = files[i].content else { continue }
+			guard case .iwa(var records, _) = files[i].content else { continue }
 			for r in records.indices {
 				for p in records[r].parts.indices where IWATypeRegistry.modeledTypes.contains(records[r].parts[p].type) {
 					if let re = IWATypeRegistry.reencode(type: records[r].parts[p].type, payload: records[r].parts[p].payload) {
@@ -101,7 +121,8 @@ struct IWAPackage {
 					}
 				}
 			}
-			files[i].content = .iwa(records)
+			// The payloads changed, so drop the verbatim original — re-encode on write.
+			files[i].content = .iwa(records, original: nil)
 		}
 	}
 
@@ -109,13 +130,21 @@ struct IWAPackage {
 	func write(to url: URL) throws {
 		var zip = StoredZipWriter()
 		for file in files {
+			let meta = zipMeta[file.path] ?? StoredZipWriter.Metadata()
 			switch file.content {
-			case .iwa(let records):
-				var stream = [UInt8]()
-				for record in records { stream.append(contentsOf: record.framed) }
-				zip.add(path: file.path, data: [UInt8](IWAArchive.encode(stream: stream)))
+			case .iwa(let records, let original):
+				// Unchanged component (no synthesized parts) → re-emit the original bytes
+				// verbatim for an exact round-trip; otherwise re-frame and re-compress.
+				let dirty = records.contains { $0.parts.contains { $0.synthesizedReferences != nil } }
+				if let original, !dirty {
+					zip.add(path: file.path, data: original, meta: meta)
+				} else {
+					var stream = [UInt8]()
+					for record in records { stream.append(contentsOf: record.framed) }
+					zip.add(path: file.path, data: [UInt8](IWAArchive.encode(stream: stream)), meta: meta)
+				}
 			case .raw(let bytes):
-				zip.add(path: file.path, data: bytes)
+				zip.add(path: file.path, data: bytes, meta: meta)
 			}
 		}
 		try zip.finish().write(to: url)
