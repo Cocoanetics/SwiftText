@@ -18,6 +18,37 @@ struct PagesSynthesizerTests {
 		#expect(text.contains("A second paragraph."))
 	}
 
+	@Test("formatted body synthesizes character-style + link objects through the graph")
+	func formattedBody() throws {
+		let url = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("synth-rich.pages")
+		defer { try? FileManager.default.removeItem(at: url) }
+
+		let heading = BodyParagraph(text: "Cold Synthesis", paragraphStyle: PagesStyleID.heading1)
+		var body = BodyParagraph(text: "This has bold and bold-italic words.", paragraphStyle: PagesStyleID.body)
+		body.runs = [
+			.init(start: 9, length: 4, style: InlineStyle(bold: true)),                 // "bold" → built-in
+			.init(start: 18, length: 11, style: InlineStyle(bold: true, italic: true)), // → synthesized combined style
+		]
+		var link = BodyParagraph(text: "Visit the notes.", paragraphStyle: PagesStyleID.body)
+		link.links = [.init(start: 10, length: 5, url: "https://example.com")]
+
+		let synth = PagesSynthesizer()
+		try synth.setBody([heading, body, link])
+		try synth.write(to: url)
+
+		// Re-reads cleanly with the text, and the graph gained synthesized objects
+		// (a combined bold-italic character style #2021 and a link object #2032).
+		let entries = try PagesContainer.entries(at: url, prefix: "").map { ($0.path, [UInt8]($0.data)) }
+		let graph = IWAObjectGraph.read(IWAPackage.read(entries))
+		let synthesizedTypes = graph.allIdentifiers
+			.filter { $0 >= PagesStyleID.synthesizedBase }
+			.compactMap { graph.type(of: $0) }
+		#expect(synthesizedTypes.contains(2021))   // combined character style
+		#expect(synthesizedTypes.contains(2032))   // hyperlink object
+		let text = try PagesFile(url: url).plainText()
+		#expect(text.contains("bold-italic"))
+	}
+
 	@Test("the synthesized package is structurally valid: every IWA parses, refs resolve")
 	func structurallyValid() throws {
 		let url = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("synth-valid.pages")

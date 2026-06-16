@@ -598,3 +598,64 @@ Header/footer counts patch `TableModelArchive` #9/#10/#11; widths/heights fill t
 alignment, column widths.** Per-cell borders are emitted as solid `TSD.StrokeArchive`s
 and round-trip, but Pages renders cell borders from the table's stroke layer rather than
 per-cell `cell_properties` strokes — still to wire.
+
+---
+
+## Cold synthesis framework — the typed object graph (2026-06-16)
+
+Everything above either patches bytes of a captured archive or splices pre-built object
+sets into it. The **cold synthesis framework** replaces that with a typed, editable model
+of the whole document — read a package in, manipulate it as objects, write a valid package
+back out, with the record framing and `PackageMetadata` *recomputed from the model* rather
+than copied. It is the foundation a document builder stands on, and it is app-agnostic: the
+shared `TS*` object layer is byte-identical across Pages, Numbers and Keynote, so the same
+machinery round-trips all three (validated: Pages ~570 objects, a Numbers doc 335/335
+records byte-identical, a Keynote deck 1309/1309 — zero dangling references in each).
+
+### The layers
+
+- **`IWAPackage`** (package I/O) — parses each `Index/*.iwa` into framing-preserving
+  `IWARecord`s (an `ArchiveInfo` id `#1` plus a *repeated* `MessageInfo` `#2`, so one record
+  can hold several object parts) and keeps everything else (`Metadata/`, previews) raw.
+  `write(to:)` re-frames and STORED-zips. A `Part` is either *preserved* (re-emits Apple's
+  `MessageInfo` verbatim, only recomputing the `#3` length) or *synthesized* (emits `#1`
+  type, `#3` length, `#5` packed `object_references`).
+
+- **`IWAReferenceScanner`** (the reference engine) — schema-less recovery of an object's
+  cross-references. Every link is a `TSP.Reference`/`DataReference`, i.e. a sub-message
+  whose `identifier` is at `#1` and whose only other fields are the two deprecated scalars
+  (`#2`/`#3`). The scanner walks the payload's message tree and records any *reference-shaped*
+  sub-message whose `#1` names a known object. Restricting to known ids (which live in a
+  high, sparse range) is what makes it exact, not heuristic. **Validated against Apple's
+  stored `object_references` across the blank template: it never misses a real reference**
+  (it is a complete superset — Apple additionally omits some style/stylesheet back-pointers
+  it resolves through the stylesheet, which is safe to include since the targets exist, and
+  which Pages accepts).
+
+- **`IWAObjectGraph`** (the editable model) — components + records, an id allocator
+  (one past the high-water mark), reachability (`reachable(from:)`, the mark phase of a GC),
+  `referencedIDs(of:)`, `addObject`/`replacePayload` taking typed-model bytes, and
+  `syncPackageMetadata()` which raises `last_object_identifier` to cover every synthesized
+  id. `read(_:)`/`package()` convert to and from `IWAPackage`; synthesized records get their
+  `#5` recomputed on export, unchanged records keep Apple's framing (so an untouched
+  document round-trips byte-for-byte).
+
+- **`PagesSynthesizer`** (the Pages app layer) — sources the bundled blank document as a
+  *theme + scaffold* (exactly as a Pages theme would supply the stylesheet), rebuilds the
+  body text storage and any synthesized character-style (2021) / hyperlink (2032) objects
+  through the graph, syncs metadata, applies a fresh document identity, and writes. A
+  `NumbersSynthesizer`/`KeynoteSynthesizer` would wrap the same `IWAObjectGraph`, supplying
+  the `TN`/`KN` root and theme — the engine doesn't change.
+
+### Validated in Pages
+
+A graph-synthesized document opens cleanly in Pages.app (no repair dialog), which proves
+Pages accepts the computed superset `object_references`. Both the *replace* path (plain
+body text) and the *add* path (a formatted body that synthesizes a combined bold-italic
+character style and a hyperlink object, placed via `addObject` with computed `#5`) render
+correctly — heading style, bold, italic, bold-italic and link all intact.
+
+The distinction from `PagesWriter` (which surgically edits archive bytes): the synthesizer
+holds the whole document as an inspectable typed graph, so references and metadata are
+derived generically instead of hand-patched per feature — the property that lets the same
+core extend to Numbers and Keynote.
