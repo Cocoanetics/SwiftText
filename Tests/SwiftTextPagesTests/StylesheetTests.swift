@@ -51,6 +51,29 @@ struct StylesheetTests {
         #expect(para.paraProperties != nil)
     }
 
+    @Test("Block quote has the HTML-style left bar (a paragraph stroke on the left edge)")
+    func blockQuoteHasLeftBar() throws {
+        let styles = try generatedStyles("> A quoted line.\n")
+        let quote = try #require(styles[PagesStyleID.blockQuote])
+        let pp = try #require(TSWP_ParagraphStyleArchive(ProtobufMessage(quote.payload)).paraProperties)
+
+        // A solid gray rule down the left edge: a stroke + the left border position,
+        // the way Pages encodes a left paragraph border (RE'd from a Pages-authored quote).
+        let stroke = try #require(pp.stroke)
+        #expect(abs((stroke.width ?? 0) - 4) < 0.01)
+        let bar = try #require(stroke.color)
+        #expect(abs((bar.r ?? 0) - 0.795) < 0.01)
+        #expect(abs((bar.g ?? 0) - 0.795) < 0.01)
+        #expect(abs((bar.b ?? 0) - 0.795) < 0.01)
+        #expect(bar.model == 1)            // RGB
+        #expect(pp.borderPositions == 4)   // left edge
+
+        // The bar sits at the first-line indent; the text block flows from the larger
+        // left indent — bar → gap → text, like an HTML block quote.
+        #expect(abs((pp.firstLineIndent ?? 0) - 14.173) < 0.01)
+        #expect(abs((pp.leftIndent ?? 0) - 36) < 0.01)
+    }
+
     @Test("Heading 4 is rebuilt black + bold (the blank theme ships it red)")
     func headingFourIsNotRed() throws {
         let styles = try generatedStyles("#### A minor heading\n")

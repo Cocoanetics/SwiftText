@@ -403,6 +403,72 @@ enum PagesBodySerializer {
 		}
 	}
 
+	/// Returns a paragraph-style payload with independent left and first-line indents
+	/// (points) in its para_properties (field 12). With a left rule present (see
+	/// ``settingLeftRule(in:red:green:blue:width:)``) Pages draws the bar at the
+	/// first-line indent and flows all text from the larger left indent — i.e. the
+	/// HTML block-quote look of bar → gap → text. Other fields are preserved.
+	static func settingIndents(in stylePayload: [UInt8], left: Float, firstLine: Float) -> [UInt8] {
+		editingParaProperties(in: stylePayload) { overrides, touched in
+			touched.insert(ParaProperty.leftIndent)
+			touched.insert(ParaProperty.firstLineIndent)
+			overrides[ParaProperty.leftIndent] = ProtobufWriter.fixed32(left.bitPattern)
+			overrides[ParaProperty.firstLineIndent] = ProtobufWriter.fixed32(firstLine.bitPattern)
+		}
+	}
+
+	/// Returns a paragraph-style payload carrying a **left vertical rule** — the
+	/// HTML-style block-quote bar — in its para_properties (field 12). Encodes exactly
+	/// what Pages writes when a left paragraph border is added (reverse-engineered from
+	/// a Pages-authored document):
+	///   - `stroke` (#32): a `TSD.StrokeArchive` with a solid `pattern` (type 1),
+	///     a `color`, and `width` in points;
+	///   - `border_positions` (#45) = 4 and the legacy `borders` (#15) = 8 — the bitmask
+	///     for the *left* edge.
+	/// The stroke colour reuses ``colorBytes(red:green:blue:)`` (the layout Pages renders).
+	/// All other para_properties (indents, spacing, line spacing, …) are preserved;
+	/// `stroke_null` (#31) is dropped so the stroke is honoured.
+	static func settingLeftRule(in stylePayload: [UInt8], red: Float, green: Float, blue: Float, width: Float) -> [UInt8] {
+		var pattern = ProtobufWriter()                       // solid line, as Pages emits
+		pattern.varintField(1, 1)                            // type = solid
+		pattern.fixed32Field(2, Float(0).bitPattern)         // phase
+		pattern.varintField(3, 0)                            // count
+		for _ in 0..<6 { pattern.fixed32Field(4, Float(0).bitPattern) }  // dash array (all-zero = solid)
+
+		var stroke = ProtobufWriter()
+		stroke.bytesField(1, colorBytes(red: red, green: green, blue: blue))   // color
+		stroke.fixed32Field(2, width.bitPattern)             // width (points)
+		stroke.varintField(3, 0)                             // cap = butt
+		stroke.varintField(4, 0)                             // join = miter
+		stroke.fixed32Field(5, Float(4).bitPattern)          // miter limit
+		stroke.bytesField(6, pattern.bytes)                  // pattern
+		let strokeBytes = stroke.bytes
+
+		let style = ProtobufMessage(stylePayload)
+		var writer = ProtobufWriter()
+		var wrote = false
+		for field in style.fields {
+			guard field.number == 12, case .lengthDelimited(let paraProperties) = field.value else { writer.append(field); continue }
+			var inner = ProtobufWriter()
+			for property in ProtobufMessage(paraProperties).fields where ![15, 31, 32, 45].contains(property.number) {
+				inner.append(property)
+			}
+			inner.varintField(15, 8)                         // deprecated borders = left
+			inner.bytesField(32, strokeBytes)                // stroke
+			inner.varintField(45, 4)                         // border positions = left
+			writer.bytesField(12, inner.bytes)
+			wrote = true
+		}
+		if !wrote {                                          // no para_properties yet — add one
+			var inner = ProtobufWriter()
+			inner.varintField(15, 8)
+			inner.bytesField(32, strokeBytes)
+			inner.varintField(45, 4)
+			writer.bytesField(12, inner.bytes)
+		}
+		return writer.bytes
+	}
+
 	/// Returns a paragraph-style payload with relative line spacing (a multiple of the
 	/// line height, e.g. 1.2) set in its para_properties (field 12). Sets the
 	/// `line_spacing` message (field 13, mode = relative, amount = `multiple`) and

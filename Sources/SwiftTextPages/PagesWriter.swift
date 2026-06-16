@@ -255,14 +255,18 @@ public final class PagesWriter {
 			}
 		}
 		if let body = try IWAArchive.objects(from: data).first(where: { $0.identifier == PagesStyleID.body })?.payload {
-			// Block quote: a copy of the (known-safe) Body style, indented + italic, with
-			// a unique identifier. (Editing the special "Default" style crashes Pages;
-			// repurposing a real style is safe.)
+			// Block quote: a copy of the (known-safe) Body style, indented + italic + gray,
+			// with a left vertical rule (the HTML-style bar), and a unique identifier.
+			// (Editing the special "Default" style crashes Pages; repurposing a real style
+			// is safe.) Indents/bar/colour reverse-engineered from a Pages-authored quote:
+			// the bar sits at the first-line indent (14.173pt ≈ 0.5cm) with the text block
+			// flowing from the left indent (36pt) — bar → gap → text, like HTML.
 			var blockQuote = PagesBodySerializer.settingStyleIdentity(in: body, name: "Block Quote", identifier: PagesStyleIdentifier.blockQuote)
 			blockQuote = PagesBodySerializer.settingSpacing(in: blockQuote, spaceBefore: 8, spaceAfter: 8)
-			blockQuote = PagesBodySerializer.settingLeftIndent(in: blockQuote, points: 36)
+			blockQuote = PagesBodySerializer.settingIndents(in: blockQuote, left: 36, firstLine: 14.173)
 			blockQuote = PagesBodySerializer.settingItalic(in: blockQuote)
 			blockQuote = PagesBodySerializer.settingTextColor(in: blockQuote, red: 0.4, green: 0.4, blue: 0.4)
+			blockQuote = PagesBodySerializer.settingLeftRule(in: blockQuote, red: 0.795, green: 0.795, blue: 0.795, width: 4)
 			data = try IWAArchive.replacingPayload(in: data, objectID: PagesStyleID.blockQuote) { _ in blockQuote }
 
 			// Heading 4: the blank theme ships it as a red "Heading Red". Rather than
