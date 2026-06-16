@@ -467,3 +467,41 @@ Still genuinely open (only matters for Strategy B / from-scratch):
 > **Dumping `TP.*` type numbers (only if going from scratch):** attach `lldb` to
 > Pages.app and `po [TSPRegistry sharedRegistry]`; `numbers-parser`'s
 > `protos/generate_mapping.py` reformats that output. Not needed for template-mutation.
+
+---
+
+## Cell-level table settings (decoded via edit-and-diff, 2026-06-16)
+
+Observed by editing a generated table in Pages, saving, and diffing the IWA.
+
+**Table-level toggles (implemented):** title = `TableModelArchive.table_name_enabled` #22
++ `DrawableArchive.title_hidden` #12; caption = `DrawableArchive.caption_hidden` #13.
+Style-driven (inherited from the theme `table-0-tableStyle` 6003 → `table_properties`
+#11, `TST.TableStylePropertiesArchive`): `banded_rows` #1, `auto_resize` #22, gridline
+visibility `v/h_strokes_visible` #33/#34 + separators #35–#37, `table_border_visible`
+#38, stroke styles #46–#61. Header/footer counts = model #9/#10/#11. Row/col sizes =
+`HeaderStorageBucket.Header.size` #2.
+
+**Cell text alignment — mechanism decoded, NOT YET IMPLEMENTED.** Horizontal alignment
+is NOT in the cell style (`CellStylePropertiesArchive` has only `vertical_alignment` #8,
+`text_wrap` #3, fill, strokes, padding). Instead:
+- Each tile cell record's word **W1** (bytes 16–19, right after the 4-byte string key) is
+  a **key into `DataStore.styleTable`** (the `DataList` whose list-id is 4; sample id
+  1733212), NOT a direct enum.
+- styleTable entry = `{ #1 key, #2 refcount, #4 { #1 styleRef } }` → a `TSWP`
+  paragraph style (type 2022). The style's `para_properties` (#12) `#1` field is the
+  alignment override.
+- Pages creates a distinct style per (alignment × header/body), because the **parent**
+  base differs by bold: `1731526` "Table Style 1" (bold, header) vs `1731527`
+  "Table Style 2" (regular, body); both parents have `#12 #1 = 4` (natural).
+- Observed body-cell values: **right → `#12 = 08 01`**, **center → `#12 = 08 02`**.
+  The default left style (1734364) is **also `08 02`**, differing from center only by
+  parent — so `#12 #1` alone is not a clean L/C/R enum; rendered result depends on
+  parent + override together. (Unresolved: the exact left-vs-center discriminator.)
+- To set a column's alignment: synthesize the matching paragraph style(s), add a
+  styleTable entry, and set each cell's W1 to that key. Left/default columns need no
+  change.
+
+**In-cell bold/italic — NOT decoded/implemented.** Cells store plain strings in the
+`stringTable` DataList; rich (mixed-style) cell text needs a separate rich-text storage
+(`DataStore.rich_text_table` #17), a larger mechanism not yet reverse-engineered.
