@@ -3,7 +3,7 @@
 import Foundation
 
 /// Generated wire model for `TSP.Reference`.
-final class TSP_Reference {
+final class TSP_Reference: IWAMessage {
     var identifier: UInt64?
     var deprecatedType: Int32?
     var deprecatedIsExternal: Bool?
@@ -41,7 +41,7 @@ final class TSP_Reference {
 }
 
 /// Generated wire model for `TSP.DataReference`.
-final class TSP_DataReference {
+final class TSP_DataReference: IWAMessage {
     var identifier: UInt64?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -67,7 +67,7 @@ final class TSP_DataReference {
 }
 
 /// Generated wire model for `TSP.SparseReferenceArray`.
-final class TSP_SparseReferenceArray {
+final class TSP_SparseReferenceArray: IWAMessage {
     var count: UInt32?
     var entries: [TSP_SparseReferenceArray_Entry] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -99,7 +99,7 @@ final class TSP_SparseReferenceArray {
 }
 
 /// Generated wire model for `TSP.SparseReferenceArray.Entry`.
-final class TSP_SparseReferenceArray_Entry {
+final class TSP_SparseReferenceArray_Entry: IWAMessage {
     var index: UInt32?
     var reference: TSP_Reference?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -131,7 +131,7 @@ final class TSP_SparseReferenceArray_Entry {
 }
 
 /// Generated wire model for `TSP.Point`.
-final class TSP_Point {
+final class TSP_Point: IWAMessage {
     var x: Float?
     var y: Float?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -163,7 +163,7 @@ final class TSP_Point {
 }
 
 /// Generated wire model for `TSP.Pose3D`.
-final class TSP_Pose3D {
+final class TSP_Pose3D: IWAMessage {
     var yaw: Float?
     var pitch: Float?
     var roll: Float?
@@ -201,7 +201,7 @@ final class TSP_Pose3D {
 }
 
 /// Generated wire model for `TSP.Rect`.
-final class TSP_Rect {
+final class TSP_Rect: IWAMessage {
     var origin: TSP_Point?
     var size: TSP_Size?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -233,7 +233,7 @@ final class TSP_Rect {
 }
 
 /// Generated wire model for `TSP.Size`.
-final class TSP_Size {
+final class TSP_Size: IWAMessage {
     var width: Float?
     var height: Float?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -265,7 +265,7 @@ final class TSP_Size {
 }
 
 /// Generated wire model for `TSP.Range`.
-final class TSP_Range {
+final class TSP_Range: IWAMessage {
     var location: UInt32?
     var length: UInt32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -297,7 +297,7 @@ final class TSP_Range {
 }
 
 /// Generated wire model for `TSP.Date`.
-final class TSP_Date {
+final class TSP_Date: IWAMessage {
     var seconds: Double?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -323,7 +323,7 @@ final class TSP_Date {
 }
 
 /// Generated wire model for `TSP.IndexSet`.
-final class TSP_IndexSet {
+final class TSP_IndexSet: IWAMessage {
     var ranges: [TSP_Range] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -349,7 +349,7 @@ final class TSP_IndexSet {
 }
 
 /// Generated wire model for `TSP.Color`.
-final class TSP_Color {
+final class TSP_Color: IWAMessage {
     var model: Int32?
     var r: Float?
     var g: Float?
@@ -435,7 +435,7 @@ final class TSP_Color {
 }
 
 /// Generated wire model for `TSP.Path`.
-final class TSP_Path {
+final class TSP_Path: IWAMessage {
     var elements: [TSP_Path_Element] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -461,7 +461,7 @@ final class TSP_Path {
 }
 
 /// Generated wire model for `TSP.Path.Element`.
-final class TSP_Path_Element {
+final class TSP_Path_Element: IWAMessage {
     var type: Int32?
     var points: [TSP_Point] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -493,7 +493,7 @@ final class TSP_Path_Element {
 }
 
 /// Generated wire model for `TSP.ReferenceDictionary`.
-final class TSP_ReferenceDictionary {
+final class TSP_ReferenceDictionary: IWAMessage {
     var entries: [TSP_ReferenceDictionary_Entry] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -519,7 +519,7 @@ final class TSP_ReferenceDictionary {
 }
 
 /// Generated wire model for `TSP.ReferenceDictionary.Entry`.
-final class TSP_ReferenceDictionary_Entry {
+final class TSP_ReferenceDictionary_Entry: IWAMessage {
     var key: TSP_Reference?
     var value: TSP_Reference?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -551,7 +551,7 @@ final class TSP_ReferenceDictionary_Entry {
 }
 
 /// Generated wire model for `TSP.UUID`.
-final class TSP_UUID {
+final class TSP_UUID: IWAMessage {
     var lower: UInt64?
     var upper: UInt64?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -583,7 +583,7 @@ final class TSP_UUID {
 }
 
 /// Generated wire model for `TSP.CFUUIDArchive`.
-final class TSP_CFUUIDArchive {
+final class TSP_CFUUIDArchive: IWAMessage {
     var uuidBytes: [UInt8]?
     var uuidW0: UInt32?
     var uuidW1: UInt32?
@@ -633,7 +633,7 @@ final class TSP_CFUUIDArchive {
 }
 
 /// Generated wire model for `TSP.UUIDSetArchive`.
-final class TSP_UUIDSetArchive {
+final class TSP_UUIDSetArchive: IWAMessage {
     var uids: [TSP_UUID] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -659,7 +659,7 @@ final class TSP_UUIDSetArchive {
 }
 
 /// Generated wire model for `TSP.UUIDMapArchive`.
-final class TSP_UUIDMapArchive {
+final class TSP_UUIDMapArchive: IWAMessage {
     var source: [TSP_UUID] = []
     var target: [TSP_UUID] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -691,7 +691,7 @@ final class TSP_UUIDMapArchive {
 }
 
 /// Generated wire model for `TSP.UUIDMultiMapArchive`.
-final class TSP_UUIDMultiMapArchive {
+final class TSP_UUIDMultiMapArchive: IWAMessage {
     var source: [TSP_UUID] = []
     var target: [TSP_UUID] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -723,7 +723,7 @@ final class TSP_UUIDMultiMapArchive {
 }
 
 /// Generated wire model for `TSP.UUIDCoordArchive`.
-final class TSP_UUIDCoordArchive {
+final class TSP_UUIDCoordArchive: IWAMessage {
     var rowUid: TSP_UUID?
     var columnUid: TSP_UUID?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -755,7 +755,7 @@ final class TSP_UUIDCoordArchive {
 }
 
 /// Generated wire model for `TSP.UUIDRectArchive`.
-final class TSP_UUIDRectArchive {
+final class TSP_UUIDRectArchive: IWAMessage {
     var columnUids: [TSP_UUID] = []
     var rowUids: [TSP_UUID] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -787,7 +787,7 @@ final class TSP_UUIDRectArchive {
 }
 
 /// Generated wire model for `TSP.SparseUUIDArray`.
-final class TSP_SparseUUIDArray {
+final class TSP_SparseUUIDArray: IWAMessage {
     var count: UInt32?
     var entries: [TSP_SparseUUIDArray_Entry] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -819,7 +819,7 @@ final class TSP_SparseUUIDArray {
 }
 
 /// Generated wire model for `TSP.SparseUUIDArray.Entry`.
-final class TSP_SparseUUIDArray_Entry {
+final class TSP_SparseUUIDArray_Entry: IWAMessage {
     var index: UInt32?
     var uuid: TSP_UUID?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -851,7 +851,7 @@ final class TSP_SparseUUIDArray_Entry {
 }
 
 /// Generated wire model for `TSP.UUIDPath`.
-final class TSP_UUIDPath {
+final class TSP_UUIDPath: IWAMessage {
     var uuids: [TSP_UUID] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -877,7 +877,7 @@ final class TSP_UUIDPath {
 }
 
 /// Generated wire model for `TSP.SparseUUIDPathArray`.
-final class TSP_SparseUUIDPathArray {
+final class TSP_SparseUUIDPathArray: IWAMessage {
     var count: UInt32?
     var entries: [TSP_SparseUUIDPathArray_Entry] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -909,7 +909,7 @@ final class TSP_SparseUUIDPathArray {
 }
 
 /// Generated wire model for `TSP.SparseUUIDPathArray.Entry`.
-final class TSP_SparseUUIDPathArray_Entry {
+final class TSP_SparseUUIDPathArray_Entry: IWAMessage {
     var index: UInt32?
     var uuidPath: TSP_UUIDPath?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -941,7 +941,7 @@ final class TSP_SparseUUIDPathArray_Entry {
 }
 
 /// Generated wire model for `TSP.PasteboardObject`.
-final class TSP_PasteboardObject {
+final class TSP_PasteboardObject: IWAMessage {
     var stylesheet: TSP_Reference?
     var drawables: [TSP_Reference] = []
     var styles: [TSP_Reference] = []
@@ -1033,7 +1033,7 @@ final class TSP_PasteboardObject {
 }
 
 /// Generated wire model for `TSP.ObjectCollection`.
-final class TSP_ObjectCollection {
+final class TSP_ObjectCollection: IWAMessage {
     var objects: [TSP_Reference] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1059,7 +1059,7 @@ final class TSP_ObjectCollection {
 }
 
 /// Generated wire model for `TSP.ObjectContainer`.
-final class TSP_ObjectContainer {
+final class TSP_ObjectContainer: IWAMessage {
     var identifier: UInt32?
     var objects: [TSP_Reference] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1091,7 +1091,7 @@ final class TSP_ObjectContainer {
 }
 
 /// Generated wire model for `TSP.DataAttributes`.
-final class TSP_DataAttributes {
+final class TSP_DataAttributes: IWAMessage {
 
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1113,7 +1113,7 @@ final class TSP_DataAttributes {
 }
 
 /// Generated wire model for `TSP.LargeArraySegment`.
-final class TSP_LargeArraySegment {
+final class TSP_LargeArraySegment: IWAMessage {
     var shouldDelayArchiving: Bool?
     var delayedArchivingPriority: UInt32?
     var packageLocator: String?
@@ -1151,7 +1151,7 @@ final class TSP_LargeArraySegment {
 }
 
 /// Generated wire model for `TSP.LargeNumberArraySegment`.
-final class TSP_LargeNumberArraySegment {
+final class TSP_LargeNumberArraySegment: IWAMessage {
     var largeArraySegment: TSP_LargeArraySegment?
     var elements: [Double] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1183,7 +1183,7 @@ final class TSP_LargeNumberArraySegment {
 }
 
 /// Generated wire model for `TSP.LargeStringArraySegment`.
-final class TSP_LargeStringArraySegment {
+final class TSP_LargeStringArraySegment: IWAMessage {
     var largeArraySegment: TSP_LargeArraySegment?
     var elements: [TSP_LargeStringArraySegment_OptionalElement] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1215,7 +1215,7 @@ final class TSP_LargeStringArraySegment {
 }
 
 /// Generated wire model for `TSP.LargeStringArraySegment.OptionalElement`.
-final class TSP_LargeStringArraySegment_OptionalElement {
+final class TSP_LargeStringArraySegment_OptionalElement: IWAMessage {
     var element: String?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1241,7 +1241,7 @@ final class TSP_LargeStringArraySegment_OptionalElement {
 }
 
 /// Generated wire model for `TSP.LargeUUIDArraySegment`.
-final class TSP_LargeUUIDArraySegment {
+final class TSP_LargeUUIDArraySegment: IWAMessage {
     var largeArraySegment: TSP_LargeArraySegment?
     var elements: [TSP_UUID] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1273,7 +1273,7 @@ final class TSP_LargeUUIDArraySegment {
 }
 
 /// Generated wire model for `TSP.LargeLazyObjectArraySegment`.
-final class TSP_LargeLazyObjectArraySegment {
+final class TSP_LargeLazyObjectArraySegment: IWAMessage {
     var largeArraySegment: TSP_LargeArraySegment?
     var elements: [TSP_Reference] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1305,7 +1305,7 @@ final class TSP_LargeLazyObjectArraySegment {
 }
 
 /// Generated wire model for `TSP.LargeObjectArraySegment`.
-final class TSP_LargeObjectArraySegment {
+final class TSP_LargeObjectArraySegment: IWAMessage {
     var largeArraySegment: TSP_LargeArraySegment?
     var elements: [TSP_Reference] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1337,7 +1337,7 @@ final class TSP_LargeObjectArraySegment {
 }
 
 /// Generated wire model for `TSP.LargeArray`.
-final class TSP_LargeArray {
+final class TSP_LargeArray: IWAMessage {
     var ranges: [TSP_Range] = []
     var segments: [TSP_Reference] = []
     var maxSegmentElementCount: UInt64?
@@ -1411,7 +1411,7 @@ final class TSP_LargeArray {
 }
 
 /// Generated wire model for `TSP.LargeNumberArray`.
-final class TSP_LargeNumberArray {
+final class TSP_LargeNumberArray: IWAMessage {
     var largeArray: TSP_LargeArray?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1437,7 +1437,7 @@ final class TSP_LargeNumberArray {
 }
 
 /// Generated wire model for `TSP.LargeStringArray`.
-final class TSP_LargeStringArray {
+final class TSP_LargeStringArray: IWAMessage {
     var largeArray: TSP_LargeArray?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1463,7 +1463,7 @@ final class TSP_LargeStringArray {
 }
 
 /// Generated wire model for `TSP.LargeLazyObjectArray`.
-final class TSP_LargeLazyObjectArray {
+final class TSP_LargeLazyObjectArray: IWAMessage {
     var largeArray: TSP_LargeArray?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1489,7 +1489,7 @@ final class TSP_LargeLazyObjectArray {
 }
 
 /// Generated wire model for `TSP.LargeObjectArray`.
-final class TSP_LargeObjectArray {
+final class TSP_LargeObjectArray: IWAMessage {
     var largeArray: TSP_LargeArray?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1515,7 +1515,7 @@ final class TSP_LargeObjectArray {
 }
 
 /// Generated wire model for `TSP.LargeUUIDArray`.
-final class TSP_LargeUUIDArray {
+final class TSP_LargeUUIDArray: IWAMessage {
     var largeArray: TSP_LargeArray?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1541,7 +1541,7 @@ final class TSP_LargeUUIDArray {
 }
 
 /// Generated wire model for `TSP.FieldOptions`.
-final class TSP_FieldOptions {
+final class TSP_FieldOptions: IWAMessage {
     var metadataType: Int32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1564,4 +1564,54 @@ final class TSP_FieldOptions {
         for _f in unknownFields { _w.append(_f) }
         return _w.bytes
     }
+}
+
+/// Registers this file's archives into the reflective catalog.
+func registerIWA_TSPMessages(_ into: inout [(name: String, decode: (ProtobufMessage) -> IWAMessage)]) {
+    into.append(("TSP.Reference", { TSP_Reference($0) as IWAMessage }))
+    into.append(("TSP.DataReference", { TSP_DataReference($0) as IWAMessage }))
+    into.append(("TSP.SparseReferenceArray", { TSP_SparseReferenceArray($0) as IWAMessage }))
+    into.append(("TSP.SparseReferenceArray.Entry", { TSP_SparseReferenceArray_Entry($0) as IWAMessage }))
+    into.append(("TSP.Point", { TSP_Point($0) as IWAMessage }))
+    into.append(("TSP.Pose3D", { TSP_Pose3D($0) as IWAMessage }))
+    into.append(("TSP.Rect", { TSP_Rect($0) as IWAMessage }))
+    into.append(("TSP.Size", { TSP_Size($0) as IWAMessage }))
+    into.append(("TSP.Range", { TSP_Range($0) as IWAMessage }))
+    into.append(("TSP.Date", { TSP_Date($0) as IWAMessage }))
+    into.append(("TSP.IndexSet", { TSP_IndexSet($0) as IWAMessage }))
+    into.append(("TSP.Color", { TSP_Color($0) as IWAMessage }))
+    into.append(("TSP.Path", { TSP_Path($0) as IWAMessage }))
+    into.append(("TSP.Path.Element", { TSP_Path_Element($0) as IWAMessage }))
+    into.append(("TSP.ReferenceDictionary", { TSP_ReferenceDictionary($0) as IWAMessage }))
+    into.append(("TSP.ReferenceDictionary.Entry", { TSP_ReferenceDictionary_Entry($0) as IWAMessage }))
+    into.append(("TSP.UUID", { TSP_UUID($0) as IWAMessage }))
+    into.append(("TSP.CFUUIDArchive", { TSP_CFUUIDArchive($0) as IWAMessage }))
+    into.append(("TSP.UUIDSetArchive", { TSP_UUIDSetArchive($0) as IWAMessage }))
+    into.append(("TSP.UUIDMapArchive", { TSP_UUIDMapArchive($0) as IWAMessage }))
+    into.append(("TSP.UUIDMultiMapArchive", { TSP_UUIDMultiMapArchive($0) as IWAMessage }))
+    into.append(("TSP.UUIDCoordArchive", { TSP_UUIDCoordArchive($0) as IWAMessage }))
+    into.append(("TSP.UUIDRectArchive", { TSP_UUIDRectArchive($0) as IWAMessage }))
+    into.append(("TSP.SparseUUIDArray", { TSP_SparseUUIDArray($0) as IWAMessage }))
+    into.append(("TSP.SparseUUIDArray.Entry", { TSP_SparseUUIDArray_Entry($0) as IWAMessage }))
+    into.append(("TSP.UUIDPath", { TSP_UUIDPath($0) as IWAMessage }))
+    into.append(("TSP.SparseUUIDPathArray", { TSP_SparseUUIDPathArray($0) as IWAMessage }))
+    into.append(("TSP.SparseUUIDPathArray.Entry", { TSP_SparseUUIDPathArray_Entry($0) as IWAMessage }))
+    into.append(("TSP.PasteboardObject", { TSP_PasteboardObject($0) as IWAMessage }))
+    into.append(("TSP.ObjectCollection", { TSP_ObjectCollection($0) as IWAMessage }))
+    into.append(("TSP.ObjectContainer", { TSP_ObjectContainer($0) as IWAMessage }))
+    into.append(("TSP.DataAttributes", { TSP_DataAttributes($0) as IWAMessage }))
+    into.append(("TSP.LargeArraySegment", { TSP_LargeArraySegment($0) as IWAMessage }))
+    into.append(("TSP.LargeNumberArraySegment", { TSP_LargeNumberArraySegment($0) as IWAMessage }))
+    into.append(("TSP.LargeStringArraySegment", { TSP_LargeStringArraySegment($0) as IWAMessage }))
+    into.append(("TSP.LargeStringArraySegment.OptionalElement", { TSP_LargeStringArraySegment_OptionalElement($0) as IWAMessage }))
+    into.append(("TSP.LargeUUIDArraySegment", { TSP_LargeUUIDArraySegment($0) as IWAMessage }))
+    into.append(("TSP.LargeLazyObjectArraySegment", { TSP_LargeLazyObjectArraySegment($0) as IWAMessage }))
+    into.append(("TSP.LargeObjectArraySegment", { TSP_LargeObjectArraySegment($0) as IWAMessage }))
+    into.append(("TSP.LargeArray", { TSP_LargeArray($0) as IWAMessage }))
+    into.append(("TSP.LargeNumberArray", { TSP_LargeNumberArray($0) as IWAMessage }))
+    into.append(("TSP.LargeStringArray", { TSP_LargeStringArray($0) as IWAMessage }))
+    into.append(("TSP.LargeLazyObjectArray", { TSP_LargeLazyObjectArray($0) as IWAMessage }))
+    into.append(("TSP.LargeObjectArray", { TSP_LargeObjectArray($0) as IWAMessage }))
+    into.append(("TSP.LargeUUIDArray", { TSP_LargeUUIDArray($0) as IWAMessage }))
+    into.append(("TSP.FieldOptions", { TSP_FieldOptions($0) as IWAMessage }))
 }

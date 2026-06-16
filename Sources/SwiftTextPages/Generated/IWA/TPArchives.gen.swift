@@ -3,7 +3,7 @@
 import Foundation
 
 /// Generated wire model for `TP.DocumentArchive`.
-final class TP_DocumentArchive {
+final class TP_DocumentArchive: IWAMessage {
     var `super`: TSA_DocumentArchive?
     var stylesheet: TSP_Reference?
     var floatingDrawables: TSP_Reference?
@@ -239,7 +239,7 @@ final class TP_DocumentArchive {
 }
 
 /// Generated wire model for `TP.ThemeArchive`.
-final class TP_ThemeArchive {
+final class TP_ThemeArchive: IWAMessage {
     var `super`: TSS_ThemeArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -265,7 +265,7 @@ final class TP_ThemeArchive {
 }
 
 /// Generated wire model for `TP.SettingsArchive`.
-final class TP_SettingsArchive {
+final class TP_SettingsArchive: IWAMessage {
     var body: Bool?
     var headers: Bool?
     var footers: Bool?
@@ -477,7 +477,7 @@ final class TP_SettingsArchive {
 }
 
 /// Generated wire model for `TP.PlaceholderArchive`.
-final class TP_PlaceholderArchive {
+final class TP_PlaceholderArchive: IWAMessage {
     var `super`: TSWP_ShapeInfoArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -503,7 +503,7 @@ final class TP_PlaceholderArchive {
 }
 
 /// Generated wire model for `TP.DrawableTagPairsArchive`.
-final class TP_DrawableTagPairsArchive {
+final class TP_DrawableTagPairsArchive: IWAMessage {
     var drawableTagPairs: [TP_DrawableTagPairsArchive_DrawableTagPair] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -529,7 +529,7 @@ final class TP_DrawableTagPairsArchive {
 }
 
 /// Generated wire model for `TP.DrawableTagPairsArchive.DrawableTagPair`.
-final class TP_DrawableTagPairsArchive_DrawableTagPair {
+final class TP_DrawableTagPairsArchive_DrawableTagPair: IWAMessage {
     var tag: String?
     var drawable: TSP_Reference?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -561,7 +561,7 @@ final class TP_DrawableTagPairsArchive_DrawableTagPair {
 }
 
 /// Generated wire model for `TP.FloatingDrawablesArchive`.
-final class TP_FloatingDrawablesArchive {
+final class TP_FloatingDrawablesArchive: IWAMessage {
     var pageGroups: [TP_FloatingDrawablesArchive_PageGroup] = []
     var drawableTagPairs: TP_DrawableTagPairsArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -593,7 +593,7 @@ final class TP_FloatingDrawablesArchive {
 }
 
 /// Generated wire model for `TP.FloatingDrawablesArchive.DrawableEntry`.
-final class TP_FloatingDrawablesArchive_DrawableEntry {
+final class TP_FloatingDrawablesArchive_DrawableEntry: IWAMessage {
     var drawable: TSP_Reference?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -619,7 +619,7 @@ final class TP_FloatingDrawablesArchive_DrawableEntry {
 }
 
 /// Generated wire model for `TP.FloatingDrawablesArchive.PageGroup`.
-final class TP_FloatingDrawablesArchive_PageGroup {
+final class TP_FloatingDrawablesArchive_PageGroup: IWAMessage {
     var pageIndex: UInt32?
     var backgroundDrawables: [TP_FloatingDrawablesArchive_DrawableEntry] = []
     var foregroundDrawables: [TP_FloatingDrawablesArchive_DrawableEntry] = []
@@ -663,7 +663,7 @@ final class TP_FloatingDrawablesArchive_PageGroup {
 }
 
 /// Generated wire model for `TP.DrawablesZOrderArchive`.
-final class TP_DrawablesZOrderArchive {
+final class TP_DrawablesZOrderArchive: IWAMessage {
     var drawables: [TSP_Reference] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -689,7 +689,7 @@ final class TP_DrawablesZOrderArchive {
 }
 
 /// Generated wire model for `TP.SectionTemplateArchive`.
-final class TP_SectionTemplateArchive {
+final class TP_SectionTemplateArchive: IWAMessage {
     var headers: [TSP_Reference] = []
     var footers: [TSP_Reference] = []
     var sectionTemplateDrawables: [TSP_Reference] = []
@@ -733,7 +733,7 @@ final class TP_SectionTemplateArchive {
 }
 
 /// Generated wire model for `TP.PageTemplateArchive`.
-final class TP_PageTemplateArchive {
+final class TP_PageTemplateArchive: IWAMessage {
     var name: String?
     var sectionTemplateDrawables: [TSP_Reference] = []
     var placeholderDrawables: [TP_PageTemplateArchive_TagDrawablePair] = []
@@ -795,7 +795,7 @@ final class TP_PageTemplateArchive {
 }
 
 /// Generated wire model for `TP.PageTemplateArchive.TagDrawablePair`.
-final class TP_PageTemplateArchive_TagDrawablePair {
+final class TP_PageTemplateArchive_TagDrawablePair: IWAMessage {
     var tag: String?
     var drawable: TSP_Reference?
     var zIndex: UInt32?
@@ -833,7 +833,7 @@ final class TP_PageTemplateArchive_TagDrawablePair {
 }
 
 /// Generated wire model for `TP.SectionArchive`.
-final class TP_SectionArchive {
+final class TP_SectionArchive: IWAMessage {
     var obsoleteShowsHeader: Bool?
     var obsoleteShowsFooter: Bool?
     var obsoleteHeaders: [TSP_Reference] = []
@@ -1033,7 +1033,7 @@ final class TP_SectionArchive {
 }
 
 /// Generated wire model for `TP.DoublePoint`.
-final class TP_DoublePoint {
+final class TP_DoublePoint: IWAMessage {
     var x: Double?
     var y: Double?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1065,7 +1065,7 @@ final class TP_DoublePoint {
 }
 
 /// Generated wire model for `TP.DoubleSize`.
-final class TP_DoubleSize {
+final class TP_DoubleSize: IWAMessage {
     var width: Double?
     var height: Double?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1097,7 +1097,7 @@ final class TP_DoubleSize {
 }
 
 /// Generated wire model for `TP.AnchorPosArchive`.
-final class TP_AnchorPosArchive {
+final class TP_AnchorPosArchive: IWAMessage {
     var attachment: TSP_Reference?
     var position: TSP_Point?
     var drawableUuidPath: TSP_UUIDPath?
@@ -1141,7 +1141,7 @@ final class TP_AnchorPosArchive {
 }
 
 /// Generated wire model for `TP.TargetHintArchive`.
-final class TP_TargetHintArchive {
+final class TP_TargetHintArchive: IWAMessage {
     var frameOrigin: TSP_Point?
     var frameSize: TSP_Size?
     var range: TSP_Range?
@@ -1239,7 +1239,7 @@ final class TP_TargetHintArchive {
 }
 
 /// Generated wire model for `TP.PageHintArchive`.
-final class TP_PageHintArchive {
+final class TP_PageHintArchive: IWAMessage {
     var pageKind: Int32?
     var targetHints: [TP_TargetHintArchive] = []
     var footnoteAutoNumberRange: TSP_Range?
@@ -1367,7 +1367,7 @@ final class TP_PageHintArchive {
 }
 
 /// Generated wire model for `TP.NullChildHintArchive`.
-final class TP_NullChildHintArchive {
+final class TP_NullChildHintArchive: IWAMessage {
 
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1389,7 +1389,7 @@ final class TP_NullChildHintArchive {
 }
 
 /// Generated wire model for `TP.SectionHintArchive`.
-final class TP_SectionHintArchive {
+final class TP_SectionHintArchive: IWAMessage {
     var pageHints: [TP_PageHintArchive] = []
     var startPageIndex: UInt32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1421,7 +1421,7 @@ final class TP_SectionHintArchive {
 }
 
 /// Generated wire model for `TP.TextboxHintArchive`.
-final class TP_TextboxHintArchive {
+final class TP_TextboxHintArchive: IWAMessage {
     var range: TSP_Range?
     var size: TSP_Size?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1453,7 +1453,7 @@ final class TP_TextboxHintArchive {
 }
 
 /// Generated wire model for `TP.TopicNumberHintLevelDataArchive`.
-final class TP_TopicNumberHintLevelDataArchive {
+final class TP_TopicNumberHintLevelDataArchive: IWAMessage {
     var number: UInt32?
     var labelType: UInt32?
     var numberType: UInt32?
@@ -1497,7 +1497,7 @@ final class TP_TopicNumberHintLevelDataArchive {
 }
 
 /// Generated wire model for `TP.TopicNumberHintEntryArchive`.
-final class TP_TopicNumberHintEntryArchive {
+final class TP_TopicNumberHintEntryArchive: IWAMessage {
     var listStyle: TSP_Reference?
     var topicNumbers: [TP_TopicNumberHintLevelDataArchive] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1529,7 +1529,7 @@ final class TP_TopicNumberHintEntryArchive {
 }
 
 /// Generated wire model for `TP.TopicNumberHintsArchive`.
-final class TP_TopicNumberHintsArchive {
+final class TP_TopicNumberHintsArchive: IWAMessage {
     var topicNumbersMap: [TP_TopicNumberHintEntryArchive] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1555,7 +1555,7 @@ final class TP_TopicNumberHintsArchive {
 }
 
 /// Generated wire model for `TP.LayoutStateArchive`.
-final class TP_LayoutStateArchive {
+final class TP_LayoutStateArchive: IWAMessage {
     var sectionIndex: UInt32?
     var sectionPageIndex: UInt32?
     var documentPageIndex: UInt32?
@@ -1623,7 +1623,7 @@ final class TP_LayoutStateArchive {
 }
 
 /// Generated wire model for `TP.CanvasSelectionArchive`.
-final class TP_CanvasSelectionArchive {
+final class TP_CanvasSelectionArchive: IWAMessage {
     var deprecatedType: Int32?
     var visualDefinitionRange: TSP_Range?
     var styleInsertionBehavior: Int32?
@@ -1715,7 +1715,7 @@ final class TP_CanvasSelectionArchive {
 }
 
 /// Generated wire model for `TP.AllFootnoteSelectionArchive`.
-final class TP_AllFootnoteSelectionArchive {
+final class TP_AllFootnoteSelectionArchive: IWAMessage {
 
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1737,7 +1737,7 @@ final class TP_AllFootnoteSelectionArchive {
 }
 
 /// Generated wire model for `TP.UIStateArchive`.
-final class TP_UIStateArchive {
+final class TP_UIStateArchive: IWAMessage {
     var obsoleteViewScale: Float?
     var visibleRectOrigin: TSP_Point?
     var obsoleteLandscape: Bool?
@@ -2039,7 +2039,7 @@ final class TP_UIStateArchive {
 }
 
 /// Generated wire model for `TP.ViewStateRootArchive`.
-final class TP_ViewStateRootArchive {
+final class TP_ViewStateRootArchive: IWAMessage {
     var layoutState: TSP_Reference?
     var viewState: TSP_Reference?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -2071,7 +2071,7 @@ final class TP_ViewStateRootArchive {
 }
 
 /// Generated wire model for `TP.UserDefinedGuideMapArchive`.
-final class TP_UserDefinedGuideMapArchive {
+final class TP_UserDefinedGuideMapArchive: IWAMessage {
     var userDefinedGuideStorages: [TP_UserDefinedGuideMapArchive_UserDefinedGuide] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -2097,7 +2097,7 @@ final class TP_UserDefinedGuideMapArchive {
 }
 
 /// Generated wire model for `TP.UserDefinedGuideMapArchive.UserDefinedGuide`.
-final class TP_UserDefinedGuideMapArchive_UserDefinedGuide {
+final class TP_UserDefinedGuideMapArchive_UserDefinedGuide: IWAMessage {
     var pageIndex: UInt32?
     var guideStorage: TSP_Reference?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -2129,7 +2129,7 @@ final class TP_UserDefinedGuideMapArchive_UserDefinedGuide {
 }
 
 /// Generated wire model for `TP.SectionSelectionArchive`.
-final class TP_SectionSelectionArchive {
+final class TP_SectionSelectionArchive: IWAMessage {
     var sections: [TSP_Reference] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -2155,7 +2155,7 @@ final class TP_SectionSelectionArchive {
 }
 
 /// Generated wire model for `TP.SectionSelectionTransformerArchive`.
-final class TP_SectionSelectionTransformerArchive {
+final class TP_SectionSelectionTransformerArchive: IWAMessage {
     var originalSelection: TSP_Reference?
     var storageUuidPath: TSP_UUIDPath?
     var sectionUuidPaths: [TSP_UUIDPath] = []
@@ -2193,7 +2193,7 @@ final class TP_SectionSelectionTransformerArchive {
 }
 
 /// Generated wire model for `TP.SectionPasteboardObjectArchive`.
-final class TP_SectionPasteboardObjectArchive {
+final class TP_SectionPasteboardObjectArchive: IWAMessage {
     var textStorage: TSP_Reference?
     var pageCount: UInt32?
     var pageDrawables: [TP_SectionPasteboardObjectArchive_PageDrawables] = []
@@ -2237,7 +2237,7 @@ final class TP_SectionPasteboardObjectArchive {
 }
 
 /// Generated wire model for `TP.SectionPasteboardObjectArchive.PageDrawables`.
-final class TP_SectionPasteboardObjectArchive_PageDrawables {
+final class TP_SectionPasteboardObjectArchive_PageDrawables: IWAMessage {
     var pageIndex: UInt32?
     var drawableTagPairs: TP_DrawableTagPairsArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -2269,7 +2269,7 @@ final class TP_SectionPasteboardObjectArchive_PageDrawables {
 }
 
 /// Generated wire model for `TP.SectionsAppNativeObjectArchive`.
-final class TP_SectionsAppNativeObjectArchive {
+final class TP_SectionsAppNativeObjectArchive: IWAMessage {
     var sectionPasteboardObjects: [TSP_Reference] = []
     var pageTemplates: [TP_SectionsAppNativeObjectArchive_PageTemplatesEntry] = []
     var flows: [TSP_Reference] = []
@@ -2307,7 +2307,7 @@ final class TP_SectionsAppNativeObjectArchive {
 }
 
 /// Generated wire model for `TP.SectionsAppNativeObjectArchive.PageTemplatesEntry`.
-final class TP_SectionsAppNativeObjectArchive_PageTemplatesEntry {
+final class TP_SectionsAppNativeObjectArchive_PageTemplatesEntry: IWAMessage {
     var key: TSP_UUID?
     var value: TSP_Reference?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -2339,7 +2339,7 @@ final class TP_SectionsAppNativeObjectArchive_PageTemplatesEntry {
 }
 
 /// Generated wire model for `TP.MailMergeSettingsArchive`.
-final class TP_MailMergeSettingsArchive {
+final class TP_MailMergeSettingsArchive: IWAMessage {
     var substituteClosest: Bool?
     var dataHasHeaderRow: Bool?
     var currentDataSource: Int32?
@@ -2425,7 +2425,7 @@ final class TP_MailMergeSettingsArchive {
 }
 
 /// Generated wire model for `TP.MailMergeSettingsArchive.NumbersDataSourceArchive`.
-final class TP_MailMergeSettingsArchive_NumbersDataSourceArchive {
+final class TP_MailMergeSettingsArchive_NumbersDataSourceArchive: IWAMessage {
     var bookmarkData: [UInt8]?
     var tableUuid: TSP_UUID?
     var documentUuid: TSP_UUID?
@@ -2469,7 +2469,7 @@ final class TP_MailMergeSettingsArchive_NumbersDataSourceArchive {
 }
 
 /// Generated wire model for `TP.MailMergeSettingsArchive.ContactsFieldsMapEntry`.
-final class TP_MailMergeSettingsArchive_ContactsFieldsMapEntry {
+final class TP_MailMergeSettingsArchive_ContactsFieldsMapEntry: IWAMessage {
     var key: String?
     var value: TSWP_MergeFieldTypeArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -2501,7 +2501,7 @@ final class TP_MailMergeSettingsArchive_ContactsFieldsMapEntry {
 }
 
 /// Generated wire model for `TP.MailMergeSettingsArchive.NumbersFieldsMapEntry`.
-final class TP_MailMergeSettingsArchive_NumbersFieldsMapEntry {
+final class TP_MailMergeSettingsArchive_NumbersFieldsMapEntry: IWAMessage {
     var key: String?
     var value: TSWP_MergeFieldTypeArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -2530,4 +2530,50 @@ final class TP_MailMergeSettingsArchive_NumbersFieldsMapEntry {
         for _f in unknownFields { _w.append(_f) }
         return _w.bytes
     }
+}
+
+/// Registers this file's archives into the reflective catalog.
+func registerIWA_TPArchives(_ into: inout [(name: String, decode: (ProtobufMessage) -> IWAMessage)]) {
+    into.append(("TP.DocumentArchive", { TP_DocumentArchive($0) as IWAMessage }))
+    into.append(("TP.ThemeArchive", { TP_ThemeArchive($0) as IWAMessage }))
+    into.append(("TP.SettingsArchive", { TP_SettingsArchive($0) as IWAMessage }))
+    into.append(("TP.PlaceholderArchive", { TP_PlaceholderArchive($0) as IWAMessage }))
+    into.append(("TP.DrawableTagPairsArchive", { TP_DrawableTagPairsArchive($0) as IWAMessage }))
+    into.append(("TP.DrawableTagPairsArchive.DrawableTagPair", { TP_DrawableTagPairsArchive_DrawableTagPair($0) as IWAMessage }))
+    into.append(("TP.FloatingDrawablesArchive", { TP_FloatingDrawablesArchive($0) as IWAMessage }))
+    into.append(("TP.FloatingDrawablesArchive.DrawableEntry", { TP_FloatingDrawablesArchive_DrawableEntry($0) as IWAMessage }))
+    into.append(("TP.FloatingDrawablesArchive.PageGroup", { TP_FloatingDrawablesArchive_PageGroup($0) as IWAMessage }))
+    into.append(("TP.DrawablesZOrderArchive", { TP_DrawablesZOrderArchive($0) as IWAMessage }))
+    into.append(("TP.SectionTemplateArchive", { TP_SectionTemplateArchive($0) as IWAMessage }))
+    into.append(("TP.PageTemplateArchive", { TP_PageTemplateArchive($0) as IWAMessage }))
+    into.append(("TP.PageTemplateArchive.TagDrawablePair", { TP_PageTemplateArchive_TagDrawablePair($0) as IWAMessage }))
+    into.append(("TP.SectionArchive", { TP_SectionArchive($0) as IWAMessage }))
+    into.append(("TP.DoublePoint", { TP_DoublePoint($0) as IWAMessage }))
+    into.append(("TP.DoubleSize", { TP_DoubleSize($0) as IWAMessage }))
+    into.append(("TP.AnchorPosArchive", { TP_AnchorPosArchive($0) as IWAMessage }))
+    into.append(("TP.TargetHintArchive", { TP_TargetHintArchive($0) as IWAMessage }))
+    into.append(("TP.PageHintArchive", { TP_PageHintArchive($0) as IWAMessage }))
+    into.append(("TP.NullChildHintArchive", { TP_NullChildHintArchive($0) as IWAMessage }))
+    into.append(("TP.SectionHintArchive", { TP_SectionHintArchive($0) as IWAMessage }))
+    into.append(("TP.TextboxHintArchive", { TP_TextboxHintArchive($0) as IWAMessage }))
+    into.append(("TP.TopicNumberHintLevelDataArchive", { TP_TopicNumberHintLevelDataArchive($0) as IWAMessage }))
+    into.append(("TP.TopicNumberHintEntryArchive", { TP_TopicNumberHintEntryArchive($0) as IWAMessage }))
+    into.append(("TP.TopicNumberHintsArchive", { TP_TopicNumberHintsArchive($0) as IWAMessage }))
+    into.append(("TP.LayoutStateArchive", { TP_LayoutStateArchive($0) as IWAMessage }))
+    into.append(("TP.CanvasSelectionArchive", { TP_CanvasSelectionArchive($0) as IWAMessage }))
+    into.append(("TP.AllFootnoteSelectionArchive", { TP_AllFootnoteSelectionArchive($0) as IWAMessage }))
+    into.append(("TP.UIStateArchive", { TP_UIStateArchive($0) as IWAMessage }))
+    into.append(("TP.ViewStateRootArchive", { TP_ViewStateRootArchive($0) as IWAMessage }))
+    into.append(("TP.UserDefinedGuideMapArchive", { TP_UserDefinedGuideMapArchive($0) as IWAMessage }))
+    into.append(("TP.UserDefinedGuideMapArchive.UserDefinedGuide", { TP_UserDefinedGuideMapArchive_UserDefinedGuide($0) as IWAMessage }))
+    into.append(("TP.SectionSelectionArchive", { TP_SectionSelectionArchive($0) as IWAMessage }))
+    into.append(("TP.SectionSelectionTransformerArchive", { TP_SectionSelectionTransformerArchive($0) as IWAMessage }))
+    into.append(("TP.SectionPasteboardObjectArchive", { TP_SectionPasteboardObjectArchive($0) as IWAMessage }))
+    into.append(("TP.SectionPasteboardObjectArchive.PageDrawables", { TP_SectionPasteboardObjectArchive_PageDrawables($0) as IWAMessage }))
+    into.append(("TP.SectionsAppNativeObjectArchive", { TP_SectionsAppNativeObjectArchive($0) as IWAMessage }))
+    into.append(("TP.SectionsAppNativeObjectArchive.PageTemplatesEntry", { TP_SectionsAppNativeObjectArchive_PageTemplatesEntry($0) as IWAMessage }))
+    into.append(("TP.MailMergeSettingsArchive", { TP_MailMergeSettingsArchive($0) as IWAMessage }))
+    into.append(("TP.MailMergeSettingsArchive.NumbersDataSourceArchive", { TP_MailMergeSettingsArchive_NumbersDataSourceArchive($0) as IWAMessage }))
+    into.append(("TP.MailMergeSettingsArchive.ContactsFieldsMapEntry", { TP_MailMergeSettingsArchive_ContactsFieldsMapEntry($0) as IWAMessage }))
+    into.append(("TP.MailMergeSettingsArchive.NumbersFieldsMapEntry", { TP_MailMergeSettingsArchive_NumbersFieldsMapEntry($0) as IWAMessage }))
 }

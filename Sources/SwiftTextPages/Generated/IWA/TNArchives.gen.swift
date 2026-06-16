@@ -3,7 +3,7 @@
 import Foundation
 
 /// Generated wire model for `TN.SheetUIStateArchive`.
-final class TN_SheetUIStateArchive {
+final class TN_SheetUIStateArchive: IWAMessage {
     var viewScale: Float?
     var scrollPosition: TSP_Point?
     var previousViewScale: Float?
@@ -95,7 +95,7 @@ final class TN_SheetUIStateArchive {
 }
 
 /// Generated wire model for `TN.SheetUIStateDictionaryEntryArchive`.
-final class TN_SheetUIStateDictionaryEntryArchive {
+final class TN_SheetUIStateDictionaryEntryArchive: IWAMessage {
     var sheet: TSP_Reference?
     var sheetUistate: TN_SheetUIStateArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -127,7 +127,7 @@ final class TN_SheetUIStateDictionaryEntryArchive {
 }
 
 /// Generated wire model for `TN.UUIDSheetUIStateDictionaryArchive`.
-final class TN_UUIDSheetUIStateDictionaryArchive {
+final class TN_UUIDSheetUIStateDictionaryArchive: IWAMessage {
     var sheetUuid: TSP_UUID?
     var sheetUistate: TN_SheetUIStateArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -159,7 +159,7 @@ final class TN_UUIDSheetUIStateDictionaryArchive {
 }
 
 /// Generated wire model for `TN.UIStateArchive`.
-final class TN_UIStateArchive {
+final class TN_UIStateArchive: IWAMessage {
     var activeSheetIndex: UInt32?
     var selectedInfo: [TSP_Reference] = []
     var sheetUistateDictionaryEntry: [TN_SheetUIStateDictionaryEntryArchive] = []
@@ -370,7 +370,7 @@ final class TN_UIStateArchive {
 }
 
 /// Generated wire model for `TN.SheetSelectionArchive`.
-final class TN_SheetSelectionArchive {
+final class TN_SheetSelectionArchive: IWAMessage {
     var sheet: TSP_Reference?
     var paginated: Bool?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -402,7 +402,7 @@ final class TN_SheetSelectionArchive {
 }
 
 /// Generated wire model for `TN.FormSelectionArchive`.
-final class TN_FormSelectionArchive {
+final class TN_FormSelectionArchive: IWAMessage {
     var recordIndex: UInt32?
     var fieldIndex: UInt32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -434,7 +434,7 @@ final class TN_FormSelectionArchive {
 }
 
 /// Generated wire model for `TN.FormBuilderSelectionArchive`.
-final class TN_FormBuilderSelectionArchive {
+final class TN_FormBuilderSelectionArchive: IWAMessage {
     var viewingRecordIndex: UInt32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -460,7 +460,7 @@ final class TN_FormBuilderSelectionArchive {
 }
 
 /// Generated wire model for `TN.FormTableChooserSelectionArchive`.
-final class TN_FormTableChooserSelectionArchive {
+final class TN_FormTableChooserSelectionArchive: IWAMessage {
 
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -482,7 +482,7 @@ final class TN_FormTableChooserSelectionArchive {
 }
 
 /// Generated wire model for `TN.UndoRedoStateArchive`.
-final class TN_UndoRedoStateArchive {
+final class TN_UndoRedoStateArchive: IWAMessage {
     var uiState: TN_UIStateArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -508,7 +508,7 @@ final class TN_UndoRedoStateArchive {
 }
 
 /// Generated wire model for `TN.DocumentArchive`.
-final class TN_DocumentArchive {
+final class TN_DocumentArchive: IWAMessage {
     var sheets: [TSP_Reference] = []
     var `super`: TSA_DocumentArchive?
     var calculationEngine: TSP_Reference?
@@ -594,7 +594,7 @@ final class TN_DocumentArchive {
 }
 
 /// Generated wire model for `TN.PlaceholderArchive`.
-final class TN_PlaceholderArchive {
+final class TN_PlaceholderArchive: IWAMessage {
     var `super`: TSWP_ShapeInfoArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -620,7 +620,7 @@ final class TN_PlaceholderArchive {
 }
 
 /// Generated wire model for `TN.SheetArchive`.
-final class TN_SheetArchive {
+final class TN_SheetArchive: IWAMessage {
     var name: String?
     var drawableInfos: [TSP_Reference] = []
     var inPortraitPageOrientation: Bool?
@@ -778,7 +778,7 @@ final class TN_SheetArchive {
 }
 
 /// Generated wire model for `TN.SheetStylePropertiesArchive`.
-final class TN_SheetStylePropertiesArchive {
+final class TN_SheetStylePropertiesArchive: IWAMessage {
     var fill: TSD_FillArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -804,7 +804,7 @@ final class TN_SheetStylePropertiesArchive {
 }
 
 /// Generated wire model for `TN.SheetStyleArchive`.
-final class TN_SheetStyleArchive {
+final class TN_SheetStyleArchive: IWAMessage {
     var `super`: TSS_StyleArchive?
     var overrideCount: UInt32?
     var sheetProperties: TN_SheetStylePropertiesArchive?
@@ -842,7 +842,7 @@ final class TN_SheetStyleArchive {
 }
 
 /// Generated wire model for `TN.FormBasedSheetArchive`.
-final class TN_FormBasedSheetArchive {
+final class TN_FormBasedSheetArchive: IWAMessage {
     var `super`: TN_SheetArchive?
     var tableId: TSP_CFUUIDArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -874,7 +874,7 @@ final class TN_FormBasedSheetArchive {
 }
 
 /// Generated wire model for `TN.ThemeArchive`.
-final class TN_ThemeArchive {
+final class TN_ThemeArchive: IWAMessage {
     var `super`: TSS_ThemeArchive?
     var prototypes: [TSP_Reference] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -906,7 +906,7 @@ final class TN_ThemeArchive {
 }
 
 /// Generated wire model for `TN.PasteboardNativeStorageArchive`.
-final class TN_PasteboardNativeStorageArchive {
+final class TN_PasteboardNativeStorageArchive: IWAMessage {
     var sheet: TSP_Reference?
     var uiState: TN_SheetUIStateArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -938,7 +938,7 @@ final class TN_PasteboardNativeStorageArchive {
 }
 
 /// Generated wire model for `TN.ChartMediatorFormulaStorage`.
-final class TN_ChartMediatorFormulaStorage {
+final class TN_ChartMediatorFormulaStorage: IWAMessage {
     var dataFormulae: [TSCE_FormulaArchive] = []
     var rowLabelFormulae: [TSCE_FormulaArchive] = []
     var colLabelFormulae: [TSCE_FormulaArchive] = []
@@ -1012,7 +1012,7 @@ final class TN_ChartMediatorFormulaStorage {
 }
 
 /// Generated wire model for `TN.ChartMediatorArchive`.
-final class TN_ChartMediatorArchive {
+final class TN_ChartMediatorArchive: IWAMessage {
     var entityId: String?
     var formulas: TN_ChartMediatorFormulaStorage?
     var columnsAreSeries: Bool?
@@ -1056,7 +1056,7 @@ final class TN_ChartMediatorArchive {
 }
 
 /// Generated wire model for `TN.ChartSelectionArchive`.
-final class TN_ChartSelectionArchive {
+final class TN_ChartSelectionArchive: IWAMessage {
     var reference: TSCE_RangeReferenceArchive?
     var chart: TSP_Reference?
     var `super`: TSD_DrawableSelectionArchive?
@@ -1094,7 +1094,7 @@ final class TN_ChartSelectionArchive {
 }
 
 /// Generated wire model for `TN.FormCommandActivityBehaviorArchive`.
-final class TN_FormCommandActivityBehaviorArchive {
+final class TN_FormCommandActivityBehaviorArchive: IWAMessage {
     var `super`: TSCK_CommandActivityBehaviorArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1117,4 +1117,29 @@ final class TN_FormCommandActivityBehaviorArchive {
         for _f in unknownFields { _w.append(_f) }
         return _w.bytes
     }
+}
+
+/// Registers this file's archives into the reflective catalog.
+func registerIWA_TNArchives(_ into: inout [(name: String, decode: (ProtobufMessage) -> IWAMessage)]) {
+    into.append(("TN.SheetUIStateArchive", { TN_SheetUIStateArchive($0) as IWAMessage }))
+    into.append(("TN.SheetUIStateDictionaryEntryArchive", { TN_SheetUIStateDictionaryEntryArchive($0) as IWAMessage }))
+    into.append(("TN.UUIDSheetUIStateDictionaryArchive", { TN_UUIDSheetUIStateDictionaryArchive($0) as IWAMessage }))
+    into.append(("TN.UIStateArchive", { TN_UIStateArchive($0) as IWAMessage }))
+    into.append(("TN.SheetSelectionArchive", { TN_SheetSelectionArchive($0) as IWAMessage }))
+    into.append(("TN.FormSelectionArchive", { TN_FormSelectionArchive($0) as IWAMessage }))
+    into.append(("TN.FormBuilderSelectionArchive", { TN_FormBuilderSelectionArchive($0) as IWAMessage }))
+    into.append(("TN.FormTableChooserSelectionArchive", { TN_FormTableChooserSelectionArchive($0) as IWAMessage }))
+    into.append(("TN.UndoRedoStateArchive", { TN_UndoRedoStateArchive($0) as IWAMessage }))
+    into.append(("TN.DocumentArchive", { TN_DocumentArchive($0) as IWAMessage }))
+    into.append(("TN.PlaceholderArchive", { TN_PlaceholderArchive($0) as IWAMessage }))
+    into.append(("TN.SheetArchive", { TN_SheetArchive($0) as IWAMessage }))
+    into.append(("TN.SheetStylePropertiesArchive", { TN_SheetStylePropertiesArchive($0) as IWAMessage }))
+    into.append(("TN.SheetStyleArchive", { TN_SheetStyleArchive($0) as IWAMessage }))
+    into.append(("TN.FormBasedSheetArchive", { TN_FormBasedSheetArchive($0) as IWAMessage }))
+    into.append(("TN.ThemeArchive", { TN_ThemeArchive($0) as IWAMessage }))
+    into.append(("TN.PasteboardNativeStorageArchive", { TN_PasteboardNativeStorageArchive($0) as IWAMessage }))
+    into.append(("TN.ChartMediatorFormulaStorage", { TN_ChartMediatorFormulaStorage($0) as IWAMessage }))
+    into.append(("TN.ChartMediatorArchive", { TN_ChartMediatorArchive($0) as IWAMessage }))
+    into.append(("TN.ChartSelectionArchive", { TN_ChartSelectionArchive($0) as IWAMessage }))
+    into.append(("TN.FormCommandActivityBehaviorArchive", { TN_FormCommandActivityBehaviorArchive($0) as IWAMessage }))
 }

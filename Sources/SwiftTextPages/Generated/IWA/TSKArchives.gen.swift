@@ -3,7 +3,7 @@
 import Foundation
 
 /// Generated wire model for `TSK.TreeNode`.
-final class TSK_TreeNode {
+final class TSK_TreeNode: IWAMessage {
     var name: String?
     var children: [TSP_Reference] = []
     var object: TSP_Reference?
@@ -41,7 +41,7 @@ final class TSK_TreeNode {
 }
 
 /// Generated wire model for `TSK.LocalCommandHistoryItem`.
-final class TSK_LocalCommandHistoryItem {
+final class TSK_LocalCommandHistoryItem: IWAMessage {
     var command: TSP_Reference?
     var behavior: TSP_Reference?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -73,7 +73,7 @@ final class TSK_LocalCommandHistoryItem {
 }
 
 /// Generated wire model for `TSK.LocalCommandHistoryArray`.
-final class TSK_LocalCommandHistoryArray {
+final class TSK_LocalCommandHistoryArray: IWAMessage {
     var largeArray: TSP_LargeArray?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -99,7 +99,7 @@ final class TSK_LocalCommandHistoryArray {
 }
 
 /// Generated wire model for `TSK.LocalCommandHistoryArraySegment`.
-final class TSK_LocalCommandHistoryArraySegment {
+final class TSK_LocalCommandHistoryArraySegment: IWAMessage {
     var largeObjectArraySegment: TSP_LargeObjectArraySegment?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -125,7 +125,7 @@ final class TSK_LocalCommandHistoryArraySegment {
 }
 
 /// Generated wire model for `TSK.LocalCommandHistory`.
-final class TSK_LocalCommandHistory {
+final class TSK_LocalCommandHistory: IWAMessage {
     var undoCount: UInt32?
     var itemsArray: TSP_Reference?
     var fixedRadar13365177: Bool?
@@ -163,7 +163,7 @@ final class TSK_LocalCommandHistory {
 }
 
 /// Generated wire model for `TSK.DocumentArchive`.
-final class TSK_DocumentArchive {
+final class TSK_DocumentArchive: IWAMessage {
     var localeIdentifier: String?
     var annotationAuthorStorage: TSP_Reference?
     var activityLogEntries: [TSP_Reference] = []
@@ -261,7 +261,7 @@ final class TSK_DocumentArchive {
 }
 
 /// Generated wire model for `TSK.FormattingSymbolsArchive`.
-final class TSK_FormattingSymbolsArchive {
+final class TSK_FormattingSymbolsArchive: IWAMessage {
     var version: String?
     var calendar: String?
     var numberingSystem: String?
@@ -569,7 +569,7 @@ final class TSK_FormattingSymbolsArchive {
 }
 
 /// Generated wire model for `TSK.FormattingSymbolsArchive.CurrencySymbol`.
-final class TSK_FormattingSymbolsArchive_CurrencySymbol {
+final class TSK_FormattingSymbolsArchive_CurrencySymbol: IWAMessage {
     var code: String?
     var symbol: String?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -601,7 +601,7 @@ final class TSK_FormattingSymbolsArchive_CurrencySymbol {
 }
 
 /// Generated wire model for `TSK.DocumentSupportArchive`.
-final class TSK_DocumentSupportArchive {
+final class TSK_DocumentSupportArchive: IWAMessage {
     var commandHistory: TSP_Reference?
     var undoCount: UInt32?
     var redoCount: UInt32?
@@ -711,7 +711,7 @@ final class TSK_DocumentSupportArchive {
 }
 
 /// Generated wire model for `TSK.ViewStateArchive`.
-final class TSK_ViewStateArchive {
+final class TSK_ViewStateArchive: IWAMessage {
     var viewStateRoot: TSP_Reference?
     var documentRevisionSequence: Int32?
     var documentRevisionIdentifier: String?
@@ -749,7 +749,7 @@ final class TSK_ViewStateArchive {
 }
 
 /// Generated wire model for `TSK.CommandArchive`.
-final class TSK_CommandArchive {
+final class TSK_CommandArchive: IWAMessage {
     var undoredostate: TSP_Reference?
     var undocollection: TSP_Reference?
     var shadowedByTransform: Bool?
@@ -811,7 +811,7 @@ final class TSK_CommandArchive {
 }
 
 /// Generated wire model for `TSK.CommandGroupArchive`.
-final class TSK_CommandGroupArchive {
+final class TSK_CommandGroupArchive: IWAMessage {
     var `super`: TSK_CommandArchive?
     var commands: [TSP_Reference] = []
     var processResults: TSP_IndexSet?
@@ -861,7 +861,7 @@ final class TSK_CommandGroupArchive {
 }
 
 /// Generated wire model for `TSK.InducedCommandCollectionArchive`.
-final class TSK_InducedCommandCollectionArchive {
+final class TSK_InducedCommandCollectionArchive: IWAMessage {
     var `super`: TSK_CommandArchive?
     var inducingCommand: TSP_Reference?
     var inducedCommands: [TSP_Reference] = []
@@ -905,7 +905,7 @@ final class TSK_InducedCommandCollectionArchive {
 }
 
 /// Generated wire model for `TSK.PropagatedCommandCollectionArchive`.
-final class TSK_PropagatedCommandCollectionArchive {
+final class TSK_PropagatedCommandCollectionArchive: IWAMessage {
     var `super`: TSK_CommandArchive?
     var propagatableCommand: TSP_Reference?
     var propagatableCommandProcessResult: Bool?
@@ -955,7 +955,7 @@ final class TSK_PropagatedCommandCollectionArchive {
 }
 
 /// Generated wire model for `TSK.FinalCommandPairArchive`.
-final class TSK_FinalCommandPairArchive {
+final class TSK_FinalCommandPairArchive: IWAMessage {
     var `super`: TSK_CommandArchive?
     var command: TSP_Reference?
     var commandProcessResult: Bool?
@@ -1005,7 +1005,7 @@ final class TSK_FinalCommandPairArchive {
 }
 
 /// Generated wire model for `TSK.CommandContainerArchive`.
-final class TSK_CommandContainerArchive {
+final class TSK_CommandContainerArchive: IWAMessage {
     var commands: [TSP_Reference] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1031,7 +1031,7 @@ final class TSK_CommandContainerArchive {
 }
 
 /// Generated wire model for `TSK.ProgressiveCommandGroupArchive`.
-final class TSK_ProgressiveCommandGroupArchive {
+final class TSK_ProgressiveCommandGroupArchive: IWAMessage {
     var `super`: TSK_CommandGroupArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1057,7 +1057,7 @@ final class TSK_ProgressiveCommandGroupArchive {
 }
 
 /// Generated wire model for `TSK.FormatStructArchive`.
-final class TSK_FormatStructArchive {
+final class TSK_FormatStructArchive: IWAMessage {
     var formatType: UInt32?
     var decimalPlaces: UInt32?
     var currencyCode: String?
@@ -1347,7 +1347,7 @@ final class TSK_FormatStructArchive {
 }
 
 /// Generated wire model for `TSK.CustomFormatArchive`.
-final class TSK_CustomFormatArchive {
+final class TSK_CustomFormatArchive: IWAMessage {
     var name: String?
     var formatTypePreBnc: UInt32?
     var defaultFormat: TSK_FormatStructArchive?
@@ -1397,7 +1397,7 @@ final class TSK_CustomFormatArchive {
 }
 
 /// Generated wire model for `TSK.CustomFormatArchive.Condition`.
-final class TSK_CustomFormatArchive_Condition {
+final class TSK_CustomFormatArchive_Condition: IWAMessage {
     var conditionType: UInt32?
     var conditionValue: Float?
     var conditionFormat: TSK_FormatStructArchive?
@@ -1441,7 +1441,7 @@ final class TSK_CustomFormatArchive_Condition {
 }
 
 /// Generated wire model for `TSK.CustomFormatListArchive`.
-final class TSK_CustomFormatListArchive {
+final class TSK_CustomFormatListArchive: IWAMessage {
     var uuids: [TSP_UUID] = []
     var customFormats: [TSK_CustomFormatArchive] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1473,7 +1473,7 @@ final class TSK_CustomFormatListArchive {
 }
 
 /// Generated wire model for `TSK.AnnotationAuthorArchive`.
-final class TSK_AnnotationAuthorArchive {
+final class TSK_AnnotationAuthorArchive: IWAMessage {
     var name: String?
     var color: TSP_Color?
     var publicId: String?
@@ -1523,7 +1523,7 @@ final class TSK_AnnotationAuthorArchive {
 }
 
 /// Generated wire model for `TSK.DeprecatedChangeAuthorArchive`.
-final class TSK_DeprecatedChangeAuthorArchive {
+final class TSK_DeprecatedChangeAuthorArchive: IWAMessage {
     var name: String?
     var changeColor: TSP_Color?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1555,7 +1555,7 @@ final class TSK_DeprecatedChangeAuthorArchive {
 }
 
 /// Generated wire model for `TSK.AnnotationAuthorStorageArchive`.
-final class TSK_AnnotationAuthorStorageArchive {
+final class TSK_AnnotationAuthorStorageArchive: IWAMessage {
     var annotationAuthor: [TSP_Reference] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1581,7 +1581,7 @@ final class TSK_AnnotationAuthorStorageArchive {
 }
 
 /// Generated wire model for `TSK.CommandBehaviorSelectionPathStorageArchive`.
-final class TSK_CommandBehaviorSelectionPathStorageArchive {
+final class TSK_CommandBehaviorSelectionPathStorageArchive: IWAMessage {
     var archivedSelection: TSK_SelectionPathArchive?
     var archivedOldSelection: TSK_SelectionPathArchive?
     var archivedNewSelection: TSK_SelectionPathArchive?
@@ -1631,7 +1631,7 @@ final class TSK_CommandBehaviorSelectionPathStorageArchive {
 }
 
 /// Generated wire model for `TSK.CommandBehaviorArchive`.
-final class TSK_CommandBehaviorArchive {
+final class TSK_CommandBehaviorArchive: IWAMessage {
     var selectionBehavior: TSP_Reference?
     var activityBehavior: TSP_Reference?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1663,7 +1663,7 @@ final class TSK_CommandBehaviorArchive {
 }
 
 /// Generated wire model for `TSK.CommandSelectionBehaviorArchive`.
-final class TSK_CommandSelectionBehaviorArchive {
+final class TSK_CommandSelectionBehaviorArchive: IWAMessage {
     var selectionPathStorage: TSP_Reference?
     var selectionFlags: UInt64?
     var additionalForwardSelectionFlags: UInt64?
@@ -1713,7 +1713,7 @@ final class TSK_CommandSelectionBehaviorArchive {
 }
 
 /// Generated wire model for `TSK.SelectionPathTransformerArchive`.
-final class TSK_SelectionPathTransformerArchive {
+final class TSK_SelectionPathTransformerArchive: IWAMessage {
     var selectionTransformers: [TSP_Reference] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1739,7 +1739,7 @@ final class TSK_SelectionPathTransformerArchive {
 }
 
 /// Generated wire model for `TSK.SelectionPathArchive`.
-final class TSK_SelectionPathArchive {
+final class TSK_SelectionPathArchive: IWAMessage {
     var orderedSelections: [TSP_Reference] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1765,7 +1765,7 @@ final class TSK_SelectionPathArchive {
 }
 
 /// Generated wire model for `TSK.DocumentSelectionArchive`.
-final class TSK_DocumentSelectionArchive {
+final class TSK_DocumentSelectionArchive: IWAMessage {
     var documentRoot: TSP_Reference?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1791,7 +1791,7 @@ final class TSK_DocumentSelectionArchive {
 }
 
 /// Generated wire model for `TSK.NullCommandArchive`.
-final class TSK_NullCommandArchive {
+final class TSK_NullCommandArchive: IWAMessage {
     var `super`: TSK_CommandArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1817,7 +1817,7 @@ final class TSK_NullCommandArchive {
 }
 
 /// Generated wire model for `TSK.GroupCommitCommandArchive`.
-final class TSK_GroupCommitCommandArchive {
+final class TSK_GroupCommitCommandArchive: IWAMessage {
     var `super`: TSK_CommandArchive?
     var canCoalesceGroup: Bool?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1849,7 +1849,7 @@ final class TSK_GroupCommitCommandArchive {
 }
 
 /// Generated wire model for `TSK.UpgradeDocPostProcessingCommandArchive`.
-final class TSK_UpgradeDocPostProcessingCommandArchive {
+final class TSK_UpgradeDocPostProcessingCommandArchive: IWAMessage {
     var `super`: TSK_CommandArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1875,7 +1875,7 @@ final class TSK_UpgradeDocPostProcessingCommandArchive {
 }
 
 /// Generated wire model for `TSK.InducedCommandCollectionCommitCommandArchive`.
-final class TSK_InducedCommandCollectionCommitCommandArchive {
+final class TSK_InducedCommandCollectionCommitCommandArchive: IWAMessage {
     var `super`: TSK_CommandArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1901,7 +1901,7 @@ final class TSK_InducedCommandCollectionCommitCommandArchive {
 }
 
 /// Generated wire model for `TSK.ChangeDocumentPackageTypeCommandArchive`.
-final class TSK_ChangeDocumentPackageTypeCommandArchive {
+final class TSK_ChangeDocumentPackageTypeCommandArchive: IWAMessage {
     var `super`: TSK_CommandArchive?
     var newPackageType: Int32?
     var oldPackageType: Int32?
@@ -1939,7 +1939,7 @@ final class TSK_ChangeDocumentPackageTypeCommandArchive {
 }
 
 /// Generated wire model for `TSK.RangeAddress`.
-final class TSK_RangeAddress {
+final class TSK_RangeAddress: IWAMessage {
     var addressIdentifier: [UInt64] = []
     var rangeList: [UInt32] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1969,7 +1969,7 @@ final class TSK_RangeAddress {
 }
 
 /// Generated wire model for `TSK.Operation`.
-final class TSK_Operation {
+final class TSK_Operation: IWAMessage {
     var type: Int32?
     var noop: Bool?
     var addressIdentifier: [UInt64] = []
@@ -2066,7 +2066,7 @@ final class TSK_Operation {
 }
 
 /// Generated wire model for `TSK.OperationTransformer`.
-final class TSK_OperationTransformer {
+final class TSK_OperationTransformer: IWAMessage {
     var higherPriority: Bool?
     var operations: [TSK_Operation] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -2098,7 +2098,7 @@ final class TSK_OperationTransformer {
 }
 
 /// Generated wire model for `TSK.OutgoingCommandQueueItem`.
-final class TSK_OutgoingCommandQueueItem {
+final class TSK_OutgoingCommandQueueItem: IWAMessage {
     var command: TSP_Reference?
     var serializedJsonWithoutDataBase64EncodedString: String?
     var serializedJsonWithoutDataBase64EncodedData: TSP_DataReference?
@@ -2160,7 +2160,7 @@ final class TSK_OutgoingCommandQueueItem {
 }
 
 /// Generated wire model for `TSK.OutgoingCommandQueueItemUUIDToDataMapEntry`.
-final class TSK_OutgoingCommandQueueItemUUIDToDataMapEntry {
+final class TSK_OutgoingCommandQueueItemUUIDToDataMapEntry: IWAMessage {
     var uuid: TSP_UUID?
     var data: TSP_DataReference?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -2192,7 +2192,7 @@ final class TSK_OutgoingCommandQueueItemUUIDToDataMapEntry {
 }
 
 /// Generated wire model for `TSK.NativeContentDescription`.
-final class TSK_NativeContentDescription {
+final class TSK_NativeContentDescription: IWAMessage {
     var appName: String?
     var appVersion: String?
     var documentId: String?
@@ -2236,7 +2236,7 @@ final class TSK_NativeContentDescription {
 }
 
 /// Generated wire model for `TSK.StructuredTextImportSettings`.
-final class TSK_StructuredTextImportSettings {
+final class TSK_StructuredTextImportSettings: IWAMessage {
     var type: Int32?
     var startingRow: Int32?
     var decimalSeparators: [String] = []
@@ -2328,7 +2328,7 @@ final class TSK_StructuredTextImportSettings {
 }
 
 /// Generated wire model for `TSK.OperationStorageCommandOperationsEntry`.
-final class TSK_OperationStorageCommandOperationsEntry {
+final class TSK_OperationStorageCommandOperationsEntry: IWAMessage {
     var commandIdentifierSameAsRevisionIdentifier: Bool?
     var commandIdentifier: [UInt64] = []
     var operations: [TSK_Operation] = []
@@ -2378,7 +2378,7 @@ final class TSK_OperationStorageCommandOperationsEntry {
 }
 
 /// Generated wire model for `TSK.OperationStorageEntry`.
-final class TSK_OperationStorageEntry {
+final class TSK_OperationStorageEntry: IWAMessage {
     var documentRevisionIdentifier: [UInt64] = []
     var documentRevisionSequenceDelta: Int32?
     var commandOperationEntries: [TSK_OperationStorageCommandOperationsEntry] = []
@@ -2433,7 +2433,7 @@ final class TSK_OperationStorageEntry {
 }
 
 /// Generated wire model for `TSK.DataReferenceRecord`.
-final class TSK_DataReferenceRecord {
+final class TSK_DataReferenceRecord: IWAMessage {
     var addedContainerUuidToReferencedDataPairs: [TSK_DataReferenceRecord_ContainerUUIDToReferencedDataPair] = []
     var removedContainerUuidToReferencedDataPairs: [TSK_DataReferenceRecord_ContainerUUIDToReferencedDataPair] = []
     var unboundedReferencedDatas: [TSP_DataReference] = []
@@ -2471,7 +2471,7 @@ final class TSK_DataReferenceRecord {
 }
 
 /// Generated wire model for `TSK.DataReferenceRecord.ContainerUUIDToReferencedDataPair`.
-final class TSK_DataReferenceRecord_ContainerUUIDToReferencedDataPair {
+final class TSK_DataReferenceRecord_ContainerUUIDToReferencedDataPair: IWAMessage {
     var containerUuid: TSP_UUID?
     var referencedData: TSP_DataReference?
     var referenceCount: UInt32?
@@ -2509,7 +2509,7 @@ final class TSK_DataReferenceRecord_ContainerUUIDToReferencedDataPair {
 }
 
 /// Generated wire model for `TSK.PencilAnnotationUIState`.
-final class TSK_PencilAnnotationUIState {
+final class TSK_PencilAnnotationUIState: IWAMessage {
     var currentToolType: Int32?
     var penToolColor: TSP_Color?
     var penToolOpacity: Float?
@@ -2568,4 +2568,55 @@ final class TSK_PencilAnnotationUIState {
         for _f in unknownFields { _w.append(_f) }
         return _w.bytes
     }
+}
+
+/// Registers this file's archives into the reflective catalog.
+func registerIWA_TSKArchives(_ into: inout [(name: String, decode: (ProtobufMessage) -> IWAMessage)]) {
+    into.append(("TSK.TreeNode", { TSK_TreeNode($0) as IWAMessage }))
+    into.append(("TSK.LocalCommandHistoryItem", { TSK_LocalCommandHistoryItem($0) as IWAMessage }))
+    into.append(("TSK.LocalCommandHistoryArray", { TSK_LocalCommandHistoryArray($0) as IWAMessage }))
+    into.append(("TSK.LocalCommandHistoryArraySegment", { TSK_LocalCommandHistoryArraySegment($0) as IWAMessage }))
+    into.append(("TSK.LocalCommandHistory", { TSK_LocalCommandHistory($0) as IWAMessage }))
+    into.append(("TSK.DocumentArchive", { TSK_DocumentArchive($0) as IWAMessage }))
+    into.append(("TSK.FormattingSymbolsArchive", { TSK_FormattingSymbolsArchive($0) as IWAMessage }))
+    into.append(("TSK.FormattingSymbolsArchive.CurrencySymbol", { TSK_FormattingSymbolsArchive_CurrencySymbol($0) as IWAMessage }))
+    into.append(("TSK.DocumentSupportArchive", { TSK_DocumentSupportArchive($0) as IWAMessage }))
+    into.append(("TSK.ViewStateArchive", { TSK_ViewStateArchive($0) as IWAMessage }))
+    into.append(("TSK.CommandArchive", { TSK_CommandArchive($0) as IWAMessage }))
+    into.append(("TSK.CommandGroupArchive", { TSK_CommandGroupArchive($0) as IWAMessage }))
+    into.append(("TSK.InducedCommandCollectionArchive", { TSK_InducedCommandCollectionArchive($0) as IWAMessage }))
+    into.append(("TSK.PropagatedCommandCollectionArchive", { TSK_PropagatedCommandCollectionArchive($0) as IWAMessage }))
+    into.append(("TSK.FinalCommandPairArchive", { TSK_FinalCommandPairArchive($0) as IWAMessage }))
+    into.append(("TSK.CommandContainerArchive", { TSK_CommandContainerArchive($0) as IWAMessage }))
+    into.append(("TSK.ProgressiveCommandGroupArchive", { TSK_ProgressiveCommandGroupArchive($0) as IWAMessage }))
+    into.append(("TSK.FormatStructArchive", { TSK_FormatStructArchive($0) as IWAMessage }))
+    into.append(("TSK.CustomFormatArchive", { TSK_CustomFormatArchive($0) as IWAMessage }))
+    into.append(("TSK.CustomFormatArchive.Condition", { TSK_CustomFormatArchive_Condition($0) as IWAMessage }))
+    into.append(("TSK.CustomFormatListArchive", { TSK_CustomFormatListArchive($0) as IWAMessage }))
+    into.append(("TSK.AnnotationAuthorArchive", { TSK_AnnotationAuthorArchive($0) as IWAMessage }))
+    into.append(("TSK.DeprecatedChangeAuthorArchive", { TSK_DeprecatedChangeAuthorArchive($0) as IWAMessage }))
+    into.append(("TSK.AnnotationAuthorStorageArchive", { TSK_AnnotationAuthorStorageArchive($0) as IWAMessage }))
+    into.append(("TSK.CommandBehaviorSelectionPathStorageArchive", { TSK_CommandBehaviorSelectionPathStorageArchive($0) as IWAMessage }))
+    into.append(("TSK.CommandBehaviorArchive", { TSK_CommandBehaviorArchive($0) as IWAMessage }))
+    into.append(("TSK.CommandSelectionBehaviorArchive", { TSK_CommandSelectionBehaviorArchive($0) as IWAMessage }))
+    into.append(("TSK.SelectionPathTransformerArchive", { TSK_SelectionPathTransformerArchive($0) as IWAMessage }))
+    into.append(("TSK.SelectionPathArchive", { TSK_SelectionPathArchive($0) as IWAMessage }))
+    into.append(("TSK.DocumentSelectionArchive", { TSK_DocumentSelectionArchive($0) as IWAMessage }))
+    into.append(("TSK.NullCommandArchive", { TSK_NullCommandArchive($0) as IWAMessage }))
+    into.append(("TSK.GroupCommitCommandArchive", { TSK_GroupCommitCommandArchive($0) as IWAMessage }))
+    into.append(("TSK.UpgradeDocPostProcessingCommandArchive", { TSK_UpgradeDocPostProcessingCommandArchive($0) as IWAMessage }))
+    into.append(("TSK.InducedCommandCollectionCommitCommandArchive", { TSK_InducedCommandCollectionCommitCommandArchive($0) as IWAMessage }))
+    into.append(("TSK.ChangeDocumentPackageTypeCommandArchive", { TSK_ChangeDocumentPackageTypeCommandArchive($0) as IWAMessage }))
+    into.append(("TSK.RangeAddress", { TSK_RangeAddress($0) as IWAMessage }))
+    into.append(("TSK.Operation", { TSK_Operation($0) as IWAMessage }))
+    into.append(("TSK.OperationTransformer", { TSK_OperationTransformer($0) as IWAMessage }))
+    into.append(("TSK.OutgoingCommandQueueItem", { TSK_OutgoingCommandQueueItem($0) as IWAMessage }))
+    into.append(("TSK.OutgoingCommandQueueItemUUIDToDataMapEntry", { TSK_OutgoingCommandQueueItemUUIDToDataMapEntry($0) as IWAMessage }))
+    into.append(("TSK.NativeContentDescription", { TSK_NativeContentDescription($0) as IWAMessage }))
+    into.append(("TSK.StructuredTextImportSettings", { TSK_StructuredTextImportSettings($0) as IWAMessage }))
+    into.append(("TSK.OperationStorageCommandOperationsEntry", { TSK_OperationStorageCommandOperationsEntry($0) as IWAMessage }))
+    into.append(("TSK.OperationStorageEntry", { TSK_OperationStorageEntry($0) as IWAMessage }))
+    into.append(("TSK.DataReferenceRecord", { TSK_DataReferenceRecord($0) as IWAMessage }))
+    into.append(("TSK.DataReferenceRecord.ContainerUUIDToReferencedDataPair", { TSK_DataReferenceRecord_ContainerUUIDToReferencedDataPair($0) as IWAMessage }))
+    into.append(("TSK.PencilAnnotationUIState", { TSK_PencilAnnotationUIState($0) as IWAMessage }))
 }

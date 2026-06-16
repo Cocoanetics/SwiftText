@@ -3,7 +3,7 @@
 import Foundation
 
 /// Generated wire model for `TSP.ArchiveInfo`.
-final class TSP_ArchiveInfo {
+final class TSP_ArchiveInfo: IWAMessage {
     var identifier: UInt64?
     var messageInfos: [TSP_MessageInfo] = []
     var shouldMerge: Bool?
@@ -41,7 +41,7 @@ final class TSP_ArchiveInfo {
 }
 
 /// Generated wire model for `TSP.MessageInfo`.
-final class TSP_MessageInfo {
+final class TSP_MessageInfo: IWAMessage {
     var type: UInt32?
     var version: [UInt32] = []
     var length: UInt32?
@@ -122,7 +122,7 @@ final class TSP_MessageInfo {
 }
 
 /// Generated wire model for `TSP.FieldInfo`.
-final class TSP_FieldInfo {
+final class TSP_FieldInfo: IWAMessage {
     var path: TSP_FieldPath?
     var type: Int32?
     var unknownFieldRule: Int32?
@@ -187,7 +187,7 @@ final class TSP_FieldInfo {
 }
 
 /// Generated wire model for `TSP.FieldPath`.
-final class TSP_FieldPath {
+final class TSP_FieldPath: IWAMessage {
     var path: [UInt32] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -212,7 +212,7 @@ final class TSP_FieldPath {
 }
 
 /// Generated wire model for `TSP.ComponentInfo`.
-final class TSP_ComponentInfo {
+final class TSP_ComponentInfo: IWAMessage {
     var identifier: UInt64?
     var preferredLocator: String?
     var locator: String?
@@ -341,7 +341,7 @@ final class TSP_ComponentInfo {
 }
 
 /// Generated wire model for `TSP.ComponentExternalReference`.
-final class TSP_ComponentExternalReference {
+final class TSP_ComponentExternalReference: IWAMessage {
     var componentIdentifier: UInt64?
     var objectIdentifier: UInt64?
     var isWeak: Bool?
@@ -379,7 +379,7 @@ final class TSP_ComponentExternalReference {
 }
 
 /// Generated wire model for `TSP.ComponentDataReference`.
-final class TSP_ComponentDataReference {
+final class TSP_ComponentDataReference: IWAMessage {
     var dataIdentifier: UInt64?
     var objectReferenceList: [TSP_ComponentDataReference_ObjectReference] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -411,7 +411,7 @@ final class TSP_ComponentDataReference {
 }
 
 /// Generated wire model for `TSP.ComponentDataReference.ObjectReference`.
-final class TSP_ComponentDataReference_ObjectReference {
+final class TSP_ComponentDataReference_ObjectReference: IWAMessage {
     var objectIdentifier: UInt64?
     var count: UInt32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -443,7 +443,7 @@ final class TSP_ComponentDataReference_ObjectReference {
 }
 
 /// Generated wire model for `TSP.ObjectUUIDMapEntry`.
-final class TSP_ObjectUUIDMapEntry {
+final class TSP_ObjectUUIDMapEntry: IWAMessage {
     var identifier: UInt64?
     var uuid: TSP_UUID?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -475,7 +475,7 @@ final class TSP_ObjectUUIDMapEntry {
 }
 
 /// Generated wire model for `TSP.FeatureInfo`.
-final class TSP_FeatureInfo {
+final class TSP_FeatureInfo: IWAMessage {
     var identifier: String?
     var readVersion: [UInt32] = []
     var writeVersion: [UInt32] = []
@@ -511,7 +511,7 @@ final class TSP_FeatureInfo {
 }
 
 /// Generated wire model for `TSP.PackageMetadata`.
-final class TSP_PackageMetadata {
+final class TSP_PackageMetadata: IWAMessage {
     var lastObjectIdentifier: UInt64?
     var revision: TSP_DocumentRevision?
     var components: [TSP_ComponentInfo] = []
@@ -594,7 +594,7 @@ final class TSP_PackageMetadata {
 }
 
 /// Generated wire model for `TSP.DocumentRevision`.
-final class TSP_DocumentRevision {
+final class TSP_DocumentRevision: IWAMessage {
     var sequence32: Int32?
     var identifier: String?
     var sequence64: UInt64?
@@ -632,7 +632,7 @@ final class TSP_DocumentRevision {
 }
 
 /// Generated wire model for `TSP.PasteboardMetadata`.
-final class TSP_PasteboardMetadata {
+final class TSP_PasteboardMetadata: IWAMessage {
     var version: [UInt32] = []
     var appName: String?
     var datas: [TSP_DataInfo] = []
@@ -686,7 +686,7 @@ final class TSP_PasteboardMetadata {
 }
 
 /// Generated wire model for `TSP.DataInfo`.
-final class TSP_DataInfo {
+final class TSP_DataInfo: IWAMessage {
     var identifier: UInt64?
     var digest: [UInt8]?
     var preferredFileName: String?
@@ -820,7 +820,7 @@ final class TSP_DataInfo {
 }
 
 /// Generated wire model for `TSP.DataMetadataMap`.
-final class TSP_DataMetadataMap {
+final class TSP_DataMetadataMap: IWAMessage {
     var dataMetadataEntries: [TSP_DataMetadataMap_DataMetadataMapEntry] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -846,7 +846,7 @@ final class TSP_DataMetadataMap {
 }
 
 /// Generated wire model for `TSP.DataMetadataMap.DataMetadataMapEntry`.
-final class TSP_DataMetadataMap_DataMetadataMapEntry {
+final class TSP_DataMetadataMap_DataMetadataMapEntry: IWAMessage {
     var dataIdentifier: UInt64?
     var dataMetadata: TSP_Reference?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -878,7 +878,7 @@ final class TSP_DataMetadataMap_DataMetadataMapEntry {
 }
 
 /// Generated wire model for `TSP.DataMetadata`.
-final class TSP_DataMetadata {
+final class TSP_DataMetadata: IWAMessage {
     var fallbackColor: TSP_Color?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -904,7 +904,7 @@ final class TSP_DataMetadata {
 }
 
 /// Generated wire model for `TSP.EncryptionInfo`.
-final class TSP_EncryptionInfo {
+final class TSP_EncryptionInfo: IWAMessage {
     var decodedLength: UInt64?
     var preferredBlockSize: UInt64?
     var blockInfos: [TSP_EncryptionBlockInfo] = []
@@ -942,7 +942,7 @@ final class TSP_EncryptionInfo {
 }
 
 /// Generated wire model for `TSP.EncryptionBlockInfo`.
-final class TSP_EncryptionBlockInfo {
+final class TSP_EncryptionBlockInfo: IWAMessage {
     var encodedLength: UInt64?
     var decodedLength: UInt64?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -974,7 +974,7 @@ final class TSP_EncryptionBlockInfo {
 }
 
 /// Generated wire model for `TSP.ViewStateMetadata`.
-final class TSP_ViewStateMetadata {
+final class TSP_ViewStateMetadata: IWAMessage {
     var version: [UInt32] = []
     var versionUuid: TSP_UUID?
     var component: TSP_ComponentInfo?
@@ -1022,7 +1022,7 @@ final class TSP_ViewStateMetadata {
 }
 
 /// Generated wire model for `TSP.ObjectSerializationMetadata`.
-final class TSP_ObjectSerializationMetadata {
+final class TSP_ObjectSerializationMetadata: IWAMessage {
     var version: [UInt32] = []
     var sourceDocumentUuid: TSP_UUID?
     var versionUuid: TSP_UUID?
@@ -1088,7 +1088,7 @@ final class TSP_ObjectSerializationMetadata {
 }
 
 /// Generated wire model for `TSP.ObjectSerializationDirectory`.
-final class TSP_ObjectSerializationDirectory {
+final class TSP_ObjectSerializationDirectory: IWAMessage {
     var entries: [TSP_ObjectSerializationDirectory_Entry] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1114,7 +1114,7 @@ final class TSP_ObjectSerializationDirectory {
 }
 
 /// Generated wire model for `TSP.ObjectSerializationDirectory.Entry`.
-final class TSP_ObjectSerializationDirectory_Entry {
+final class TSP_ObjectSerializationDirectory_Entry: IWAMessage {
     var locator: String?
     var offset: UInt64?
     var size: UInt64?
@@ -1152,7 +1152,7 @@ final class TSP_ObjectSerializationDirectory_Entry {
 }
 
 /// Generated wire model for `TSP.DataPropertiesEntryV1`.
-final class TSP_DataPropertiesEntryV1 {
+final class TSP_DataPropertiesEntryV1: IWAMessage {
     var digest: [UInt8]?
     var expectsMatchedDigest: Bool?
     var creationTimeIntervalSince1970: Double?
@@ -1201,7 +1201,7 @@ final class TSP_DataPropertiesEntryV1 {
 }
 
 /// Generated wire model for `TSP.DataPropertiesV1`.
-final class TSP_DataPropertiesV1 {
+final class TSP_DataPropertiesV1: IWAMessage {
     var properties: [TSP_DataPropertiesEntryV1] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1227,7 +1227,7 @@ final class TSP_DataPropertiesV1 {
 }
 
 /// Generated wire model for `TSP.DocumentMetadata`.
-final class TSP_DocumentMetadata {
+final class TSP_DocumentMetadata: IWAMessage {
     var isInCollaborationMode: Bool?
     var dataPropertiesV1: TSP_DataPropertiesV1?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1259,7 +1259,7 @@ final class TSP_DocumentMetadata {
 }
 
 /// Generated wire model for `TSP.SupportMetadata`.
-final class TSP_SupportMetadata {
+final class TSP_SupportMetadata: IWAMessage {
     var isInCollaborationMode: Bool?
     var dataCollaborationProperties: [TSP_SupportMetadata_DataCollaborationProperties] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1291,7 +1291,7 @@ final class TSP_SupportMetadata {
 }
 
 /// Generated wire model for `TSP.SupportMetadata.DataCollaborationProperties`.
-final class TSP_SupportMetadata_DataCollaborationProperties {
+final class TSP_SupportMetadata_DataCollaborationProperties: IWAMessage {
     var digest: [UInt8]?
     var acknowledgedByServer: Bool?
     var materializedOnServer: Bool?
@@ -1350,4 +1350,36 @@ final class TSP_SupportMetadata_DataCollaborationProperties {
         for _f in unknownFields { _w.append(_f) }
         return _w.bytes
     }
+}
+
+/// Registers this file's archives into the reflective catalog.
+func registerIWA_TSPArchiveMessages(_ into: inout [(name: String, decode: (ProtobufMessage) -> IWAMessage)]) {
+    into.append(("TSP.ArchiveInfo", { TSP_ArchiveInfo($0) as IWAMessage }))
+    into.append(("TSP.MessageInfo", { TSP_MessageInfo($0) as IWAMessage }))
+    into.append(("TSP.FieldInfo", { TSP_FieldInfo($0) as IWAMessage }))
+    into.append(("TSP.FieldPath", { TSP_FieldPath($0) as IWAMessage }))
+    into.append(("TSP.ComponentInfo", { TSP_ComponentInfo($0) as IWAMessage }))
+    into.append(("TSP.ComponentExternalReference", { TSP_ComponentExternalReference($0) as IWAMessage }))
+    into.append(("TSP.ComponentDataReference", { TSP_ComponentDataReference($0) as IWAMessage }))
+    into.append(("TSP.ComponentDataReference.ObjectReference", { TSP_ComponentDataReference_ObjectReference($0) as IWAMessage }))
+    into.append(("TSP.ObjectUUIDMapEntry", { TSP_ObjectUUIDMapEntry($0) as IWAMessage }))
+    into.append(("TSP.FeatureInfo", { TSP_FeatureInfo($0) as IWAMessage }))
+    into.append(("TSP.PackageMetadata", { TSP_PackageMetadata($0) as IWAMessage }))
+    into.append(("TSP.DocumentRevision", { TSP_DocumentRevision($0) as IWAMessage }))
+    into.append(("TSP.PasteboardMetadata", { TSP_PasteboardMetadata($0) as IWAMessage }))
+    into.append(("TSP.DataInfo", { TSP_DataInfo($0) as IWAMessage }))
+    into.append(("TSP.DataMetadataMap", { TSP_DataMetadataMap($0) as IWAMessage }))
+    into.append(("TSP.DataMetadataMap.DataMetadataMapEntry", { TSP_DataMetadataMap_DataMetadataMapEntry($0) as IWAMessage }))
+    into.append(("TSP.DataMetadata", { TSP_DataMetadata($0) as IWAMessage }))
+    into.append(("TSP.EncryptionInfo", { TSP_EncryptionInfo($0) as IWAMessage }))
+    into.append(("TSP.EncryptionBlockInfo", { TSP_EncryptionBlockInfo($0) as IWAMessage }))
+    into.append(("TSP.ViewStateMetadata", { TSP_ViewStateMetadata($0) as IWAMessage }))
+    into.append(("TSP.ObjectSerializationMetadata", { TSP_ObjectSerializationMetadata($0) as IWAMessage }))
+    into.append(("TSP.ObjectSerializationDirectory", { TSP_ObjectSerializationDirectory($0) as IWAMessage }))
+    into.append(("TSP.ObjectSerializationDirectory.Entry", { TSP_ObjectSerializationDirectory_Entry($0) as IWAMessage }))
+    into.append(("TSP.DataPropertiesEntryV1", { TSP_DataPropertiesEntryV1($0) as IWAMessage }))
+    into.append(("TSP.DataPropertiesV1", { TSP_DataPropertiesV1($0) as IWAMessage }))
+    into.append(("TSP.DocumentMetadata", { TSP_DocumentMetadata($0) as IWAMessage }))
+    into.append(("TSP.SupportMetadata", { TSP_SupportMetadata($0) as IWAMessage }))
+    into.append(("TSP.SupportMetadata.DataCollaborationProperties", { TSP_SupportMetadata_DataCollaborationProperties($0) as IWAMessage }))
 }

@@ -3,7 +3,7 @@
 import Foundation
 
 /// Generated wire model for `TSD.EdgeInsetsArchive`.
-final class TSD_EdgeInsetsArchive {
+final class TSD_EdgeInsetsArchive: IWAMessage {
     var top: Float?
     var left: Float?
     var bottom: Float?
@@ -47,7 +47,7 @@ final class TSD_EdgeInsetsArchive {
 }
 
 /// Generated wire model for `TSD.GeometryArchive`.
-final class TSD_GeometryArchive {
+final class TSD_GeometryArchive: IWAMessage {
     var position: TSP_Point?
     var size: TSP_Size?
     var flags: UInt32?
@@ -91,7 +91,7 @@ final class TSD_GeometryArchive {
 }
 
 /// Generated wire model for `TSD.PointPathSourceArchive`.
-final class TSD_PointPathSourceArchive {
+final class TSD_PointPathSourceArchive: IWAMessage {
     var type: Int32?
     var point: TSP_Point?
     var naturalsize: TSP_Size?
@@ -129,7 +129,7 @@ final class TSD_PointPathSourceArchive {
 }
 
 /// Generated wire model for `TSD.ScalarPathSourceArchive`.
-final class TSD_ScalarPathSourceArchive {
+final class TSD_ScalarPathSourceArchive: IWAMessage {
     var type: Int32?
     var scalar: Float?
     var naturalsize: TSP_Size?
@@ -173,7 +173,7 @@ final class TSD_ScalarPathSourceArchive {
 }
 
 /// Generated wire model for `TSD.BezierPathSourceArchive`.
-final class TSD_BezierPathSourceArchive {
+final class TSD_BezierPathSourceArchive: IWAMessage {
     var pathString: String?
     var naturalsize: TSP_Size?
     var path: TSP_Path?
@@ -211,7 +211,7 @@ final class TSD_BezierPathSourceArchive {
 }
 
 /// Generated wire model for `TSD.CalloutPathSourceArchive`.
-final class TSD_CalloutPathSourceArchive {
+final class TSD_CalloutPathSourceArchive: IWAMessage {
     var naturalSize: TSP_Size?
     var tailPosition: TSP_Point?
     var tailSize: Float?
@@ -261,7 +261,7 @@ final class TSD_CalloutPathSourceArchive {
 }
 
 /// Generated wire model for `TSD.ConnectionLinePathSourceArchive`.
-final class TSD_ConnectionLinePathSourceArchive {
+final class TSD_ConnectionLinePathSourceArchive: IWAMessage {
     var `super`: TSD_BezierPathSourceArchive?
     var type: Int32?
     var outsetFrom: Float?
@@ -305,7 +305,7 @@ final class TSD_ConnectionLinePathSourceArchive {
 }
 
 /// Generated wire model for `TSD.EditableBezierPathSourceArchive`.
-final class TSD_EditableBezierPathSourceArchive {
+final class TSD_EditableBezierPathSourceArchive: IWAMessage {
     var subpaths: [TSD_EditableBezierPathSourceArchive_Subpath] = []
     var naturalsize: TSP_Size?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -337,7 +337,7 @@ final class TSD_EditableBezierPathSourceArchive {
 }
 
 /// Generated wire model for `TSD.EditableBezierPathSourceArchive.Node`.
-final class TSD_EditableBezierPathSourceArchive_Node {
+final class TSD_EditableBezierPathSourceArchive_Node: IWAMessage {
     var incontrolpoint: TSP_Point?
     var nodepoint: TSP_Point?
     var outcontrolpoint: TSP_Point?
@@ -381,7 +381,7 @@ final class TSD_EditableBezierPathSourceArchive_Node {
 }
 
 /// Generated wire model for `TSD.EditableBezierPathSourceArchive.Subpath`.
-final class TSD_EditableBezierPathSourceArchive_Subpath {
+final class TSD_EditableBezierPathSourceArchive_Subpath: IWAMessage {
     var nodes: [TSD_EditableBezierPathSourceArchive_Node] = []
     var closed: Bool?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -413,7 +413,7 @@ final class TSD_EditableBezierPathSourceArchive_Subpath {
 }
 
 /// Generated wire model for `TSD.PathSourceArchive`.
-final class TSD_PathSourceArchive {
+final class TSD_PathSourceArchive: IWAMessage {
     var horizontalflip: Bool?
     var verticalflip: Bool?
     var pointPathSource: TSD_PointPathSourceArchive?
@@ -493,7 +493,7 @@ final class TSD_PathSourceArchive {
 }
 
 /// Generated wire model for `TSD.AngleGradientArchive`.
-final class TSD_AngleGradientArchive {
+final class TSD_AngleGradientArchive: IWAMessage {
     var gradientangle: Float?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -519,7 +519,7 @@ final class TSD_AngleGradientArchive {
 }
 
 /// Generated wire model for `TSD.TransformGradientArchive`.
-final class TSD_TransformGradientArchive {
+final class TSD_TransformGradientArchive: IWAMessage {
     var start: TSP_Point?
     var end: TSP_Point?
     var basenaturalsize: TSP_Size?
@@ -557,7 +557,7 @@ final class TSD_TransformGradientArchive {
 }
 
 /// Generated wire model for `TSD.GradientArchive`.
-final class TSD_GradientArchive {
+final class TSD_GradientArchive: IWAMessage {
     var type: Int32?
     var stops: [TSD_GradientArchive_GradientStop] = []
     var opacity: Float?
@@ -613,7 +613,7 @@ final class TSD_GradientArchive {
 }
 
 /// Generated wire model for `TSD.GradientArchive.GradientStop`.
-final class TSD_GradientArchive_GradientStop {
+final class TSD_GradientArchive_GradientStop: IWAMessage {
     var color: TSP_Color?
     var fraction: Float?
     var inflection: Float?
@@ -651,7 +651,7 @@ final class TSD_GradientArchive_GradientStop {
 }
 
 /// Generated wire model for `TSD.ImageFillArchive`.
-final class TSD_ImageFillArchive {
+final class TSD_ImageFillArchive: IWAMessage {
     var imagedata: TSP_DataReference?
     var technique: Int32?
     var tint: TSP_Color?
@@ -725,7 +725,7 @@ final class TSD_ImageFillArchive {
 }
 
 /// Generated wire model for `TSD.FillArchive`.
-final class TSD_FillArchive {
+final class TSD_FillArchive: IWAMessage {
     var color: TSP_Color?
     var gradient: TSD_GradientArchive?
     var image: TSD_ImageFillArchive?
@@ -763,7 +763,7 @@ final class TSD_FillArchive {
 }
 
 /// Generated wire model for `TSD.StrokePatternArchive`.
-final class TSD_StrokePatternArchive {
+final class TSD_StrokePatternArchive: IWAMessage {
     var type: Int32?
     var phase: Float?
     var count: UInt32?
@@ -807,7 +807,7 @@ final class TSD_StrokePatternArchive {
 }
 
 /// Generated wire model for `TSD.StrokeArchive`.
-final class TSD_StrokeArchive {
+final class TSD_StrokeArchive: IWAMessage {
     var color: TSP_Color?
     var width: Float?
     var cap: Int32?
@@ -881,7 +881,7 @@ final class TSD_StrokeArchive {
 }
 
 /// Generated wire model for `TSD.SmartStrokeArchive`.
-final class TSD_SmartStrokeArchive {
+final class TSD_SmartStrokeArchive: IWAMessage {
     var strokeName: String?
     var randomSeed: UInt32?
     var parametervalues: TSP_ReferenceDictionary?
@@ -925,7 +925,7 @@ final class TSD_SmartStrokeArchive {
 }
 
 /// Generated wire model for `TSD.FrameArchive`.
-final class TSD_FrameArchive {
+final class TSD_FrameArchive: IWAMessage {
     var framename: String?
     var assetscale: Float?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -957,7 +957,7 @@ final class TSD_FrameArchive {
 }
 
 /// Generated wire model for `TSD.PatternedStrokeArchive`.
-final class TSD_PatternedStrokeArchive {
+final class TSD_PatternedStrokeArchive: IWAMessage {
     var patternName: String?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -983,7 +983,7 @@ final class TSD_PatternedStrokeArchive {
 }
 
 /// Generated wire model for `TSD.LineEndArchive`.
-final class TSD_LineEndArchive {
+final class TSD_LineEndArchive: IWAMessage {
     var path: TSP_Path?
     var lineJoin: Int32?
     var endPoint: TSP_Point?
@@ -1033,7 +1033,7 @@ final class TSD_LineEndArchive {
 }
 
 /// Generated wire model for `TSD.ShadowArchive`.
-final class TSD_ShadowArchive {
+final class TSD_ShadowArchive: IWAMessage {
     var color: TSP_Color?
     var angle: Float?
     var offset: Float?
@@ -1113,7 +1113,7 @@ final class TSD_ShadowArchive {
 }
 
 /// Generated wire model for `TSD.DropShadowArchive`.
-final class TSD_DropShadowArchive {
+final class TSD_DropShadowArchive: IWAMessage {
 
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1135,7 +1135,7 @@ final class TSD_DropShadowArchive {
 }
 
 /// Generated wire model for `TSD.ContactShadowArchive`.
-final class TSD_ContactShadowArchive {
+final class TSD_ContactShadowArchive: IWAMessage {
     var height: Float?
     var offset: Float?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1167,7 +1167,7 @@ final class TSD_ContactShadowArchive {
 }
 
 /// Generated wire model for `TSD.CurvedShadowArchive`.
-final class TSD_CurvedShadowArchive {
+final class TSD_CurvedShadowArchive: IWAMessage {
     var curve: Float?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1193,7 +1193,7 @@ final class TSD_CurvedShadowArchive {
 }
 
 /// Generated wire model for `TSD.ReflectionArchive`.
-final class TSD_ReflectionArchive {
+final class TSD_ReflectionArchive: IWAMessage {
     var opacity: Float?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1219,7 +1219,7 @@ final class TSD_ReflectionArchive {
 }
 
 /// Generated wire model for `TSD.ImageAdjustmentsArchive`.
-final class TSD_ImageAdjustmentsArchive {
+final class TSD_ImageAdjustmentsArchive: IWAMessage {
     var exposure: Float?
     var saturation: Float?
     var contrast: Float?
@@ -1323,7 +1323,7 @@ final class TSD_ImageAdjustmentsArchive {
 }
 
 /// Generated wire model for `TSD.ShapeStylePropertiesArchive`.
-final class TSD_ShapeStylePropertiesArchive {
+final class TSD_ShapeStylePropertiesArchive: IWAMessage {
     var fill: TSD_FillArchive?
     var stroke: TSD_StrokeArchive?
     var opacity: Float?
@@ -1385,7 +1385,7 @@ final class TSD_ShapeStylePropertiesArchive {
 }
 
 /// Generated wire model for `TSD.ShapeStyleArchive`.
-final class TSD_ShapeStyleArchive {
+final class TSD_ShapeStyleArchive: IWAMessage {
     var `super`: TSS_StyleArchive?
     var overrideCount: UInt32?
     var shapeProperties: TSD_ShapeStylePropertiesArchive?
@@ -1423,7 +1423,7 @@ final class TSD_ShapeStyleArchive {
 }
 
 /// Generated wire model for `TSD.MediaStylePropertiesArchive`.
-final class TSD_MediaStylePropertiesArchive {
+final class TSD_MediaStylePropertiesArchive: IWAMessage {
     var stroke: TSD_StrokeArchive?
     var opacity: Float?
     var shadow: TSD_ShadowArchive?
@@ -1467,7 +1467,7 @@ final class TSD_MediaStylePropertiesArchive {
 }
 
 /// Generated wire model for `TSD.MediaStyleArchive`.
-final class TSD_MediaStyleArchive {
+final class TSD_MediaStyleArchive: IWAMessage {
     var `super`: TSS_StyleArchive?
     var overrideCount: UInt32?
     var mediaProperties: TSD_MediaStylePropertiesArchive?
@@ -1505,7 +1505,7 @@ final class TSD_MediaStyleArchive {
 }
 
 /// Generated wire model for `TSD.ThemePresetsArchive`.
-final class TSD_ThemePresetsArchive {
+final class TSD_ThemePresetsArchive: IWAMessage {
     var gradientFillPresets: [TSD_FillArchive] = []
     var imageFillPresets: [TSD_FillArchive] = []
     var shadowPresets: [TSD_ShadowArchive] = []
@@ -1579,7 +1579,7 @@ final class TSD_ThemePresetsArchive {
 }
 
 /// Generated wire model for `TSD.ThemeReplaceFillPresetCommandArchive`.
-final class TSD_ThemeReplaceFillPresetCommandArchive {
+final class TSD_ThemeReplaceFillPresetCommandArchive: IWAMessage {
     var `super`: TSK_CommandArchive?
     var theme: TSP_Reference?
     var fill: TSD_FillArchive?
@@ -1629,7 +1629,7 @@ final class TSD_ThemeReplaceFillPresetCommandArchive {
 }
 
 /// Generated wire model for `TSD.DrawableArchive`.
-final class TSD_DrawableArchive {
+final class TSD_DrawableArchive: IWAMessage {
     var geometry: TSD_GeometryArchive?
     var parent: TSP_Reference?
     var exteriorTextWrap: TSD_ExteriorTextWrapArchive?
@@ -1727,7 +1727,7 @@ final class TSD_DrawableArchive {
 }
 
 /// Generated wire model for `TSD.ContainerArchive`.
-final class TSD_ContainerArchive {
+final class TSD_ContainerArchive: IWAMessage {
     var geometry: TSD_GeometryArchive?
     var parent: TSP_Reference?
     var children: [TSP_Reference] = []
@@ -1765,7 +1765,7 @@ final class TSD_ContainerArchive {
 }
 
 /// Generated wire model for `TSD.GroupArchive`.
-final class TSD_GroupArchive {
+final class TSD_GroupArchive: IWAMessage {
     var `super`: TSD_DrawableArchive?
     var children: [TSP_Reference] = []
     var fakeShapeForEmptyGroup: TSP_Reference?
@@ -1803,7 +1803,7 @@ final class TSD_GroupArchive {
 }
 
 /// Generated wire model for `TSD.FreehandDrawingAnimationArchive`.
-final class TSD_FreehandDrawingAnimationArchive {
+final class TSD_FreehandDrawingAnimationArchive: IWAMessage {
     var duration: Double?
     var shouldLoop: Bool?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1835,7 +1835,7 @@ final class TSD_FreehandDrawingAnimationArchive {
 }
 
 /// Generated wire model for `TSD.FreehandDrawingArchive`.
-final class TSD_FreehandDrawingArchive {
+final class TSD_FreehandDrawingArchive: IWAMessage {
     var spacerShape: TSP_Reference?
     var opacity: Double?
     var animation: TSD_FreehandDrawingAnimationArchive?
@@ -1879,7 +1879,7 @@ final class TSD_FreehandDrawingArchive {
 }
 
 /// Generated wire model for `TSD.ShapeArchive`.
-final class TSD_ShapeArchive {
+final class TSD_ShapeArchive: IWAMessage {
     var `super`: TSD_DrawableArchive?
     var style: TSP_Reference?
     var pathsource: TSD_PathSourceArchive?
@@ -1935,7 +1935,7 @@ final class TSD_ShapeArchive {
 }
 
 /// Generated wire model for `TSD.ConnectionLineArchive`.
-final class TSD_ConnectionLineArchive {
+final class TSD_ConnectionLineArchive: IWAMessage {
     var `super`: TSD_ShapeArchive?
     var connectedFrom: TSP_Reference?
     var connectedTo: TSP_Reference?
@@ -1985,7 +1985,7 @@ final class TSD_ConnectionLineArchive {
 }
 
 /// Generated wire model for `TSD.ImageArchive`.
-final class TSD_ImageArchive {
+final class TSD_ImageArchive: IWAMessage {
     var `super`: TSD_DrawableArchive?
     var data: TSP_DataReference?
     var style: TSP_Reference?
@@ -2143,7 +2143,7 @@ final class TSD_ImageArchive {
 }
 
 /// Generated wire model for `TSD.MaskArchive`.
-final class TSD_MaskArchive {
+final class TSD_MaskArchive: IWAMessage {
     var `super`: TSD_DrawableArchive?
     var pathsource: TSD_PathSourceArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -2175,7 +2175,7 @@ final class TSD_MaskArchive {
 }
 
 /// Generated wire model for `TSD.ImageDataAttributes`.
-final class TSD_ImageDataAttributes {
+final class TSD_ImageDataAttributes: IWAMessage {
     var pixelSize: TSP_Size?
     var imageIsSrgb: Bool?
     var shouldBeInterpretedAsGenericIfUntagged: Bool?
@@ -2213,7 +2213,7 @@ final class TSD_ImageDataAttributes {
 }
 
 /// Generated wire model for `TSD.MovieArchive`.
-final class TSD_MovieArchive {
+final class TSD_MovieArchive: IWAMessage {
     var `super`: TSD_DrawableArchive?
     var moviedata: TSP_DataReference?
     var importedauxiliarymoviedata: TSP_DataReference?
@@ -2413,7 +2413,7 @@ final class TSD_MovieArchive {
 }
 
 /// Generated wire model for `TSD.ExteriorTextWrapArchive`.
-final class TSD_ExteriorTextWrapArchive {
+final class TSD_ExteriorTextWrapArchive: IWAMessage {
     var type: UInt32?
     var direction: UInt32?
     var fitType: UInt32?
@@ -2469,7 +2469,7 @@ final class TSD_ExteriorTextWrapArchive {
 }
 
 /// Generated wire model for `TSD.DrawableContentDescription`.
-final class TSD_DrawableContentDescription {
+final class TSD_DrawableContentDescription: IWAMessage {
     var elementKind: UInt32?
     var isAnchoredToText: Bool?
     var isFloatingAboveText: Bool?
@@ -2513,7 +2513,7 @@ final class TSD_DrawableContentDescription {
 }
 
 /// Generated wire model for `TSD.FreehandDrawingContentDescription`.
-final class TSD_FreehandDrawingContentDescription {
+final class TSD_FreehandDrawingContentDescription: IWAMessage {
     var `super`: TSD_DrawableContentDescription?
     var sourceDocWantedSpacerShape: Bool?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -2545,7 +2545,7 @@ final class TSD_FreehandDrawingContentDescription {
 }
 
 /// Generated wire model for `TSD.FreehandDrawingToolkitUIState`.
-final class TSD_FreehandDrawingToolkitUIState {
+final class TSD_FreehandDrawingToolkitUIState: IWAMessage {
     var currentColor: TSP_Color?
     var mostRecentRestorableToolType: Int32?
     var penToolOpacity: Float?
@@ -2655,7 +2655,7 @@ final class TSD_FreehandDrawingToolkitUIState {
 }
 
 /// Generated wire model for `TSD.StandinCaptionArchive`.
-final class TSD_StandinCaptionArchive {
+final class TSD_StandinCaptionArchive: IWAMessage {
 
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -2677,7 +2677,7 @@ final class TSD_StandinCaptionArchive {
 }
 
 /// Generated wire model for `TSD.GuideArchive`.
-final class TSD_GuideArchive {
+final class TSD_GuideArchive: IWAMessage {
     var type: Int32?
     var offset: Float?
     var start: Float?
@@ -2733,7 +2733,7 @@ final class TSD_GuideArchive {
 }
 
 /// Generated wire model for `TSD.UserDefinedGuideArchive`.
-final class TSD_UserDefinedGuideArchive {
+final class TSD_UserDefinedGuideArchive: IWAMessage {
     var type: Int32?
     var position: Float?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -2765,7 +2765,7 @@ final class TSD_UserDefinedGuideArchive {
 }
 
 /// Generated wire model for `TSD.GuideStorageArchive`.
-final class TSD_GuideStorageArchive {
+final class TSD_GuideStorageArchive: IWAMessage {
     var userdefinedguides: [TSD_UserDefinedGuideArchive] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -2791,7 +2791,7 @@ final class TSD_GuideStorageArchive {
 }
 
 /// Generated wire model for `TSD.CanvasSelectionArchive`.
-final class TSD_CanvasSelectionArchive {
+final class TSD_CanvasSelectionArchive: IWAMessage {
     var infos: [TSP_Reference] = []
     var nonInteractiveInfos: [TSP_Reference] = []
     var container: TSP_Reference?
@@ -2829,7 +2829,7 @@ final class TSD_CanvasSelectionArchive {
 }
 
 /// Generated wire model for `TSD.DrawableSelectionArchive`.
-final class TSD_DrawableSelectionArchive {
+final class TSD_DrawableSelectionArchive: IWAMessage {
     var infos: [TSP_Reference] = []
     var nonInteractiveInfos: [TSP_Reference] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -2861,7 +2861,7 @@ final class TSD_DrawableSelectionArchive {
 }
 
 /// Generated wire model for `TSD.GroupSelectionArchive`.
-final class TSD_GroupSelectionArchive {
+final class TSD_GroupSelectionArchive: IWAMessage {
     var `super`: TSD_DrawableSelectionArchive?
     var hasSelectedInfosInNonGroupContainer: Bool?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -2893,7 +2893,7 @@ final class TSD_GroupSelectionArchive {
 }
 
 /// Generated wire model for `TSD.PathSelectionArchive`.
-final class TSD_PathSelectionArchive {
+final class TSD_PathSelectionArchive: IWAMessage {
 
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -2915,7 +2915,7 @@ final class TSD_PathSelectionArchive {
 }
 
 /// Generated wire model for `TSD.InfoHyperlinkSelectionArchive`.
-final class TSD_InfoHyperlinkSelectionArchive {
+final class TSD_InfoHyperlinkSelectionArchive: IWAMessage {
 
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -2937,7 +2937,7 @@ final class TSD_InfoHyperlinkSelectionArchive {
 }
 
 /// Generated wire model for `TSD.CommentStorageArchive`.
-final class TSD_CommentStorageArchive {
+final class TSD_CommentStorageArchive: IWAMessage {
     var text: String?
     var creationDate: TSP_Date?
     var author: TSP_Reference?
@@ -2987,7 +2987,7 @@ final class TSD_CommentStorageArchive {
 }
 
 /// Generated wire model for `TSD.ReplaceAnnotationAuthorCommandArchive`.
-final class TSD_ReplaceAnnotationAuthorCommandArchive {
+final class TSD_ReplaceAnnotationAuthorCommandArchive: IWAMessage {
     var `super`: TSK_CommandArchive?
     var oldAnnotationAuthor: TSP_Reference?
     var newAnnotationAuthor: TSP_Reference?
@@ -3025,7 +3025,7 @@ final class TSD_ReplaceAnnotationAuthorCommandArchive {
 }
 
 /// Generated wire model for `TSD.PencilAnnotationArchive`.
-final class TSD_PencilAnnotationArchive {
+final class TSD_PencilAnnotationArchive: IWAMessage {
     var pencilAnnotationStorage: TSP_Reference?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -3051,7 +3051,7 @@ final class TSD_PencilAnnotationArchive {
 }
 
 /// Generated wire model for `TSD.PencilAnnotationSelectionArchive`.
-final class TSD_PencilAnnotationSelectionArchive {
+final class TSD_PencilAnnotationSelectionArchive: IWAMessage {
     var pencilAnnotation: TSP_Reference?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -3077,7 +3077,7 @@ final class TSD_PencilAnnotationSelectionArchive {
 }
 
 /// Generated wire model for `TSD.PencilAnnotationStorageArchive`.
-final class TSD_PencilAnnotationStorageArchive {
+final class TSD_PencilAnnotationStorageArchive: IWAMessage {
     var attachedLocation: Int32?
     var markupOffset: TSP_Point?
     var rasterizedImage: TSP_DataReference?
@@ -3241,7 +3241,7 @@ final class TSD_PencilAnnotationStorageArchive {
 }
 
 /// Generated wire model for `TSD.SpecColorFillSetColorArchive`.
-final class TSD_SpecColorFillSetColorArchive {
+final class TSD_SpecColorFillSetColorArchive: IWAMessage {
     var color: TSP_Color?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -3267,7 +3267,7 @@ final class TSD_SpecColorFillSetColorArchive {
 }
 
 /// Generated wire model for `TSD.SpecFrameSetAssetScaleArchive`.
-final class TSD_SpecFrameSetAssetScaleArchive {
+final class TSD_SpecFrameSetAssetScaleArchive: IWAMessage {
     var assetScale: Double?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -3293,7 +3293,7 @@ final class TSD_SpecFrameSetAssetScaleArchive {
 }
 
 /// Generated wire model for `TSD.SpecGradientFillSetAngleArchive`.
-final class TSD_SpecGradientFillSetAngleArchive {
+final class TSD_SpecGradientFillSetAngleArchive: IWAMessage {
     var angle: Double?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -3319,7 +3319,7 @@ final class TSD_SpecGradientFillSetAngleArchive {
 }
 
 /// Generated wire model for `TSD.SpecImageFillSetTechniqueArchive`.
-final class TSD_SpecImageFillSetTechniqueArchive {
+final class TSD_SpecImageFillSetTechniqueArchive: IWAMessage {
     var technique: Int32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -3345,7 +3345,7 @@ final class TSD_SpecImageFillSetTechniqueArchive {
 }
 
 /// Generated wire model for `TSD.SpecReflectionSetOpacityArchive`.
-final class TSD_SpecReflectionSetOpacityArchive {
+final class TSD_SpecReflectionSetOpacityArchive: IWAMessage {
     var opacity: Double?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -3371,7 +3371,7 @@ final class TSD_SpecReflectionSetOpacityArchive {
 }
 
 /// Generated wire model for `TSD.SpecShadowSetAngleArchive`.
-final class TSD_SpecShadowSetAngleArchive {
+final class TSD_SpecShadowSetAngleArchive: IWAMessage {
     var angle: Double?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -3397,7 +3397,7 @@ final class TSD_SpecShadowSetAngleArchive {
 }
 
 /// Generated wire model for `TSD.SpecShadowSetColorArchive`.
-final class TSD_SpecShadowSetColorArchive {
+final class TSD_SpecShadowSetColorArchive: IWAMessage {
     var color: TSP_Color?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -3423,7 +3423,7 @@ final class TSD_SpecShadowSetColorArchive {
 }
 
 /// Generated wire model for `TSD.SpecShadowSetOffsetArchive`.
-final class TSD_SpecShadowSetOffsetArchive {
+final class TSD_SpecShadowSetOffsetArchive: IWAMessage {
     var offset: Double?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -3449,7 +3449,7 @@ final class TSD_SpecShadowSetOffsetArchive {
 }
 
 /// Generated wire model for `TSD.SpecShadowSetOpacityArchive`.
-final class TSD_SpecShadowSetOpacityArchive {
+final class TSD_SpecShadowSetOpacityArchive: IWAMessage {
     var opacity: Double?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -3475,7 +3475,7 @@ final class TSD_SpecShadowSetOpacityArchive {
 }
 
 /// Generated wire model for `TSD.SpecShadowSetRadiusArchive`.
-final class TSD_SpecShadowSetRadiusArchive {
+final class TSD_SpecShadowSetRadiusArchive: IWAMessage {
     var radius: Int32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -3501,7 +3501,7 @@ final class TSD_SpecShadowSetRadiusArchive {
 }
 
 /// Generated wire model for `TSD.SpecStrokeSetColorArchive`.
-final class TSD_SpecStrokeSetColorArchive {
+final class TSD_SpecStrokeSetColorArchive: IWAMessage {
     var color: TSP_Color?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -3527,7 +3527,7 @@ final class TSD_SpecStrokeSetColorArchive {
 }
 
 /// Generated wire model for `TSD.SpecStrokeSetPatternArchive`.
-final class TSD_SpecStrokeSetPatternArchive {
+final class TSD_SpecStrokeSetPatternArchive: IWAMessage {
     var lineCap: Int32?
     var lineJoin: Int32?
     var miterLimit: Double?
@@ -3583,7 +3583,7 @@ final class TSD_SpecStrokeSetPatternArchive {
 }
 
 /// Generated wire model for `TSD.SpecStrokeSetWidthArchive`.
-final class TSD_SpecStrokeSetWidthArchive {
+final class TSD_SpecStrokeSetWidthArchive: IWAMessage {
     var width: Double?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -3609,7 +3609,7 @@ final class TSD_SpecStrokeSetWidthArchive {
 }
 
 /// Generated wire model for `TSD.Attribution`.
-final class TSD_Attribution {
+final class TSD_Attribution: IWAMessage {
     var title: String?
     var descriptionText: String?
     var externalUrl: String?
@@ -3659,7 +3659,7 @@ final class TSD_Attribution {
 }
 
 /// Generated wire model for `TSD.MovieFingerprint`.
-final class TSD_MovieFingerprint {
+final class TSD_MovieFingerprint: IWAMessage {
     var tracks: [TSD_MovieFingerprintTrack] = []
     var version: [UInt32] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -3690,7 +3690,7 @@ final class TSD_MovieFingerprint {
 }
 
 /// Generated wire model for `TSD.MovieFingerprintTrack`.
-final class TSD_MovieFingerprintTrack {
+final class TSD_MovieFingerprintTrack: IWAMessage {
     var mediaType: String?
     var enabled: Bool?
     var totalSampleDataLength: Int64?
@@ -3827,4 +3827,88 @@ final class TSD_MovieFingerprintTrack {
         for _f in unknownFields { _w.append(_f) }
         return _w.bytes
     }
+}
+
+/// Registers this file's archives into the reflective catalog.
+func registerIWA_TSDArchives(_ into: inout [(name: String, decode: (ProtobufMessage) -> IWAMessage)]) {
+    into.append(("TSD.EdgeInsetsArchive", { TSD_EdgeInsetsArchive($0) as IWAMessage }))
+    into.append(("TSD.GeometryArchive", { TSD_GeometryArchive($0) as IWAMessage }))
+    into.append(("TSD.PointPathSourceArchive", { TSD_PointPathSourceArchive($0) as IWAMessage }))
+    into.append(("TSD.ScalarPathSourceArchive", { TSD_ScalarPathSourceArchive($0) as IWAMessage }))
+    into.append(("TSD.BezierPathSourceArchive", { TSD_BezierPathSourceArchive($0) as IWAMessage }))
+    into.append(("TSD.CalloutPathSourceArchive", { TSD_CalloutPathSourceArchive($0) as IWAMessage }))
+    into.append(("TSD.ConnectionLinePathSourceArchive", { TSD_ConnectionLinePathSourceArchive($0) as IWAMessage }))
+    into.append(("TSD.EditableBezierPathSourceArchive", { TSD_EditableBezierPathSourceArchive($0) as IWAMessage }))
+    into.append(("TSD.EditableBezierPathSourceArchive.Node", { TSD_EditableBezierPathSourceArchive_Node($0) as IWAMessage }))
+    into.append(("TSD.EditableBezierPathSourceArchive.Subpath", { TSD_EditableBezierPathSourceArchive_Subpath($0) as IWAMessage }))
+    into.append(("TSD.PathSourceArchive", { TSD_PathSourceArchive($0) as IWAMessage }))
+    into.append(("TSD.AngleGradientArchive", { TSD_AngleGradientArchive($0) as IWAMessage }))
+    into.append(("TSD.TransformGradientArchive", { TSD_TransformGradientArchive($0) as IWAMessage }))
+    into.append(("TSD.GradientArchive", { TSD_GradientArchive($0) as IWAMessage }))
+    into.append(("TSD.GradientArchive.GradientStop", { TSD_GradientArchive_GradientStop($0) as IWAMessage }))
+    into.append(("TSD.ImageFillArchive", { TSD_ImageFillArchive($0) as IWAMessage }))
+    into.append(("TSD.FillArchive", { TSD_FillArchive($0) as IWAMessage }))
+    into.append(("TSD.StrokePatternArchive", { TSD_StrokePatternArchive($0) as IWAMessage }))
+    into.append(("TSD.StrokeArchive", { TSD_StrokeArchive($0) as IWAMessage }))
+    into.append(("TSD.SmartStrokeArchive", { TSD_SmartStrokeArchive($0) as IWAMessage }))
+    into.append(("TSD.FrameArchive", { TSD_FrameArchive($0) as IWAMessage }))
+    into.append(("TSD.PatternedStrokeArchive", { TSD_PatternedStrokeArchive($0) as IWAMessage }))
+    into.append(("TSD.LineEndArchive", { TSD_LineEndArchive($0) as IWAMessage }))
+    into.append(("TSD.ShadowArchive", { TSD_ShadowArchive($0) as IWAMessage }))
+    into.append(("TSD.DropShadowArchive", { TSD_DropShadowArchive($0) as IWAMessage }))
+    into.append(("TSD.ContactShadowArchive", { TSD_ContactShadowArchive($0) as IWAMessage }))
+    into.append(("TSD.CurvedShadowArchive", { TSD_CurvedShadowArchive($0) as IWAMessage }))
+    into.append(("TSD.ReflectionArchive", { TSD_ReflectionArchive($0) as IWAMessage }))
+    into.append(("TSD.ImageAdjustmentsArchive", { TSD_ImageAdjustmentsArchive($0) as IWAMessage }))
+    into.append(("TSD.ShapeStylePropertiesArchive", { TSD_ShapeStylePropertiesArchive($0) as IWAMessage }))
+    into.append(("TSD.ShapeStyleArchive", { TSD_ShapeStyleArchive($0) as IWAMessage }))
+    into.append(("TSD.MediaStylePropertiesArchive", { TSD_MediaStylePropertiesArchive($0) as IWAMessage }))
+    into.append(("TSD.MediaStyleArchive", { TSD_MediaStyleArchive($0) as IWAMessage }))
+    into.append(("TSD.ThemePresetsArchive", { TSD_ThemePresetsArchive($0) as IWAMessage }))
+    into.append(("TSD.ThemeReplaceFillPresetCommandArchive", { TSD_ThemeReplaceFillPresetCommandArchive($0) as IWAMessage }))
+    into.append(("TSD.DrawableArchive", { TSD_DrawableArchive($0) as IWAMessage }))
+    into.append(("TSD.ContainerArchive", { TSD_ContainerArchive($0) as IWAMessage }))
+    into.append(("TSD.GroupArchive", { TSD_GroupArchive($0) as IWAMessage }))
+    into.append(("TSD.FreehandDrawingAnimationArchive", { TSD_FreehandDrawingAnimationArchive($0) as IWAMessage }))
+    into.append(("TSD.FreehandDrawingArchive", { TSD_FreehandDrawingArchive($0) as IWAMessage }))
+    into.append(("TSD.ShapeArchive", { TSD_ShapeArchive($0) as IWAMessage }))
+    into.append(("TSD.ConnectionLineArchive", { TSD_ConnectionLineArchive($0) as IWAMessage }))
+    into.append(("TSD.ImageArchive", { TSD_ImageArchive($0) as IWAMessage }))
+    into.append(("TSD.MaskArchive", { TSD_MaskArchive($0) as IWAMessage }))
+    into.append(("TSD.ImageDataAttributes", { TSD_ImageDataAttributes($0) as IWAMessage }))
+    into.append(("TSD.MovieArchive", { TSD_MovieArchive($0) as IWAMessage }))
+    into.append(("TSD.ExteriorTextWrapArchive", { TSD_ExteriorTextWrapArchive($0) as IWAMessage }))
+    into.append(("TSD.DrawableContentDescription", { TSD_DrawableContentDescription($0) as IWAMessage }))
+    into.append(("TSD.FreehandDrawingContentDescription", { TSD_FreehandDrawingContentDescription($0) as IWAMessage }))
+    into.append(("TSD.FreehandDrawingToolkitUIState", { TSD_FreehandDrawingToolkitUIState($0) as IWAMessage }))
+    into.append(("TSD.StandinCaptionArchive", { TSD_StandinCaptionArchive($0) as IWAMessage }))
+    into.append(("TSD.GuideArchive", { TSD_GuideArchive($0) as IWAMessage }))
+    into.append(("TSD.UserDefinedGuideArchive", { TSD_UserDefinedGuideArchive($0) as IWAMessage }))
+    into.append(("TSD.GuideStorageArchive", { TSD_GuideStorageArchive($0) as IWAMessage }))
+    into.append(("TSD.CanvasSelectionArchive", { TSD_CanvasSelectionArchive($0) as IWAMessage }))
+    into.append(("TSD.DrawableSelectionArchive", { TSD_DrawableSelectionArchive($0) as IWAMessage }))
+    into.append(("TSD.GroupSelectionArchive", { TSD_GroupSelectionArchive($0) as IWAMessage }))
+    into.append(("TSD.PathSelectionArchive", { TSD_PathSelectionArchive($0) as IWAMessage }))
+    into.append(("TSD.InfoHyperlinkSelectionArchive", { TSD_InfoHyperlinkSelectionArchive($0) as IWAMessage }))
+    into.append(("TSD.CommentStorageArchive", { TSD_CommentStorageArchive($0) as IWAMessage }))
+    into.append(("TSD.ReplaceAnnotationAuthorCommandArchive", { TSD_ReplaceAnnotationAuthorCommandArchive($0) as IWAMessage }))
+    into.append(("TSD.PencilAnnotationArchive", { TSD_PencilAnnotationArchive($0) as IWAMessage }))
+    into.append(("TSD.PencilAnnotationSelectionArchive", { TSD_PencilAnnotationSelectionArchive($0) as IWAMessage }))
+    into.append(("TSD.PencilAnnotationStorageArchive", { TSD_PencilAnnotationStorageArchive($0) as IWAMessage }))
+    into.append(("TSD.SpecColorFillSetColorArchive", { TSD_SpecColorFillSetColorArchive($0) as IWAMessage }))
+    into.append(("TSD.SpecFrameSetAssetScaleArchive", { TSD_SpecFrameSetAssetScaleArchive($0) as IWAMessage }))
+    into.append(("TSD.SpecGradientFillSetAngleArchive", { TSD_SpecGradientFillSetAngleArchive($0) as IWAMessage }))
+    into.append(("TSD.SpecImageFillSetTechniqueArchive", { TSD_SpecImageFillSetTechniqueArchive($0) as IWAMessage }))
+    into.append(("TSD.SpecReflectionSetOpacityArchive", { TSD_SpecReflectionSetOpacityArchive($0) as IWAMessage }))
+    into.append(("TSD.SpecShadowSetAngleArchive", { TSD_SpecShadowSetAngleArchive($0) as IWAMessage }))
+    into.append(("TSD.SpecShadowSetColorArchive", { TSD_SpecShadowSetColorArchive($0) as IWAMessage }))
+    into.append(("TSD.SpecShadowSetOffsetArchive", { TSD_SpecShadowSetOffsetArchive($0) as IWAMessage }))
+    into.append(("TSD.SpecShadowSetOpacityArchive", { TSD_SpecShadowSetOpacityArchive($0) as IWAMessage }))
+    into.append(("TSD.SpecShadowSetRadiusArchive", { TSD_SpecShadowSetRadiusArchive($0) as IWAMessage }))
+    into.append(("TSD.SpecStrokeSetColorArchive", { TSD_SpecStrokeSetColorArchive($0) as IWAMessage }))
+    into.append(("TSD.SpecStrokeSetPatternArchive", { TSD_SpecStrokeSetPatternArchive($0) as IWAMessage }))
+    into.append(("TSD.SpecStrokeSetWidthArchive", { TSD_SpecStrokeSetWidthArchive($0) as IWAMessage }))
+    into.append(("TSD.Attribution", { TSD_Attribution($0) as IWAMessage }))
+    into.append(("TSD.MovieFingerprint", { TSD_MovieFingerprint($0) as IWAMessage }))
+    into.append(("TSD.MovieFingerprintTrack", { TSD_MovieFingerprintTrack($0) as IWAMessage }))
 }

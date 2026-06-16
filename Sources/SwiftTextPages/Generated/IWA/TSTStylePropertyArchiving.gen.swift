@@ -3,7 +3,7 @@
 import Foundation
 
 /// Generated wire model for `TST.Deprecated_TableStrokeArchive`.
-final class TST_Deprecated_TableStrokeArchive {
+final class TST_Deprecated_TableStrokeArchive: IWAMessage {
     var stroke: TSD_StrokeArchive?
     var background: Bool?
     var opacity: Float?
@@ -47,7 +47,7 @@ final class TST_Deprecated_TableStrokeArchive {
 }
 
 /// Generated wire model for `TST.CellStylePropertiesArchive`.
-final class TST_CellStylePropertiesArchive {
+final class TST_CellStylePropertiesArchive: IWAMessage {
     var cellFill: TSD_FillArchive?
     var textWrap: Bool?
     var deprecatedTopStroke: TST_Deprecated_TableStrokeArchive?
@@ -139,7 +139,7 @@ final class TST_CellStylePropertiesArchive {
 }
 
 /// Generated wire model for `TST.Deprecated_StrokePresetDataArchive`.
-final class TST_Deprecated_StrokePresetDataArchive {
+final class TST_Deprecated_StrokePresetDataArchive: IWAMessage {
     var deprecatedHorizontalStroke: TST_Deprecated_TableStrokeArchive?
     var deprecatedVerticalStroke: TST_Deprecated_TableStrokeArchive?
     var deprecatedExteriorStroke: TST_Deprecated_TableStrokeArchive?
@@ -183,7 +183,7 @@ final class TST_Deprecated_StrokePresetDataArchive {
 }
 
 /// Generated wire model for `TST.StrokePresetDataArchive`.
-final class TST_StrokePresetDataArchive {
+final class TST_StrokePresetDataArchive: IWAMessage {
     var horizontalStroke: TSD_StrokeArchive?
     var verticalStroke: TSD_StrokeArchive?
     var exteriorStroke: TSD_StrokeArchive?
@@ -227,7 +227,7 @@ final class TST_StrokePresetDataArchive {
 }
 
 /// Generated wire model for `TST.StrokePresetListArchive`.
-final class TST_StrokePresetListArchive {
+final class TST_StrokePresetListArchive: IWAMessage {
     var count: Int32?
     var deprecatedPreset: [TST_Deprecated_StrokePresetDataArchive] = []
     var preset: [TST_StrokePresetDataArchive] = []
@@ -265,7 +265,7 @@ final class TST_StrokePresetListArchive {
 }
 
 /// Generated wire model for `TST.TableStylePropertiesArchive`.
-final class TST_TableStylePropertiesArchive {
+final class TST_TableStylePropertiesArchive: IWAMessage {
     var bandedRows: Bool?
     var bandedFill: TSD_FillArchive?
     var behavesLikeSpreadsheet: Bool?
@@ -771,7 +771,7 @@ final class TST_TableStylePropertiesArchive {
 }
 
 /// Generated wire model for `TST.TableStylePresetArchive`.
-final class TST_TableStylePresetArchive {
+final class TST_TableStylePresetArchive: IWAMessage {
     var index: Int32?
     var image: TSP_Reference?
     var styleNetwork: TSP_Reference?
@@ -809,7 +809,7 @@ final class TST_TableStylePresetArchive {
 }
 
 /// Generated wire model for `TST.TableStrokePresetArchive`.
-final class TST_TableStrokePresetArchive {
+final class TST_TableStrokePresetArchive: IWAMessage {
     var index: Int32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -835,7 +835,7 @@ final class TST_TableStrokePresetArchive {
 }
 
 /// Generated wire model for `TST.ThemePresetsArchive`.
-final class TST_ThemePresetsArchive {
+final class TST_ThemePresetsArchive: IWAMessage {
     var tableStylePresets: [TSP_Reference] = []
     var tableCellStrokePresets: [TSP_Reference] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -864,4 +864,17 @@ final class TST_ThemePresetsArchive {
         for _f in unknownFields { _w.append(_f) }
         return _w.bytes
     }
+}
+
+/// Registers this file's archives into the reflective catalog.
+func registerIWA_TSTStylePropertyArchiving(_ into: inout [(name: String, decode: (ProtobufMessage) -> IWAMessage)]) {
+    into.append(("TST.Deprecated_TableStrokeArchive", { TST_Deprecated_TableStrokeArchive($0) as IWAMessage }))
+    into.append(("TST.CellStylePropertiesArchive", { TST_CellStylePropertiesArchive($0) as IWAMessage }))
+    into.append(("TST.Deprecated_StrokePresetDataArchive", { TST_Deprecated_StrokePresetDataArchive($0) as IWAMessage }))
+    into.append(("TST.StrokePresetDataArchive", { TST_StrokePresetDataArchive($0) as IWAMessage }))
+    into.append(("TST.StrokePresetListArchive", { TST_StrokePresetListArchive($0) as IWAMessage }))
+    into.append(("TST.TableStylePropertiesArchive", { TST_TableStylePropertiesArchive($0) as IWAMessage }))
+    into.append(("TST.TableStylePresetArchive", { TST_TableStylePresetArchive($0) as IWAMessage }))
+    into.append(("TST.TableStrokePresetArchive", { TST_TableStrokePresetArchive($0) as IWAMessage }))
+    into.append(("TST.ThemePresetsArchive", { TST_ThemePresetsArchive($0) as IWAMessage }))
 }

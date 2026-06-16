@@ -3,7 +3,7 @@
 import Foundation
 
 /// Generated wire model for `TSA.DocumentArchive`.
-final class TSA_DocumentArchive {
+final class TSA_DocumentArchive: IWAMessage {
     var `super`: TSK_DocumentArchive?
     var textPresetDisplayItems: [TSWP_TextPresetDisplayItemArchive] = []
     var documentLanguage: String?
@@ -119,7 +119,7 @@ final class TSA_DocumentArchive {
 }
 
 /// Generated wire model for `TSA.FunctionBrowserStateArchive`.
-final class TSA_FunctionBrowserStateArchive {
+final class TSA_FunctionBrowserStateArchive: IWAMessage {
     var recentFunctions: [UInt32] = []
     var backFunctions: [UInt32] = []
     var forwardFunctions: [UInt32] = []
@@ -160,7 +160,7 @@ final class TSA_FunctionBrowserStateArchive {
 }
 
 /// Generated wire model for `TSA.ThemePresetsArchive`.
-final class TSA_ThemePresetsArchive {
+final class TSA_ThemePresetsArchive: IWAMessage {
     var captionStylePresets: [TSP_Reference] = []
     var svgImportStylePresets: [TSP_Reference] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -192,7 +192,7 @@ final class TSA_ThemePresetsArchive {
 }
 
 /// Generated wire model for `TSA.ShortcutControllerArchive`.
-final class TSA_ShortcutControllerArchive {
+final class TSA_ShortcutControllerArchive: IWAMessage {
     var entries: [TSA_ShortcutControllerArchive_ShortcutMapEntry] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -218,7 +218,7 @@ final class TSA_ShortcutControllerArchive {
 }
 
 /// Generated wire model for `TSA.ShortcutControllerArchive.ShortcutMapEntry`.
-final class TSA_ShortcutControllerArchive_ShortcutMapEntry {
+final class TSA_ShortcutControllerArchive_ShortcutMapEntry: IWAMessage {
     var shortcut: String?
     var style: TSP_Reference?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -250,7 +250,7 @@ final class TSA_ShortcutControllerArchive_ShortcutMapEntry {
 }
 
 /// Generated wire model for `TSA.PropagatePresetCommandArchive`.
-final class TSA_PropagatePresetCommandArchive {
+final class TSA_PropagatePresetCommandArchive: IWAMessage {
     var `super`: TSK_CommandArchive?
     var presetChangeCommand: TSP_Reference?
     var alwaysPreserveAppearance: Bool?
@@ -288,7 +288,7 @@ final class TSA_PropagatePresetCommandArchive {
 }
 
 /// Generated wire model for `TSA.ShortcutCommandArchive`.
-final class TSA_ShortcutCommandArchive {
+final class TSA_ShortcutCommandArchive: IWAMessage {
     var `super`: TSK_CommandArchive?
     var oldStyle: TSP_Reference?
     var newStyle: TSP_Reference?
@@ -338,7 +338,7 @@ final class TSA_ShortcutCommandArchive {
 }
 
 /// Generated wire model for `TSA.AddCustomFormatCommandArchive`.
-final class TSA_AddCustomFormatCommandArchive {
+final class TSA_AddCustomFormatCommandArchive: IWAMessage {
     var `super`: TSK_CommandArchive?
     var customFormat: TSK_CustomFormatArchive?
     var customFormatKey: TSP_UUID?
@@ -376,7 +376,7 @@ final class TSA_AddCustomFormatCommandArchive {
 }
 
 /// Generated wire model for `TSA.UpdateCustomFormatCommandArchive`.
-final class TSA_UpdateCustomFormatCommandArchive {
+final class TSA_UpdateCustomFormatCommandArchive: IWAMessage {
     var `super`: TSK_CommandArchive?
     var customFormat: TSK_CustomFormatArchive?
     var oldCustomFormat: TSK_CustomFormatArchive?
@@ -420,7 +420,7 @@ final class TSA_UpdateCustomFormatCommandArchive {
 }
 
 /// Generated wire model for `TSA.ReplaceCustomFormatCommandArchive`.
-final class TSA_ReplaceCustomFormatCommandArchive {
+final class TSA_ReplaceCustomFormatCommandArchive: IWAMessage {
     var `super`: TSK_CommandArchive?
     var customFormat: TSK_CustomFormatArchive?
     var customFormatKey: TSP_UUID?
@@ -464,7 +464,7 @@ final class TSA_ReplaceCustomFormatCommandArchive {
 }
 
 /// Generated wire model for `TSA.NeedsMediaCompatibilityUpgradeCommandArchive`.
-final class TSA_NeedsMediaCompatibilityUpgradeCommandArchive {
+final class TSA_NeedsMediaCompatibilityUpgradeCommandArchive: IWAMessage {
     var `super`: TSK_CommandArchive?
     var needsMediaCompatibilityUpgrade: Bool?
     var oldNeedsMediaCompatibilityUpgrade: Bool?
@@ -526,7 +526,7 @@ final class TSA_NeedsMediaCompatibilityUpgradeCommandArchive {
 }
 
 /// Generated wire model for `TSA.ChangeDocumentLocaleCommandArchive`.
-final class TSA_ChangeDocumentLocaleCommandArchive {
+final class TSA_ChangeDocumentLocaleCommandArchive: IWAMessage {
     var `super`: TSK_CommandArchive?
     var oldLocaleId: String?
     var newLocaleId: String?
@@ -576,7 +576,7 @@ final class TSA_ChangeDocumentLocaleCommandArchive {
 }
 
 /// Generated wire model for `TSA.InducedVerifyObjectsWithServerCommandArchive`.
-final class TSA_InducedVerifyObjectsWithServerCommandArchive {
+final class TSA_InducedVerifyObjectsWithServerCommandArchive: IWAMessage {
     var `super`: TSK_CommandArchive?
     var objectIdList: [TSP_UUID] = []
     var objectIdListUndefined: Bool?
@@ -638,7 +638,7 @@ final class TSA_InducedVerifyObjectsWithServerCommandArchive {
 }
 
 /// Generated wire model for `TSA.InducedVerifyTransformHistoryWithServerCommandArchive`.
-final class TSA_InducedVerifyTransformHistoryWithServerCommandArchive {
+final class TSA_InducedVerifyTransformHistoryWithServerCommandArchive: IWAMessage {
     var `super`: TSK_CommandArchive?
     var serverOperationStorageEntries: [TSK_OperationStorageEntry] = []
     var serverOperationStorageEntriesUndefined: Bool?
@@ -676,7 +676,7 @@ final class TSA_InducedVerifyTransformHistoryWithServerCommandArchive {
 }
 
 /// Generated wire model for `TSA.StyleUpdatePropertyMapCommandArchive`.
-final class TSA_StyleUpdatePropertyMapCommandArchive {
+final class TSA_StyleUpdatePropertyMapCommandArchive: IWAMessage {
 
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -698,7 +698,7 @@ final class TSA_StyleUpdatePropertyMapCommandArchive {
 }
 
 /// Generated wire model for `TSA.RemoteDataChangeCommandArchive`.
-final class TSA_RemoteDataChangeCommandArchive {
+final class TSA_RemoteDataChangeCommandArchive: IWAMessage {
     var `super`: TSK_CommandArchive?
     var valueMap: TSCE_RemoteDataValueMapArchive?
     var quotes: [TSCE_StockArchive] = []
@@ -742,7 +742,7 @@ final class TSA_RemoteDataChangeCommandArchive {
 }
 
 /// Generated wire model for `TSA.GalleryInfoSetValueCommandArchive`.
-final class TSA_GalleryInfoSetValueCommandArchive {
+final class TSA_GalleryInfoSetValueCommandArchive: IWAMessage {
     var `super`: TSK_CommandArchive?
     var infoIdPath: TSP_UUIDPath?
     var property: Int32?
@@ -792,7 +792,7 @@ final class TSA_GalleryInfoSetValueCommandArchive {
 }
 
 /// Generated wire model for `TSA.GalleryInfoSetValueCommandArchive.PropertyValue`.
-final class TSA_GalleryInfoSetValueCommandArchive_PropertyValue {
+final class TSA_GalleryInfoSetValueCommandArchive_PropertyValue: IWAMessage {
     var captionMode: Int32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -818,7 +818,7 @@ final class TSA_GalleryInfoSetValueCommandArchive_PropertyValue {
 }
 
 /// Generated wire model for `TSA.GalleryInfoInsertItemsCommandArchive`.
-final class TSA_GalleryInfoInsertItemsCommandArchive {
+final class TSA_GalleryInfoInsertItemsCommandArchive: IWAMessage {
     var items: [TSP_Reference] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -844,7 +844,7 @@ final class TSA_GalleryInfoInsertItemsCommandArchive {
 }
 
 /// Generated wire model for `TSA.GalleryInfoRemoveItemsCommandArchive`.
-final class TSA_GalleryInfoRemoveItemsCommandArchive {
+final class TSA_GalleryInfoRemoveItemsCommandArchive: IWAMessage {
 
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -866,7 +866,7 @@ final class TSA_GalleryInfoRemoveItemsCommandArchive {
 }
 
 /// Generated wire model for `TSA.GalleryItemSetGeometryCommand`.
-final class TSA_GalleryItemSetGeometryCommand {
+final class TSA_GalleryItemSetGeometryCommand: IWAMessage {
     var `super`: TSK_CommandArchive?
     var itemIdPath: TSP_UUIDPath?
     var offset: TSP_Point?
@@ -922,7 +922,7 @@ final class TSA_GalleryItemSetGeometryCommand {
 }
 
 /// Generated wire model for `TSA.GalleryItem`.
-final class TSA_GalleryItem {
+final class TSA_GalleryItem: IWAMessage {
     var offset: TSP_Point?
     var scale: Float?
     var imageData: TSP_DataReference?
@@ -996,7 +996,7 @@ final class TSA_GalleryItem {
 }
 
 /// Generated wire model for `TSA.GalleryInfo`.
-final class TSA_GalleryInfo {
+final class TSA_GalleryInfo: IWAMessage {
     var items: [TSP_Reference] = []
     var captionMode: Int32?
     var captionStorage: TSP_Reference?
@@ -1034,7 +1034,7 @@ final class TSA_GalleryInfo {
 }
 
 /// Generated wire model for `TSA.GallerySelectionTransformer`.
-final class TSA_GallerySelectionTransformer {
+final class TSA_GallerySelectionTransformer: IWAMessage {
     var galleryUuidPath: TSP_UUIDPath?
     var captionStorageUuidPath: TSP_UUIDPath?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1066,7 +1066,7 @@ final class TSA_GallerySelectionTransformer {
 }
 
 /// Generated wire model for `TSA.GalleryItemSelection`.
-final class TSA_GalleryItemSelection {
+final class TSA_GalleryItemSelection: IWAMessage {
     var displayedItem: TSP_Reference?
     var items: [TSP_Reference] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1098,7 +1098,7 @@ final class TSA_GalleryItemSelection {
 }
 
 /// Generated wire model for `TSA.GalleryItemSelectionTransformer`.
-final class TSA_GalleryItemSelectionTransformer {
+final class TSA_GalleryItemSelectionTransformer: IWAMessage {
     var transformerHelper: TSA_GalleryItemSelectionTransformerHelper?
     var captionStorageUuidPath: TSP_UUIDPath?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1130,7 +1130,7 @@ final class TSA_GalleryItemSelectionTransformer {
 }
 
 /// Generated wire model for `TSA.GalleryItemSelectionTransformerHelper`.
-final class TSA_GalleryItemSelectionTransformerHelper {
+final class TSA_GalleryItemSelectionTransformerHelper: IWAMessage {
     var displayedItemUuidPath: TSP_UUIDPath?
     var itemUuidPaths: [TSP_UUIDPath] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1162,7 +1162,7 @@ final class TSA_GalleryItemSelectionTransformerHelper {
 }
 
 /// Generated wire model for `TSA.GalleryItemSetValueCommand`.
-final class TSA_GalleryItemSetValueCommand {
+final class TSA_GalleryItemSetValueCommand: IWAMessage {
     var `super`: TSK_CommandArchive?
     var itemIdPath: TSP_UUIDPath?
     var property: Int32?
@@ -1212,7 +1212,7 @@ final class TSA_GalleryItemSetValueCommand {
 }
 
 /// Generated wire model for `TSA.GalleryItemSetValueCommand.PropertyValue`.
-final class TSA_GalleryItemSetValueCommand_PropertyValue {
+final class TSA_GalleryItemSetValueCommand_PropertyValue: IWAMessage {
     var imageData: TSP_DataReference?
     var accessibilityDescription: String?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1244,7 +1244,7 @@ final class TSA_GalleryItemSetValueCommand_PropertyValue {
 }
 
 /// Generated wire model for `TSA.CollaboratorGalleryItemCursor`.
-final class TSA_CollaboratorGalleryItemCursor {
+final class TSA_CollaboratorGalleryItemCursor: IWAMessage {
     var displayedItemId: TSP_UUID?
     var itemIds: [TSP_UUID] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1276,7 +1276,7 @@ final class TSA_CollaboratorGalleryItemCursor {
 }
 
 /// Generated wire model for `TSA.WebVideoInfo`.
-final class TSA_WebVideoInfo {
+final class TSA_WebVideoInfo: IWAMessage {
     var url: String?
     var posterImageData: TSP_DataReference?
     var attribution: TSD_Attribution?
@@ -1314,7 +1314,7 @@ final class TSA_WebVideoInfo {
 }
 
 /// Generated wire model for `TSA.CaptionPlacementArchive`.
-final class TSA_CaptionPlacementArchive {
+final class TSA_CaptionPlacementArchive: IWAMessage {
     var captionAnchorLocation: Int32?
     var drawableAnchorLocation: Int32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1346,7 +1346,7 @@ final class TSA_CaptionPlacementArchive {
 }
 
 /// Generated wire model for `TSA.CaptionInfoArchive`.
-final class TSA_CaptionInfoArchive {
+final class TSA_CaptionInfoArchive: IWAMessage {
     var `super`: TSWP_ShapeInfoArchive?
     var placement: TSP_Reference?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1378,7 +1378,7 @@ final class TSA_CaptionInfoArchive {
 }
 
 /// Generated wire model for `TSA.TitlePlacementCommandArchive`.
-final class TSA_TitlePlacementCommandArchive {
+final class TSA_TitlePlacementCommandArchive: IWAMessage {
     var placement: TSP_Reference?
     var oldPlacement: TSP_Reference?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1410,7 +1410,7 @@ final class TSA_TitlePlacementCommandArchive {
 }
 
 /// Generated wire model for `TSA.Object3DInfo`.
-final class TSA_Object3DInfo {
+final class TSA_Object3DInfo: IWAMessage {
     var objectData: TSP_DataReference?
     var playsAnimations: Bool?
     var pose3d: TSP_Pose3D?
@@ -1472,7 +1472,7 @@ final class TSA_Object3DInfo {
 }
 
 /// Generated wire model for `TSA.Object3DInfoCommandArchive`.
-final class TSA_Object3DInfoCommandArchive {
+final class TSA_Object3DInfoCommandArchive: IWAMessage {
     var info: TSP_Reference?
     var infoIdPath: TSP_UUIDPath?
     var thumbnailImageData: TSP_DataReference?
@@ -1552,7 +1552,7 @@ final class TSA_Object3DInfoCommandArchive {
 }
 
 /// Generated wire model for `TSA.Object3DInfoSetValueCommandArchive`.
-final class TSA_Object3DInfoSetValueCommandArchive {
+final class TSA_Object3DInfoSetValueCommandArchive: IWAMessage {
     var `super`: TSK_CommandArchive?
     var object3dInfoIdPath: TSP_UUIDPath?
     var property: Int32?
@@ -1602,7 +1602,7 @@ final class TSA_Object3DInfoSetValueCommandArchive {
 }
 
 /// Generated wire model for `TSA.Object3DInfoSetValueCommandArchive.PropertyValue`.
-final class TSA_Object3DInfoSetValueCommandArchive_PropertyValue {
+final class TSA_Object3DInfoSetValueCommandArchive_PropertyValue: IWAMessage {
     var playsAnimations: Bool?
     var opacity: Float?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1631,4 +1631,46 @@ final class TSA_Object3DInfoSetValueCommandArchive_PropertyValue {
         for _f in unknownFields { _w.append(_f) }
         return _w.bytes
     }
+}
+
+/// Registers this file's archives into the reflective catalog.
+func registerIWA_TSAArchives(_ into: inout [(name: String, decode: (ProtobufMessage) -> IWAMessage)]) {
+    into.append(("TSA.DocumentArchive", { TSA_DocumentArchive($0) as IWAMessage }))
+    into.append(("TSA.FunctionBrowserStateArchive", { TSA_FunctionBrowserStateArchive($0) as IWAMessage }))
+    into.append(("TSA.ThemePresetsArchive", { TSA_ThemePresetsArchive($0) as IWAMessage }))
+    into.append(("TSA.ShortcutControllerArchive", { TSA_ShortcutControllerArchive($0) as IWAMessage }))
+    into.append(("TSA.ShortcutControllerArchive.ShortcutMapEntry", { TSA_ShortcutControllerArchive_ShortcutMapEntry($0) as IWAMessage }))
+    into.append(("TSA.PropagatePresetCommandArchive", { TSA_PropagatePresetCommandArchive($0) as IWAMessage }))
+    into.append(("TSA.ShortcutCommandArchive", { TSA_ShortcutCommandArchive($0) as IWAMessage }))
+    into.append(("TSA.AddCustomFormatCommandArchive", { TSA_AddCustomFormatCommandArchive($0) as IWAMessage }))
+    into.append(("TSA.UpdateCustomFormatCommandArchive", { TSA_UpdateCustomFormatCommandArchive($0) as IWAMessage }))
+    into.append(("TSA.ReplaceCustomFormatCommandArchive", { TSA_ReplaceCustomFormatCommandArchive($0) as IWAMessage }))
+    into.append(("TSA.NeedsMediaCompatibilityUpgradeCommandArchive", { TSA_NeedsMediaCompatibilityUpgradeCommandArchive($0) as IWAMessage }))
+    into.append(("TSA.ChangeDocumentLocaleCommandArchive", { TSA_ChangeDocumentLocaleCommandArchive($0) as IWAMessage }))
+    into.append(("TSA.InducedVerifyObjectsWithServerCommandArchive", { TSA_InducedVerifyObjectsWithServerCommandArchive($0) as IWAMessage }))
+    into.append(("TSA.InducedVerifyTransformHistoryWithServerCommandArchive", { TSA_InducedVerifyTransformHistoryWithServerCommandArchive($0) as IWAMessage }))
+    into.append(("TSA.StyleUpdatePropertyMapCommandArchive", { TSA_StyleUpdatePropertyMapCommandArchive($0) as IWAMessage }))
+    into.append(("TSA.RemoteDataChangeCommandArchive", { TSA_RemoteDataChangeCommandArchive($0) as IWAMessage }))
+    into.append(("TSA.GalleryInfoSetValueCommandArchive", { TSA_GalleryInfoSetValueCommandArchive($0) as IWAMessage }))
+    into.append(("TSA.GalleryInfoSetValueCommandArchive.PropertyValue", { TSA_GalleryInfoSetValueCommandArchive_PropertyValue($0) as IWAMessage }))
+    into.append(("TSA.GalleryInfoInsertItemsCommandArchive", { TSA_GalleryInfoInsertItemsCommandArchive($0) as IWAMessage }))
+    into.append(("TSA.GalleryInfoRemoveItemsCommandArchive", { TSA_GalleryInfoRemoveItemsCommandArchive($0) as IWAMessage }))
+    into.append(("TSA.GalleryItemSetGeometryCommand", { TSA_GalleryItemSetGeometryCommand($0) as IWAMessage }))
+    into.append(("TSA.GalleryItem", { TSA_GalleryItem($0) as IWAMessage }))
+    into.append(("TSA.GalleryInfo", { TSA_GalleryInfo($0) as IWAMessage }))
+    into.append(("TSA.GallerySelectionTransformer", { TSA_GallerySelectionTransformer($0) as IWAMessage }))
+    into.append(("TSA.GalleryItemSelection", { TSA_GalleryItemSelection($0) as IWAMessage }))
+    into.append(("TSA.GalleryItemSelectionTransformer", { TSA_GalleryItemSelectionTransformer($0) as IWAMessage }))
+    into.append(("TSA.GalleryItemSelectionTransformerHelper", { TSA_GalleryItemSelectionTransformerHelper($0) as IWAMessage }))
+    into.append(("TSA.GalleryItemSetValueCommand", { TSA_GalleryItemSetValueCommand($0) as IWAMessage }))
+    into.append(("TSA.GalleryItemSetValueCommand.PropertyValue", { TSA_GalleryItemSetValueCommand_PropertyValue($0) as IWAMessage }))
+    into.append(("TSA.CollaboratorGalleryItemCursor", { TSA_CollaboratorGalleryItemCursor($0) as IWAMessage }))
+    into.append(("TSA.WebVideoInfo", { TSA_WebVideoInfo($0) as IWAMessage }))
+    into.append(("TSA.CaptionPlacementArchive", { TSA_CaptionPlacementArchive($0) as IWAMessage }))
+    into.append(("TSA.CaptionInfoArchive", { TSA_CaptionInfoArchive($0) as IWAMessage }))
+    into.append(("TSA.TitlePlacementCommandArchive", { TSA_TitlePlacementCommandArchive($0) as IWAMessage }))
+    into.append(("TSA.Object3DInfo", { TSA_Object3DInfo($0) as IWAMessage }))
+    into.append(("TSA.Object3DInfoCommandArchive", { TSA_Object3DInfoCommandArchive($0) as IWAMessage }))
+    into.append(("TSA.Object3DInfoSetValueCommandArchive", { TSA_Object3DInfoSetValueCommandArchive($0) as IWAMessage }))
+    into.append(("TSA.Object3DInfoSetValueCommandArchive.PropertyValue", { TSA_Object3DInfoSetValueCommandArchive_PropertyValue($0) as IWAMessage }))
 }

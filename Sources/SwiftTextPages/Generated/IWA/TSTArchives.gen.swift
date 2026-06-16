@@ -3,7 +3,7 @@
 import Foundation
 
 /// Generated wire model for `TST.CellID`.
-final class TST_CellID {
+final class TST_CellID: IWAMessage {
     var packeddata: UInt32?
     var expandedCoord: TSCE_CellCoordinateArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -35,7 +35,7 @@ final class TST_CellID {
 }
 
 /// Generated wire model for `TST.CellUIDLookupListArchive`.
-final class TST_CellUIDLookupListArchive {
+final class TST_CellUIDLookupListArchive: IWAMessage {
     var columnUids: TSCE_UidLookupListArchive?
     var rowUids: TSCE_UidLookupListArchive?
     var columnIndexes: [Int32] = []
@@ -77,7 +77,7 @@ final class TST_CellUIDLookupListArchive {
 }
 
 /// Generated wire model for `TST.CellUIDListArchive`.
-final class TST_CellUIDListArchive {
+final class TST_CellUIDListArchive: IWAMessage {
     var rowUids: [TSP_UUID] = []
     var columnUids: [TSP_UUID] = []
     var compressedRowIndexes: [Int32] = []
@@ -125,7 +125,7 @@ final class TST_CellUIDListArchive {
 }
 
 /// Generated wire model for `TST.TableSize`.
-final class TST_TableSize {
+final class TST_TableSize: IWAMessage {
     var packeddata: UInt32?
     var numColumns: UInt32?
     var numRows: UInt32?
@@ -163,7 +163,7 @@ final class TST_TableSize {
 }
 
 /// Generated wire model for `TST.ExpandedTableSize`.
-final class TST_ExpandedTableSize {
+final class TST_ExpandedTableSize: IWAMessage {
     var numColumns: UInt32?
     var numRows: UInt32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -195,7 +195,7 @@ final class TST_ExpandedTableSize {
 }
 
 /// Generated wire model for `TST.CellRange`.
-final class TST_CellRange {
+final class TST_CellRange: IWAMessage {
     var origin: TST_CellID?
     var size: TST_TableSize?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -227,7 +227,7 @@ final class TST_CellRange {
 }
 
 /// Generated wire model for `TST.ExpandedCellRange`.
-final class TST_ExpandedCellRange {
+final class TST_ExpandedCellRange: IWAMessage {
     var origin: TSCE_CellCoordinateArchive?
     var size: TST_ExpandedTableSize?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -259,7 +259,7 @@ final class TST_ExpandedCellRange {
 }
 
 /// Generated wire model for `TST.TableSelection`.
-final class TST_TableSelection {
+final class TST_TableSelection: IWAMessage {
     var cellrange: TST_CellRange?
     var extendedcellrange: TST_CellRange?
     var extendedcellrangevalid: Bool?
@@ -303,7 +303,7 @@ final class TST_TableSelection {
 }
 
 /// Generated wire model for `TST.TileRowInfo`.
-final class TST_TileRowInfo {
+final class TST_TileRowInfo: IWAMessage {
     var tileRowIndex: UInt32?
     var cellCount: UInt32?
     var cellStorageBufferPreBnc: [UInt8]?
@@ -371,7 +371,7 @@ final class TST_TileRowInfo {
 }
 
 /// Generated wire model for `TST.Tile`.
-final class TST_Tile {
+final class TST_Tile: IWAMessage {
     var maxcolumn: UInt32?
     var maxrow: UInt32?
     var numcells: UInt32?
@@ -439,7 +439,7 @@ final class TST_Tile {
 }
 
 /// Generated wire model for `TST.TileStorage`.
-final class TST_TileStorage {
+final class TST_TileStorage: IWAMessage {
     var tiles: [TST_TileStorage_Tile] = []
     var tileSize: UInt32?
     var shouldUseWideRows: Bool?
@@ -477,7 +477,7 @@ final class TST_TileStorage {
 }
 
 /// Generated wire model for `TST.TileStorage.Tile`.
-final class TST_TileStorage_Tile {
+final class TST_TileStorage_Tile: IWAMessage {
     var tileid: UInt32?
     var tile: TSP_Reference?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -509,7 +509,7 @@ final class TST_TileStorage_Tile {
 }
 
 /// Generated wire model for `TST.PopUpMenuModel`.
-final class TST_PopUpMenuModel {
+final class TST_PopUpMenuModel: IWAMessage {
     var item: [TST_PopUpMenuModel_CellValue] = []
     var tsceItem: [TSCE_CellValueArchive] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -541,7 +541,7 @@ final class TST_PopUpMenuModel {
 }
 
 /// Generated wire model for `TST.PopUpMenuModel.CellValue`.
-final class TST_PopUpMenuModel_CellValue {
+final class TST_PopUpMenuModel_CellValue: IWAMessage {
     var cellValueType: Int32?
     var booleanValue: TSCE_BooleanCellValueArchive?
     var dateValue: TSCE_DateCellValueArchive?
@@ -591,7 +591,7 @@ final class TST_PopUpMenuModel_CellValue {
 }
 
 /// Generated wire model for `TST.ImportWarningSetArchive`.
-final class TST_ImportWarningSetArchive {
+final class TST_ImportWarningSetArchive: IWAMessage {
     var formulaImportWarning: TST_ImportWarningSetArchive_FormulaImportWarning?
     var condFormatAboveAvgEqualAvg: Bool?
     var condFormatAboveAvgStdDev: Bool?
@@ -719,7 +719,7 @@ final class TST_ImportWarningSetArchive {
 }
 
 /// Generated wire model for `TST.ImportWarningSetArchive.FormulaImportWarning`.
-final class TST_ImportWarningSetArchive_FormulaImportWarning {
+final class TST_ImportWarningSetArchive_FormulaImportWarning: IWAMessage {
     var formulaWarningType: Int32?
     var originalFormula: String?
     var supplementaryText: String?
@@ -763,7 +763,7 @@ final class TST_ImportWarningSetArchive_FormulaImportWarning {
 }
 
 /// Generated wire model for `TST.CellRefImportWarningSetPairArchive`.
-final class TST_CellRefImportWarningSetPairArchive {
+final class TST_CellRefImportWarningSetPairArchive: IWAMessage {
     var cellRef: TSCE_CellReferenceArchive?
     var warningSet: TST_ImportWarningSetArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -795,7 +795,7 @@ final class TST_CellRefImportWarningSetPairArchive {
 }
 
 /// Generated wire model for `TST.ImportWarningSetByCellRefArchive`.
-final class TST_ImportWarningSetByCellRefArchive {
+final class TST_ImportWarningSetByCellRefArchive: IWAMessage {
     var cellrefWarningSetPair: [TST_CellRefImportWarningSetPairArchive] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -821,7 +821,7 @@ final class TST_ImportWarningSetByCellRefArchive {
 }
 
 /// Generated wire model for `TST.TableDataList`.
-final class TST_TableDataList {
+final class TST_TableDataList: IWAMessage {
     var listtype: Int32?
     var nextlistid: UInt32?
     var entries: [TST_TableDataList_ListEntry] = []
@@ -871,7 +871,7 @@ final class TST_TableDataList {
 }
 
 /// Generated wire model for `TST.TableDataList.ListEntry`.
-final class TST_TableDataList_ListEntry {
+final class TST_TableDataList_ListEntry: IWAMessage {
     var key: UInt32?
     var refcount: UInt32?
     var string: String?
@@ -957,7 +957,7 @@ final class TST_TableDataList_ListEntry {
 }
 
 /// Generated wire model for `TST.TableDataListSegment`.
-final class TST_TableDataListSegment {
+final class TST_TableDataListSegment: IWAMessage {
     var listType: Int32?
     var keyRange: TSP_Range?
     var entries: [TST_TableDataList_ListEntry] = []
@@ -995,7 +995,7 @@ final class TST_TableDataListSegment {
 }
 
 /// Generated wire model for `TST.TableRBTree`.
-final class TST_TableRBTree {
+final class TST_TableRBTree: IWAMessage {
     var nodes: [TST_TableRBTree_Node] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1021,7 +1021,7 @@ final class TST_TableRBTree {
 }
 
 /// Generated wire model for `TST.TableRBTree.Node`.
-final class TST_TableRBTree_Node {
+final class TST_TableRBTree_Node: IWAMessage {
     var key: UInt32?
     var value: UInt32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1053,7 +1053,7 @@ final class TST_TableRBTree_Node {
 }
 
 /// Generated wire model for `TST.HeaderStorageBucket`.
-final class TST_HeaderStorageBucket {
+final class TST_HeaderStorageBucket: IWAMessage {
     var buckethashfunction: UInt32?
     var headers: [TST_HeaderStorageBucket_Header] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1085,7 +1085,7 @@ final class TST_HeaderStorageBucket {
 }
 
 /// Generated wire model for `TST.HeaderStorageBucket.Header`.
-final class TST_HeaderStorageBucket_Header {
+final class TST_HeaderStorageBucket_Header: IWAMessage {
     var index: UInt32?
     var size: Float?
     var hidingstate: UInt32?
@@ -1141,7 +1141,7 @@ final class TST_HeaderStorageBucket_Header {
 }
 
 /// Generated wire model for `TST.HeaderStorage`.
-final class TST_HeaderStorage {
+final class TST_HeaderStorage: IWAMessage {
     var buckethashfunction: UInt32?
     var buckets: [TSP_Reference] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1173,7 +1173,7 @@ final class TST_HeaderStorage {
 }
 
 /// Generated wire model for `TST.DataStore`.
-final class TST_DataStore {
+final class TST_DataStore: IWAMessage {
     var rowheaders: TST_HeaderStorage?
     var columnheaders: TSP_Reference?
     var tiles: TST_TileStorage?
@@ -1325,7 +1325,7 @@ final class TST_DataStore {
 }
 
 /// Generated wire model for `TST.TableInfoArchive`.
-final class TST_TableInfoArchive {
+final class TST_TableInfoArchive: IWAMessage {
     var `super`: TSD_DrawableArchive?
     var tablemodel: TSP_Reference?
     var editingState: TSP_Reference?
@@ -1435,7 +1435,7 @@ final class TST_TableInfoArchive {
 }
 
 /// Generated wire model for `TST.CategoryInfoArchive`.
-final class TST_CategoryInfoArchive {
+final class TST_CategoryInfoArchive: IWAMessage {
     var `super`: TSD_DrawableArchive?
     var tablemodel: TSP_Reference?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1467,7 +1467,7 @@ final class TST_CategoryInfoArchive {
 }
 
 /// Generated wire model for `TST.WPTableInfoArchive`.
-final class TST_WPTableInfoArchive {
+final class TST_WPTableInfoArchive: IWAMessage {
     var `super`: TST_TableInfoArchive?
     var storage: TSP_Reference?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1499,7 +1499,7 @@ final class TST_WPTableInfoArchive {
 }
 
 /// Generated wire model for `TST.TableStyleNetworkArchive`.
-final class TST_TableStyleNetworkArchive {
+final class TST_TableStyleNetworkArchive: IWAMessage {
     var bodyTextStyle: TSP_Reference?
     var headerRowTextStyle: TSP_Reference?
     var headerColumnTextStyle: TSP_Reference?
@@ -1729,7 +1729,7 @@ final class TST_TableStyleNetworkArchive {
 }
 
 /// Generated wire model for `TST.TableGroupSortOrderUIDArchive`.
-final class TST_TableGroupSortOrderUIDArchive {
+final class TST_TableGroupSortOrderUIDArchive: IWAMessage {
     var groupSortRules: [TST_TableGroupSortOrderUIDArchive_GroupSortRuleUIDArchive] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1755,7 +1755,7 @@ final class TST_TableGroupSortOrderUIDArchive {
 }
 
 /// Generated wire model for `TST.TableGroupSortOrderUIDArchive.GroupSortRuleUIDArchive`.
-final class TST_TableGroupSortOrderUIDArchive_GroupSortRuleUIDArchive {
+final class TST_TableGroupSortOrderUIDArchive_GroupSortRuleUIDArchive: IWAMessage {
     var groupingColumnUid: TSP_UUID?
     var columnUid: TSP_UUID?
     var direction: Int32?
@@ -1793,7 +1793,7 @@ final class TST_TableGroupSortOrderUIDArchive_GroupSortRuleUIDArchive {
 }
 
 /// Generated wire model for `TST.TableSortOrderArchive`.
-final class TST_TableSortOrderArchive {
+final class TST_TableSortOrderArchive: IWAMessage {
     var type: Int32?
     var rules: [TST_TableSortOrderArchive_SortRuleArchive] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1825,7 +1825,7 @@ final class TST_TableSortOrderArchive {
 }
 
 /// Generated wire model for `TST.TableSortOrderArchive.SortRuleArchive`.
-final class TST_TableSortOrderArchive_SortRuleArchive {
+final class TST_TableSortOrderArchive_SortRuleArchive: IWAMessage {
     var index: UInt32?
     var direction: Int32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1857,7 +1857,7 @@ final class TST_TableSortOrderArchive_SortRuleArchive {
 }
 
 /// Generated wire model for `TST.TableSortOrderUIDArchive`.
-final class TST_TableSortOrderUIDArchive {
+final class TST_TableSortOrderUIDArchive: IWAMessage {
     var type: Int32?
     var rules: [TST_TableSortOrderUIDArchive_SortRuleArchive] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1889,7 +1889,7 @@ final class TST_TableSortOrderUIDArchive {
 }
 
 /// Generated wire model for `TST.TableSortOrderUIDArchive.SortRuleArchive`.
-final class TST_TableSortOrderUIDArchive_SortRuleArchive {
+final class TST_TableSortOrderUIDArchive_SortRuleArchive: IWAMessage {
     var columnUid: TSP_UUID?
     var direction: Int32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1921,7 +1921,7 @@ final class TST_TableSortOrderUIDArchive_SortRuleArchive {
 }
 
 /// Generated wire model for `TST.SortRuleReferenceTrackerArchive`.
-final class TST_SortRuleReferenceTrackerArchive {
+final class TST_SortRuleReferenceTrackerArchive: IWAMessage {
     var referenceTracker: TSP_Reference?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1947,7 +1947,7 @@ final class TST_SortRuleReferenceTrackerArchive {
 }
 
 /// Generated wire model for `TST.CellRegion`.
-final class TST_CellRegion {
+final class TST_CellRegion: IWAMessage {
     var cellRanges: [TST_CellRange] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1973,7 +1973,7 @@ final class TST_CellRegion {
 }
 
 /// Generated wire model for `TST.CellUIDRegionArchive`.
-final class TST_CellUIDRegionArchive {
+final class TST_CellUIDRegionArchive: IWAMessage {
     var cellUidRanges: [TSP_UUIDRectArchive] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1999,7 +1999,7 @@ final class TST_CellUIDRegionArchive {
 }
 
 /// Generated wire model for `TST.StructuredTextImportRecord`.
-final class TST_StructuredTextImportRecord {
+final class TST_StructuredTextImportRecord: IWAMessage {
     var importSettings: TSK_StructuredTextImportSettings?
     var importSource: String?
     var importDate: Double?
@@ -2073,7 +2073,7 @@ final class TST_StructuredTextImportRecord {
 }
 
 /// Generated wire model for `TST.TableModelArchive`.
-final class TST_TableModelArchive {
+final class TST_TableModelArchive: IWAMessage {
     var tableId: String?
     var fromTableId: String?
     var wasCut: Bool?
@@ -2600,7 +2600,7 @@ final class TST_TableModelArchive {
 }
 
 /// Generated wire model for `TST.SummaryModelArchive`.
-final class TST_SummaryModelArchive {
+final class TST_SummaryModelArchive: IWAMessage {
     var tableInfo: TSP_Reference?
     var dataStore: TST_DataStore?
     var columnRowUids: TSP_Reference?
@@ -2769,7 +2769,7 @@ final class TST_SummaryModelArchive {
 }
 
 /// Generated wire model for `TST.SummaryModelGroupByChangeStateArchive`.
-final class TST_SummaryModelGroupByChangeStateArchive {
+final class TST_SummaryModelGroupByChangeStateArchive: IWAMessage {
     var cellMap: TSP_Reference?
     var summaryRowHeightList: [Double] = []
     var labelRowHeightList: [Double] = []
@@ -2812,7 +2812,7 @@ final class TST_SummaryModelGroupByChangeStateArchive {
 }
 
 /// Generated wire model for `TST.ColumnRowUIDMapArchive`.
-final class TST_ColumnRowUIDMapArchive {
+final class TST_ColumnRowUIDMapArchive: IWAMessage {
     var sortedColumnUids: [TSP_UUID] = []
     var columnIndexForUid: [UInt32] = []
     var columnUidForIndex: [UInt32] = []
@@ -2864,7 +2864,7 @@ final class TST_ColumnRowUIDMapArchive {
 }
 
 /// Generated wire model for `TST.StrokeLayerArchive`.
-final class TST_StrokeLayerArchive {
+final class TST_StrokeLayerArchive: IWAMessage {
     var rowColumnIndex: UInt32?
     var strokeRuns: [TST_StrokeLayerArchive_StrokeRunArchive] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -2896,7 +2896,7 @@ final class TST_StrokeLayerArchive {
 }
 
 /// Generated wire model for `TST.StrokeLayerArchive.StrokeRunArchive`.
-final class TST_StrokeLayerArchive_StrokeRunArchive {
+final class TST_StrokeLayerArchive_StrokeRunArchive: IWAMessage {
     var origin: Int32?
     var length: UInt32?
     var stroke: TSD_StrokeArchive?
@@ -2940,7 +2940,7 @@ final class TST_StrokeLayerArchive_StrokeRunArchive {
 }
 
 /// Generated wire model for `TST.StrokeSidecarArchive`.
-final class TST_StrokeSidecarArchive {
+final class TST_StrokeSidecarArchive: IWAMessage {
     var maxOrder: UInt32?
     var columnCount: UInt32?
     var rowCount: UInt32?
@@ -3002,7 +3002,7 @@ final class TST_StrokeSidecarArchive {
 }
 
 /// Generated wire model for `TST.DurationWrapperArchive`.
-final class TST_DurationWrapperArchive {
+final class TST_DurationWrapperArchive: IWAMessage {
 
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -3024,7 +3024,7 @@ final class TST_DurationWrapperArchive {
 }
 
 /// Generated wire model for `TST.Cell`.
-final class TST_Cell {
+final class TST_Cell: IWAMessage {
     var valuetype: Int32?
     var cellStyle: TSP_Reference?
     var textStyle: TSP_Reference?
@@ -3212,7 +3212,7 @@ final class TST_Cell {
 }
 
 /// Generated wire model for `TST.MergeRegionMapArchive`.
-final class TST_MergeRegionMapArchive {
+final class TST_MergeRegionMapArchive: IWAMessage {
     var cellRange: [TST_CellRange] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -3238,7 +3238,7 @@ final class TST_MergeRegionMapArchive {
 }
 
 /// Generated wire model for `TST.CellMapArchive`.
-final class TST_CellMapArchive {
+final class TST_CellMapArchive: IWAMessage {
     var cellTiles: [TSP_Reference] = []
     var uidBased: Bool?
     var expandedCellIds: [TSCE_CellCoordinateArchive] = []
@@ -3318,7 +3318,7 @@ final class TST_CellMapArchive {
 }
 
 /// Generated wire model for `TST.CellListArchive`.
-final class TST_CellListArchive {
+final class TST_CellListArchive: IWAMessage {
     var cells: [TST_CellListArchive_OptionalCell] = []
     var trailingEmptyCellCount: UInt32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -3350,7 +3350,7 @@ final class TST_CellListArchive {
 }
 
 /// Generated wire model for `TST.CellListArchive.OptionalCell`.
-final class TST_CellListArchive_OptionalCell {
+final class TST_CellListArchive_OptionalCell: IWAMessage {
     var cell: TST_Cell?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -3376,7 +3376,7 @@ final class TST_CellListArchive_OptionalCell {
 }
 
 /// Generated wire model for `TST.ConcurrentCellMapArchive`.
-final class TST_ConcurrentCellMapArchive {
+final class TST_ConcurrentCellMapArchive: IWAMessage {
     var cellLists: [TSP_Reference] = []
     var uidBased: Bool?
     var mergeActions: [TST_MergeOperationArchive] = []
@@ -3444,7 +3444,7 @@ final class TST_ConcurrentCellMapArchive {
 }
 
 /// Generated wire model for `TST.ConcurrentCellListArchive`.
-final class TST_ConcurrentCellListArchive {
+final class TST_ConcurrentCellListArchive: IWAMessage {
     var cells: [TST_ConcurrentCellListArchive_OptionalCell] = []
     var cellUidRange: TSP_UUIDRectArchive?
     var cellRange: TST_CellRange?
@@ -3482,7 +3482,7 @@ final class TST_ConcurrentCellListArchive {
 }
 
 /// Generated wire model for `TST.ConcurrentCellListArchive.OptionalCell`.
-final class TST_ConcurrentCellListArchive_OptionalCell {
+final class TST_ConcurrentCellListArchive_OptionalCell: IWAMessage {
     var cell: TST_Cell?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -3508,7 +3508,7 @@ final class TST_ConcurrentCellListArchive_OptionalCell {
 }
 
 /// Generated wire model for `TST.CellFormatAndValueArchive`.
-final class TST_CellFormatAndValueArchive {
+final class TST_CellFormatAndValueArchive: IWAMessage {
     var valuetype: Int32?
     var numbervalue: Double?
     var stringvalue: String?
@@ -3654,7 +3654,7 @@ final class TST_CellFormatAndValueArchive {
 }
 
 /// Generated wire model for `TST.CellSpecArchive`.
-final class TST_CellSpecArchive {
+final class TST_CellSpecArchive: IWAMessage {
     var interactionType: UInt32?
     var formula: TSCE_FormulaArchive?
     var rangeControlMin: Double?
@@ -3722,7 +3722,7 @@ final class TST_CellSpecArchive {
 }
 
 /// Generated wire model for `TST.CommentStorageWrapperArchive`.
-final class TST_CommentStorageWrapperArchive {
+final class TST_CommentStorageWrapperArchive: IWAMessage {
     var commentStorage: TSP_Reference?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -3748,7 +3748,7 @@ final class TST_CommentStorageWrapperArchive {
 }
 
 /// Generated wire model for `TST.CellDiffArchive`.
-final class TST_CellDiffArchive {
+final class TST_CellDiffArchive: IWAMessage {
     var propertyMapToSet: TSS_CommandPropertyMapArchive?
     var propertyMapToReset: TSS_CommandPropertyMapArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -3780,7 +3780,7 @@ final class TST_CellDiffArchive {
 }
 
 /// Generated wire model for `TST.CellDiffArray`.
-final class TST_CellDiffArray {
+final class TST_CellDiffArray: IWAMessage {
     var largeArray: TSP_LargeArray?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -3806,7 +3806,7 @@ final class TST_CellDiffArray {
 }
 
 /// Generated wire model for `TST.CellDiffArraySegment`.
-final class TST_CellDiffArraySegment {
+final class TST_CellDiffArraySegment: IWAMessage {
     var largeArraySegment: TSP_LargeArraySegment?
     var elements: [TST_CellDiffArchive] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -3838,7 +3838,7 @@ final class TST_CellDiffArraySegment {
 }
 
 /// Generated wire model for `TST.CellDiffMapArchive`.
-final class TST_CellDiffMapArchive {
+final class TST_CellDiffMapArchive: IWAMessage {
     var uidBased: Bool?
     var expandedCellIds: [TSCE_CellCoordinateArchive] = []
     var cellUids: TST_CellUIDListArchive?
@@ -3882,7 +3882,7 @@ final class TST_CellDiffMapArchive {
 }
 
 /// Generated wire model for `TST.HierarchicalCellDiffMapArchive`.
-final class TST_HierarchicalCellDiffMapArchive {
+final class TST_HierarchicalCellDiffMapArchive: IWAMessage {
     var numRowRules: Int32?
     var numColumnRules: Int32?
     var rowHeaderUids: [TSP_UUID] = []
@@ -3978,7 +3978,7 @@ final class TST_HierarchicalCellDiffMapArchive {
 }
 
 /// Generated wire model for `TST.HierarchicalCellDiffMapArchive.BoxedRow`.
-final class TST_HierarchicalCellDiffMapArchive_BoxedRow {
+final class TST_HierarchicalCellDiffMapArchive_BoxedRow: IWAMessage {
     var columnIndexSet: TSP_IndexSet?
     var cellDiffList: [TST_CellDiffArchive] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -4010,7 +4010,7 @@ final class TST_HierarchicalCellDiffMapArchive_BoxedRow {
 }
 
 /// Generated wire model for `TST.DoubleStyleMapArchive`.
-final class TST_DoubleStyleMapArchive {
+final class TST_DoubleStyleMapArchive: IWAMessage {
     var capacity: UInt32?
     var count: UInt32?
     var cellMapEntry: [TST_DoubleStyleMapArchive_DoubleStyleMapEntryArchive] = []
@@ -4048,7 +4048,7 @@ final class TST_DoubleStyleMapArchive {
 }
 
 /// Generated wire model for `TST.DoubleStyleMapArchive.DoubleStyleMapEntryArchive`.
-final class TST_DoubleStyleMapArchive_DoubleStyleMapEntryArchive {
+final class TST_DoubleStyleMapArchive_DoubleStyleMapEntryArchive: IWAMessage {
     var cellId: TST_CellID?
     var oldStyle: TSP_Reference?
     var newStyle: TSP_Reference?
@@ -4086,7 +4086,7 @@ final class TST_DoubleStyleMapArchive_DoubleStyleMapEntryArchive {
 }
 
 /// Generated wire model for `TST.StyleTableMapArchive`.
-final class TST_StyleTableMapArchive {
+final class TST_StyleTableMapArchive: IWAMessage {
     var capacity: UInt32?
     var count: UInt32?
     var mapEntry: [TST_StyleTableMapArchive_StyleTableMapEntryArchive] = []
@@ -4124,7 +4124,7 @@ final class TST_StyleTableMapArchive {
 }
 
 /// Generated wire model for `TST.StyleTableMapArchive.StyleTableMapEntryArchive`.
-final class TST_StyleTableMapArchive_StyleTableMapEntryArchive {
+final class TST_StyleTableMapArchive_StyleTableMapEntryArchive: IWAMessage {
     var key: UInt32?
     var oldStyle: TSP_Reference?
     var newStyle: TSP_Reference?
@@ -4162,7 +4162,7 @@ final class TST_StyleTableMapArchive_StyleTableMapEntryArchive {
 }
 
 /// Generated wire model for `TST.SelectionArchive`.
-final class TST_SelectionArchive {
+final class TST_SelectionArchive: IWAMessage {
     var tablemodel: TSP_Reference?
     var selectionType: Int32?
     var anchorCell: TST_CellID?
@@ -4248,7 +4248,7 @@ final class TST_SelectionArchive {
 }
 
 /// Generated wire model for `TST.DeathhawkRdar39989167CellSelectionArchive`.
-final class TST_DeathhawkRdar39989167CellSelectionArchive {
+final class TST_DeathhawkRdar39989167CellSelectionArchive: IWAMessage {
     var tableInfo: TSP_Reference?
     var selectionType: Int32?
     var cellUidRegion: TST_CellUIDRegionArchive?
@@ -4304,7 +4304,7 @@ final class TST_DeathhawkRdar39989167CellSelectionArchive {
 }
 
 /// Generated wire model for `TST.StrokeSelectionArchive`.
-final class TST_StrokeSelectionArchive {
+final class TST_StrokeSelectionArchive: IWAMessage {
     var mask: Int32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -4330,7 +4330,7 @@ final class TST_StrokeSelectionArchive {
 }
 
 /// Generated wire model for `TST.ControlCellSelectionArchive`.
-final class TST_ControlCellSelectionArchive {
+final class TST_ControlCellSelectionArchive: IWAMessage {
 
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -4352,7 +4352,7 @@ final class TST_ControlCellSelectionArchive {
 }
 
 /// Generated wire model for `TST.StockCellSelectionArchive`.
-final class TST_StockCellSelectionArchive {
+final class TST_StockCellSelectionArchive: IWAMessage {
 
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -4374,7 +4374,7 @@ final class TST_StockCellSelectionArchive {
 }
 
 /// Generated wire model for `TST.TableNameSelectionArchive`.
-final class TST_TableNameSelectionArchive {
+final class TST_TableNameSelectionArchive: IWAMessage {
 
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -4396,7 +4396,7 @@ final class TST_TableNameSelectionArchive {
 }
 
 /// Generated wire model for `TST.AutofillSelectionArchive`.
-final class TST_AutofillSelectionArchive {
+final class TST_AutofillSelectionArchive: IWAMessage {
     var sourceCellRange: TST_CellRange?
     var targetCellRange: TST_CellRange?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -4428,7 +4428,7 @@ final class TST_AutofillSelectionArchive {
 }
 
 /// Generated wire model for `TST.FilterRulePrePivotArchive`.
-final class TST_FilterRulePrePivotArchive {
+final class TST_FilterRulePrePivotArchive: IWAMessage {
     var predicate: TST_FormulaPredicatePrePivotArchive?
     var disabled: Bool?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -4460,7 +4460,7 @@ final class TST_FilterRulePrePivotArchive {
 }
 
 /// Generated wire model for `TST.FilterRuleArchive`.
-final class TST_FilterRuleArchive {
+final class TST_FilterRuleArchive: IWAMessage {
     var predicate: TST_FormulaPredicateArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -4486,7 +4486,7 @@ final class TST_FilterRuleArchive {
 }
 
 /// Generated wire model for `TST.TableStyleArchive`.
-final class TST_TableStyleArchive {
+final class TST_TableStyleArchive: IWAMessage {
     var `super`: TSS_StyleArchive?
     var overrideCount: UInt32?
     var tableProperties: TST_TableStylePropertiesArchive?
@@ -4524,7 +4524,7 @@ final class TST_TableStyleArchive {
 }
 
 /// Generated wire model for `TST.CellStyleArchive`.
-final class TST_CellStyleArchive {
+final class TST_CellStyleArchive: IWAMessage {
     var `super`: TSS_StyleArchive?
     var overrideCount: UInt32?
     var cellProperties: TST_CellStylePropertiesArchive?
@@ -4562,7 +4562,7 @@ final class TST_CellStyleArchive {
 }
 
 /// Generated wire model for `TST.FormulaPredArgDataArchive`.
-final class TST_FormulaPredArgDataArchive {
+final class TST_FormulaPredArgDataArchive: IWAMessage {
     var doubleValue: Double?
     var decimalLow: UInt64?
     var decimalHigh: UInt64?
@@ -4630,7 +4630,7 @@ final class TST_FormulaPredArgDataArchive {
 }
 
 /// Generated wire model for `TST.FormulaPredArgArchive`.
-final class TST_FormulaPredArgArchive {
+final class TST_FormulaPredArgArchive: IWAMessage {
     var argType: Int32?
     var argValue: TST_FormulaPredArgDataArchive?
     var baseCellRef: TSCE_CellReferenceArchive?
@@ -4716,7 +4716,7 @@ final class TST_FormulaPredArgArchive {
 }
 
 /// Generated wire model for `TST.FormulaPredicatePrePivotArchive`.
-final class TST_FormulaPredicatePrePivotArchive {
+final class TST_FormulaPredicatePrePivotArchive: IWAMessage {
     var formula: TSCE_FormulaArchive?
     var predicateType: Int32?
     var qualifier1: Int32?
@@ -4778,7 +4778,7 @@ final class TST_FormulaPredicatePrePivotArchive {
 }
 
 /// Generated wire model for `TST.FormulaPredicateArchive`.
-final class TST_FormulaPredicateArchive {
+final class TST_FormulaPredicateArchive: IWAMessage {
     var predicateType: Int32?
     var qualifier1: Int32?
     var qualifier2: Int32?
@@ -4864,7 +4864,7 @@ final class TST_FormulaPredicateArchive {
 }
 
 /// Generated wire model for `TST.ConditionalStyleSetArchive`.
-final class TST_ConditionalStyleSetArchive {
+final class TST_ConditionalStyleSetArchive: IWAMessage {
     var rulecount: UInt32?
     var rulesPrepivot: [TST_ConditionalStyleSetArchive_ConditionalStyleRulePrePivot] = []
     var rules: TST_ConditionalStyleSetArchive_ConditionalStyleRules?
@@ -4902,7 +4902,7 @@ final class TST_ConditionalStyleSetArchive {
 }
 
 /// Generated wire model for `TST.ConditionalStyleSetArchive.ConditionalStyleRulePrePivot`.
-final class TST_ConditionalStyleSetArchive_ConditionalStyleRulePrePivot {
+final class TST_ConditionalStyleSetArchive_ConditionalStyleRulePrePivot: IWAMessage {
     var predicate: TST_FormulaPredicatePrePivotArchive?
     var cellStyle: TSP_Reference?
     var textStyle: TSP_Reference?
@@ -4940,7 +4940,7 @@ final class TST_ConditionalStyleSetArchive_ConditionalStyleRulePrePivot {
 }
 
 /// Generated wire model for `TST.ConditionalStyleSetArchive.ConditionalStyleRule`.
-final class TST_ConditionalStyleSetArchive_ConditionalStyleRule {
+final class TST_ConditionalStyleSetArchive_ConditionalStyleRule: IWAMessage {
     var predicate: TST_FormulaPredicateArchive?
     var cellStyle: TSP_Reference?
     var textStyle: TSP_Reference?
@@ -4978,7 +4978,7 @@ final class TST_ConditionalStyleSetArchive_ConditionalStyleRule {
 }
 
 /// Generated wire model for `TST.ConditionalStyleSetArchive.ConditionalStyleRules`.
-final class TST_ConditionalStyleSetArchive_ConditionalStyleRules {
+final class TST_ConditionalStyleSetArchive_ConditionalStyleRules: IWAMessage {
     var rule: [TST_ConditionalStyleSetArchive_ConditionalStyleRule] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -5004,7 +5004,7 @@ final class TST_ConditionalStyleSetArchive_ConditionalStyleRules {
 }
 
 /// Generated wire model for `TST.FilterSetArchive`.
-final class TST_FilterSetArchive {
+final class TST_FilterSetArchive: IWAMessage {
     var type: Int32?
     var isEnabled: Bool?
     var filterRulesPrepivot: [TST_FilterRulePrePivotArchive] = []
@@ -5064,7 +5064,7 @@ final class TST_FilterSetArchive {
 }
 
 /// Generated wire model for `TST.UniqueIndexArchive`.
-final class TST_UniqueIndexArchive {
+final class TST_UniqueIndexArchive: IWAMessage {
     var columnUid: TSP_UUID?
     var uniqueEntries: [TST_UniqueIndexArchive_UniqueIndexEntryArchive] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -5096,7 +5096,7 @@ final class TST_UniqueIndexArchive {
 }
 
 /// Generated wire model for `TST.UniqueIndexArchive.UniqueIndexEntryArchive`.
-final class TST_UniqueIndexArchive_UniqueIndexEntryArchive {
+final class TST_UniqueIndexArchive_UniqueIndexEntryArchive: IWAMessage {
     var stringValue: String?
     var rowUids: [TSP_UUID] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -5128,7 +5128,7 @@ final class TST_UniqueIndexArchive_UniqueIndexEntryArchive {
 }
 
 /// Generated wire model for `TST.HiddenStateExtentArchive`.
-final class TST_HiddenStateExtentArchive {
+final class TST_HiddenStateExtentArchive: IWAMessage {
     var hiddenStateExtentUid: TSP_UUID?
     var baseHiddenStates: [TST_HiddenStateExtentArchive_RowOrColumnState] = []
     var rowOrColumnDirection: Int32?
@@ -5214,7 +5214,7 @@ final class TST_HiddenStateExtentArchive {
 }
 
 /// Generated wire model for `TST.HiddenStateExtentArchive.RowOrColumnState`.
-final class TST_HiddenStateExtentArchive_RowOrColumnState {
+final class TST_HiddenStateExtentArchive_RowOrColumnState: IWAMessage {
     var rowOrColumnUid: TSP_UUID?
     var userHidden: Bool?
     var filtered: Bool?
@@ -5258,7 +5258,7 @@ final class TST_HiddenStateExtentArchive_RowOrColumnState {
 }
 
 /// Generated wire model for `TST.HiddenStatesArchive`.
-final class TST_HiddenStatesArchive {
+final class TST_HiddenStatesArchive: IWAMessage {
     var hiddenStatesUid: TSP_UUID?
     var columnHiddenStateExtent: TST_HiddenStateExtentArchive?
     var rowHiddenStateExtent: TST_HiddenStateExtentArchive?
@@ -5296,7 +5296,7 @@ final class TST_HiddenStatesArchive {
 }
 
 /// Generated wire model for `TST.HiddenStatesOwnerArchive`.
-final class TST_HiddenStatesOwnerArchive {
+final class TST_HiddenStatesOwnerArchive: IWAMessage {
     var ownerUid: TSP_UUID?
     var hiddenStates: [TST_HiddenStatesArchive] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -5328,7 +5328,7 @@ final class TST_HiddenStatesOwnerArchive {
 }
 
 /// Generated wire model for `TST.ExpandCollapseStateArchive`.
-final class TST_ExpandCollapseStateArchive {
+final class TST_ExpandCollapseStateArchive: IWAMessage {
     var uidsCollapsed: [TSP_UUID] = []
     var uidsExpanded: [TSP_UUID] = []
     var dimension: Int32?
@@ -5366,7 +5366,7 @@ final class TST_ExpandCollapseStateArchive {
 }
 
 /// Generated wire model for `TST.TokenAttachmentArchive`.
-final class TST_TokenAttachmentArchive {
+final class TST_TokenAttachmentArchive: IWAMessage {
     var `super`: TSWP_UIGraphicalAttachment?
     var expressionnode: TSP_Reference?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -5398,7 +5398,7 @@ final class TST_TokenAttachmentArchive {
 }
 
 /// Generated wire model for `TST.ExpressionNodeArchive`.
-final class TST_ExpressionNodeArchive {
+final class TST_ExpressionNodeArchive: IWAMessage {
     var children: [TSP_Reference] = []
     var firstIndex: UInt64?
     var lastIndex: UInt64?
@@ -5436,7 +5436,7 @@ final class TST_ExpressionNodeArchive {
 }
 
 /// Generated wire model for `TST.BooleanNodeArchive`.
-final class TST_BooleanNodeArchive {
+final class TST_BooleanNodeArchive: IWAMessage {
     var `super`: TST_ExpressionNodeArchive?
     var value: Bool?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -5468,7 +5468,7 @@ final class TST_BooleanNodeArchive {
 }
 
 /// Generated wire model for `TST.NumberNodeArchive`.
-final class TST_NumberNodeArchive {
+final class TST_NumberNodeArchive: IWAMessage {
     var `super`: TST_ExpressionNodeArchive?
     var number: Double?
     var decimalLow: UInt64?
@@ -5512,7 +5512,7 @@ final class TST_NumberNodeArchive {
 }
 
 /// Generated wire model for `TST.StringNodeArchive`.
-final class TST_StringNodeArchive {
+final class TST_StringNodeArchive: IWAMessage {
     var `super`: TST_ExpressionNodeArchive?
     var value: String?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -5544,7 +5544,7 @@ final class TST_StringNodeArchive {
 }
 
 /// Generated wire model for `TST.IdentifierNodeArchive`.
-final class TST_IdentifierNodeArchive {
+final class TST_IdentifierNodeArchive: IWAMessage {
     var `super`: TST_ExpressionNodeArchive?
     var identifier: String?
     var symbol: UInt32?
@@ -5582,7 +5582,7 @@ final class TST_IdentifierNodeArchive {
 }
 
 /// Generated wire model for `TST.ArrayNodeArchive`.
-final class TST_ArrayNodeArchive {
+final class TST_ArrayNodeArchive: IWAMessage {
     var `super`: TST_ExpressionNodeArchive?
     var columns: UInt32?
     var rows: UInt32?
@@ -5620,7 +5620,7 @@ final class TST_ArrayNodeArchive {
 }
 
 /// Generated wire model for `TST.ListNodeArchive`.
-final class TST_ListNodeArchive {
+final class TST_ListNodeArchive: IWAMessage {
     var `super`: TST_ExpressionNodeArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -5646,7 +5646,7 @@ final class TST_ListNodeArchive {
 }
 
 /// Generated wire model for `TST.OperatorNodeArchive`.
-final class TST_OperatorNodeArchive {
+final class TST_OperatorNodeArchive: IWAMessage {
     var `super`: TST_ExpressionNodeArchive?
     var operatorchar: UInt32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -5678,7 +5678,7 @@ final class TST_OperatorNodeArchive {
 }
 
 /// Generated wire model for `TST.PostfixOperatorNodeArchive`.
-final class TST_PostfixOperatorNodeArchive {
+final class TST_PostfixOperatorNodeArchive: IWAMessage {
     var `super`: TST_OperatorNodeArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -5704,7 +5704,7 @@ final class TST_PostfixOperatorNodeArchive {
 }
 
 /// Generated wire model for `TST.PrefixOperatorNodeArchive`.
-final class TST_PrefixOperatorNodeArchive {
+final class TST_PrefixOperatorNodeArchive: IWAMessage {
     var `super`: TST_OperatorNodeArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -5730,7 +5730,7 @@ final class TST_PrefixOperatorNodeArchive {
 }
 
 /// Generated wire model for `TST.FunctionNodeArchive`.
-final class TST_FunctionNodeArchive {
+final class TST_FunctionNodeArchive: IWAMessage {
     var `super`: TST_ExpressionNodeArchive?
     var functionindex: UInt32?
     var invalidfunctionname: String?
@@ -5768,7 +5768,7 @@ final class TST_FunctionNodeArchive {
 }
 
 /// Generated wire model for `TST.FunctionEndNodeArchive`.
-final class TST_FunctionEndNodeArchive {
+final class TST_FunctionEndNodeArchive: IWAMessage {
     var `super`: TST_ExpressionNodeArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -5794,7 +5794,7 @@ final class TST_FunctionEndNodeArchive {
 }
 
 /// Generated wire model for `TST.DateNodeArchive`.
-final class TST_DateNodeArchive {
+final class TST_DateNodeArchive: IWAMessage {
     var `super`: TST_ExpressionNodeArchive?
     var value: String?
     var format: String?
@@ -5832,7 +5832,7 @@ final class TST_DateNodeArchive {
 }
 
 /// Generated wire model for `TST.ReferenceNodeArchive`.
-final class TST_ReferenceNodeArchive {
+final class TST_ReferenceNodeArchive: IWAMessage {
     var `super`: TST_ExpressionNodeArchive?
     var rangereference: TSCE_RangeReferenceArchive?
     var preserveFlags: UInt32?
@@ -5918,7 +5918,7 @@ final class TST_ReferenceNodeArchive {
 }
 
 /// Generated wire model for `TST.DurationNodeArchive`.
-final class TST_DurationNodeArchive {
+final class TST_DurationNodeArchive: IWAMessage {
     var `super`: TST_ExpressionNodeArchive?
     var timeinterval: Double?
     var smallest: UInt32?
@@ -5968,7 +5968,7 @@ final class TST_DurationNodeArchive {
 }
 
 /// Generated wire model for `TST.ArgumentPlaceholderNodeArchive`.
-final class TST_ArgumentPlaceholderNodeArchive {
+final class TST_ArgumentPlaceholderNodeArchive: IWAMessage {
     var `super`: TST_ExpressionNodeArchive?
     var functionindex: UInt32?
     var argumentindex: UInt32?
@@ -6012,7 +6012,7 @@ final class TST_ArgumentPlaceholderNodeArchive {
 }
 
 /// Generated wire model for `TST.EmptyExpressionNodeArchive`.
-final class TST_EmptyExpressionNodeArchive {
+final class TST_EmptyExpressionNodeArchive: IWAMessage {
     var `super`: TST_ExpressionNodeArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -6038,7 +6038,7 @@ final class TST_EmptyExpressionNodeArchive {
 }
 
 /// Generated wire model for `TST.VariableNodeArchive`.
-final class TST_VariableNodeArchive {
+final class TST_VariableNodeArchive: IWAMessage {
     var `super`: TST_ExpressionNodeArchive?
     var identifier: String?
     var symbol: UInt32?
@@ -6076,7 +6076,7 @@ final class TST_VariableNodeArchive {
 }
 
 /// Generated wire model for `TST.SpillOriginRefNodeArchive`.
-final class TST_SpillOriginRefNodeArchive {
+final class TST_SpillOriginRefNodeArchive: IWAMessage {
     var `super`: TST_ExpressionNodeArchive?
     var spillOriginCoord: TSCE_CellCoordinateArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -6108,7 +6108,7 @@ final class TST_SpillOriginRefNodeArchive {
 }
 
 /// Generated wire model for `TST.LayoutHintArchive`.
-final class TST_LayoutHintArchive {
+final class TST_LayoutHintArchive: IWAMessage {
     var isvalid: Bool?
     var cellrange: TST_CellRange?
     var hintid: TST_CellID?
@@ -6176,7 +6176,7 @@ final class TST_LayoutHintArchive {
 }
 
 /// Generated wire model for `TST.CompletionTokenAttachmentArchive`.
-final class TST_CompletionTokenAttachmentArchive {
+final class TST_CompletionTokenAttachmentArchive: IWAMessage {
     var `super`: TST_TokenAttachmentArchive?
     var completiontext: String?
     var caretposition: UInt32?
@@ -6220,7 +6220,7 @@ final class TST_CompletionTokenAttachmentArchive {
 }
 
 /// Generated wire model for `TST.HiddenStateFormulaOwnerArchive`.
-final class TST_HiddenStateFormulaOwnerArchive {
+final class TST_HiddenStateFormulaOwnerArchive: IWAMessage {
     var ownerId: TSP_CFUUIDArchive?
     var thresholdValue: [TSCE_CellValueArchive] = []
     var needsToUpdateFilterSetForImport: Bool?
@@ -6258,7 +6258,7 @@ final class TST_HiddenStateFormulaOwnerArchive {
 }
 
 /// Generated wire model for `TST.FormulaStoreArchive`.
-final class TST_FormulaStoreArchive {
+final class TST_FormulaStoreArchive: IWAMessage {
     var nextFormulaIndex: UInt32?
     var formulas: [TST_FormulaStoreArchive_FormulaStorePair] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -6290,7 +6290,7 @@ final class TST_FormulaStoreArchive {
 }
 
 /// Generated wire model for `TST.FormulaStoreArchive.FormulaStorePair`.
-final class TST_FormulaStoreArchive_FormulaStorePair {
+final class TST_FormulaStoreArchive_FormulaStorePair: IWAMessage {
     var formulaIndex: UInt32?
     var formula: TSCE_FormulaArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -6322,7 +6322,7 @@ final class TST_FormulaStoreArchive_FormulaStorePair {
 }
 
 /// Generated wire model for `TST.MergeOperationArchive`.
-final class TST_MergeOperationArchive {
+final class TST_MergeOperationArchive: IWAMessage {
     var mergeType: Int32?
     var mergeRanges: [TSP_UUIDRectArchive] = []
     var mergeFormulas: [TSCE_FormulaArchive] = []
@@ -6365,7 +6365,7 @@ final class TST_MergeOperationArchive {
 }
 
 /// Generated wire model for `TST.MergeOwnerArchive`.
-final class TST_MergeOwnerArchive {
+final class TST_MergeOwnerArchive: IWAMessage {
     var ownerId: TSP_CFUUIDArchive?
     var formulaStore: TST_FormulaStoreArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -6397,7 +6397,7 @@ final class TST_MergeOwnerArchive {
 }
 
 /// Generated wire model for `TST.PencilAnnotationArchive`.
-final class TST_PencilAnnotationArchive {
+final class TST_PencilAnnotationArchive: IWAMessage {
     var tableInfo: TSP_Reference?
     var pencilAnnotationStorage: TSP_Reference?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -6429,7 +6429,7 @@ final class TST_PencilAnnotationArchive {
 }
 
 /// Generated wire model for `TST.PencilAnnotationOwnerArchive`.
-final class TST_PencilAnnotationOwnerArchive {
+final class TST_PencilAnnotationOwnerArchive: IWAMessage {
     var ownerId: TSP_CFUUIDArchive?
     var formulaStore: TST_FormulaStoreArchive?
     var annotations: [TSP_Reference] = []
@@ -6467,7 +6467,7 @@ final class TST_PencilAnnotationOwnerArchive {
 }
 
 /// Generated wire model for `TST.AccumulatorArchive`.
-final class TST_AccumulatorArchive {
+final class TST_AccumulatorArchive: IWAMessage {
     var boolCount: UInt32?
     var numberCount: UInt32?
     var dateCount: UInt32?
@@ -6583,7 +6583,7 @@ final class TST_AccumulatorArchive {
 }
 
 /// Generated wire model for `TST.GroupColumnArchive`.
-final class TST_GroupColumnArchive {
+final class TST_GroupColumnArchive: IWAMessage {
     var columnUid: TSP_UUID?
     var groupingType: UInt32?
     var groupingFunctor: TSCE_FunctorArchive?
@@ -6627,7 +6627,7 @@ final class TST_GroupColumnArchive {
 }
 
 /// Generated wire model for `TST.GroupColumnListArchive`.
-final class TST_GroupColumnListArchive {
+final class TST_GroupColumnListArchive: IWAMessage {
     var groupColumn: [TST_GroupColumnArchive] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -6653,7 +6653,7 @@ final class TST_GroupColumnListArchive {
 }
 
 /// Generated wire model for `TST.ColumnAggregateArchive`.
-final class TST_ColumnAggregateArchive {
+final class TST_ColumnAggregateArchive: IWAMessage {
     var columnUid: TSP_UUID?
     var level: UInt32?
     var aggType: UInt32?
@@ -6709,7 +6709,7 @@ final class TST_ColumnAggregateArchive {
 }
 
 /// Generated wire model for `TST.ColumnAggregateListArchive`.
-final class TST_ColumnAggregateListArchive {
+final class TST_ColumnAggregateListArchive: IWAMessage {
     var aggregates: [TST_ColumnAggregateArchive] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -6735,7 +6735,7 @@ final class TST_ColumnAggregateListArchive {
 }
 
 /// Generated wire model for `TST.GroupByArchive`.
-final class TST_GroupByArchive {
+final class TST_GroupByArchive: IWAMessage {
     var groupByUid: TSP_UUID?
     var groupColumn: [TST_GroupColumnArchive] = []
     var groupNodeRoot: TST_GroupByArchive_GroupNodeArchive?
@@ -6863,7 +6863,7 @@ final class TST_GroupByArchive {
 }
 
 /// Generated wire model for `TST.GroupByArchive.AggNodeArchive`.
-final class TST_GroupByArchive_AggNodeArchive {
+final class TST_GroupByArchive_AggNodeArchive: IWAMessage {
     var formulaCoord: TSCE_CellCoordinateArchive?
     var accum: TST_AccumulatorArchive?
     var child: [TST_GroupByArchive_AggNodeArchive] = []
@@ -6901,7 +6901,7 @@ final class TST_GroupByArchive_AggNodeArchive {
 }
 
 /// Generated wire model for `TST.GroupByArchive.AggregatorArchive`.
-final class TST_GroupByArchive_AggregatorArchive {
+final class TST_GroupByArchive_AggregatorArchive: IWAMessage {
     var columnUid: TSP_UUID?
     var aggNode: TST_GroupByArchive_AggNodeArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -6933,7 +6933,7 @@ final class TST_GroupByArchive_AggregatorArchive {
 }
 
 /// Generated wire model for `TST.GroupByArchive.GroupNodeArchive`.
-final class TST_GroupByArchive_GroupNodeArchive {
+final class TST_GroupByArchive_GroupNodeArchive: IWAMessage {
     var groupUid: TSP_UUID?
     var child: [TST_GroupByArchive_GroupNodeArchive] = []
     var rowUid: [TSP_UUID] = []
@@ -7007,7 +7007,7 @@ final class TST_GroupByArchive_GroupNodeArchive {
 }
 
 /// Generated wire model for `TST.GroupByArchive.GroupNodeArchive.FormatManagerArchive`.
-final class TST_GroupByArchive_GroupNodeArchive_FormatManagerArchive {
+final class TST_GroupByArchive_GroupNodeArchive_FormatManagerArchive: IWAMessage {
     var cellValue: TSCE_CellValueArchive?
     var formats: [TSK_FormatStructArchive] = []
     var rowSets: [TST_GroupByArchive_GroupNodeArchive_FormatManagerArchive_RowSetArchive] = []
@@ -7051,7 +7051,7 @@ final class TST_GroupByArchive_GroupNodeArchive_FormatManagerArchive {
 }
 
 /// Generated wire model for `TST.GroupByArchive.GroupNodeArchive.FormatManagerArchive.RowSetArchive`.
-final class TST_GroupByArchive_GroupNodeArchive_FormatManagerArchive_RowSetArchive {
+final class TST_GroupByArchive_GroupNodeArchive_FormatManagerArchive_RowSetArchive: IWAMessage {
     var rowUids: [TSP_UUID] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -7077,7 +7077,7 @@ final class TST_GroupByArchive_GroupNodeArchive_FormatManagerArchive_RowSetArchi
 }
 
 /// Generated wire model for `TST.CategoryOwnerArchive`.
-final class TST_CategoryOwnerArchive {
+final class TST_CategoryOwnerArchive: IWAMessage {
     var ownerUid: TSP_UUID?
     var groupBy: [TST_GroupByArchive] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -7109,7 +7109,7 @@ final class TST_CategoryOwnerArchive {
 }
 
 /// Generated wire model for `TST.CategoryOwnerRefArchive`.
-final class TST_CategoryOwnerRefArchive {
+final class TST_CategoryOwnerRefArchive: IWAMessage {
     var groupBy: [TSP_Reference] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -7135,7 +7135,7 @@ final class TST_CategoryOwnerRefArchive {
 }
 
 /// Generated wire model for `TST.PivotGroupingColumnOptionsMapArchive`.
-final class TST_PivotGroupingColumnOptionsMapArchive {
+final class TST_PivotGroupingColumnOptionsMapArchive: IWAMessage {
     var uids: [TSP_UUID] = []
     var flags: [UInt32] = []
     var aggregateRuleUids: [TSP_UUID] = []
@@ -7172,7 +7172,7 @@ final class TST_PivotGroupingColumnOptionsMapArchive {
 }
 
 /// Generated wire model for `TST.PivotOwnerArchive`.
-final class TST_PivotOwnerArchive {
+final class TST_PivotOwnerArchive: IWAMessage {
     var pivotOwnerUid: TSP_UUID?
     var groupingColumnsForRows: TST_GroupColumnListArchive?
     var groupingColumnsForColumns: TST_GroupColumnListArchive?
@@ -7288,7 +7288,7 @@ final class TST_PivotOwnerArchive {
 }
 
 /// Generated wire model for `TST.RichTextPayloadArchive`.
-final class TST_RichTextPayloadArchive {
+final class TST_RichTextPayloadArchive: IWAMessage {
     var storage: TSP_Reference?
     var range: TSP_Range?
     var cellid: TST_CellID?
@@ -7326,7 +7326,7 @@ final class TST_RichTextPayloadArchive {
 }
 
 /// Generated wire model for `TST.FormulaEqualsTokenAttachmentArchive`.
-final class TST_FormulaEqualsTokenAttachmentArchive {
+final class TST_FormulaEqualsTokenAttachmentArchive: IWAMessage {
     var `super`: TSWP_UIGraphicalAttachment?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -7352,7 +7352,7 @@ final class TST_FormulaEqualsTokenAttachmentArchive {
 }
 
 /// Generated wire model for `TST.CellFillStandIn`.
-final class TST_CellFillStandIn {
+final class TST_CellFillStandIn: IWAMessage {
     var fill: TSD_FillArchive?
     var typeIsMixed: Bool?
     var colorHasBeenModified: Bool?
@@ -7492,7 +7492,7 @@ final class TST_CellFillStandIn {
 }
 
 /// Generated wire model for `TST.FormulaSelectionArchive`.
-final class TST_FormulaSelectionArchive {
+final class TST_FormulaSelectionArchive: IWAMessage {
     var `super`: TSWP_SelectionArchive?
     var activetokencharindex: UInt32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -7524,7 +7524,7 @@ final class TST_FormulaSelectionArchive {
 }
 
 /// Generated wire model for `TST.CellBorderArchive`.
-final class TST_CellBorderArchive {
+final class TST_CellBorderArchive: IWAMessage {
     var topStroke: TSD_StrokeArchive?
     var topStrokeOrder: Int32?
     var rightStroke: TSD_StrokeArchive?
@@ -7592,7 +7592,7 @@ final class TST_CellBorderArchive {
 }
 
 /// Generated wire model for `TST.DefaultCellStylesContainerArchive`.
-final class TST_DefaultCellStylesContainerArchive {
+final class TST_DefaultCellStylesContainerArchive: IWAMessage {
     var tableStyleNetwork: TSP_Reference?
     var rowUids: [TSP_UUID] = []
     var columnUids: [TSP_UUID] = []
@@ -7646,7 +7646,7 @@ final class TST_DefaultCellStylesContainerArchive {
 }
 
 /// Generated wire model for `TST.MultiTableRemapperArchive`.
-final class TST_MultiTableRemapperArchive {
+final class TST_MultiTableRemapperArchive: IWAMessage {
     var mappingPurpose: Int32?
     var shouldStealReferences: Bool?
     var canReuseTableNames: Bool?
@@ -7708,7 +7708,7 @@ final class TST_MultiTableRemapperArchive {
 }
 
 /// Generated wire model for `TST.ChangePropagationMapWrapper`.
-final class TST_ChangePropagationMapWrapper {
+final class TST_ChangePropagationMapWrapper: IWAMessage {
     var replacementBehavior: Int32?
     var styleReplacePrototypes: [TSP_Reference] = []
     var styleReplaceReplacements: [TSP_Reference] = []
@@ -7800,7 +7800,7 @@ final class TST_ChangePropagationMapWrapper {
 }
 
 /// Generated wire model for `TST.SummaryCellVendorArchive`.
-final class TST_SummaryCellVendorArchive {
+final class TST_SummaryCellVendorArchive: IWAMessage {
     var tableInfo: TSP_Reference?
     var entries: [TST_SummaryCellVendorArchive_SummaryCellEntry] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -7832,7 +7832,7 @@ final class TST_SummaryCellVendorArchive {
 }
 
 /// Generated wire model for `TST.SummaryCellVendorArchive.SummaryCellEntry`.
-final class TST_SummaryCellVendorArchive_SummaryCellEntry {
+final class TST_SummaryCellVendorArchive_SummaryCellEntry: IWAMessage {
     var wildcarduid: TSP_UUID?
     var columnuid: TSP_UUID?
     var cell: TST_Cell?
@@ -7870,7 +7870,7 @@ final class TST_SummaryCellVendorArchive_SummaryCellEntry {
 }
 
 /// Generated wire model for `TST.CategoryOrderArchive`.
-final class TST_CategoryOrderArchive {
+final class TST_CategoryOrderArchive: IWAMessage {
     var tableInfo: TSP_Reference?
     var uidMap: TSP_Reference?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -7902,7 +7902,7 @@ final class TST_CategoryOrderArchive {
 }
 
 /// Generated wire model for `TST.PivotOrderArchive`.
-final class TST_PivotOrderArchive {
+final class TST_PivotOrderArchive: IWAMessage {
     var uidMap: TSP_Reference?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -7928,7 +7928,7 @@ final class TST_PivotOrderArchive {
 }
 
 /// Generated wire model for `TST.HeaderNameMgrTileArchive`.
-final class TST_HeaderNameMgrTileArchive {
+final class TST_HeaderNameMgrTileArchive: IWAMessage {
     var firstFragment: String?
     var lastFragment: String?
     var nameFragEntries: [TST_HeaderNameMgrTileArchive_NameFragmentArchive] = []
@@ -7966,7 +7966,7 @@ final class TST_HeaderNameMgrTileArchive {
 }
 
 /// Generated wire model for `TST.HeaderNameMgrTileArchive.NameFragmentArchive`.
-final class TST_HeaderNameMgrTileArchive_NameFragmentArchive {
+final class TST_HeaderNameMgrTileArchive_NameFragmentArchive: IWAMessage {
     var nameFragment: String?
     var namePrecedent: TSCE_CellCoordinateArchive?
     var usesOfNameFragment: TSCE_UidCellRefSetArchive?
@@ -8004,7 +8004,7 @@ final class TST_HeaderNameMgrTileArchive_NameFragmentArchive {
 }
 
 /// Generated wire model for `TST.HeaderNameMgrArchive`.
-final class TST_HeaderNameMgrArchive {
+final class TST_HeaderNameMgrArchive: IWAMessage {
     var ownerUid: TSP_UUID?
     var nrmOwnerUid: TSP_UUID?
     var perTables: [TST_HeaderNameMgrArchive_PerTableArchive] = []
@@ -8048,7 +8048,7 @@ final class TST_HeaderNameMgrArchive {
 }
 
 /// Generated wire model for `TST.HeaderNameMgrArchive.PerTableArchive`.
-final class TST_HeaderNameMgrArchive_PerTableArchive {
+final class TST_HeaderNameMgrArchive_PerTableArchive: IWAMessage {
     var tableUid: TSP_UUID?
     var perTablePrecedent: TSCE_CellCoordinateArchive?
     var isDeleted: Bool?
@@ -8110,7 +8110,7 @@ final class TST_HeaderNameMgrArchive_PerTableArchive {
 }
 
 /// Generated wire model for `TST.WidthHeightCacheFittingEntry`.
-final class TST_WidthHeightCacheFittingEntry {
+final class TST_WidthHeightCacheFittingEntry: IWAMessage {
     var fittingIndex: UInt32?
     var fittingSize: Float?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -8142,7 +8142,7 @@ final class TST_WidthHeightCacheFittingEntry {
 }
 
 /// Generated wire model for `TST.WidthHeightCache`.
-final class TST_WidthHeightCache {
+final class TST_WidthHeightCache: IWAMessage {
     var rowsFittingEntries: [TST_WidthHeightCacheFittingEntry] = []
     var columnsCount: UInt32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -8174,7 +8174,7 @@ final class TST_WidthHeightCache {
 }
 
 /// Generated wire model for `TST.LayoutEngineArchive`.
-final class TST_LayoutEngineArchive {
+final class TST_LayoutEngineArchive: IWAMessage {
     var widthHeightCache: TST_WidthHeightCache?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -8200,7 +8200,7 @@ final class TST_LayoutEngineArchive {
 }
 
 /// Generated wire model for `TST.CollaboratorTableCursorSubselectionArchive`.
-final class TST_CollaboratorTableCursorSubselectionArchive {
+final class TST_CollaboratorTableCursorSubselectionArchive: IWAMessage {
     var cellUidList: TST_CellUIDListArchive?
     var selectionType: Int32?
     var rowColumnUidList: [TSP_UUID] = []
@@ -8235,4 +8235,169 @@ final class TST_CollaboratorTableCursorSubselectionArchive {
         for _f in unknownFields { _w.append(_f) }
         return _w.bytes
     }
+}
+
+/// Registers this file's archives into the reflective catalog.
+func registerIWA_TSTArchives(_ into: inout [(name: String, decode: (ProtobufMessage) -> IWAMessage)]) {
+    into.append(("TST.CellID", { TST_CellID($0) as IWAMessage }))
+    into.append(("TST.CellUIDLookupListArchive", { TST_CellUIDLookupListArchive($0) as IWAMessage }))
+    into.append(("TST.CellUIDListArchive", { TST_CellUIDListArchive($0) as IWAMessage }))
+    into.append(("TST.TableSize", { TST_TableSize($0) as IWAMessage }))
+    into.append(("TST.ExpandedTableSize", { TST_ExpandedTableSize($0) as IWAMessage }))
+    into.append(("TST.CellRange", { TST_CellRange($0) as IWAMessage }))
+    into.append(("TST.ExpandedCellRange", { TST_ExpandedCellRange($0) as IWAMessage }))
+    into.append(("TST.TableSelection", { TST_TableSelection($0) as IWAMessage }))
+    into.append(("TST.TileRowInfo", { TST_TileRowInfo($0) as IWAMessage }))
+    into.append(("TST.Tile", { TST_Tile($0) as IWAMessage }))
+    into.append(("TST.TileStorage", { TST_TileStorage($0) as IWAMessage }))
+    into.append(("TST.TileStorage.Tile", { TST_TileStorage_Tile($0) as IWAMessage }))
+    into.append(("TST.PopUpMenuModel", { TST_PopUpMenuModel($0) as IWAMessage }))
+    into.append(("TST.PopUpMenuModel.CellValue", { TST_PopUpMenuModel_CellValue($0) as IWAMessage }))
+    into.append(("TST.ImportWarningSetArchive", { TST_ImportWarningSetArchive($0) as IWAMessage }))
+    into.append(("TST.ImportWarningSetArchive.FormulaImportWarning", { TST_ImportWarningSetArchive_FormulaImportWarning($0) as IWAMessage }))
+    into.append(("TST.CellRefImportWarningSetPairArchive", { TST_CellRefImportWarningSetPairArchive($0) as IWAMessage }))
+    into.append(("TST.ImportWarningSetByCellRefArchive", { TST_ImportWarningSetByCellRefArchive($0) as IWAMessage }))
+    into.append(("TST.TableDataList", { TST_TableDataList($0) as IWAMessage }))
+    into.append(("TST.TableDataList.ListEntry", { TST_TableDataList_ListEntry($0) as IWAMessage }))
+    into.append(("TST.TableDataListSegment", { TST_TableDataListSegment($0) as IWAMessage }))
+    into.append(("TST.TableRBTree", { TST_TableRBTree($0) as IWAMessage }))
+    into.append(("TST.TableRBTree.Node", { TST_TableRBTree_Node($0) as IWAMessage }))
+    into.append(("TST.HeaderStorageBucket", { TST_HeaderStorageBucket($0) as IWAMessage }))
+    into.append(("TST.HeaderStorageBucket.Header", { TST_HeaderStorageBucket_Header($0) as IWAMessage }))
+    into.append(("TST.HeaderStorage", { TST_HeaderStorage($0) as IWAMessage }))
+    into.append(("TST.DataStore", { TST_DataStore($0) as IWAMessage }))
+    into.append(("TST.TableInfoArchive", { TST_TableInfoArchive($0) as IWAMessage }))
+    into.append(("TST.CategoryInfoArchive", { TST_CategoryInfoArchive($0) as IWAMessage }))
+    into.append(("TST.WPTableInfoArchive", { TST_WPTableInfoArchive($0) as IWAMessage }))
+    into.append(("TST.TableStyleNetworkArchive", { TST_TableStyleNetworkArchive($0) as IWAMessage }))
+    into.append(("TST.TableGroupSortOrderUIDArchive", { TST_TableGroupSortOrderUIDArchive($0) as IWAMessage }))
+    into.append(("TST.TableGroupSortOrderUIDArchive.GroupSortRuleUIDArchive", { TST_TableGroupSortOrderUIDArchive_GroupSortRuleUIDArchive($0) as IWAMessage }))
+    into.append(("TST.TableSortOrderArchive", { TST_TableSortOrderArchive($0) as IWAMessage }))
+    into.append(("TST.TableSortOrderArchive.SortRuleArchive", { TST_TableSortOrderArchive_SortRuleArchive($0) as IWAMessage }))
+    into.append(("TST.TableSortOrderUIDArchive", { TST_TableSortOrderUIDArchive($0) as IWAMessage }))
+    into.append(("TST.TableSortOrderUIDArchive.SortRuleArchive", { TST_TableSortOrderUIDArchive_SortRuleArchive($0) as IWAMessage }))
+    into.append(("TST.SortRuleReferenceTrackerArchive", { TST_SortRuleReferenceTrackerArchive($0) as IWAMessage }))
+    into.append(("TST.CellRegion", { TST_CellRegion($0) as IWAMessage }))
+    into.append(("TST.CellUIDRegionArchive", { TST_CellUIDRegionArchive($0) as IWAMessage }))
+    into.append(("TST.StructuredTextImportRecord", { TST_StructuredTextImportRecord($0) as IWAMessage }))
+    into.append(("TST.TableModelArchive", { TST_TableModelArchive($0) as IWAMessage }))
+    into.append(("TST.SummaryModelArchive", { TST_SummaryModelArchive($0) as IWAMessage }))
+    into.append(("TST.SummaryModelGroupByChangeStateArchive", { TST_SummaryModelGroupByChangeStateArchive($0) as IWAMessage }))
+    into.append(("TST.ColumnRowUIDMapArchive", { TST_ColumnRowUIDMapArchive($0) as IWAMessage }))
+    into.append(("TST.StrokeLayerArchive", { TST_StrokeLayerArchive($0) as IWAMessage }))
+    into.append(("TST.StrokeLayerArchive.StrokeRunArchive", { TST_StrokeLayerArchive_StrokeRunArchive($0) as IWAMessage }))
+    into.append(("TST.StrokeSidecarArchive", { TST_StrokeSidecarArchive($0) as IWAMessage }))
+    into.append(("TST.DurationWrapperArchive", { TST_DurationWrapperArchive($0) as IWAMessage }))
+    into.append(("TST.Cell", { TST_Cell($0) as IWAMessage }))
+    into.append(("TST.MergeRegionMapArchive", { TST_MergeRegionMapArchive($0) as IWAMessage }))
+    into.append(("TST.CellMapArchive", { TST_CellMapArchive($0) as IWAMessage }))
+    into.append(("TST.CellListArchive", { TST_CellListArchive($0) as IWAMessage }))
+    into.append(("TST.CellListArchive.OptionalCell", { TST_CellListArchive_OptionalCell($0) as IWAMessage }))
+    into.append(("TST.ConcurrentCellMapArchive", { TST_ConcurrentCellMapArchive($0) as IWAMessage }))
+    into.append(("TST.ConcurrentCellListArchive", { TST_ConcurrentCellListArchive($0) as IWAMessage }))
+    into.append(("TST.ConcurrentCellListArchive.OptionalCell", { TST_ConcurrentCellListArchive_OptionalCell($0) as IWAMessage }))
+    into.append(("TST.CellFormatAndValueArchive", { TST_CellFormatAndValueArchive($0) as IWAMessage }))
+    into.append(("TST.CellSpecArchive", { TST_CellSpecArchive($0) as IWAMessage }))
+    into.append(("TST.CommentStorageWrapperArchive", { TST_CommentStorageWrapperArchive($0) as IWAMessage }))
+    into.append(("TST.CellDiffArchive", { TST_CellDiffArchive($0) as IWAMessage }))
+    into.append(("TST.CellDiffArray", { TST_CellDiffArray($0) as IWAMessage }))
+    into.append(("TST.CellDiffArraySegment", { TST_CellDiffArraySegment($0) as IWAMessage }))
+    into.append(("TST.CellDiffMapArchive", { TST_CellDiffMapArchive($0) as IWAMessage }))
+    into.append(("TST.HierarchicalCellDiffMapArchive", { TST_HierarchicalCellDiffMapArchive($0) as IWAMessage }))
+    into.append(("TST.HierarchicalCellDiffMapArchive.BoxedRow", { TST_HierarchicalCellDiffMapArchive_BoxedRow($0) as IWAMessage }))
+    into.append(("TST.DoubleStyleMapArchive", { TST_DoubleStyleMapArchive($0) as IWAMessage }))
+    into.append(("TST.DoubleStyleMapArchive.DoubleStyleMapEntryArchive", { TST_DoubleStyleMapArchive_DoubleStyleMapEntryArchive($0) as IWAMessage }))
+    into.append(("TST.StyleTableMapArchive", { TST_StyleTableMapArchive($0) as IWAMessage }))
+    into.append(("TST.StyleTableMapArchive.StyleTableMapEntryArchive", { TST_StyleTableMapArchive_StyleTableMapEntryArchive($0) as IWAMessage }))
+    into.append(("TST.SelectionArchive", { TST_SelectionArchive($0) as IWAMessage }))
+    into.append(("TST.DeathhawkRdar39989167CellSelectionArchive", { TST_DeathhawkRdar39989167CellSelectionArchive($0) as IWAMessage }))
+    into.append(("TST.StrokeSelectionArchive", { TST_StrokeSelectionArchive($0) as IWAMessage }))
+    into.append(("TST.ControlCellSelectionArchive", { TST_ControlCellSelectionArchive($0) as IWAMessage }))
+    into.append(("TST.StockCellSelectionArchive", { TST_StockCellSelectionArchive($0) as IWAMessage }))
+    into.append(("TST.TableNameSelectionArchive", { TST_TableNameSelectionArchive($0) as IWAMessage }))
+    into.append(("TST.AutofillSelectionArchive", { TST_AutofillSelectionArchive($0) as IWAMessage }))
+    into.append(("TST.FilterRulePrePivotArchive", { TST_FilterRulePrePivotArchive($0) as IWAMessage }))
+    into.append(("TST.FilterRuleArchive", { TST_FilterRuleArchive($0) as IWAMessage }))
+    into.append(("TST.TableStyleArchive", { TST_TableStyleArchive($0) as IWAMessage }))
+    into.append(("TST.CellStyleArchive", { TST_CellStyleArchive($0) as IWAMessage }))
+    into.append(("TST.FormulaPredArgDataArchive", { TST_FormulaPredArgDataArchive($0) as IWAMessage }))
+    into.append(("TST.FormulaPredArgArchive", { TST_FormulaPredArgArchive($0) as IWAMessage }))
+    into.append(("TST.FormulaPredicatePrePivotArchive", { TST_FormulaPredicatePrePivotArchive($0) as IWAMessage }))
+    into.append(("TST.FormulaPredicateArchive", { TST_FormulaPredicateArchive($0) as IWAMessage }))
+    into.append(("TST.ConditionalStyleSetArchive", { TST_ConditionalStyleSetArchive($0) as IWAMessage }))
+    into.append(("TST.ConditionalStyleSetArchive.ConditionalStyleRulePrePivot", { TST_ConditionalStyleSetArchive_ConditionalStyleRulePrePivot($0) as IWAMessage }))
+    into.append(("TST.ConditionalStyleSetArchive.ConditionalStyleRule", { TST_ConditionalStyleSetArchive_ConditionalStyleRule($0) as IWAMessage }))
+    into.append(("TST.ConditionalStyleSetArchive.ConditionalStyleRules", { TST_ConditionalStyleSetArchive_ConditionalStyleRules($0) as IWAMessage }))
+    into.append(("TST.FilterSetArchive", { TST_FilterSetArchive($0) as IWAMessage }))
+    into.append(("TST.UniqueIndexArchive", { TST_UniqueIndexArchive($0) as IWAMessage }))
+    into.append(("TST.UniqueIndexArchive.UniqueIndexEntryArchive", { TST_UniqueIndexArchive_UniqueIndexEntryArchive($0) as IWAMessage }))
+    into.append(("TST.HiddenStateExtentArchive", { TST_HiddenStateExtentArchive($0) as IWAMessage }))
+    into.append(("TST.HiddenStateExtentArchive.RowOrColumnState", { TST_HiddenStateExtentArchive_RowOrColumnState($0) as IWAMessage }))
+    into.append(("TST.HiddenStatesArchive", { TST_HiddenStatesArchive($0) as IWAMessage }))
+    into.append(("TST.HiddenStatesOwnerArchive", { TST_HiddenStatesOwnerArchive($0) as IWAMessage }))
+    into.append(("TST.ExpandCollapseStateArchive", { TST_ExpandCollapseStateArchive($0) as IWAMessage }))
+    into.append(("TST.TokenAttachmentArchive", { TST_TokenAttachmentArchive($0) as IWAMessage }))
+    into.append(("TST.ExpressionNodeArchive", { TST_ExpressionNodeArchive($0) as IWAMessage }))
+    into.append(("TST.BooleanNodeArchive", { TST_BooleanNodeArchive($0) as IWAMessage }))
+    into.append(("TST.NumberNodeArchive", { TST_NumberNodeArchive($0) as IWAMessage }))
+    into.append(("TST.StringNodeArchive", { TST_StringNodeArchive($0) as IWAMessage }))
+    into.append(("TST.IdentifierNodeArchive", { TST_IdentifierNodeArchive($0) as IWAMessage }))
+    into.append(("TST.ArrayNodeArchive", { TST_ArrayNodeArchive($0) as IWAMessage }))
+    into.append(("TST.ListNodeArchive", { TST_ListNodeArchive($0) as IWAMessage }))
+    into.append(("TST.OperatorNodeArchive", { TST_OperatorNodeArchive($0) as IWAMessage }))
+    into.append(("TST.PostfixOperatorNodeArchive", { TST_PostfixOperatorNodeArchive($0) as IWAMessage }))
+    into.append(("TST.PrefixOperatorNodeArchive", { TST_PrefixOperatorNodeArchive($0) as IWAMessage }))
+    into.append(("TST.FunctionNodeArchive", { TST_FunctionNodeArchive($0) as IWAMessage }))
+    into.append(("TST.FunctionEndNodeArchive", { TST_FunctionEndNodeArchive($0) as IWAMessage }))
+    into.append(("TST.DateNodeArchive", { TST_DateNodeArchive($0) as IWAMessage }))
+    into.append(("TST.ReferenceNodeArchive", { TST_ReferenceNodeArchive($0) as IWAMessage }))
+    into.append(("TST.DurationNodeArchive", { TST_DurationNodeArchive($0) as IWAMessage }))
+    into.append(("TST.ArgumentPlaceholderNodeArchive", { TST_ArgumentPlaceholderNodeArchive($0) as IWAMessage }))
+    into.append(("TST.EmptyExpressionNodeArchive", { TST_EmptyExpressionNodeArchive($0) as IWAMessage }))
+    into.append(("TST.VariableNodeArchive", { TST_VariableNodeArchive($0) as IWAMessage }))
+    into.append(("TST.SpillOriginRefNodeArchive", { TST_SpillOriginRefNodeArchive($0) as IWAMessage }))
+    into.append(("TST.LayoutHintArchive", { TST_LayoutHintArchive($0) as IWAMessage }))
+    into.append(("TST.CompletionTokenAttachmentArchive", { TST_CompletionTokenAttachmentArchive($0) as IWAMessage }))
+    into.append(("TST.HiddenStateFormulaOwnerArchive", { TST_HiddenStateFormulaOwnerArchive($0) as IWAMessage }))
+    into.append(("TST.FormulaStoreArchive", { TST_FormulaStoreArchive($0) as IWAMessage }))
+    into.append(("TST.FormulaStoreArchive.FormulaStorePair", { TST_FormulaStoreArchive_FormulaStorePair($0) as IWAMessage }))
+    into.append(("TST.MergeOperationArchive", { TST_MergeOperationArchive($0) as IWAMessage }))
+    into.append(("TST.MergeOwnerArchive", { TST_MergeOwnerArchive($0) as IWAMessage }))
+    into.append(("TST.PencilAnnotationArchive", { TST_PencilAnnotationArchive($0) as IWAMessage }))
+    into.append(("TST.PencilAnnotationOwnerArchive", { TST_PencilAnnotationOwnerArchive($0) as IWAMessage }))
+    into.append(("TST.AccumulatorArchive", { TST_AccumulatorArchive($0) as IWAMessage }))
+    into.append(("TST.GroupColumnArchive", { TST_GroupColumnArchive($0) as IWAMessage }))
+    into.append(("TST.GroupColumnListArchive", { TST_GroupColumnListArchive($0) as IWAMessage }))
+    into.append(("TST.ColumnAggregateArchive", { TST_ColumnAggregateArchive($0) as IWAMessage }))
+    into.append(("TST.ColumnAggregateListArchive", { TST_ColumnAggregateListArchive($0) as IWAMessage }))
+    into.append(("TST.GroupByArchive", { TST_GroupByArchive($0) as IWAMessage }))
+    into.append(("TST.GroupByArchive.AggNodeArchive", { TST_GroupByArchive_AggNodeArchive($0) as IWAMessage }))
+    into.append(("TST.GroupByArchive.AggregatorArchive", { TST_GroupByArchive_AggregatorArchive($0) as IWAMessage }))
+    into.append(("TST.GroupByArchive.GroupNodeArchive", { TST_GroupByArchive_GroupNodeArchive($0) as IWAMessage }))
+    into.append(("TST.GroupByArchive.GroupNodeArchive.FormatManagerArchive", { TST_GroupByArchive_GroupNodeArchive_FormatManagerArchive($0) as IWAMessage }))
+    into.append(("TST.GroupByArchive.GroupNodeArchive.FormatManagerArchive.RowSetArchive", { TST_GroupByArchive_GroupNodeArchive_FormatManagerArchive_RowSetArchive($0) as IWAMessage }))
+    into.append(("TST.CategoryOwnerArchive", { TST_CategoryOwnerArchive($0) as IWAMessage }))
+    into.append(("TST.CategoryOwnerRefArchive", { TST_CategoryOwnerRefArchive($0) as IWAMessage }))
+    into.append(("TST.PivotGroupingColumnOptionsMapArchive", { TST_PivotGroupingColumnOptionsMapArchive($0) as IWAMessage }))
+    into.append(("TST.PivotOwnerArchive", { TST_PivotOwnerArchive($0) as IWAMessage }))
+    into.append(("TST.RichTextPayloadArchive", { TST_RichTextPayloadArchive($0) as IWAMessage }))
+    into.append(("TST.FormulaEqualsTokenAttachmentArchive", { TST_FormulaEqualsTokenAttachmentArchive($0) as IWAMessage }))
+    into.append(("TST.CellFillStandIn", { TST_CellFillStandIn($0) as IWAMessage }))
+    into.append(("TST.FormulaSelectionArchive", { TST_FormulaSelectionArchive($0) as IWAMessage }))
+    into.append(("TST.CellBorderArchive", { TST_CellBorderArchive($0) as IWAMessage }))
+    into.append(("TST.DefaultCellStylesContainerArchive", { TST_DefaultCellStylesContainerArchive($0) as IWAMessage }))
+    into.append(("TST.MultiTableRemapperArchive", { TST_MultiTableRemapperArchive($0) as IWAMessage }))
+    into.append(("TST.ChangePropagationMapWrapper", { TST_ChangePropagationMapWrapper($0) as IWAMessage }))
+    into.append(("TST.SummaryCellVendorArchive", { TST_SummaryCellVendorArchive($0) as IWAMessage }))
+    into.append(("TST.SummaryCellVendorArchive.SummaryCellEntry", { TST_SummaryCellVendorArchive_SummaryCellEntry($0) as IWAMessage }))
+    into.append(("TST.CategoryOrderArchive", { TST_CategoryOrderArchive($0) as IWAMessage }))
+    into.append(("TST.PivotOrderArchive", { TST_PivotOrderArchive($0) as IWAMessage }))
+    into.append(("TST.HeaderNameMgrTileArchive", { TST_HeaderNameMgrTileArchive($0) as IWAMessage }))
+    into.append(("TST.HeaderNameMgrTileArchive.NameFragmentArchive", { TST_HeaderNameMgrTileArchive_NameFragmentArchive($0) as IWAMessage }))
+    into.append(("TST.HeaderNameMgrArchive", { TST_HeaderNameMgrArchive($0) as IWAMessage }))
+    into.append(("TST.HeaderNameMgrArchive.PerTableArchive", { TST_HeaderNameMgrArchive_PerTableArchive($0) as IWAMessage }))
+    into.append(("TST.WidthHeightCacheFittingEntry", { TST_WidthHeightCacheFittingEntry($0) as IWAMessage }))
+    into.append(("TST.WidthHeightCache", { TST_WidthHeightCache($0) as IWAMessage }))
+    into.append(("TST.LayoutEngineArchive", { TST_LayoutEngineArchive($0) as IWAMessage }))
+    into.append(("TST.CollaboratorTableCursorSubselectionArchive", { TST_CollaboratorTableCursorSubselectionArchive($0) as IWAMessage }))
 }

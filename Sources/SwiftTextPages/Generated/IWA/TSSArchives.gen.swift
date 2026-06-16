@@ -3,7 +3,7 @@
 import Foundation
 
 /// Generated wire model for `TSS.StyleArchive`.
-final class TSS_StyleArchive {
+final class TSS_StyleArchive: IWAMessage {
     var name: String?
     var styleIdentifier: String?
     var parent: TSP_Reference?
@@ -53,7 +53,7 @@ final class TSS_StyleArchive {
 }
 
 /// Generated wire model for `TSS.StylesheetArchive`.
-final class TSS_StylesheetArchive {
+final class TSS_StylesheetArchive: IWAMessage {
     var styles: [TSP_Reference] = []
     var identifierToStyleMap: [TSS_StylesheetArchive_IdentifiedStyleEntry] = []
     var parent: TSP_Reference?
@@ -205,7 +205,7 @@ final class TSS_StylesheetArchive {
 }
 
 /// Generated wire model for `TSS.StylesheetArchive.IdentifiedStyleEntry`.
-final class TSS_StylesheetArchive_IdentifiedStyleEntry {
+final class TSS_StylesheetArchive_IdentifiedStyleEntry: IWAMessage {
     var identifier: String?
     var style: TSP_Reference?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -237,7 +237,7 @@ final class TSS_StylesheetArchive_IdentifiedStyleEntry {
 }
 
 /// Generated wire model for `TSS.StylesheetArchive.StyleChildrenEntry`.
-final class TSS_StylesheetArchive_StyleChildrenEntry {
+final class TSS_StylesheetArchive_StyleChildrenEntry: IWAMessage {
     var parent: TSP_Reference?
     var children: [TSP_Reference] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -269,7 +269,7 @@ final class TSS_StylesheetArchive_StyleChildrenEntry {
 }
 
 /// Generated wire model for `TSS.StylesheetArchive.VersionedStyles`.
-final class TSS_StylesheetArchive_VersionedStyles {
+final class TSS_StylesheetArchive_VersionedStyles: IWAMessage {
     var styles: [TSP_Reference] = []
     var identifierToStyleMap: [TSS_StylesheetArchive_IdentifiedStyleEntry] = []
     var parentToChildrenStyleMap: [TSS_StylesheetArchive_StyleChildrenEntry] = []
@@ -307,7 +307,7 @@ final class TSS_StylesheetArchive_VersionedStyles {
 }
 
 /// Generated wire model for `TSS.ThemeArchive`.
-final class TSS_ThemeArchive {
+final class TSS_ThemeArchive: IWAMessage {
     var legacyStylesheet: TSP_Reference?
     var themeIdentifier: String?
     var documentStylesheet: TSP_Reference?
@@ -363,7 +363,7 @@ final class TSS_ThemeArchive {
 }
 
 /// Generated wire model for `TSS.ApplyThemeCommandArchive`.
-final class TSS_ApplyThemeCommandArchive {
+final class TSS_ApplyThemeCommandArchive: IWAMessage {
     var `super`: TSK_CommandArchive?
     var commands: [TSP_Reference] = []
     var oldTheme: TSP_Reference?
@@ -407,7 +407,7 @@ final class TSS_ApplyThemeCommandArchive {
 }
 
 /// Generated wire model for `TSS.ApplyThemeChildCommandArchive`.
-final class TSS_ApplyThemeChildCommandArchive {
+final class TSS_ApplyThemeChildCommandArchive: IWAMessage {
     var `super`: TSK_CommandArchive?
     var parent: TSP_Reference?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -439,7 +439,7 @@ final class TSS_ApplyThemeChildCommandArchive {
 }
 
 /// Generated wire model for `TSS.StyleUpdatePropertyMapCommandArchive`.
-final class TSS_StyleUpdatePropertyMapCommandArchive {
+final class TSS_StyleUpdatePropertyMapCommandArchive: IWAMessage {
     var `super`: TSK_CommandArchive?
     var currentStyle: TSP_Reference?
     var styleWithOldPropertyMap: TSP_Reference?
@@ -495,7 +495,7 @@ final class TSS_StyleUpdatePropertyMapCommandArchive {
 }
 
 /// Generated wire model for `TSS.ThemeReplacePresetCommandArchive`.
-final class TSS_ThemeReplacePresetCommandArchive {
+final class TSS_ThemeReplacePresetCommandArchive: IWAMessage {
     var `super`: TSK_CommandArchive?
     var preset: TSP_Reference?
     var oldpreset: TSP_Reference?
@@ -539,7 +539,7 @@ final class TSS_ThemeReplacePresetCommandArchive {
 }
 
 /// Generated wire model for `TSS.ThemeReplaceColorPresetCommandArchive`.
-final class TSS_ThemeReplaceColorPresetCommandArchive {
+final class TSS_ThemeReplaceColorPresetCommandArchive: IWAMessage {
     var `super`: TSK_CommandArchive?
     var theme: TSP_Reference?
     var color: TSP_Color?
@@ -589,7 +589,7 @@ final class TSS_ThemeReplaceColorPresetCommandArchive {
 }
 
 /// Generated wire model for `TSS.ThemeAddStylePresetCommandArchive`.
-final class TSS_ThemeAddStylePresetCommandArchive {
+final class TSS_ThemeAddStylePresetCommandArchive: IWAMessage {
     var `super`: TSK_CommandArchive?
     var theme: TSP_Reference?
     var preset: TSP_Reference?
@@ -645,7 +645,7 @@ final class TSS_ThemeAddStylePresetCommandArchive {
 }
 
 /// Generated wire model for `TSS.ThemeRemoveStylePresetCommandArchive`.
-final class TSS_ThemeRemoveStylePresetCommandArchive {
+final class TSS_ThemeRemoveStylePresetCommandArchive: IWAMessage {
     var `super`: TSK_CommandArchive?
     var theme: TSP_Reference?
     var preset: TSP_Reference?
@@ -707,7 +707,7 @@ final class TSS_ThemeRemoveStylePresetCommandArchive {
 }
 
 /// Generated wire model for `TSS.ThemeMovePresetCommandArchive`.
-final class TSS_ThemeMovePresetCommandArchive {
+final class TSS_ThemeMovePresetCommandArchive: IWAMessage {
     var `super`: TSK_CommandArchive?
     var theme: TSP_Reference?
     var presetId: TSP_UUID?
@@ -757,7 +757,7 @@ final class TSS_ThemeMovePresetCommandArchive {
 }
 
 /// Generated wire model for `TSS.ThemeReplaceStylePresetAndDisconnectStylesCommandArchive`.
-final class TSS_ThemeReplaceStylePresetAndDisconnectStylesCommandArchive {
+final class TSS_ThemeReplaceStylePresetAndDisconnectStylesCommandArchive: IWAMessage {
     var `super`: TSK_CommandArchive?
     var preset: TSP_Reference?
     var replacementPreset: TSP_Reference?
@@ -795,7 +795,7 @@ final class TSS_ThemeReplaceStylePresetAndDisconnectStylesCommandArchive {
 }
 
 /// Generated wire model for `TSS.CommandPropertyEntryArchive`.
-final class TSS_CommandPropertyEntryArchive {
+final class TSS_CommandPropertyEntryArchive: IWAMessage {
     var property: UInt32?
     var type: Int32?
     var integerValue: Int32?
@@ -857,7 +857,7 @@ final class TSS_CommandPropertyEntryArchive {
 }
 
 /// Generated wire model for `TSS.CommandPropertyMapArchive`.
-final class TSS_CommandPropertyMapArchive {
+final class TSS_CommandPropertyMapArchive: IWAMessage {
     var propertyEntries: [TSS_CommandPropertyEntryArchive] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -880,4 +880,25 @@ final class TSS_CommandPropertyMapArchive {
         for _f in unknownFields { _w.append(_f) }
         return _w.bytes
     }
+}
+
+/// Registers this file's archives into the reflective catalog.
+func registerIWA_TSSArchives(_ into: inout [(name: String, decode: (ProtobufMessage) -> IWAMessage)]) {
+    into.append(("TSS.StyleArchive", { TSS_StyleArchive($0) as IWAMessage }))
+    into.append(("TSS.StylesheetArchive", { TSS_StylesheetArchive($0) as IWAMessage }))
+    into.append(("TSS.StylesheetArchive.IdentifiedStyleEntry", { TSS_StylesheetArchive_IdentifiedStyleEntry($0) as IWAMessage }))
+    into.append(("TSS.StylesheetArchive.StyleChildrenEntry", { TSS_StylesheetArchive_StyleChildrenEntry($0) as IWAMessage }))
+    into.append(("TSS.StylesheetArchive.VersionedStyles", { TSS_StylesheetArchive_VersionedStyles($0) as IWAMessage }))
+    into.append(("TSS.ThemeArchive", { TSS_ThemeArchive($0) as IWAMessage }))
+    into.append(("TSS.ApplyThemeCommandArchive", { TSS_ApplyThemeCommandArchive($0) as IWAMessage }))
+    into.append(("TSS.ApplyThemeChildCommandArchive", { TSS_ApplyThemeChildCommandArchive($0) as IWAMessage }))
+    into.append(("TSS.StyleUpdatePropertyMapCommandArchive", { TSS_StyleUpdatePropertyMapCommandArchive($0) as IWAMessage }))
+    into.append(("TSS.ThemeReplacePresetCommandArchive", { TSS_ThemeReplacePresetCommandArchive($0) as IWAMessage }))
+    into.append(("TSS.ThemeReplaceColorPresetCommandArchive", { TSS_ThemeReplaceColorPresetCommandArchive($0) as IWAMessage }))
+    into.append(("TSS.ThemeAddStylePresetCommandArchive", { TSS_ThemeAddStylePresetCommandArchive($0) as IWAMessage }))
+    into.append(("TSS.ThemeRemoveStylePresetCommandArchive", { TSS_ThemeRemoveStylePresetCommandArchive($0) as IWAMessage }))
+    into.append(("TSS.ThemeMovePresetCommandArchive", { TSS_ThemeMovePresetCommandArchive($0) as IWAMessage }))
+    into.append(("TSS.ThemeReplaceStylePresetAndDisconnectStylesCommandArchive", { TSS_ThemeReplaceStylePresetAndDisconnectStylesCommandArchive($0) as IWAMessage }))
+    into.append(("TSS.CommandPropertyEntryArchive", { TSS_CommandPropertyEntryArchive($0) as IWAMessage }))
+    into.append(("TSS.CommandPropertyMapArchive", { TSS_CommandPropertyMapArchive($0) as IWAMessage }))
 }

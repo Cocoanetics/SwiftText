@@ -3,7 +3,7 @@
 import Foundation
 
 /// Generated wire model for `TSCK.CollaborationCommandHistoryArray`.
-final class TSCK_CollaborationCommandHistoryArray {
+final class TSCK_CollaborationCommandHistoryArray: IWAMessage {
     var largeArray: TSP_LargeArray?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -29,7 +29,7 @@ final class TSCK_CollaborationCommandHistoryArray {
 }
 
 /// Generated wire model for `TSCK.CollaborationCommandHistoryArraySegment`.
-final class TSCK_CollaborationCommandHistoryArraySegment {
+final class TSCK_CollaborationCommandHistoryArraySegment: IWAMessage {
     var largeObjectArraySegment: TSP_LargeObjectArraySegment?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -55,7 +55,7 @@ final class TSCK_CollaborationCommandHistoryArraySegment {
 }
 
 /// Generated wire model for `TSCK.CollaborationCommandHistory`.
-final class TSCK_CollaborationCommandHistory {
+final class TSCK_CollaborationCommandHistory: IWAMessage {
     var localIdentifier: TSP_UUID?
     var undoItems: TSCK_CollaborationCommandHistory_ItemList?
     var redoItems: TSCK_CollaborationCommandHistory_ItemList?
@@ -93,7 +93,7 @@ final class TSCK_CollaborationCommandHistory {
 }
 
 /// Generated wire model for `TSCK.CollaborationCommandHistory.ItemList`.
-final class TSCK_CollaborationCommandHistory_ItemList {
+final class TSCK_CollaborationCommandHistory_ItemList: IWAMessage {
     var itemsArray: TSP_Reference?
     var transformerEntries: [TSP_Reference] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -125,7 +125,7 @@ final class TSCK_CollaborationCommandHistory_ItemList {
 }
 
 /// Generated wire model for `TSCK.CollaborationCommandHistoryItem`.
-final class TSCK_CollaborationCommandHistoryItem {
+final class TSCK_CollaborationCommandHistoryItem: IWAMessage {
     var command: TSP_Reference?
     var actionString: String?
     var behavior: TSP_Reference?
@@ -175,7 +175,7 @@ final class TSCK_CollaborationCommandHistoryItem {
 }
 
 /// Generated wire model for `TSCK.CollaborationCommandHistoryCoalescingGroup`.
-final class TSCK_CollaborationCommandHistoryCoalescingGroup {
+final class TSCK_CollaborationCommandHistoryCoalescingGroup: IWAMessage {
     var nodes: [TSP_Reference] = []
     var didCoalesceAllCommands: Bool?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -207,7 +207,7 @@ final class TSCK_CollaborationCommandHistoryCoalescingGroup {
 }
 
 /// Generated wire model for `TSCK.CollaborationCommandHistoryCoalescingGroupNode`.
-final class TSCK_CollaborationCommandHistoryCoalescingGroupNode {
+final class TSCK_CollaborationCommandHistoryCoalescingGroupNode: IWAMessage {
     var command: TSP_Reference?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -233,7 +233,7 @@ final class TSCK_CollaborationCommandHistoryCoalescingGroupNode {
 }
 
 /// Generated wire model for `TSCK.CollaborationCommandHistoryOriginatingCommandAcknowledgementObserver`.
-final class TSCK_CollaborationCommandHistoryOriginatingCommandAcknowledgementObserver {
+final class TSCK_CollaborationCommandHistoryOriginatingCommandAcknowledgementObserver: IWAMessage {
     var coalescingGroup: TSP_Reference?
     var node: TSP_Reference?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -265,7 +265,7 @@ final class TSCK_CollaborationCommandHistoryOriginatingCommandAcknowledgementObs
 }
 
 /// Generated wire model for `TSCK.DocumentSupportCollaborationState`.
-final class TSCK_DocumentSupportCollaborationState {
+final class TSCK_DocumentSupportCollaborationState: IWAMessage {
     var collaborationCommandHistory: TSP_Reference?
     var collaborationSessionState: TSP_Reference?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -297,7 +297,7 @@ final class TSCK_DocumentSupportCollaborationState {
 }
 
 /// Generated wire model for `TSCK.SetAnnotationAuthorColorCommandArchive`.
-final class TSCK_SetAnnotationAuthorColorCommandArchive {
+final class TSCK_SetAnnotationAuthorColorCommandArchive: IWAMessage {
     var `super`: TSK_CommandArchive?
     var annotationAuthor: TSP_Reference?
     var color: TSP_Color?
@@ -341,7 +341,7 @@ final class TSCK_SetAnnotationAuthorColorCommandArchive {
 }
 
 /// Generated wire model for `TSCK.SetActivityAuthorShareParticipantIDCommandArchive`.
-final class TSCK_SetActivityAuthorShareParticipantIDCommandArchive {
+final class TSCK_SetActivityAuthorShareParticipantIDCommandArchive: IWAMessage {
     var `super`: TSK_CommandArchive?
     var activityAuthor: TSP_Reference?
     var shareParticipantId: String?
@@ -385,7 +385,7 @@ final class TSCK_SetActivityAuthorShareParticipantIDCommandArchive {
 }
 
 /// Generated wire model for `TSCK.IdOperationArgs`.
-final class TSCK_IdOperationArgs {
+final class TSCK_IdOperationArgs: IWAMessage {
     var idPath: TSP_UUIDPath?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -411,7 +411,7 @@ final class TSCK_IdOperationArgs {
 }
 
 /// Generated wire model for `TSCK.AddIdOperationArgs`.
-final class TSCK_AddIdOperationArgs {
+final class TSCK_AddIdOperationArgs: IWAMessage {
     var `super`: TSCK_IdOperationArgs?
     var index: Int32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -443,7 +443,7 @@ final class TSCK_AddIdOperationArgs {
 }
 
 /// Generated wire model for `TSCK.RemoveIdOperationArgs`.
-final class TSCK_RemoveIdOperationArgs {
+final class TSCK_RemoveIdOperationArgs: IWAMessage {
     var `super`: TSCK_IdOperationArgs?
     var index: Int32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -475,7 +475,7 @@ final class TSCK_RemoveIdOperationArgs {
 }
 
 /// Generated wire model for `TSCK.RearrangeIdOperationArgs`.
-final class TSCK_RearrangeIdOperationArgs {
+final class TSCK_RearrangeIdOperationArgs: IWAMessage {
     var `super`: TSCK_IdOperationArgs?
     var fromIndex: Int32?
     var toIndex: Int32?
@@ -513,7 +513,7 @@ final class TSCK_RearrangeIdOperationArgs {
 }
 
 /// Generated wire model for `TSCK.IdPlacementOperationArgs`.
-final class TSCK_IdPlacementOperationArgs {
+final class TSCK_IdPlacementOperationArgs: IWAMessage {
     var `super`: TSCK_IdOperationArgs?
     var fromIndex: Int32?
     var toIndex: Int32?
@@ -551,7 +551,7 @@ final class TSCK_IdPlacementOperationArgs {
 }
 
 /// Generated wire model for `TSCK.ActivityCommitCommandArchive`.
-final class TSCK_ActivityCommitCommandArchive {
+final class TSCK_ActivityCommitCommandArchive: IWAMessage {
     var `super`: TSK_CommandArchive?
     var activity: TSP_Reference?
     var author: TSP_Reference?
@@ -595,7 +595,7 @@ final class TSCK_ActivityCommitCommandArchive {
 }
 
 /// Generated wire model for `TSCK.ExecuteTestBetweenRollbackAndReapplyCommandArchive`.
-final class TSCK_ExecuteTestBetweenRollbackAndReapplyCommandArchive {
+final class TSCK_ExecuteTestBetweenRollbackAndReapplyCommandArchive: IWAMessage {
     var `super`: TSK_CommandArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -621,7 +621,7 @@ final class TSCK_ExecuteTestBetweenRollbackAndReapplyCommandArchive {
 }
 
 /// Generated wire model for `TSCK.CreateLocalStorageSnapshotCommandArchive`.
-final class TSCK_CreateLocalStorageSnapshotCommandArchive {
+final class TSCK_CreateLocalStorageSnapshotCommandArchive: IWAMessage {
     var `super`: TSK_CommandArchive?
     var snapshotId: String?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -653,7 +653,7 @@ final class TSCK_CreateLocalStorageSnapshotCommandArchive {
 }
 
 /// Generated wire model for `TSCK.BlockDiffsAtCurrentRevisionCommand`.
-final class TSCK_BlockDiffsAtCurrentRevisionCommand {
+final class TSCK_BlockDiffsAtCurrentRevisionCommand: IWAMessage {
     var `super`: TSK_CommandArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -679,7 +679,7 @@ final class TSCK_BlockDiffsAtCurrentRevisionCommand {
 }
 
 /// Generated wire model for `TSCK.TransformerEntry`.
-final class TSCK_TransformerEntry {
+final class TSCK_TransformerEntry: IWAMessage {
     var sequence: UInt64?
     var creationTime: Double?
     var transformer: TSK_OperationTransformer?
@@ -717,7 +717,7 @@ final class TSCK_TransformerEntry {
 }
 
 /// Generated wire model for `TSCK.CollaborationAppliedCommandDocumentRevisionMapping`.
-final class TSCK_CollaborationAppliedCommandDocumentRevisionMapping {
+final class TSCK_CollaborationAppliedCommandDocumentRevisionMapping: IWAMessage {
     var command: TSP_Reference?
     var documentRevisionIdentifier: TSP_UUID?
     var documentRevisionSequence: Int32?
@@ -767,7 +767,7 @@ final class TSCK_CollaborationAppliedCommandDocumentRevisionMapping {
 }
 
 /// Generated wire model for `TSCK.CollaborationDocumentSessionState`.
-final class TSCK_CollaborationDocumentSessionState {
+final class TSCK_CollaborationDocumentSessionState: IWAMessage {
     var collaboratorIds: [String] = []
     var rsvpCommandQueueItems: [TSP_Reference] = []
     var collaboratorCursorTransformerEntries: [TSP_Reference] = []
@@ -907,7 +907,7 @@ final class TSCK_CollaborationDocumentSessionState {
 }
 
 /// Generated wire model for `TSCK.CollaborationDocumentSessionState.AcknowledgementObserverEntry`.
-final class TSCK_CollaborationDocumentSessionState_AcknowledgementObserverEntry {
+final class TSCK_CollaborationDocumentSessionState_AcknowledgementObserverEntry: IWAMessage {
     var commandIdentifier: TSP_UUID?
     var acknowledgementObservers: [TSP_Reference] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -939,7 +939,7 @@ final class TSCK_CollaborationDocumentSessionState_AcknowledgementObserverEntry 
 }
 
 /// Generated wire model for `TSCK.OperationStorageEntryArray`.
-final class TSCK_OperationStorageEntryArray {
+final class TSCK_OperationStorageEntryArray: IWAMessage {
     var largeArray: TSP_LargeArray?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -965,7 +965,7 @@ final class TSCK_OperationStorageEntryArray {
 }
 
 /// Generated wire model for `TSCK.OperationStorageEntryArraySegment`.
-final class TSCK_OperationStorageEntryArraySegment {
+final class TSCK_OperationStorageEntryArraySegment: IWAMessage {
     var largeArraySegment: TSP_LargeArraySegment?
     var elements: [TSK_OperationStorageEntry] = []
     var lastDocumentRevisionSequenceBeforeSegment: Int32?
@@ -1015,7 +1015,7 @@ final class TSCK_OperationStorageEntryArraySegment {
 }
 
 /// Generated wire model for `TSCK.OperationStorage`.
-final class TSCK_OperationStorage {
+final class TSCK_OperationStorage: IWAMessage {
     var entries: TSP_Reference?
     var operationCount: UInt64?
     var lastDocumentRevisionSequence: Int32?
@@ -1089,7 +1089,7 @@ final class TSCK_OperationStorage {
 }
 
 /// Generated wire model for `TSCK.OutgoingCommandQueue`.
-final class TSCK_OutgoingCommandQueue {
+final class TSCK_OutgoingCommandQueue: IWAMessage {
     var largeObjectArray: TSP_LargeObjectArray?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1115,7 +1115,7 @@ final class TSCK_OutgoingCommandQueue {
 }
 
 /// Generated wire model for `TSCK.OutgoingCommandQueueSegment`.
-final class TSCK_OutgoingCommandQueueSegment {
+final class TSCK_OutgoingCommandQueueSegment: IWAMessage {
     var largeObjectArraySegment: TSP_LargeObjectArraySegment?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1141,7 +1141,7 @@ final class TSCK_OutgoingCommandQueueSegment {
 }
 
 /// Generated wire model for `TSCK.CommandAssetChunkArchive`.
-final class TSCK_CommandAssetChunkArchive {
+final class TSCK_CommandAssetChunkArchive: IWAMessage {
     var `super`: TSK_CommandArchive?
     var digest: String?
     var assetChunk: String?
@@ -1197,7 +1197,7 @@ final class TSCK_CommandAssetChunkArchive {
 }
 
 /// Generated wire model for `TSCK.AssetUploadStatusCommandArchive`.
-final class TSCK_AssetUploadStatusCommandArchive {
+final class TSCK_AssetUploadStatusCommandArchive: IWAMessage {
     var `super`: TSK_CommandArchive?
     var infoList: [TSCK_AssetUploadStatusCommandArchive_AssetUploadStatusInfo] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1229,7 +1229,7 @@ final class TSCK_AssetUploadStatusCommandArchive {
 }
 
 /// Generated wire model for `TSCK.AssetUploadStatusCommandArchive.AssetUploadStatusInfo`.
-final class TSCK_AssetUploadStatusCommandArchive_AssetUploadStatusInfo {
+final class TSCK_AssetUploadStatusCommandArchive_AssetUploadStatusInfo: IWAMessage {
     var digest: String?
     var uploadStatus: Int32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1261,7 +1261,7 @@ final class TSCK_AssetUploadStatusCommandArchive_AssetUploadStatusInfo {
 }
 
 /// Generated wire model for `TSCK.AssetUnmaterializedOnServerCommandArchive`.
-final class TSCK_AssetUnmaterializedOnServerCommandArchive {
+final class TSCK_AssetUnmaterializedOnServerCommandArchive: IWAMessage {
     var `super`: TSK_CommandArchive?
     var digestList: [String] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1293,7 +1293,7 @@ final class TSCK_AssetUnmaterializedOnServerCommandArchive {
 }
 
 /// Generated wire model for `TSCK.CollaboratorCursorArchive`.
-final class TSCK_CollaboratorCursorArchive {
+final class TSCK_CollaboratorCursorArchive: IWAMessage {
     var idPath: TSP_UUIDPath?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1319,7 +1319,7 @@ final class TSCK_CollaboratorCursorArchive {
 }
 
 /// Generated wire model for `TSCK.ActivityStreamArchive`.
-final class TSCK_ActivityStreamArchive {
+final class TSCK_ActivityStreamArchive: IWAMessage {
     var acknowledgedActivityArray: TSP_Reference?
     var unacknowledgedLocalActivityArray: TSP_Reference?
     var authorCache: TSP_Reference?
@@ -1381,7 +1381,7 @@ final class TSCK_ActivityStreamArchive {
 }
 
 /// Generated wire model for `TSCK.ActivityStreamActivityArray`.
-final class TSCK_ActivityStreamActivityArray {
+final class TSCK_ActivityStreamActivityArray: IWAMessage {
     var largeArray: TSP_LargeObjectArray?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1407,7 +1407,7 @@ final class TSCK_ActivityStreamActivityArray {
 }
 
 /// Generated wire model for `TSCK.ActivityStreamActivityArraySegment`.
-final class TSCK_ActivityStreamActivityArraySegment {
+final class TSCK_ActivityStreamActivityArraySegment: IWAMessage {
     var largeArraySegment: TSP_LargeObjectArraySegment?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1433,7 +1433,7 @@ final class TSCK_ActivityStreamActivityArraySegment {
 }
 
 /// Generated wire model for `TSCK.ActivityArchive`.
-final class TSCK_ActivityArchive {
+final class TSCK_ActivityArchive: IWAMessage {
     var cursorCollectionPersistenceWrappers: [TSP_Reference] = []
     var authorIdentifier: TSP_UUID?
     var nondirectionalActionType: Int32?
@@ -1524,7 +1524,7 @@ final class TSCK_ActivityArchive {
 }
 
 /// Generated wire model for `TSCK.ActivityAuthorArchive`.
-final class TSCK_ActivityAuthorArchive {
+final class TSCK_ActivityAuthorArchive: IWAMessage {
     var name: String?
     var color: TSP_Color?
     var publicIds: [String] = []
@@ -1574,7 +1574,7 @@ final class TSCK_ActivityAuthorArchive {
 }
 
 /// Generated wire model for `TSCK.CommandActivityBehaviorArchive`.
-final class TSCK_CommandActivityBehaviorArchive {
+final class TSCK_CommandActivityBehaviorArchive: IWAMessage {
     var selectionPathStorages: [TSP_Reference] = []
     var actionType: Int32?
     var shouldSendNotification: Bool?
@@ -1624,7 +1624,7 @@ final class TSCK_CommandActivityBehaviorArchive {
 }
 
 /// Generated wire model for `TSCK.ActivityCursorCollectionArchive`.
-final class TSCK_ActivityCursorCollectionArchive {
+final class TSCK_ActivityCursorCollectionArchive: IWAMessage {
     var idCursors: [TSCK_CollaboratorCursorArchive] = []
     var textCursor: TSCK_CollaboratorCursorArchive?
     var tableCursor: TSCK_CollaboratorCursorArchive?
@@ -1680,7 +1680,7 @@ final class TSCK_ActivityCursorCollectionArchive {
 }
 
 /// Generated wire model for `TSCK.ActivityCursorCollectionPersistenceWrapperArchive`.
-final class TSCK_ActivityCursorCollectionPersistenceWrapperArchive {
+final class TSCK_ActivityCursorCollectionPersistenceWrapperArchive: IWAMessage {
     var activityCursorCollection: TSCK_ActivityCursorCollectionArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1706,7 +1706,7 @@ final class TSCK_ActivityCursorCollectionPersistenceWrapperArchive {
 }
 
 /// Generated wire model for `TSCK.ActivityNavigationInfoArchive`.
-final class TSCK_ActivityNavigationInfoArchive {
+final class TSCK_ActivityNavigationInfoArchive: IWAMessage {
 
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1728,7 +1728,7 @@ final class TSCK_ActivityNavigationInfoArchive {
 }
 
 /// Generated wire model for `TSCK.CommentActivityNavigationInfoArchive`.
-final class TSCK_CommentActivityNavigationInfoArchive {
+final class TSCK_CommentActivityNavigationInfoArchive: IWAMessage {
     var commentId: String?
     var parentUuid: TSP_UUID?
     var storageUuid: TSP_UUID?
@@ -1766,7 +1766,7 @@ final class TSCK_CommentActivityNavigationInfoArchive {
 }
 
 /// Generated wire model for `TSCK.ActivityAuthorCacheArchive`.
-final class TSCK_ActivityAuthorCacheArchive {
+final class TSCK_ActivityAuthorCacheArchive: IWAMessage {
     var shareParticipantIdCache: [TSCK_ActivityAuthorCacheArchive_ShareParticipantIDCache] = []
     var fallbackPublicIdCache: [TSCK_ActivityAuthorCacheArchive_PublicIDCache] = []
     var indexCache: [TSCK_ActivityAuthorCacheArchive_IndexCache] = []
@@ -1828,7 +1828,7 @@ final class TSCK_ActivityAuthorCacheArchive {
 }
 
 /// Generated wire model for `TSCK.ActivityAuthorCacheArchive.ShareParticipantIDCache`.
-final class TSCK_ActivityAuthorCacheArchive_ShareParticipantIDCache {
+final class TSCK_ActivityAuthorCacheArchive_ShareParticipantIDCache: IWAMessage {
     var identifier: TSP_UUID?
     var shareParticipantId: String?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1860,7 +1860,7 @@ final class TSCK_ActivityAuthorCacheArchive_ShareParticipantIDCache {
 }
 
 /// Generated wire model for `TSCK.ActivityAuthorCacheArchive.PublicIDCache`.
-final class TSCK_ActivityAuthorCacheArchive_PublicIDCache {
+final class TSCK_ActivityAuthorCacheArchive_PublicIDCache: IWAMessage {
     var identifier: TSP_UUID?
     var publicIdentifier: String?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1892,7 +1892,7 @@ final class TSCK_ActivityAuthorCacheArchive_PublicIDCache {
 }
 
 /// Generated wire model for `TSCK.ActivityAuthorCacheArchive.IndexCache`.
-final class TSCK_ActivityAuthorCacheArchive_IndexCache {
+final class TSCK_ActivityAuthorCacheArchive_IndexCache: IWAMessage {
     var identifier: TSP_UUID?
     var authorIndex: UInt64?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1924,7 +1924,7 @@ final class TSCK_ActivityAuthorCacheArchive_IndexCache {
 }
 
 /// Generated wire model for `TSCK.ActivityAuthorCacheArchive.FirstJoinCache`.
-final class TSCK_ActivityAuthorCacheArchive_FirstJoinCache {
+final class TSCK_ActivityAuthorCacheArchive_FirstJoinCache: IWAMessage {
     var identifier: TSP_UUID?
     var firstJoinDate: TSP_Date?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1956,7 +1956,7 @@ final class TSCK_ActivityAuthorCacheArchive_FirstJoinCache {
 }
 
 /// Generated wire model for `TSCK.ActivityOnlyCommandArchive`.
-final class TSCK_ActivityOnlyCommandArchive {
+final class TSCK_ActivityOnlyCommandArchive: IWAMessage {
     var `super`: TSK_CommandArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1982,7 +1982,7 @@ final class TSCK_ActivityOnlyCommandArchive {
 }
 
 /// Generated wire model for `TSCK.ActivityNotificationItemArchive`.
-final class TSCK_ActivityNotificationItemArchive {
+final class TSCK_ActivityNotificationItemArchive: IWAMessage {
     var type: Int32?
     var uniqueIdentifier: TSP_UUID?
     var activities: [TSP_Reference] = []
@@ -2026,7 +2026,7 @@ final class TSCK_ActivityNotificationItemArchive {
 }
 
 /// Generated wire model for `TSCK.ActivityNotificationParticipantCacheArchive`.
-final class TSCK_ActivityNotificationParticipantCacheArchive {
+final class TSCK_ActivityNotificationParticipantCacheArchive: IWAMessage {
     var notificationItems: [TSP_Reference] = []
     var lastEditNotificationItemSentDate: TSP_Date?
     var senderFailedToEnqueueAttempts: [TSCK_ActivityNotificationParticipantCacheArchive_UniqueIdentifierAndAttempts] = []
@@ -2076,7 +2076,7 @@ final class TSCK_ActivityNotificationParticipantCacheArchive {
 }
 
 /// Generated wire model for `TSCK.ActivityNotificationParticipantCacheArchive.UniqueIdentifierAndAttempts`.
-final class TSCK_ActivityNotificationParticipantCacheArchive_UniqueIdentifierAndAttempts {
+final class TSCK_ActivityNotificationParticipantCacheArchive_UniqueIdentifierAndAttempts: IWAMessage {
     var uniqueIdentifier: TSP_UUID?
     var attempts: UInt32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -2108,7 +2108,7 @@ final class TSCK_ActivityNotificationParticipantCacheArchive_UniqueIdentifierAnd
 }
 
 /// Generated wire model for `TSCK.ActivityNotificationQueueArchive`.
-final class TSCK_ActivityNotificationQueueArchive {
+final class TSCK_ActivityNotificationQueueArchive: IWAMessage {
     var unprocessedNotificationItems: [TSP_Reference] = []
     var pendingParticipantCaches: [TSP_Reference] = []
     var sentParticipantCaches: [TSP_Reference] = []
@@ -2146,7 +2146,7 @@ final class TSCK_ActivityNotificationQueueArchive {
 }
 
 /// Generated wire model for `TSCK.ActivityStreamTransformationStateArchive`.
-final class TSCK_ActivityStreamTransformationStateArchive {
+final class TSCK_ActivityStreamTransformationStateArchive: IWAMessage {
     var nextActivityToTransformIndex: Int32?
     var oldestRevisionSequenceAfterTransformed: Int32?
     var lastActivityCoalescedDate: TSP_Date?
@@ -2214,7 +2214,7 @@ final class TSCK_ActivityStreamTransformationStateArchive {
 }
 
 /// Generated wire model for `TSCK.ActivityStreamActivityCounterArchive`.
-final class TSCK_ActivityStreamActivityCounterArchive {
+final class TSCK_ActivityStreamActivityCounterArchive: IWAMessage {
     var actionTypeCounter: [TSCK_ActivityStreamActivityCounterArchive_ActionTypeCounter] = []
     var cursorTypeCounter: [TSCK_ActivityStreamActivityCounterArchive_CursorTypeCounter] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -2246,7 +2246,7 @@ final class TSCK_ActivityStreamActivityCounterArchive {
 }
 
 /// Generated wire model for `TSCK.ActivityStreamActivityCounterArchive.ActionTypeCounter`.
-final class TSCK_ActivityStreamActivityCounterArchive_ActionTypeCounter {
+final class TSCK_ActivityStreamActivityCounterArchive_ActionTypeCounter: IWAMessage {
     var actionType: Int32?
     var count: UInt32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -2278,7 +2278,7 @@ final class TSCK_ActivityStreamActivityCounterArchive_ActionTypeCounter {
 }
 
 /// Generated wire model for `TSCK.ActivityStreamActivityCounterArchive.CursorTypeCounter`.
-final class TSCK_ActivityStreamActivityCounterArchive_CursorTypeCounter {
+final class TSCK_ActivityStreamActivityCounterArchive_CursorTypeCounter: IWAMessage {
     var cursorType: Int32?
     var count: UInt32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -2310,7 +2310,7 @@ final class TSCK_ActivityStreamActivityCounterArchive_CursorTypeCounter {
 }
 
 /// Generated wire model for `TSCK.ActivityStreamRemovedAuthorAuditorPendingStateArchive`.
-final class TSCK_ActivityStreamRemovedAuthorAuditorPendingStateArchive {
+final class TSCK_ActivityStreamRemovedAuthorAuditorPendingStateArchive: IWAMessage {
     var currentAuthorIdentifiers: [TSP_UUID] = []
     var datesToAudit: [TSCK_ActivityStreamRemovedAuthorAuditorPendingStateArchive_DateToAuditAndType] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -2342,7 +2342,7 @@ final class TSCK_ActivityStreamRemovedAuthorAuditorPendingStateArchive {
 }
 
 /// Generated wire model for `TSCK.ActivityStreamRemovedAuthorAuditorPendingStateArchive.DateToAuditAndType`.
-final class TSCK_ActivityStreamRemovedAuthorAuditorPendingStateArchive_DateToAuditAndType {
+final class TSCK_ActivityStreamRemovedAuthorAuditorPendingStateArchive_DateToAuditAndType: IWAMessage {
     var dateToAudit: TSP_Date?
     var type: Int32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -2371,4 +2371,68 @@ final class TSCK_ActivityStreamRemovedAuthorAuditorPendingStateArchive_DateToAud
         for _f in unknownFields { _w.append(_f) }
         return _w.bytes
     }
+}
+
+/// Registers this file's archives into the reflective catalog.
+func registerIWA_TSCKArchives(_ into: inout [(name: String, decode: (ProtobufMessage) -> IWAMessage)]) {
+    into.append(("TSCK.CollaborationCommandHistoryArray", { TSCK_CollaborationCommandHistoryArray($0) as IWAMessage }))
+    into.append(("TSCK.CollaborationCommandHistoryArraySegment", { TSCK_CollaborationCommandHistoryArraySegment($0) as IWAMessage }))
+    into.append(("TSCK.CollaborationCommandHistory", { TSCK_CollaborationCommandHistory($0) as IWAMessage }))
+    into.append(("TSCK.CollaborationCommandHistory.ItemList", { TSCK_CollaborationCommandHistory_ItemList($0) as IWAMessage }))
+    into.append(("TSCK.CollaborationCommandHistoryItem", { TSCK_CollaborationCommandHistoryItem($0) as IWAMessage }))
+    into.append(("TSCK.CollaborationCommandHistoryCoalescingGroup", { TSCK_CollaborationCommandHistoryCoalescingGroup($0) as IWAMessage }))
+    into.append(("TSCK.CollaborationCommandHistoryCoalescingGroupNode", { TSCK_CollaborationCommandHistoryCoalescingGroupNode($0) as IWAMessage }))
+    into.append(("TSCK.CollaborationCommandHistoryOriginatingCommandAcknowledgementObserver", { TSCK_CollaborationCommandHistoryOriginatingCommandAcknowledgementObserver($0) as IWAMessage }))
+    into.append(("TSCK.DocumentSupportCollaborationState", { TSCK_DocumentSupportCollaborationState($0) as IWAMessage }))
+    into.append(("TSCK.SetAnnotationAuthorColorCommandArchive", { TSCK_SetAnnotationAuthorColorCommandArchive($0) as IWAMessage }))
+    into.append(("TSCK.SetActivityAuthorShareParticipantIDCommandArchive", { TSCK_SetActivityAuthorShareParticipantIDCommandArchive($0) as IWAMessage }))
+    into.append(("TSCK.IdOperationArgs", { TSCK_IdOperationArgs($0) as IWAMessage }))
+    into.append(("TSCK.AddIdOperationArgs", { TSCK_AddIdOperationArgs($0) as IWAMessage }))
+    into.append(("TSCK.RemoveIdOperationArgs", { TSCK_RemoveIdOperationArgs($0) as IWAMessage }))
+    into.append(("TSCK.RearrangeIdOperationArgs", { TSCK_RearrangeIdOperationArgs($0) as IWAMessage }))
+    into.append(("TSCK.IdPlacementOperationArgs", { TSCK_IdPlacementOperationArgs($0) as IWAMessage }))
+    into.append(("TSCK.ActivityCommitCommandArchive", { TSCK_ActivityCommitCommandArchive($0) as IWAMessage }))
+    into.append(("TSCK.ExecuteTestBetweenRollbackAndReapplyCommandArchive", { TSCK_ExecuteTestBetweenRollbackAndReapplyCommandArchive($0) as IWAMessage }))
+    into.append(("TSCK.CreateLocalStorageSnapshotCommandArchive", { TSCK_CreateLocalStorageSnapshotCommandArchive($0) as IWAMessage }))
+    into.append(("TSCK.BlockDiffsAtCurrentRevisionCommand", { TSCK_BlockDiffsAtCurrentRevisionCommand($0) as IWAMessage }))
+    into.append(("TSCK.TransformerEntry", { TSCK_TransformerEntry($0) as IWAMessage }))
+    into.append(("TSCK.CollaborationAppliedCommandDocumentRevisionMapping", { TSCK_CollaborationAppliedCommandDocumentRevisionMapping($0) as IWAMessage }))
+    into.append(("TSCK.CollaborationDocumentSessionState", { TSCK_CollaborationDocumentSessionState($0) as IWAMessage }))
+    into.append(("TSCK.CollaborationDocumentSessionState.AcknowledgementObserverEntry", { TSCK_CollaborationDocumentSessionState_AcknowledgementObserverEntry($0) as IWAMessage }))
+    into.append(("TSCK.OperationStorageEntryArray", { TSCK_OperationStorageEntryArray($0) as IWAMessage }))
+    into.append(("TSCK.OperationStorageEntryArraySegment", { TSCK_OperationStorageEntryArraySegment($0) as IWAMessage }))
+    into.append(("TSCK.OperationStorage", { TSCK_OperationStorage($0) as IWAMessage }))
+    into.append(("TSCK.OutgoingCommandQueue", { TSCK_OutgoingCommandQueue($0) as IWAMessage }))
+    into.append(("TSCK.OutgoingCommandQueueSegment", { TSCK_OutgoingCommandQueueSegment($0) as IWAMessage }))
+    into.append(("TSCK.CommandAssetChunkArchive", { TSCK_CommandAssetChunkArchive($0) as IWAMessage }))
+    into.append(("TSCK.AssetUploadStatusCommandArchive", { TSCK_AssetUploadStatusCommandArchive($0) as IWAMessage }))
+    into.append(("TSCK.AssetUploadStatusCommandArchive.AssetUploadStatusInfo", { TSCK_AssetUploadStatusCommandArchive_AssetUploadStatusInfo($0) as IWAMessage }))
+    into.append(("TSCK.AssetUnmaterializedOnServerCommandArchive", { TSCK_AssetUnmaterializedOnServerCommandArchive($0) as IWAMessage }))
+    into.append(("TSCK.CollaboratorCursorArchive", { TSCK_CollaboratorCursorArchive($0) as IWAMessage }))
+    into.append(("TSCK.ActivityStreamArchive", { TSCK_ActivityStreamArchive($0) as IWAMessage }))
+    into.append(("TSCK.ActivityStreamActivityArray", { TSCK_ActivityStreamActivityArray($0) as IWAMessage }))
+    into.append(("TSCK.ActivityStreamActivityArraySegment", { TSCK_ActivityStreamActivityArraySegment($0) as IWAMessage }))
+    into.append(("TSCK.ActivityArchive", { TSCK_ActivityArchive($0) as IWAMessage }))
+    into.append(("TSCK.ActivityAuthorArchive", { TSCK_ActivityAuthorArchive($0) as IWAMessage }))
+    into.append(("TSCK.CommandActivityBehaviorArchive", { TSCK_CommandActivityBehaviorArchive($0) as IWAMessage }))
+    into.append(("TSCK.ActivityCursorCollectionArchive", { TSCK_ActivityCursorCollectionArchive($0) as IWAMessage }))
+    into.append(("TSCK.ActivityCursorCollectionPersistenceWrapperArchive", { TSCK_ActivityCursorCollectionPersistenceWrapperArchive($0) as IWAMessage }))
+    into.append(("TSCK.ActivityNavigationInfoArchive", { TSCK_ActivityNavigationInfoArchive($0) as IWAMessage }))
+    into.append(("TSCK.CommentActivityNavigationInfoArchive", { TSCK_CommentActivityNavigationInfoArchive($0) as IWAMessage }))
+    into.append(("TSCK.ActivityAuthorCacheArchive", { TSCK_ActivityAuthorCacheArchive($0) as IWAMessage }))
+    into.append(("TSCK.ActivityAuthorCacheArchive.ShareParticipantIDCache", { TSCK_ActivityAuthorCacheArchive_ShareParticipantIDCache($0) as IWAMessage }))
+    into.append(("TSCK.ActivityAuthorCacheArchive.PublicIDCache", { TSCK_ActivityAuthorCacheArchive_PublicIDCache($0) as IWAMessage }))
+    into.append(("TSCK.ActivityAuthorCacheArchive.IndexCache", { TSCK_ActivityAuthorCacheArchive_IndexCache($0) as IWAMessage }))
+    into.append(("TSCK.ActivityAuthorCacheArchive.FirstJoinCache", { TSCK_ActivityAuthorCacheArchive_FirstJoinCache($0) as IWAMessage }))
+    into.append(("TSCK.ActivityOnlyCommandArchive", { TSCK_ActivityOnlyCommandArchive($0) as IWAMessage }))
+    into.append(("TSCK.ActivityNotificationItemArchive", { TSCK_ActivityNotificationItemArchive($0) as IWAMessage }))
+    into.append(("TSCK.ActivityNotificationParticipantCacheArchive", { TSCK_ActivityNotificationParticipantCacheArchive($0) as IWAMessage }))
+    into.append(("TSCK.ActivityNotificationParticipantCacheArchive.UniqueIdentifierAndAttempts", { TSCK_ActivityNotificationParticipantCacheArchive_UniqueIdentifierAndAttempts($0) as IWAMessage }))
+    into.append(("TSCK.ActivityNotificationQueueArchive", { TSCK_ActivityNotificationQueueArchive($0) as IWAMessage }))
+    into.append(("TSCK.ActivityStreamTransformationStateArchive", { TSCK_ActivityStreamTransformationStateArchive($0) as IWAMessage }))
+    into.append(("TSCK.ActivityStreamActivityCounterArchive", { TSCK_ActivityStreamActivityCounterArchive($0) as IWAMessage }))
+    into.append(("TSCK.ActivityStreamActivityCounterArchive.ActionTypeCounter", { TSCK_ActivityStreamActivityCounterArchive_ActionTypeCounter($0) as IWAMessage }))
+    into.append(("TSCK.ActivityStreamActivityCounterArchive.CursorTypeCounter", { TSCK_ActivityStreamActivityCounterArchive_CursorTypeCounter($0) as IWAMessage }))
+    into.append(("TSCK.ActivityStreamRemovedAuthorAuditorPendingStateArchive", { TSCK_ActivityStreamRemovedAuthorAuditorPendingStateArchive($0) as IWAMessage }))
+    into.append(("TSCK.ActivityStreamRemovedAuthorAuditorPendingStateArchive.DateToAuditAndType", { TSCK_ActivityStreamRemovedAuthorAuditorPendingStateArchive_DateToAuditAndType($0) as IWAMessage }))
 }

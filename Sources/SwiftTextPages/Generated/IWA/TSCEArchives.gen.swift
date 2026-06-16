@@ -3,7 +3,7 @@
 import Foundation
 
 /// Generated wire model for `TSCE.CellReferenceArchive`.
-final class TSCE_CellReferenceArchive {
+final class TSCE_CellReferenceArchive: IWAMessage {
     var column: UInt32?
     var row: UInt32?
     var tableId: TSP_CFUUIDArchive?
@@ -41,7 +41,7 @@ final class TSCE_CellReferenceArchive {
 }
 
 /// Generated wire model for `TSCE.InternalCellReferenceArchive`.
-final class TSCE_InternalCellReferenceArchive {
+final class TSCE_InternalCellReferenceArchive: IWAMessage {
     var coordinate: TSCE_CellCoordinateArchive?
     var ownerId: UInt32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -73,7 +73,7 @@ final class TSCE_InternalCellReferenceArchive {
 }
 
 /// Generated wire model for `TSCE.RelativeCellRefArchive`.
-final class TSCE_RelativeCellRefArchive {
+final class TSCE_RelativeCellRefArchive: IWAMessage {
     var relativeRowOffset: Int32?
     var relativeColumnOffset: Int32?
     var tableUid: TSP_UUID?
@@ -135,7 +135,7 @@ final class TSCE_RelativeCellRefArchive {
 }
 
 /// Generated wire model for `TSCE.RangeReferenceArchive`.
-final class TSCE_RangeReferenceArchive {
+final class TSCE_RangeReferenceArchive: IWAMessage {
     var tableId: TSP_CFUUIDArchive?
     var topLeftColumn: UInt32?
     var topLeftRow: UInt32?
@@ -185,7 +185,7 @@ final class TSCE_RangeReferenceArchive {
 }
 
 /// Generated wire model for `TSCE.InternalRangeReferenceArchive`.
-final class TSCE_InternalRangeReferenceArchive {
+final class TSCE_InternalRangeReferenceArchive: IWAMessage {
     var ownerId: UInt32?
     var range: TSCE_RangeCoordinateArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -217,7 +217,7 @@ final class TSCE_InternalRangeReferenceArchive {
 }
 
 /// Generated wire model for `TSCE.IndexSetArchive`.
-final class TSCE_IndexSetArchive {
+final class TSCE_IndexSetArchive: IWAMessage {
     var entries: [TSCE_IndexSetArchive_IndexSetEntry] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -243,7 +243,7 @@ final class TSCE_IndexSetArchive {
 }
 
 /// Generated wire model for `TSCE.IndexSetArchive.IndexSetEntry`.
-final class TSCE_IndexSetArchive_IndexSetEntry {
+final class TSCE_IndexSetArchive_IndexSetEntry: IWAMessage {
     var rangeBegin: Int32?
     var rangeEnd: Int32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -275,7 +275,7 @@ final class TSCE_IndexSetArchive_IndexSetEntry {
 }
 
 /// Generated wire model for `TSCE.CellCoordSetArchive`.
-final class TSCE_CellCoordSetArchive {
+final class TSCE_CellCoordSetArchive: IWAMessage {
     var columnEntries: [TSCE_CellCoordSetArchive_ColumnEntry] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -301,7 +301,7 @@ final class TSCE_CellCoordSetArchive {
 }
 
 /// Generated wire model for `TSCE.CellCoordSetArchive.ColumnEntry`.
-final class TSCE_CellCoordSetArchive_ColumnEntry {
+final class TSCE_CellCoordSetArchive_ColumnEntry: IWAMessage {
     var column: UInt32?
     var rowSet: TSCE_IndexSetArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -333,7 +333,7 @@ final class TSCE_CellCoordSetArchive_ColumnEntry {
 }
 
 /// Generated wire model for `TSCE.InternalCellRefSetArchive`.
-final class TSCE_InternalCellRefSetArchive {
+final class TSCE_InternalCellRefSetArchive: IWAMessage {
     var ownerEntries: [TSCE_InternalCellRefSetArchive_OwnerEntry] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -359,7 +359,7 @@ final class TSCE_InternalCellRefSetArchive {
 }
 
 /// Generated wire model for `TSCE.InternalCellRefSetArchive.OwnerEntry`.
-final class TSCE_InternalCellRefSetArchive_OwnerEntry {
+final class TSCE_InternalCellRefSetArchive_OwnerEntry: IWAMessage {
     var ownerId: UInt32?
     var coordSet: TSCE_CellCoordSetArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -391,7 +391,7 @@ final class TSCE_InternalCellRefSetArchive_OwnerEntry {
 }
 
 /// Generated wire model for `TSCE.ColumnRowSize`.
-final class TSCE_ColumnRowSize {
+final class TSCE_ColumnRowSize: IWAMessage {
     var numColumns: UInt32?
     var numRows: UInt32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -423,7 +423,7 @@ final class TSCE_ColumnRowSize {
 }
 
 /// Generated wire model for `TSCE.CellRectArchive`.
-final class TSCE_CellRectArchive {
+final class TSCE_CellRectArchive: IWAMessage {
     var origin: TSCE_CellCoordinateArchive?
     var size: TSCE_ColumnRowSize?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -455,7 +455,7 @@ final class TSCE_CellRectArchive {
 }
 
 /// Generated wire model for `TSCE.CellRefSetArchive`.
-final class TSCE_CellRefSetArchive {
+final class TSCE_CellRefSetArchive: IWAMessage {
     var ownerEntries: [TSCE_CellRefSetArchive_OwnerEntry] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -481,7 +481,7 @@ final class TSCE_CellRefSetArchive {
 }
 
 /// Generated wire model for `TSCE.CellRefSetArchive.OwnerEntry`.
-final class TSCE_CellRefSetArchive_OwnerEntry {
+final class TSCE_CellRefSetArchive_OwnerEntry: IWAMessage {
     var ownerUid: TSP_UUID?
     var coordSet: TSCE_CellCoordSetArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -513,7 +513,7 @@ final class TSCE_CellRefSetArchive_OwnerEntry {
 }
 
 /// Generated wire model for `TSCE.UidCoordSetArchive`.
-final class TSCE_UidCoordSetArchive {
+final class TSCE_UidCoordSetArchive: IWAMessage {
     var columnEntries: [TSCE_UidCoordSetArchive_ColumnEntry] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -539,7 +539,7 @@ final class TSCE_UidCoordSetArchive {
 }
 
 /// Generated wire model for `TSCE.UidCoordSetArchive.ColumnEntry`.
-final class TSCE_UidCoordSetArchive_ColumnEntry {
+final class TSCE_UidCoordSetArchive_ColumnEntry: IWAMessage {
     var column: TSP_UUID?
     var rowSet: [TSP_UUID] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -571,7 +571,7 @@ final class TSCE_UidCoordSetArchive_ColumnEntry {
 }
 
 /// Generated wire model for `TSCE.UidCellRefSetArchive`.
-final class TSCE_UidCellRefSetArchive {
+final class TSCE_UidCellRefSetArchive: IWAMessage {
     var ownerEntries: [TSCE_UidCellRefSetArchive_OwnerEntry] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -597,7 +597,7 @@ final class TSCE_UidCellRefSetArchive {
 }
 
 /// Generated wire model for `TSCE.UidCellRefSetArchive.OwnerEntry`.
-final class TSCE_UidCellRefSetArchive_OwnerEntry {
+final class TSCE_UidCellRefSetArchive_OwnerEntry: IWAMessage {
     var ownerUid: TSP_UUID?
     var coordSet: TSCE_UidCoordSetArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -629,7 +629,7 @@ final class TSCE_UidCellRefSetArchive_OwnerEntry {
 }
 
 /// Generated wire model for `TSCE.ReferencesToDirtyArchive`.
-final class TSCE_ReferencesToDirtyArchive {
+final class TSCE_ReferencesToDirtyArchive: IWAMessage {
     var toDirtyOwnerIds: TSCE_IndexSetArchive?
     var toDirtyCells: TSCE_InternalCellRefSetArchive?
     var toDirtyCellsAdditional: TSCE_InternalCellRefSetArchive?
@@ -685,7 +685,7 @@ final class TSCE_ReferencesToDirtyArchive {
 }
 
 /// Generated wire model for `TSCE.CoordMapperArchive`.
-final class TSCE_CoordMapperArchive {
+final class TSCE_CoordMapperArchive: IWAMessage {
     var tableUid: TSP_UUID?
     var summaryRowsSet: TSCE_IndexSetArchive?
     var summaryColumnsSet: TSCE_IndexSetArchive?
@@ -753,7 +753,7 @@ final class TSCE_CoordMapperArchive {
 }
 
 /// Generated wire model for `TSCE.CoordMapperArchive.BaseToViewEntry`.
-final class TSCE_CoordMapperArchive_BaseToViewEntry {
+final class TSCE_CoordMapperArchive_BaseToViewEntry: IWAMessage {
     var baseColumnOrRow: UInt32?
     var viewColumnOrRow: UInt32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -785,7 +785,7 @@ final class TSCE_CoordMapperArchive_BaseToViewEntry {
 }
 
 /// Generated wire model for `TSCE.CoordMapperArchive.SummaryToViewEntry`.
-final class TSCE_CoordMapperArchive_SummaryToViewEntry {
+final class TSCE_CoordMapperArchive_SummaryToViewEntry: IWAMessage {
     var summaryColumnOrRow: UInt32?
     var viewColumnOrRow: UInt32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -817,7 +817,7 @@ final class TSCE_CoordMapperArchive_SummaryToViewEntry {
 }
 
 /// Generated wire model for `TSCE.ReferenceArchive`.
-final class TSCE_ReferenceArchive {
+final class TSCE_ReferenceArchive: IWAMessage {
     var referenceType: Int32?
     var cellReference: TSCE_CellReferenceArchive?
     var rangeReference: TSCE_RangeReferenceArchive?
@@ -855,7 +855,7 @@ final class TSCE_ReferenceArchive {
 }
 
 /// Generated wire model for `TSCE.EdgeArchive`.
-final class TSCE_EdgeArchive {
+final class TSCE_EdgeArchive: IWAMessage {
     var column: UInt32?
     var row: UInt32?
     var isPrecedent: Bool?
@@ -899,7 +899,7 @@ final class TSCE_EdgeArchive {
 }
 
 /// Generated wire model for `TSCE.EdgesArchive`.
-final class TSCE_EdgesArchive {
+final class TSCE_EdgesArchive: IWAMessage {
     var packedEdgeWithoutOwner: [UInt32] = []
     var packedEdgeWithOwner: [UInt32] = []
     var ownerIdForEdge: [TSP_CFUUIDArchive] = []
@@ -940,7 +940,7 @@ final class TSCE_EdgesArchive {
 }
 
 /// Generated wire model for `TSCE.ExpandedEdgesArchive`.
-final class TSCE_ExpandedEdgesArchive {
+final class TSCE_ExpandedEdgesArchive: IWAMessage {
     var edgeWithoutOwnerRows: [UInt32] = []
     var edgeWithoutOwnerColumns: [UInt32] = []
     var edgeWithOwnerRows: [UInt32] = []
@@ -985,7 +985,7 @@ final class TSCE_ExpandedEdgesArchive {
 }
 
 /// Generated wire model for `TSCE.CellRecordArchive`.
-final class TSCE_CellRecordArchive {
+final class TSCE_CellRecordArchive: IWAMessage {
     var column: UInt32?
     var row: UInt32?
     var dirtySelfPlusPrecedentsCount: UInt64?
@@ -1065,7 +1065,7 @@ final class TSCE_CellRecordArchive {
 }
 
 /// Generated wire model for `TSCE.CellDependenciesArchive`.
-final class TSCE_CellDependenciesArchive {
+final class TSCE_CellDependenciesArchive: IWAMessage {
     var cellRecord: [TSCE_CellRecordArchive] = []
     var numDirtyCells: UInt32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1097,7 +1097,7 @@ final class TSCE_CellDependenciesArchive {
 }
 
 /// Generated wire model for `TSCE.CellRecordExpandedArchive`.
-final class TSCE_CellRecordExpandedArchive {
+final class TSCE_CellRecordExpandedArchive: IWAMessage {
     var column: UInt32?
     var row: UInt32?
     var dirtySelfPlusPrecedentsCount: UInt64?
@@ -1153,7 +1153,7 @@ final class TSCE_CellRecordExpandedArchive {
 }
 
 /// Generated wire model for `TSCE.CellDependenciesExpandedArchive`.
-final class TSCE_CellDependenciesExpandedArchive {
+final class TSCE_CellDependenciesExpandedArchive: IWAMessage {
     var cellRecord: [TSCE_CellRecordExpandedArchive] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1179,7 +1179,7 @@ final class TSCE_CellDependenciesExpandedArchive {
 }
 
 /// Generated wire model for `TSCE.CellRecordTileArchive`.
-final class TSCE_CellRecordTileArchive {
+final class TSCE_CellRecordTileArchive: IWAMessage {
     var internalOwnerId: UInt32?
     var tileColumnBegin: UInt32?
     var tileRowBegin: UInt32?
@@ -1223,7 +1223,7 @@ final class TSCE_CellRecordTileArchive {
 }
 
 /// Generated wire model for `TSCE.CellDependenciesTiledArchive`.
-final class TSCE_CellDependenciesTiledArchive {
+final class TSCE_CellDependenciesTiledArchive: IWAMessage {
     var cellRecordTiles: [TSP_Reference] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1249,7 +1249,7 @@ final class TSCE_CellDependenciesTiledArchive {
 }
 
 /// Generated wire model for `TSCE.VolatileDependenciesArchive`.
-final class TSCE_VolatileDependenciesArchive {
+final class TSCE_VolatileDependenciesArchive: IWAMessage {
     var volatileTimeCellColumn: [UInt32] = []
     var volatileTimeCellRow: [UInt32] = []
     var volatileRandomCellColumn: [UInt32] = []
@@ -1361,7 +1361,7 @@ final class TSCE_VolatileDependenciesArchive {
 }
 
 /// Generated wire model for `TSCE.VolatileDependenciesExpandedArchive`.
-final class TSCE_VolatileDependenciesExpandedArchive {
+final class TSCE_VolatileDependenciesExpandedArchive: IWAMessage {
     var volatileTimeCells: TSCE_CellCoordSetArchive?
     var volatileRandomCells: TSCE_CellCoordSetArchive?
     var volatileLocaleCells: TSCE_CellCoordSetArchive?
@@ -1417,7 +1417,7 @@ final class TSCE_VolatileDependenciesExpandedArchive {
 }
 
 /// Generated wire model for `TSCE.RTreeInternalNodeContentsArchive`.
-final class TSCE_RTreeInternalNodeContentsArchive {
+final class TSCE_RTreeInternalNodeContentsArchive: IWAMessage {
     var min: [UInt32] = []
     var max: [UInt32] = []
     var child: TSCE_RTreeNodeArchive?
@@ -1453,7 +1453,7 @@ final class TSCE_RTreeInternalNodeContentsArchive {
 }
 
 /// Generated wire model for `TSCE.RTreeLeafNodeContentsArchive`.
-final class TSCE_RTreeLeafNodeContentsArchive {
+final class TSCE_RTreeLeafNodeContentsArchive: IWAMessage {
     var min: [UInt32] = []
     var max: [UInt32] = []
     var cellReference: TSCE_CellReferenceArchive?
@@ -1489,7 +1489,7 @@ final class TSCE_RTreeLeafNodeContentsArchive {
 }
 
 /// Generated wire model for `TSCE.RTreeNodeArchive`.
-final class TSCE_RTreeNodeArchive {
+final class TSCE_RTreeNodeArchive: IWAMessage {
     var level: UInt32?
     var count: UInt32?
     var internalNodeContents: [TSCE_RTreeInternalNodeContentsArchive] = []
@@ -1533,7 +1533,7 @@ final class TSCE_RTreeNodeArchive {
 }
 
 /// Generated wire model for `TSCE.RTreeArchive`.
-final class TSCE_RTreeArchive {
+final class TSCE_RTreeArchive: IWAMessage {
     var dataFileId: UInt32?
     var dataSize: UInt32?
     var dataNumDims: UInt32?
@@ -1601,7 +1601,7 @@ final class TSCE_RTreeArchive {
 }
 
 /// Generated wire model for `TSCE.RangeBackDependencyArchive`.
-final class TSCE_RangeBackDependencyArchive {
+final class TSCE_RangeBackDependencyArchive: IWAMessage {
     var cellCoordRow: UInt32?
     var cellCoordColumn: UInt32?
     var rangeReference: TSCE_RangeReferenceArchive?
@@ -1645,7 +1645,7 @@ final class TSCE_RangeBackDependencyArchive {
 }
 
 /// Generated wire model for `TSCE.RangeDependenciesArchive`.
-final class TSCE_RangeDependenciesArchive {
+final class TSCE_RangeDependenciesArchive: IWAMessage {
     var backDependency: [TSCE_RangeBackDependencyArchive] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1671,7 +1671,7 @@ final class TSCE_RangeDependenciesArchive {
 }
 
 /// Generated wire model for `TSCE.RangePrecedentsTileArchive`.
-final class TSCE_RangePrecedentsTileArchive {
+final class TSCE_RangePrecedentsTileArchive: IWAMessage {
     var toOwnerId: UInt32?
     var fromToRange: [TSCE_RangePrecedentsTileArchive_FromToRangeArchive] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1703,7 +1703,7 @@ final class TSCE_RangePrecedentsTileArchive {
 }
 
 /// Generated wire model for `TSCE.RangePrecedentsTileArchive.FromToRangeArchive`.
-final class TSCE_RangePrecedentsTileArchive_FromToRangeArchive {
+final class TSCE_RangePrecedentsTileArchive_FromToRangeArchive: IWAMessage {
     var fromCoord: TSCE_CellCoordinateArchive?
     var refersToRect: TSCE_CellRectArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1735,7 +1735,7 @@ final class TSCE_RangePrecedentsTileArchive_FromToRangeArchive {
 }
 
 /// Generated wire model for `TSCE.RangeDependenciesTiledArchive`.
-final class TSCE_RangeDependenciesTiledArchive {
+final class TSCE_RangeDependenciesTiledArchive: IWAMessage {
     var rangePrecedentsTile: [TSP_Reference] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -1761,7 +1761,7 @@ final class TSCE_RangeDependenciesTiledArchive {
 }
 
 /// Generated wire model for `TSCE.SpanningDependenciesArchive`.
-final class TSCE_SpanningDependenciesArchive {
+final class TSCE_SpanningDependenciesArchive: IWAMessage {
     var column: [UInt32] = []
     var rangeContext: [Int32] = []
     var cell: [TSCE_CellReferenceArchive] = []
@@ -1821,7 +1821,7 @@ final class TSCE_SpanningDependenciesArchive {
 }
 
 /// Generated wire model for `TSCE.SpanningDependenciesArchive.ReferringColumnToLocalCells`.
-final class TSCE_SpanningDependenciesArchive_ReferringColumnToLocalCells {
+final class TSCE_SpanningDependenciesArchive_ReferringColumnToLocalCells: IWAMessage {
     var column: UInt32?
     var rangeContext: Int32?
     var cellCoordinate: [TSCE_CellCoordinateArchive] = []
@@ -1859,7 +1859,7 @@ final class TSCE_SpanningDependenciesArchive_ReferringColumnToLocalCells {
 }
 
 /// Generated wire model for `TSCE.SpanningDependenciesArchive.ReferringColumnToRemoteCells`.
-final class TSCE_SpanningDependenciesArchive_ReferringColumnToRemoteCells {
+final class TSCE_SpanningDependenciesArchive_ReferringColumnToRemoteCells: IWAMessage {
     var column: UInt32?
     var rangeContext: Int32?
     var internalCellReference: [TSCE_InternalCellReferenceArchive] = []
@@ -1897,7 +1897,7 @@ final class TSCE_SpanningDependenciesArchive_ReferringColumnToRemoteCells {
 }
 
 /// Generated wire model for `TSCE.SpanningDependenciesExpandedArchive`.
-final class TSCE_SpanningDependenciesExpandedArchive {
+final class TSCE_SpanningDependenciesExpandedArchive: IWAMessage {
     var coordRefersToSpans: [TSCE_SpanningDependenciesExpandedArchive_CellCoordRefersToExtents] = []
     var totalRangeForTable: TSCE_RangeCoordinateArchive?
     var bodyRangeForTable: TSCE_RangeCoordinateArchive?
@@ -1935,7 +1935,7 @@ final class TSCE_SpanningDependenciesExpandedArchive {
 }
 
 /// Generated wire model for `TSCE.SpanningDependenciesExpandedArchive.ExtentRange`.
-final class TSCE_SpanningDependenciesExpandedArchive_ExtentRange {
+final class TSCE_SpanningDependenciesExpandedArchive_ExtentRange: IWAMessage {
     var extentBegin: UInt32?
     var extentEnd: UInt32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1967,7 +1967,7 @@ final class TSCE_SpanningDependenciesExpandedArchive_ExtentRange {
 }
 
 /// Generated wire model for `TSCE.SpanningDependenciesExpandedArchive.ExtentRangeWithTableWithContext`.
-final class TSCE_SpanningDependenciesExpandedArchive_ExtentRangeWithTableWithContext {
+final class TSCE_SpanningDependenciesExpandedArchive_ExtentRangeWithTableWithContext: IWAMessage {
     var ownerId: UInt32?
     var rangeContext: Int32?
     var ranges: [TSCE_SpanningDependenciesExpandedArchive_ExtentRange] = []
@@ -2005,7 +2005,7 @@ final class TSCE_SpanningDependenciesExpandedArchive_ExtentRangeWithTableWithCon
 }
 
 /// Generated wire model for `TSCE.SpanningDependenciesExpandedArchive.CellCoordRefersToExtents`.
-final class TSCE_SpanningDependenciesExpandedArchive_CellCoordRefersToExtents {
+final class TSCE_SpanningDependenciesExpandedArchive_CellCoordRefersToExtents: IWAMessage {
     var coordinate: TSCE_CellCoordinateArchive?
     var rangesByTableContext: [TSCE_SpanningDependenciesExpandedArchive_ExtentRangeWithTableWithContext] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -2037,7 +2037,7 @@ final class TSCE_SpanningDependenciesExpandedArchive_CellCoordRefersToExtents {
 }
 
 /// Generated wire model for `TSCE.WholeOwnerDependenciesArchive`.
-final class TSCE_WholeOwnerDependenciesArchive {
+final class TSCE_WholeOwnerDependenciesArchive: IWAMessage {
     var dependentCell: [TSCE_InternalCellReferenceArchive] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -2063,7 +2063,7 @@ final class TSCE_WholeOwnerDependenciesArchive {
 }
 
 /// Generated wire model for `TSCE.WholeOwnerDependenciesExpandedArchive`.
-final class TSCE_WholeOwnerDependenciesExpandedArchive {
+final class TSCE_WholeOwnerDependenciesExpandedArchive: IWAMessage {
     var dependentCells: TSCE_InternalCellRefSetArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -2089,7 +2089,7 @@ final class TSCE_WholeOwnerDependenciesExpandedArchive {
 }
 
 /// Generated wire model for `TSCE.ErrorArchive`.
-final class TSCE_ErrorArchive {
+final class TSCE_ErrorArchive: IWAMessage {
     var errorTypeCode: UInt32?
     var errorInfoDictionary: [TSCE_ErrorArchive_ErrorDictionaryEntry] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -2121,7 +2121,7 @@ final class TSCE_ErrorArchive {
 }
 
 /// Generated wire model for `TSCE.ErrorArchive.ErrorDictionaryEntry`.
-final class TSCE_ErrorArchive_ErrorDictionaryEntry {
+final class TSCE_ErrorArchive_ErrorDictionaryEntry: IWAMessage {
     var errorKey: String?
     var valueForKeyString: String?
     var valueForKeyNumber: Double?
@@ -2159,7 +2159,7 @@ final class TSCE_ErrorArchive_ErrorDictionaryEntry {
 }
 
 /// Generated wire model for `TSCE.WarningArchive`.
-final class TSCE_WarningArchive {
+final class TSCE_WarningArchive: IWAMessage {
     var warningType: UInt32?
     var warningInfoDictionary: [TSCE_WarningArchive_WarningDictionaryEntry] = []
     var rangeRef: TSCE_RangeReferenceArchive?
@@ -2197,7 +2197,7 @@ final class TSCE_WarningArchive {
 }
 
 /// Generated wire model for `TSCE.WarningArchive.WarningDictionaryEntry`.
-final class TSCE_WarningArchive_WarningDictionaryEntry {
+final class TSCE_WarningArchive_WarningDictionaryEntry: IWAMessage {
     var warningKey: String?
     var valueForKeyString: String?
     var valueForKeyNumber: Double?
@@ -2235,7 +2235,7 @@ final class TSCE_WarningArchive_WarningDictionaryEntry {
 }
 
 /// Generated wire model for `TSCE.CellErrorsArchive`.
-final class TSCE_CellErrorsArchive {
+final class TSCE_CellErrorsArchive: IWAMessage {
     var errors: [TSCE_CellErrorsArchive_ErrorForCell] = []
     var enhancedErrors: [TSCE_CellErrorsArchive_EnhancedErrorForCell] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -2267,7 +2267,7 @@ final class TSCE_CellErrorsArchive {
 }
 
 /// Generated wire model for `TSCE.CellErrorsArchive.ErrorForCell`.
-final class TSCE_CellErrorsArchive_ErrorForCell {
+final class TSCE_CellErrorsArchive_ErrorForCell: IWAMessage {
     var coordinate: TSCE_CellCoordinateArchive?
     var errorFlavor: Int32?
     var errDueToCell: TSCE_InternalCellReferenceArchive?
@@ -2305,7 +2305,7 @@ final class TSCE_CellErrorsArchive_ErrorForCell {
 }
 
 /// Generated wire model for `TSCE.CellErrorsArchive.EnhancedErrorForCell`.
-final class TSCE_CellErrorsArchive_EnhancedErrorForCell {
+final class TSCE_CellErrorsArchive_EnhancedErrorForCell: IWAMessage {
     var coordinate: TSCE_CellCoordinateArchive?
     var error: TSCE_ErrorArchive?
     var errDueToCell: TSCE_InternalCellReferenceArchive?
@@ -2349,7 +2349,7 @@ final class TSCE_CellErrorsArchive_EnhancedErrorForCell {
 }
 
 /// Generated wire model for `TSCE.CellSpillSizesArchive`.
-final class TSCE_CellSpillSizesArchive {
+final class TSCE_CellSpillSizesArchive: IWAMessage {
     var spills: [TSCE_CellSpillSizesArchive_SpillForCell] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -2375,7 +2375,7 @@ final class TSCE_CellSpillSizesArchive {
 }
 
 /// Generated wire model for `TSCE.CellSpillSizesArchive.SpillForCell`.
-final class TSCE_CellSpillSizesArchive_SpillForCell {
+final class TSCE_CellSpillSizesArchive_SpillForCell: IWAMessage {
     var coordinate: TSCE_CellCoordinateArchive?
     var spillSize: TSCE_ColumnRowSize?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -2407,7 +2407,7 @@ final class TSCE_CellSpillSizesArchive_SpillForCell {
 }
 
 /// Generated wire model for `TSCE.UuidReferencesArchive`.
-final class TSCE_UuidReferencesArchive {
+final class TSCE_UuidReferencesArchive: IWAMessage {
     var tableRefs: [TSCE_UuidReferencesArchive_TableRef] = []
     var tableUuidRefs: [TSCE_UuidReferencesArchive_TableWithUuidRef] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -2439,7 +2439,7 @@ final class TSCE_UuidReferencesArchive {
 }
 
 /// Generated wire model for `TSCE.UuidReferencesArchive.TableRef`.
-final class TSCE_UuidReferencesArchive_TableRef {
+final class TSCE_UuidReferencesArchive_TableRef: IWAMessage {
     var ownerUuid: TSP_UUID?
     var coordSet: TSCE_CellCoordSetArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -2471,7 +2471,7 @@ final class TSCE_UuidReferencesArchive_TableRef {
 }
 
 /// Generated wire model for `TSCE.UuidReferencesArchive.UuidRef`.
-final class TSCE_UuidReferencesArchive_UuidRef {
+final class TSCE_UuidReferencesArchive_UuidRef: IWAMessage {
     var uuid: TSP_UUID?
     var coordSet: TSCE_CellCoordSetArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -2503,7 +2503,7 @@ final class TSCE_UuidReferencesArchive_UuidRef {
 }
 
 /// Generated wire model for `TSCE.UuidReferencesArchive.TableWithUuidRef`.
-final class TSCE_UuidReferencesArchive_TableWithUuidRef {
+final class TSCE_UuidReferencesArchive_TableWithUuidRef: IWAMessage {
     var ownerUuid: TSP_UUID?
     var uuidRefs: [TSCE_UuidReferencesArchive_UuidRef] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -2535,7 +2535,7 @@ final class TSCE_UuidReferencesArchive_TableWithUuidRef {
 }
 
 /// Generated wire model for `TSCE.FormulaOwnerDependenciesArchive`.
-final class TSCE_FormulaOwnerDependenciesArchive {
+final class TSCE_FormulaOwnerDependenciesArchive: IWAMessage {
     var formulaOwnerUid: TSP_UUID?
     var internalFormulaOwnerId: UInt32?
     var ownerKind: UInt32?
@@ -2651,7 +2651,7 @@ final class TSCE_FormulaOwnerDependenciesArchive {
 }
 
 /// Generated wire model for `TSCE.FormulaOwnerInfoArchive`.
-final class TSCE_FormulaOwnerInfoArchive {
+final class TSCE_FormulaOwnerInfoArchive: IWAMessage {
     var formulaOwnerId: TSP_CFUUIDArchive?
     var cellDependencies: TSCE_CellDependenciesArchive?
     var rangeDependencies: TSCE_RangeDependenciesArchive?
@@ -2725,7 +2725,7 @@ final class TSCE_FormulaOwnerInfoArchive {
 }
 
 /// Generated wire model for `TSCE.SubFormulaOwnerIDArchive`.
-final class TSCE_SubFormulaOwnerIDArchive {
+final class TSCE_SubFormulaOwnerIDArchive: IWAMessage {
     var baseOwnerUid: TSP_UUID?
     var ownerKind: UInt32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -2757,7 +2757,7 @@ final class TSCE_SubFormulaOwnerIDArchive {
 }
 
 /// Generated wire model for `TSCE.OwnerIDMapArchive`.
-final class TSCE_OwnerIDMapArchive {
+final class TSCE_OwnerIDMapArchive: IWAMessage {
     var mapEntry: [TSCE_OwnerIDMapArchive_OwnerIDMapArchiveEntry] = []
     var unregisteredInternalOwnerId: [UInt32] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -2788,7 +2788,7 @@ final class TSCE_OwnerIDMapArchive {
 }
 
 /// Generated wire model for `TSCE.OwnerIDMapArchive.OwnerIDMapArchiveEntry`.
-final class TSCE_OwnerIDMapArchive_OwnerIDMapArchiveEntry {
+final class TSCE_OwnerIDMapArchive_OwnerIDMapArchiveEntry: IWAMessage {
     var internalOwnerId: UInt32?
     var ownerId: TSP_CFUUIDArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -2820,7 +2820,7 @@ final class TSCE_OwnerIDMapArchive_OwnerIDMapArchiveEntry {
 }
 
 /// Generated wire model for `TSCE.UidLookupListArchive`.
-final class TSCE_UidLookupListArchive {
+final class TSCE_UidLookupListArchive: IWAMessage {
     var uuids: [TSP_UUID] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -2846,7 +2846,7 @@ final class TSCE_UidLookupListArchive {
 }
 
 /// Generated wire model for `TSCE.DependencyTrackerArchive`.
-final class TSCE_DependencyTrackerArchive {
+final class TSCE_DependencyTrackerArchive: IWAMessage {
     var formulaOwnerInfo: [TSCE_FormulaOwnerInfoArchive] = []
     var dirtyLeaf: [TSCE_CellReferenceArchive] = []
     var ownerIdMap: TSCE_OwnerIDMapArchive?
@@ -2902,7 +2902,7 @@ final class TSCE_DependencyTrackerArchive {
 }
 
 /// Generated wire model for `TSCE.RemoteDataSpecifierArchive`.
-final class TSCE_RemoteDataSpecifierArchive {
+final class TSCE_RemoteDataSpecifierArchive: IWAMessage {
     var functionIndex: UInt32?
     var symbol: String?
     var attribute: UInt32?
@@ -2946,7 +2946,7 @@ final class TSCE_RemoteDataSpecifierArchive {
 }
 
 /// Generated wire model for `TSCE.RemoteDataValueMapArchive`.
-final class TSCE_RemoteDataValueMapArchive {
+final class TSCE_RemoteDataValueMapArchive: IWAMessage {
     var entry: [TSCE_RemoteDataValueMapArchive_RemoteDataMapEntry] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -2972,7 +2972,7 @@ final class TSCE_RemoteDataValueMapArchive {
 }
 
 /// Generated wire model for `TSCE.RemoteDataValueMapArchive.RemoteDataMapEntry`.
-final class TSCE_RemoteDataValueMapArchive_RemoteDataMapEntry {
+final class TSCE_RemoteDataValueMapArchive_RemoteDataMapEntry: IWAMessage {
     var specifier: TSCE_RemoteDataSpecifierArchive?
     var value: TSCE_CellValueArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -3004,7 +3004,7 @@ final class TSCE_RemoteDataValueMapArchive_RemoteDataMapEntry {
 }
 
 /// Generated wire model for `TSCE.StockArchive`.
-final class TSCE_StockArchive {
+final class TSCE_StockArchive: IWAMessage {
     var symbol: String?
     var date: Double?
     var attribute: [TSCE_StockArchive_AttributeEntry] = []
@@ -3042,7 +3042,7 @@ final class TSCE_StockArchive {
 }
 
 /// Generated wire model for `TSCE.StockArchive.AttributeEntry`.
-final class TSCE_StockArchive_AttributeEntry {
+final class TSCE_StockArchive_AttributeEntry: IWAMessage {
     var attribute: UInt32?
     var value: String?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -3074,7 +3074,7 @@ final class TSCE_StockArchive_AttributeEntry {
 }
 
 /// Generated wire model for `TSCE.RemoteDataStoreArchive`.
-final class TSCE_RemoteDataStoreArchive {
+final class TSCE_RemoteDataStoreArchive: IWAMessage {
     var valueMap: TSCE_RemoteDataValueMapArchive?
     var stocks: [TSCE_StockArchive] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -3106,7 +3106,7 @@ final class TSCE_RemoteDataStoreArchive {
 }
 
 /// Generated wire model for `TSCE.NameTrackedReferencePair`.
-final class TSCE_NameTrackedReferencePair {
+final class TSCE_NameTrackedReferencePair: IWAMessage {
     var name: String?
     var trackedReference: TSP_Reference?
     var trackedReferenceId: UInt32?
@@ -3144,7 +3144,7 @@ final class TSCE_NameTrackedReferencePair {
 }
 
 /// Generated wire model for `TSCE.NamesByTrackedReferenceArchive`.
-final class TSCE_NamesByTrackedReferenceArchive {
+final class TSCE_NamesByTrackedReferenceArchive: IWAMessage {
     var tableId: TSP_CFUUIDArchive?
     var nameTrackedReferencePair: [TSCE_NameTrackedReferencePair] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -3176,7 +3176,7 @@ final class TSCE_NamesByTrackedReferenceArchive {
 }
 
 /// Generated wire model for `TSCE.NamedReferenceManagerArchive`.
-final class TSCE_NamedReferenceManagerArchive {
+final class TSCE_NamedReferenceManagerArchive: IWAMessage {
     var referenceTracker: TSP_Reference?
     var namesByTrackedReferenceByTable: [TSCE_NamesByTrackedReferenceArchive] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -3208,7 +3208,7 @@ final class TSCE_NamedReferenceManagerArchive {
 }
 
 /// Generated wire model for `TSCE.UuidSetStoreArchive`.
-final class TSCE_UuidSetStoreArchive {
+final class TSCE_UuidSetStoreArchive: IWAMessage {
     var uuidset: [TSCE_UuidSetStoreArchive_UuidSet] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -3234,7 +3234,7 @@ final class TSCE_UuidSetStoreArchive {
 }
 
 /// Generated wire model for `TSCE.UuidSetStoreArchive.UuidSet`.
-final class TSCE_UuidSetStoreArchive_UuidSet {
+final class TSCE_UuidSetStoreArchive_UuidSet: IWAMessage {
     var uuid: [TSP_UUID] = []
     var indexOfSet: UInt32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -3266,7 +3266,7 @@ final class TSCE_UuidSetStoreArchive_UuidSet {
 }
 
 /// Generated wire model for `TSCE.UuidReferenceMapArchive`.
-final class TSCE_UuidReferenceMapArchive {
+final class TSCE_UuidReferenceMapArchive: IWAMessage {
     var cellRefsForUuid: [TSCE_UuidReferenceMapArchive_CellRefsForUuid] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -3292,7 +3292,7 @@ final class TSCE_UuidReferenceMapArchive {
 }
 
 /// Generated wire model for `TSCE.UuidReferenceMapArchive.CellRefsForUuid`.
-final class TSCE_UuidReferenceMapArchive_CellRefsForUuid {
+final class TSCE_UuidReferenceMapArchive_CellRefsForUuid: IWAMessage {
     var uuid: TSP_UUID?
     var cellRef: [TSCE_InternalCellReferenceArchive] = []
     var cellRefs: TSCE_InternalCellRefSetArchive?
@@ -3330,7 +3330,7 @@ final class TSCE_UuidReferenceMapArchive_CellRefsForUuid {
 }
 
 /// Generated wire model for `TSCE.GroupByNodeMapArchive`.
-final class TSCE_GroupByNodeMapArchive {
+final class TSCE_GroupByNodeMapArchive: IWAMessage {
     var refsForGroupBy: [TSCE_GroupByNodeMapArchive_GroupNodesForGroupBy] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -3356,7 +3356,7 @@ final class TSCE_GroupByNodeMapArchive {
 }
 
 /// Generated wire model for `TSCE.GroupByNodeMapArchive.CellRefsForGroupNode`.
-final class TSCE_GroupByNodeMapArchive_CellRefsForGroupNode {
+final class TSCE_GroupByNodeMapArchive_CellRefsForGroupNode: IWAMessage {
     var groupNodeUid: TSP_UUID?
     var cellRefs: TSCE_InternalCellRefSetArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -3388,7 +3388,7 @@ final class TSCE_GroupByNodeMapArchive_CellRefsForGroupNode {
 }
 
 /// Generated wire model for `TSCE.GroupByNodeMapArchive.GroupNodesForGroupBy`.
-final class TSCE_GroupByNodeMapArchive_GroupNodesForGroupBy {
+final class TSCE_GroupByNodeMapArchive_GroupNodesForGroupBy: IWAMessage {
     var groupByUid: TSP_UUID?
     var refsForGroupNode: [TSCE_GroupByNodeMapArchive_CellRefsForGroupNode] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -3420,7 +3420,7 @@ final class TSCE_GroupByNodeMapArchive_GroupNodesForGroupBy {
 }
 
 /// Generated wire model for `TSCE.CalculationEngineArchive`.
-final class TSCE_CalculationEngineArchive {
+final class TSCE_CalculationEngineArchive: IWAMessage {
     var baseDate1904: Bool?
     var dependencyTracker: TSCE_DependencyTrackerArchive?
     var namedReferenceManager: TSP_Reference?
@@ -3542,7 +3542,7 @@ final class TSCE_CalculationEngineArchive {
 }
 
 /// Generated wire model for `TSCE.PreserveColumnRowFlagsArchive`.
-final class TSCE_PreserveColumnRowFlagsArchive {
+final class TSCE_PreserveColumnRowFlagsArchive: IWAMessage {
     var beginRowIsAbsolute: Bool?
     var beginColumnIsAbsolute: Bool?
     var endRowIsAbsolute: Bool?
@@ -3586,7 +3586,7 @@ final class TSCE_PreserveColumnRowFlagsArchive {
 }
 
 /// Generated wire model for `TSCE.CategoryReferenceArchive`.
-final class TSCE_CategoryReferenceArchive {
+final class TSCE_CategoryReferenceArchive: IWAMessage {
     var groupByUid: TSP_UUID?
     var columnUid: TSP_UUID?
     var aggregateType: UInt32?
@@ -3684,7 +3684,7 @@ final class TSCE_CategoryReferenceArchive {
 }
 
 /// Generated wire model for `TSCE.CategoryReferenceArchive.CatRefUidList`.
-final class TSCE_CategoryReferenceArchive_CatRefUidList {
+final class TSCE_CategoryReferenceArchive_CatRefUidList: IWAMessage {
     var uid: [TSP_UUID] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -3710,7 +3710,7 @@ final class TSCE_CategoryReferenceArchive_CatRefUidList {
 }
 
 /// Generated wire model for `TSCE.ASTNodeArrayArchive`.
-final class TSCE_ASTNodeArrayArchive {
+final class TSCE_ASTNodeArrayArchive: IWAMessage {
     var astNode: [TSCE_ASTNodeArrayArchive_ASTNodeArchive] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -3736,7 +3736,7 @@ final class TSCE_ASTNodeArrayArchive {
 }
 
 /// Generated wire model for `TSCE.ASTNodeArrayArchive.ASTLocalCellReferenceNodeArchive`.
-final class TSCE_ASTNodeArrayArchive_ASTLocalCellReferenceNodeArchive {
+final class TSCE_ASTNodeArrayArchive_ASTLocalCellReferenceNodeArchive: IWAMessage {
     var rowHandle: UInt32?
     var columnHandle: UInt32?
     var rowIsSticky: UInt32?
@@ -3780,7 +3780,7 @@ final class TSCE_ASTNodeArrayArchive_ASTLocalCellReferenceNodeArchive {
 }
 
 /// Generated wire model for `TSCE.ASTNodeArrayArchive.ASTCrossTableCellReferenceNodeArchive`.
-final class TSCE_ASTNodeArrayArchive_ASTCrossTableCellReferenceNodeArchive {
+final class TSCE_ASTNodeArrayArchive_ASTCrossTableCellReferenceNodeArchive: IWAMessage {
     var rowHandle: UInt32?
     var columnHandle: UInt32?
     var rowIsSticky: UInt32?
@@ -3854,7 +3854,7 @@ final class TSCE_ASTNodeArrayArchive_ASTCrossTableCellReferenceNodeArchive {
 }
 
 /// Generated wire model for `TSCE.ASTNodeArrayArchive.ASTColumnCoordinateArchive`.
-final class TSCE_ASTNodeArrayArchive_ASTColumnCoordinateArchive {
+final class TSCE_ASTNodeArrayArchive_ASTColumnCoordinateArchive: IWAMessage {
     var column: Int32?
     var absolute: Bool?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -3886,7 +3886,7 @@ final class TSCE_ASTNodeArrayArchive_ASTColumnCoordinateArchive {
 }
 
 /// Generated wire model for `TSCE.ASTNodeArrayArchive.ASTRowCoordinateArchive`.
-final class TSCE_ASTNodeArrayArchive_ASTRowCoordinateArchive {
+final class TSCE_ASTNodeArrayArchive_ASTRowCoordinateArchive: IWAMessage {
     var row: Int32?
     var absolute: Bool?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -3918,7 +3918,7 @@ final class TSCE_ASTNodeArrayArchive_ASTRowCoordinateArchive {
 }
 
 /// Generated wire model for `TSCE.ASTNodeArrayArchive.ASTUidList`.
-final class TSCE_ASTNodeArrayArchive_ASTUidList {
+final class TSCE_ASTNodeArrayArchive_ASTUidList: IWAMessage {
     var uid: [TSP_UUID] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -3944,7 +3944,7 @@ final class TSCE_ASTNodeArrayArchive_ASTUidList {
 }
 
 /// Generated wire model for `TSCE.ASTNodeArrayArchive.ASTUidTract`.
-final class TSCE_ASTNodeArrayArchive_ASTUidTract {
+final class TSCE_ASTNodeArrayArchive_ASTUidTract: IWAMessage {
     var columnuids: TSCE_ASTNodeArrayArchive_ASTUidList?
     var rowuids: TSCE_ASTNodeArrayArchive_ASTUidList?
     var isRangeRef: Bool?
@@ -3994,7 +3994,7 @@ final class TSCE_ASTNodeArrayArchive_ASTUidTract {
 }
 
 /// Generated wire model for `TSCE.ASTNodeArrayArchive.ASTStickyBits`.
-final class TSCE_ASTNodeArrayArchive_ASTStickyBits {
+final class TSCE_ASTNodeArrayArchive_ASTStickyBits: IWAMessage {
     var beginRowIsAbsolute: Bool?
     var beginColumnIsAbsolute: Bool?
     var endRowIsAbsolute: Bool?
@@ -4038,7 +4038,7 @@ final class TSCE_ASTNodeArrayArchive_ASTStickyBits {
 }
 
 /// Generated wire model for `TSCE.ASTNodeArrayArchive.ASTUidTractList`.
-final class TSCE_ASTNodeArrayArchive_ASTUidTractList {
+final class TSCE_ASTNodeArrayArchive_ASTUidTractList: IWAMessage {
     var tract: [TSCE_ASTNodeArrayArchive_ASTUidTract] = []
     var stickyBits: TSCE_ASTNodeArrayArchive_ASTStickyBits?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -4070,7 +4070,7 @@ final class TSCE_ASTNodeArrayArchive_ASTUidTractList {
 }
 
 /// Generated wire model for `TSCE.ASTNodeArrayArchive.ASTUidCoordinateArchive`.
-final class TSCE_ASTNodeArrayArchive_ASTUidCoordinateArchive {
+final class TSCE_ASTNodeArrayArchive_ASTUidCoordinateArchive: IWAMessage {
     var columnUid: TSP_UUID?
     var rowUid: TSP_UUID?
     var columnAbsolute: Bool?
@@ -4114,7 +4114,7 @@ final class TSCE_ASTNodeArrayArchive_ASTUidCoordinateArchive {
 }
 
 /// Generated wire model for `TSCE.ASTNodeArrayArchive.ASTCategoryLevels`.
-final class TSCE_ASTNodeArrayArchive_ASTCategoryLevels {
+final class TSCE_ASTNodeArrayArchive_ASTCategoryLevels: IWAMessage {
     var astColumnGroupLevel: UInt32?
     var astRowGroupLevel: UInt32?
     var astAggIndexLevel: UInt32?
@@ -4152,7 +4152,7 @@ final class TSCE_ASTNodeArrayArchive_ASTCategoryLevels {
 }
 
 /// Generated wire model for `TSCE.ASTNodeArrayArchive.ASTCategoryReferenceArchive`.
-final class TSCE_ASTNodeArrayArchive_ASTCategoryReferenceArchive {
+final class TSCE_ASTNodeArrayArchive_ASTCategoryReferenceArchive: IWAMessage {
     var categoryRef: TSCE_CategoryReferenceArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -4178,7 +4178,7 @@ final class TSCE_ASTNodeArrayArchive_ASTCategoryReferenceArchive {
 }
 
 /// Generated wire model for `TSCE.ASTNodeArrayArchive.ASTColonTractArchive`.
-final class TSCE_ASTNodeArrayArchive_ASTColonTractArchive {
+final class TSCE_ASTNodeArrayArchive_ASTColonTractArchive: IWAMessage {
     var relativeColumn: [TSCE_ASTNodeArrayArchive_ASTColonTractArchive_ASTColonTractRelativeRangeArchive] = []
     var relativeRow: [TSCE_ASTNodeArrayArchive_ASTColonTractArchive_ASTColonTractRelativeRangeArchive] = []
     var absoluteColumn: [TSCE_ASTNodeArrayArchive_ASTColonTractArchive_ASTColonTractAbsoluteRangeArchive] = []
@@ -4228,7 +4228,7 @@ final class TSCE_ASTNodeArrayArchive_ASTColonTractArchive {
 }
 
 /// Generated wire model for `TSCE.ASTNodeArrayArchive.ASTColonTractArchive.ASTColonTractRelativeRangeArchive`.
-final class TSCE_ASTNodeArrayArchive_ASTColonTractArchive_ASTColonTractRelativeRangeArchive {
+final class TSCE_ASTNodeArrayArchive_ASTColonTractArchive_ASTColonTractRelativeRangeArchive: IWAMessage {
     var rangeBegin: Int32?
     var rangeEnd: Int32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -4260,7 +4260,7 @@ final class TSCE_ASTNodeArrayArchive_ASTColonTractArchive_ASTColonTractRelativeR
 }
 
 /// Generated wire model for `TSCE.ASTNodeArrayArchive.ASTColonTractArchive.ASTColonTractAbsoluteRangeArchive`.
-final class TSCE_ASTNodeArrayArchive_ASTColonTractArchive_ASTColonTractAbsoluteRangeArchive {
+final class TSCE_ASTNodeArrayArchive_ASTColonTractArchive_ASTColonTractAbsoluteRangeArchive: IWAMessage {
     var rangeBegin: UInt32?
     var rangeEnd: UInt32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -4292,7 +4292,7 @@ final class TSCE_ASTNodeArrayArchive_ASTColonTractArchive_ASTColonTractAbsoluteR
 }
 
 /// Generated wire model for `TSCE.ASTNodeArrayArchive.ASTCrossTableReferenceExtraInfoArchive`.
-final class TSCE_ASTNodeArrayArchive_ASTCrossTableReferenceExtraInfoArchive {
+final class TSCE_ASTNodeArrayArchive_ASTCrossTableReferenceExtraInfoArchive: IWAMessage {
     var tableId: TSP_CFUUIDArchive?
     var astReferenceWhitespaceAfterSheetName: String?
     var astReferenceWhitespaceBeforeTableName: String?
@@ -4342,7 +4342,7 @@ final class TSCE_ASTNodeArrayArchive_ASTCrossTableReferenceExtraInfoArchive {
 }
 
 /// Generated wire model for `TSCE.ASTNodeArrayArchive.ASTLambdaIdentsListArchive`.
-final class TSCE_ASTNodeArrayArchive_ASTLambdaIdentsListArchive {
+final class TSCE_ASTNodeArrayArchive_ASTLambdaIdentsListArchive: IWAMessage {
     var astIdentifierString: [String] = []
     var astFirstSymbol: UInt32?
     var astWhitespaceBeforeIdents: String?
@@ -4386,7 +4386,7 @@ final class TSCE_ASTNodeArrayArchive_ASTLambdaIdentsListArchive {
 }
 
 /// Generated wire model for `TSCE.ASTNodeArrayArchive.ASTNodeArchive`.
-final class TSCE_ASTNodeArrayArchive_ASTNodeArchive {
+final class TSCE_ASTNodeArrayArchive_ASTNodeArchive: IWAMessage {
     var astNodeType: Int32?
     var astFunctionNodeIndex: UInt32?
     var astFunctionNodeNumArgs: UInt32?
@@ -4676,7 +4676,7 @@ final class TSCE_ASTNodeArrayArchive_ASTNodeArchive {
 }
 
 /// Generated wire model for `TSCE.FormulaTranslationFlagsArchive`.
-final class TSCE_FormulaTranslationFlagsArchive {
+final class TSCE_FormulaTranslationFlagsArchive: IWAMessage {
     var excelImportTranslation: Bool?
     var numberToDateCoercionRemovalTranslation: Bool?
     var containsUidFormReferences: Bool?
@@ -4726,7 +4726,7 @@ final class TSCE_FormulaTranslationFlagsArchive {
 }
 
 /// Generated wire model for `TSCE.FormulaArchive`.
-final class TSCE_FormulaArchive {
+final class TSCE_FormulaArchive: IWAMessage {
     var astNodeArray: TSCE_ASTNodeArrayArchive?
     var hostColumn: UInt32?
     var hostRow: UInt32?
@@ -4800,7 +4800,7 @@ final class TSCE_FormulaArchive {
 }
 
 /// Generated wire model for `TSCE.FunctorArchive`.
-final class TSCE_FunctorArchive {
+final class TSCE_FunctorArchive: IWAMessage {
     var formula: TSCE_FormulaArchive?
     var numArgs: UInt32?
     var firstSymbol: UInt32?
@@ -4838,7 +4838,7 @@ final class TSCE_FunctorArchive {
 }
 
 /// Generated wire model for `TSCE.FormatStructArchive`.
-final class TSCE_FormatStructArchive {
+final class TSCE_FormatStructArchive: IWAMessage {
     var formatType: UInt32?
     var decimalPlaces: UInt32?
     var currencyCode: String?
@@ -4954,7 +4954,7 @@ final class TSCE_FormatStructArchive {
 }
 
 /// Generated wire model for `TSCE.RangeCoordinateArchive`.
-final class TSCE_RangeCoordinateArchive {
+final class TSCE_RangeCoordinateArchive: IWAMessage {
     var topLeftColumn: UInt32?
     var topLeftRow: UInt32?
     var bottomRightColumn: UInt32?
@@ -4998,7 +4998,7 @@ final class TSCE_RangeCoordinateArchive {
 }
 
 /// Generated wire model for `TSCE.TableTransposeInfoArchive`.
-final class TSCE_TableTransposeInfoArchive {
+final class TSCE_TableTransposeInfoArchive: IWAMessage {
     var numberOfFooterRows: UInt32?
     var bodyRangeForTransposedTable: TSCE_RangeCoordinateArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -5030,7 +5030,7 @@ final class TSCE_TableTransposeInfoArchive {
 }
 
 /// Generated wire model for `TSCE.MergeOriginMovedArchive`.
-final class TSCE_MergeOriginMovedArchive {
+final class TSCE_MergeOriginMovedArchive: IWAMessage {
     var srcColumn: [UInt32] = []
     var srcRow: [UInt32] = []
     var dstColumn: [UInt32] = []
@@ -5070,7 +5070,7 @@ final class TSCE_MergeOriginMovedArchive {
 }
 
 /// Generated wire model for `TSCE.OwnerUIDMapperArchive`.
-final class TSCE_OwnerUIDMapperArchive {
+final class TSCE_OwnerUIDMapperArchive: IWAMessage {
     var tableUid: TSP_UUID?
     var nextTableUid: TSP_UUID?
     var hiddenStateForRowsOwnerUid: TSP_UUID?
@@ -5198,7 +5198,7 @@ final class TSCE_OwnerUIDMapperArchive {
 }
 
 /// Generated wire model for `TSCE.RewriteTableUIDInfoArchive`.
-final class TSCE_RewriteTableUIDInfoArchive {
+final class TSCE_RewriteTableUIDInfoArchive: IWAMessage {
     var tableUidMap: [TSCE_RewriteTableUIDInfoArchive_TableUIDMapEntryArchive] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -5224,7 +5224,7 @@ final class TSCE_RewriteTableUIDInfoArchive {
 }
 
 /// Generated wire model for `TSCE.RewriteTableUIDInfoArchive.TableUIDMapEntryArchive`.
-final class TSCE_RewriteTableUIDInfoArchive_TableUIDMapEntryArchive {
+final class TSCE_RewriteTableUIDInfoArchive_TableUIDMapEntryArchive: IWAMessage {
     var prevTableUid: TSP_UUID?
     var newTableUid: TSP_UUID?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -5256,7 +5256,7 @@ final class TSCE_RewriteTableUIDInfoArchive_TableUIDMapEntryArchive {
 }
 
 /// Generated wire model for `TSCE.GroupByChangeArchive`.
-final class TSCE_GroupByChangeArchive {
+final class TSCE_GroupByChangeArchive: IWAMessage {
     var changeType: Int32?
     var groupByUid: TSP_UUID?
     var previousLevel: UInt32?
@@ -5324,7 +5324,7 @@ final class TSCE_GroupByChangeArchive {
 }
 
 /// Generated wire model for `TSCE.GroupByChangeArchive.GroupingColumnChangeArchive`.
-final class TSCE_GroupByChangeArchive_GroupingColumnChangeArchive {
+final class TSCE_GroupByChangeArchive_GroupingColumnChangeArchive: IWAMessage {
     var oldLevel: UInt32?
     var newLevel: UInt32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -5356,7 +5356,7 @@ final class TSCE_GroupByChangeArchive_GroupingColumnChangeArchive {
 }
 
 /// Generated wire model for `TSCE.RewriteGroupNodeUIDInfoArchive`.
-final class TSCE_RewriteGroupNodeUIDInfoArchive {
+final class TSCE_RewriteGroupNodeUIDInfoArchive: IWAMessage {
     var groupByUid: TSP_UUID?
     var groupNodeUidMap: TSP_UUIDMapArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -5388,7 +5388,7 @@ final class TSCE_RewriteGroupNodeUIDInfoArchive {
 }
 
 /// Generated wire model for `TSCE.IndexedUidsArchive`.
-final class TSCE_IndexedUidsArchive {
+final class TSCE_IndexedUidsArchive: IWAMessage {
     var uids: [TSCE_IndexedUidsArchive_IndexedUid] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -5414,7 +5414,7 @@ final class TSCE_IndexedUidsArchive {
 }
 
 /// Generated wire model for `TSCE.IndexedUidsArchive.IndexedUid`.
-final class TSCE_IndexedUidsArchive_IndexedUid {
+final class TSCE_IndexedUidsArchive_IndexedUid: IWAMessage {
     var uidForIndex: TSP_UUID?
     var indexForUid: UInt32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -5446,7 +5446,7 @@ final class TSCE_IndexedUidsArchive_IndexedUid {
 }
 
 /// Generated wire model for `TSCE.RewriteRangeEntryArchive`.
-final class TSCE_RewriteRangeEntryArchive {
+final class TSCE_RewriteRangeEntryArchive: IWAMessage {
     var rangeLocation: UInt32?
     var rangeLength: UInt32?
     var rangeUids: [TSP_UUID] = []
@@ -5490,7 +5490,7 @@ final class TSCE_RewriteRangeEntryArchive {
 }
 
 /// Generated wire model for `TSCE.ColumnOrRowUuidsInfoArchive`.
-final class TSCE_ColumnOrRowUuidsInfoArchive {
+final class TSCE_ColumnOrRowUuidsInfoArchive: IWAMessage {
     var isRows: Bool?
     var tableUid: TSP_UUID?
     var condStyleOwnerUid: TSP_UUID?
@@ -5564,7 +5564,7 @@ final class TSCE_ColumnOrRowUuidsInfoArchive {
 }
 
 /// Generated wire model for `TSCE.RegionInfoArchive`.
-final class TSCE_RegionInfoArchive {
+final class TSCE_RegionInfoArchive: IWAMessage {
     var tableUid: TSP_UUID?
     var columnUids: TSCE_IndexedUidsArchive?
     var rowUids: TSCE_IndexedUidsArchive?
@@ -5602,7 +5602,7 @@ final class TSCE_RegionInfoArchive {
 }
 
 /// Generated wire model for `TSCE.RegionMovedInfoArchive`.
-final class TSCE_RegionMovedInfoArchive {
+final class TSCE_RegionMovedInfoArchive: IWAMessage {
     var srcRegion: TSCE_RegionInfoArchive?
     var dstRegion: TSCE_RegionInfoArchive?
     var spanRows: Bool?
@@ -5658,7 +5658,7 @@ final class TSCE_RegionMovedInfoArchive {
 }
 
 /// Generated wire model for `TSCE.MergeSourceArchive`.
-final class TSCE_MergeSourceArchive {
+final class TSCE_MergeSourceArchive: IWAMessage {
     var coordColumn: UInt32?
     var coordRow: UInt32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -5690,7 +5690,7 @@ final class TSCE_MergeSourceArchive {
 }
 
 /// Generated wire model for `TSCE.HauntedOwnerArchive`.
-final class TSCE_HauntedOwnerArchive {
+final class TSCE_HauntedOwnerArchive: IWAMessage {
     var ownerUid: TSP_UUID?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -5716,7 +5716,7 @@ final class TSCE_HauntedOwnerArchive {
 }
 
 /// Generated wire model for `TSCE.SpillOwnerArchive`.
-final class TSCE_SpillOwnerArchive {
+final class TSCE_SpillOwnerArchive: IWAMessage {
     var ownerUid: TSP_UUID?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -5742,7 +5742,7 @@ final class TSCE_SpillOwnerArchive {
 }
 
 /// Generated wire model for `TSCE.CellCoordinateArchive`.
-final class TSCE_CellCoordinateArchive {
+final class TSCE_CellCoordinateArchive: IWAMessage {
     var packeddata: UInt32?
     var column: UInt32?
     var row: UInt32?
@@ -5780,7 +5780,7 @@ final class TSCE_CellCoordinateArchive {
 }
 
 /// Generated wire model for `TSCE.CellCoordinateVectorArchive`.
-final class TSCE_CellCoordinateVectorArchive {
+final class TSCE_CellCoordinateVectorArchive: IWAMessage {
     var cellCoord: [TSCE_CellCoordinateArchive] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -5806,7 +5806,7 @@ final class TSCE_CellCoordinateVectorArchive {
 }
 
 /// Generated wire model for `TSCE.ExpandedCellRefObjectPairArchive`.
-final class TSCE_ExpandedCellRefObjectPairArchive {
+final class TSCE_ExpandedCellRefObjectPairArchive: IWAMessage {
     var cellRef: TSCE_CellReferenceArchive?
     var object: TSP_Reference?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -5838,7 +5838,7 @@ final class TSCE_ExpandedCellRefObjectPairArchive {
 }
 
 /// Generated wire model for `TSCE.ExpandedCellRefObjectMapArchive`.
-final class TSCE_ExpandedCellRefObjectMapArchive {
+final class TSCE_ExpandedCellRefObjectMapArchive: IWAMessage {
     var cellRefObjectPair: [TSCE_ExpandedCellRefObjectPairArchive] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -5864,7 +5864,7 @@ final class TSCE_ExpandedCellRefObjectMapArchive {
 }
 
 /// Generated wire model for `TSCE.FormulaAtCoordArchive`.
-final class TSCE_FormulaAtCoordArchive {
+final class TSCE_FormulaAtCoordArchive: IWAMessage {
     var column: UInt32?
     var row: UInt32?
     var formula: TSCE_FormulaArchive?
@@ -5908,7 +5908,7 @@ final class TSCE_FormulaAtCoordArchive {
 }
 
 /// Generated wire model for `TSCE.FormulaCoordPairsByOwnerArchive`.
-final class TSCE_FormulaCoordPairsByOwnerArchive {
+final class TSCE_FormulaCoordPairsByOwnerArchive: IWAMessage {
     var ownerKind: UInt32?
     var ownerUid: TSP_UUID?
     var formulaAtCoords: [TSCE_FormulaAtCoordArchive] = []
@@ -5946,7 +5946,7 @@ final class TSCE_FormulaCoordPairsByOwnerArchive {
 }
 
 /// Generated wire model for `TSCE.FormulasForUndoArchive`.
-final class TSCE_FormulasForUndoArchive {
+final class TSCE_FormulasForUndoArchive: IWAMessage {
     var formulasForOwner: [TSCE_FormulaCoordPairsByOwnerArchive] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -5972,7 +5972,7 @@ final class TSCE_FormulasForUndoArchive {
 }
 
 /// Generated wire model for `TSCE.FormulaRewriteCommandArchive`.
-final class TSCE_FormulaRewriteCommandArchive {
+final class TSCE_FormulaRewriteCommandArchive: IWAMessage {
     var tableRewriteCommand: TSP_Reference?
     var `super`: TSK_CommandArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -6004,7 +6004,7 @@ final class TSCE_FormulaRewriteCommandArchive {
 }
 
 /// Generated wire model for `TSCE.TrackedReferenceArchive`.
-final class TSCE_TrackedReferenceArchive {
+final class TSCE_TrackedReferenceArchive: IWAMessage {
     var ast: TSCE_ASTNodeArrayArchive?
     var formulaId: UInt32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -6036,7 +6036,7 @@ final class TSCE_TrackedReferenceArchive {
 }
 
 /// Generated wire model for `TSCE.ExpandedTrackedReferenceArchive`.
-final class TSCE_ExpandedTrackedReferenceArchive {
+final class TSCE_ExpandedTrackedReferenceArchive: IWAMessage {
     var ast: TSCE_ASTNodeArrayArchive?
     var formulaColumn: UInt32?
     var formulaRow: UInt32?
@@ -6074,7 +6074,7 @@ final class TSCE_ExpandedTrackedReferenceArchive {
 }
 
 /// Generated wire model for `TSCE.TrackedReferenceStoreArchive`.
-final class TSCE_TrackedReferenceStoreArchive {
+final class TSCE_TrackedReferenceStoreArchive: IWAMessage {
     var uuid: TSP_CFUUIDArchive?
     var trackedReference: [TSP_Reference] = []
     var containedTrackedReference: [TSCE_TrackedReferenceArchive] = []
@@ -6118,7 +6118,7 @@ final class TSCE_TrackedReferenceStoreArchive {
 }
 
 /// Generated wire model for `TSCE.ViewTractRefArchive`.
-final class TSCE_ViewTractRefArchive {
+final class TSCE_ViewTractRefArchive: IWAMessage {
     var tableUid: TSP_UUID?
     var uidTract: TSCE_ASTNodeArrayArchive_ASTUidTract?
     var preserveFlags: TSCE_PreserveColumnRowFlagsArchive?
@@ -6174,7 +6174,7 @@ final class TSCE_ViewTractRefArchive {
 }
 
 /// Generated wire model for `TSCE.BooleanCellValueArchive`.
-final class TSCE_BooleanCellValueArchive {
+final class TSCE_BooleanCellValueArchive: IWAMessage {
     var value: Bool?
     var format: TSK_FormatStructArchive?
     var formatIsExplicit: Bool?
@@ -6212,7 +6212,7 @@ final class TSCE_BooleanCellValueArchive {
 }
 
 /// Generated wire model for `TSCE.DateCellValueArchive`.
-final class TSCE_DateCellValueArchive {
+final class TSCE_DateCellValueArchive: IWAMessage {
     var value: Double?
     var format: TSK_FormatStructArchive?
     var formatIsImplicit: Bool?
@@ -6256,7 +6256,7 @@ final class TSCE_DateCellValueArchive {
 }
 
 /// Generated wire model for `TSCE.NumberCellValueArchive`.
-final class TSCE_NumberCellValueArchive {
+final class TSCE_NumberCellValueArchive: IWAMessage {
     var value: Double?
     var unitIndex: Int32?
     var currencyCode: String?
@@ -6324,7 +6324,7 @@ final class TSCE_NumberCellValueArchive {
 }
 
 /// Generated wire model for `TSCE.StringCellValueArchive`.
-final class TSCE_StringCellValueArchive {
+final class TSCE_StringCellValueArchive: IWAMessage {
     var value: String?
     var format: TSK_FormatStructArchive?
     var formatIsImplicit: Bool?
@@ -6380,7 +6380,7 @@ final class TSCE_StringCellValueArchive {
 }
 
 /// Generated wire model for `TSCE.ErrorCellValueArchive`.
-final class TSCE_ErrorCellValueArchive {
+final class TSCE_ErrorCellValueArchive: IWAMessage {
     var errorType: Int32?
     var extraInfoInt: Int32?
     var extraInfoString: String?
@@ -6424,7 +6424,7 @@ final class TSCE_ErrorCellValueArchive {
 }
 
 /// Generated wire model for `TSCE.CellValueArchive`.
-final class TSCE_CellValueArchive {
+final class TSCE_CellValueArchive: IWAMessage {
     var cellValueType: Int32?
     var booleanValue: TSCE_BooleanCellValueArchive?
     var dateValue: TSCE_DateCellValueArchive?
@@ -6477,4 +6477,159 @@ final class TSCE_CellValueArchive {
         for _f in unknownFields { _w.append(_f) }
         return _w.bytes
     }
+}
+
+/// Registers this file's archives into the reflective catalog.
+func registerIWA_TSCEArchives(_ into: inout [(name: String, decode: (ProtobufMessage) -> IWAMessage)]) {
+    into.append(("TSCE.CellReferenceArchive", { TSCE_CellReferenceArchive($0) as IWAMessage }))
+    into.append(("TSCE.InternalCellReferenceArchive", { TSCE_InternalCellReferenceArchive($0) as IWAMessage }))
+    into.append(("TSCE.RelativeCellRefArchive", { TSCE_RelativeCellRefArchive($0) as IWAMessage }))
+    into.append(("TSCE.RangeReferenceArchive", { TSCE_RangeReferenceArchive($0) as IWAMessage }))
+    into.append(("TSCE.InternalRangeReferenceArchive", { TSCE_InternalRangeReferenceArchive($0) as IWAMessage }))
+    into.append(("TSCE.IndexSetArchive", { TSCE_IndexSetArchive($0) as IWAMessage }))
+    into.append(("TSCE.IndexSetArchive.IndexSetEntry", { TSCE_IndexSetArchive_IndexSetEntry($0) as IWAMessage }))
+    into.append(("TSCE.CellCoordSetArchive", { TSCE_CellCoordSetArchive($0) as IWAMessage }))
+    into.append(("TSCE.CellCoordSetArchive.ColumnEntry", { TSCE_CellCoordSetArchive_ColumnEntry($0) as IWAMessage }))
+    into.append(("TSCE.InternalCellRefSetArchive", { TSCE_InternalCellRefSetArchive($0) as IWAMessage }))
+    into.append(("TSCE.InternalCellRefSetArchive.OwnerEntry", { TSCE_InternalCellRefSetArchive_OwnerEntry($0) as IWAMessage }))
+    into.append(("TSCE.ColumnRowSize", { TSCE_ColumnRowSize($0) as IWAMessage }))
+    into.append(("TSCE.CellRectArchive", { TSCE_CellRectArchive($0) as IWAMessage }))
+    into.append(("TSCE.CellRefSetArchive", { TSCE_CellRefSetArchive($0) as IWAMessage }))
+    into.append(("TSCE.CellRefSetArchive.OwnerEntry", { TSCE_CellRefSetArchive_OwnerEntry($0) as IWAMessage }))
+    into.append(("TSCE.UidCoordSetArchive", { TSCE_UidCoordSetArchive($0) as IWAMessage }))
+    into.append(("TSCE.UidCoordSetArchive.ColumnEntry", { TSCE_UidCoordSetArchive_ColumnEntry($0) as IWAMessage }))
+    into.append(("TSCE.UidCellRefSetArchive", { TSCE_UidCellRefSetArchive($0) as IWAMessage }))
+    into.append(("TSCE.UidCellRefSetArchive.OwnerEntry", { TSCE_UidCellRefSetArchive_OwnerEntry($0) as IWAMessage }))
+    into.append(("TSCE.ReferencesToDirtyArchive", { TSCE_ReferencesToDirtyArchive($0) as IWAMessage }))
+    into.append(("TSCE.CoordMapperArchive", { TSCE_CoordMapperArchive($0) as IWAMessage }))
+    into.append(("TSCE.CoordMapperArchive.BaseToViewEntry", { TSCE_CoordMapperArchive_BaseToViewEntry($0) as IWAMessage }))
+    into.append(("TSCE.CoordMapperArchive.SummaryToViewEntry", { TSCE_CoordMapperArchive_SummaryToViewEntry($0) as IWAMessage }))
+    into.append(("TSCE.ReferenceArchive", { TSCE_ReferenceArchive($0) as IWAMessage }))
+    into.append(("TSCE.EdgeArchive", { TSCE_EdgeArchive($0) as IWAMessage }))
+    into.append(("TSCE.EdgesArchive", { TSCE_EdgesArchive($0) as IWAMessage }))
+    into.append(("TSCE.ExpandedEdgesArchive", { TSCE_ExpandedEdgesArchive($0) as IWAMessage }))
+    into.append(("TSCE.CellRecordArchive", { TSCE_CellRecordArchive($0) as IWAMessage }))
+    into.append(("TSCE.CellDependenciesArchive", { TSCE_CellDependenciesArchive($0) as IWAMessage }))
+    into.append(("TSCE.CellRecordExpandedArchive", { TSCE_CellRecordExpandedArchive($0) as IWAMessage }))
+    into.append(("TSCE.CellDependenciesExpandedArchive", { TSCE_CellDependenciesExpandedArchive($0) as IWAMessage }))
+    into.append(("TSCE.CellRecordTileArchive", { TSCE_CellRecordTileArchive($0) as IWAMessage }))
+    into.append(("TSCE.CellDependenciesTiledArchive", { TSCE_CellDependenciesTiledArchive($0) as IWAMessage }))
+    into.append(("TSCE.VolatileDependenciesArchive", { TSCE_VolatileDependenciesArchive($0) as IWAMessage }))
+    into.append(("TSCE.VolatileDependenciesExpandedArchive", { TSCE_VolatileDependenciesExpandedArchive($0) as IWAMessage }))
+    into.append(("TSCE.RTreeInternalNodeContentsArchive", { TSCE_RTreeInternalNodeContentsArchive($0) as IWAMessage }))
+    into.append(("TSCE.RTreeLeafNodeContentsArchive", { TSCE_RTreeLeafNodeContentsArchive($0) as IWAMessage }))
+    into.append(("TSCE.RTreeNodeArchive", { TSCE_RTreeNodeArchive($0) as IWAMessage }))
+    into.append(("TSCE.RTreeArchive", { TSCE_RTreeArchive($0) as IWAMessage }))
+    into.append(("TSCE.RangeBackDependencyArchive", { TSCE_RangeBackDependencyArchive($0) as IWAMessage }))
+    into.append(("TSCE.RangeDependenciesArchive", { TSCE_RangeDependenciesArchive($0) as IWAMessage }))
+    into.append(("TSCE.RangePrecedentsTileArchive", { TSCE_RangePrecedentsTileArchive($0) as IWAMessage }))
+    into.append(("TSCE.RangePrecedentsTileArchive.FromToRangeArchive", { TSCE_RangePrecedentsTileArchive_FromToRangeArchive($0) as IWAMessage }))
+    into.append(("TSCE.RangeDependenciesTiledArchive", { TSCE_RangeDependenciesTiledArchive($0) as IWAMessage }))
+    into.append(("TSCE.SpanningDependenciesArchive", { TSCE_SpanningDependenciesArchive($0) as IWAMessage }))
+    into.append(("TSCE.SpanningDependenciesArchive.ReferringColumnToLocalCells", { TSCE_SpanningDependenciesArchive_ReferringColumnToLocalCells($0) as IWAMessage }))
+    into.append(("TSCE.SpanningDependenciesArchive.ReferringColumnToRemoteCells", { TSCE_SpanningDependenciesArchive_ReferringColumnToRemoteCells($0) as IWAMessage }))
+    into.append(("TSCE.SpanningDependenciesExpandedArchive", { TSCE_SpanningDependenciesExpandedArchive($0) as IWAMessage }))
+    into.append(("TSCE.SpanningDependenciesExpandedArchive.ExtentRange", { TSCE_SpanningDependenciesExpandedArchive_ExtentRange($0) as IWAMessage }))
+    into.append(("TSCE.SpanningDependenciesExpandedArchive.ExtentRangeWithTableWithContext", { TSCE_SpanningDependenciesExpandedArchive_ExtentRangeWithTableWithContext($0) as IWAMessage }))
+    into.append(("TSCE.SpanningDependenciesExpandedArchive.CellCoordRefersToExtents", { TSCE_SpanningDependenciesExpandedArchive_CellCoordRefersToExtents($0) as IWAMessage }))
+    into.append(("TSCE.WholeOwnerDependenciesArchive", { TSCE_WholeOwnerDependenciesArchive($0) as IWAMessage }))
+    into.append(("TSCE.WholeOwnerDependenciesExpandedArchive", { TSCE_WholeOwnerDependenciesExpandedArchive($0) as IWAMessage }))
+    into.append(("TSCE.ErrorArchive", { TSCE_ErrorArchive($0) as IWAMessage }))
+    into.append(("TSCE.ErrorArchive.ErrorDictionaryEntry", { TSCE_ErrorArchive_ErrorDictionaryEntry($0) as IWAMessage }))
+    into.append(("TSCE.WarningArchive", { TSCE_WarningArchive($0) as IWAMessage }))
+    into.append(("TSCE.WarningArchive.WarningDictionaryEntry", { TSCE_WarningArchive_WarningDictionaryEntry($0) as IWAMessage }))
+    into.append(("TSCE.CellErrorsArchive", { TSCE_CellErrorsArchive($0) as IWAMessage }))
+    into.append(("TSCE.CellErrorsArchive.ErrorForCell", { TSCE_CellErrorsArchive_ErrorForCell($0) as IWAMessage }))
+    into.append(("TSCE.CellErrorsArchive.EnhancedErrorForCell", { TSCE_CellErrorsArchive_EnhancedErrorForCell($0) as IWAMessage }))
+    into.append(("TSCE.CellSpillSizesArchive", { TSCE_CellSpillSizesArchive($0) as IWAMessage }))
+    into.append(("TSCE.CellSpillSizesArchive.SpillForCell", { TSCE_CellSpillSizesArchive_SpillForCell($0) as IWAMessage }))
+    into.append(("TSCE.UuidReferencesArchive", { TSCE_UuidReferencesArchive($0) as IWAMessage }))
+    into.append(("TSCE.UuidReferencesArchive.TableRef", { TSCE_UuidReferencesArchive_TableRef($0) as IWAMessage }))
+    into.append(("TSCE.UuidReferencesArchive.UuidRef", { TSCE_UuidReferencesArchive_UuidRef($0) as IWAMessage }))
+    into.append(("TSCE.UuidReferencesArchive.TableWithUuidRef", { TSCE_UuidReferencesArchive_TableWithUuidRef($0) as IWAMessage }))
+    into.append(("TSCE.FormulaOwnerDependenciesArchive", { TSCE_FormulaOwnerDependenciesArchive($0) as IWAMessage }))
+    into.append(("TSCE.FormulaOwnerInfoArchive", { TSCE_FormulaOwnerInfoArchive($0) as IWAMessage }))
+    into.append(("TSCE.SubFormulaOwnerIDArchive", { TSCE_SubFormulaOwnerIDArchive($0) as IWAMessage }))
+    into.append(("TSCE.OwnerIDMapArchive", { TSCE_OwnerIDMapArchive($0) as IWAMessage }))
+    into.append(("TSCE.OwnerIDMapArchive.OwnerIDMapArchiveEntry", { TSCE_OwnerIDMapArchive_OwnerIDMapArchiveEntry($0) as IWAMessage }))
+    into.append(("TSCE.UidLookupListArchive", { TSCE_UidLookupListArchive($0) as IWAMessage }))
+    into.append(("TSCE.DependencyTrackerArchive", { TSCE_DependencyTrackerArchive($0) as IWAMessage }))
+    into.append(("TSCE.RemoteDataSpecifierArchive", { TSCE_RemoteDataSpecifierArchive($0) as IWAMessage }))
+    into.append(("TSCE.RemoteDataValueMapArchive", { TSCE_RemoteDataValueMapArchive($0) as IWAMessage }))
+    into.append(("TSCE.RemoteDataValueMapArchive.RemoteDataMapEntry", { TSCE_RemoteDataValueMapArchive_RemoteDataMapEntry($0) as IWAMessage }))
+    into.append(("TSCE.StockArchive", { TSCE_StockArchive($0) as IWAMessage }))
+    into.append(("TSCE.StockArchive.AttributeEntry", { TSCE_StockArchive_AttributeEntry($0) as IWAMessage }))
+    into.append(("TSCE.RemoteDataStoreArchive", { TSCE_RemoteDataStoreArchive($0) as IWAMessage }))
+    into.append(("TSCE.NameTrackedReferencePair", { TSCE_NameTrackedReferencePair($0) as IWAMessage }))
+    into.append(("TSCE.NamesByTrackedReferenceArchive", { TSCE_NamesByTrackedReferenceArchive($0) as IWAMessage }))
+    into.append(("TSCE.NamedReferenceManagerArchive", { TSCE_NamedReferenceManagerArchive($0) as IWAMessage }))
+    into.append(("TSCE.UuidSetStoreArchive", { TSCE_UuidSetStoreArchive($0) as IWAMessage }))
+    into.append(("TSCE.UuidSetStoreArchive.UuidSet", { TSCE_UuidSetStoreArchive_UuidSet($0) as IWAMessage }))
+    into.append(("TSCE.UuidReferenceMapArchive", { TSCE_UuidReferenceMapArchive($0) as IWAMessage }))
+    into.append(("TSCE.UuidReferenceMapArchive.CellRefsForUuid", { TSCE_UuidReferenceMapArchive_CellRefsForUuid($0) as IWAMessage }))
+    into.append(("TSCE.GroupByNodeMapArchive", { TSCE_GroupByNodeMapArchive($0) as IWAMessage }))
+    into.append(("TSCE.GroupByNodeMapArchive.CellRefsForGroupNode", { TSCE_GroupByNodeMapArchive_CellRefsForGroupNode($0) as IWAMessage }))
+    into.append(("TSCE.GroupByNodeMapArchive.GroupNodesForGroupBy", { TSCE_GroupByNodeMapArchive_GroupNodesForGroupBy($0) as IWAMessage }))
+    into.append(("TSCE.CalculationEngineArchive", { TSCE_CalculationEngineArchive($0) as IWAMessage }))
+    into.append(("TSCE.PreserveColumnRowFlagsArchive", { TSCE_PreserveColumnRowFlagsArchive($0) as IWAMessage }))
+    into.append(("TSCE.CategoryReferenceArchive", { TSCE_CategoryReferenceArchive($0) as IWAMessage }))
+    into.append(("TSCE.CategoryReferenceArchive.CatRefUidList", { TSCE_CategoryReferenceArchive_CatRefUidList($0) as IWAMessage }))
+    into.append(("TSCE.ASTNodeArrayArchive", { TSCE_ASTNodeArrayArchive($0) as IWAMessage }))
+    into.append(("TSCE.ASTNodeArrayArchive.ASTLocalCellReferenceNodeArchive", { TSCE_ASTNodeArrayArchive_ASTLocalCellReferenceNodeArchive($0) as IWAMessage }))
+    into.append(("TSCE.ASTNodeArrayArchive.ASTCrossTableCellReferenceNodeArchive", { TSCE_ASTNodeArrayArchive_ASTCrossTableCellReferenceNodeArchive($0) as IWAMessage }))
+    into.append(("TSCE.ASTNodeArrayArchive.ASTColumnCoordinateArchive", { TSCE_ASTNodeArrayArchive_ASTColumnCoordinateArchive($0) as IWAMessage }))
+    into.append(("TSCE.ASTNodeArrayArchive.ASTRowCoordinateArchive", { TSCE_ASTNodeArrayArchive_ASTRowCoordinateArchive($0) as IWAMessage }))
+    into.append(("TSCE.ASTNodeArrayArchive.ASTUidList", { TSCE_ASTNodeArrayArchive_ASTUidList($0) as IWAMessage }))
+    into.append(("TSCE.ASTNodeArrayArchive.ASTUidTract", { TSCE_ASTNodeArrayArchive_ASTUidTract($0) as IWAMessage }))
+    into.append(("TSCE.ASTNodeArrayArchive.ASTStickyBits", { TSCE_ASTNodeArrayArchive_ASTStickyBits($0) as IWAMessage }))
+    into.append(("TSCE.ASTNodeArrayArchive.ASTUidTractList", { TSCE_ASTNodeArrayArchive_ASTUidTractList($0) as IWAMessage }))
+    into.append(("TSCE.ASTNodeArrayArchive.ASTUidCoordinateArchive", { TSCE_ASTNodeArrayArchive_ASTUidCoordinateArchive($0) as IWAMessage }))
+    into.append(("TSCE.ASTNodeArrayArchive.ASTCategoryLevels", { TSCE_ASTNodeArrayArchive_ASTCategoryLevels($0) as IWAMessage }))
+    into.append(("TSCE.ASTNodeArrayArchive.ASTCategoryReferenceArchive", { TSCE_ASTNodeArrayArchive_ASTCategoryReferenceArchive($0) as IWAMessage }))
+    into.append(("TSCE.ASTNodeArrayArchive.ASTColonTractArchive", { TSCE_ASTNodeArrayArchive_ASTColonTractArchive($0) as IWAMessage }))
+    into.append(("TSCE.ASTNodeArrayArchive.ASTColonTractArchive.ASTColonTractRelativeRangeArchive", { TSCE_ASTNodeArrayArchive_ASTColonTractArchive_ASTColonTractRelativeRangeArchive($0) as IWAMessage }))
+    into.append(("TSCE.ASTNodeArrayArchive.ASTColonTractArchive.ASTColonTractAbsoluteRangeArchive", { TSCE_ASTNodeArrayArchive_ASTColonTractArchive_ASTColonTractAbsoluteRangeArchive($0) as IWAMessage }))
+    into.append(("TSCE.ASTNodeArrayArchive.ASTCrossTableReferenceExtraInfoArchive", { TSCE_ASTNodeArrayArchive_ASTCrossTableReferenceExtraInfoArchive($0) as IWAMessage }))
+    into.append(("TSCE.ASTNodeArrayArchive.ASTLambdaIdentsListArchive", { TSCE_ASTNodeArrayArchive_ASTLambdaIdentsListArchive($0) as IWAMessage }))
+    into.append(("TSCE.ASTNodeArrayArchive.ASTNodeArchive", { TSCE_ASTNodeArrayArchive_ASTNodeArchive($0) as IWAMessage }))
+    into.append(("TSCE.FormulaTranslationFlagsArchive", { TSCE_FormulaTranslationFlagsArchive($0) as IWAMessage }))
+    into.append(("TSCE.FormulaArchive", { TSCE_FormulaArchive($0) as IWAMessage }))
+    into.append(("TSCE.FunctorArchive", { TSCE_FunctorArchive($0) as IWAMessage }))
+    into.append(("TSCE.FormatStructArchive", { TSCE_FormatStructArchive($0) as IWAMessage }))
+    into.append(("TSCE.RangeCoordinateArchive", { TSCE_RangeCoordinateArchive($0) as IWAMessage }))
+    into.append(("TSCE.TableTransposeInfoArchive", { TSCE_TableTransposeInfoArchive($0) as IWAMessage }))
+    into.append(("TSCE.MergeOriginMovedArchive", { TSCE_MergeOriginMovedArchive($0) as IWAMessage }))
+    into.append(("TSCE.OwnerUIDMapperArchive", { TSCE_OwnerUIDMapperArchive($0) as IWAMessage }))
+    into.append(("TSCE.RewriteTableUIDInfoArchive", { TSCE_RewriteTableUIDInfoArchive($0) as IWAMessage }))
+    into.append(("TSCE.RewriteTableUIDInfoArchive.TableUIDMapEntryArchive", { TSCE_RewriteTableUIDInfoArchive_TableUIDMapEntryArchive($0) as IWAMessage }))
+    into.append(("TSCE.GroupByChangeArchive", { TSCE_GroupByChangeArchive($0) as IWAMessage }))
+    into.append(("TSCE.GroupByChangeArchive.GroupingColumnChangeArchive", { TSCE_GroupByChangeArchive_GroupingColumnChangeArchive($0) as IWAMessage }))
+    into.append(("TSCE.RewriteGroupNodeUIDInfoArchive", { TSCE_RewriteGroupNodeUIDInfoArchive($0) as IWAMessage }))
+    into.append(("TSCE.IndexedUidsArchive", { TSCE_IndexedUidsArchive($0) as IWAMessage }))
+    into.append(("TSCE.IndexedUidsArchive.IndexedUid", { TSCE_IndexedUidsArchive_IndexedUid($0) as IWAMessage }))
+    into.append(("TSCE.RewriteRangeEntryArchive", { TSCE_RewriteRangeEntryArchive($0) as IWAMessage }))
+    into.append(("TSCE.ColumnOrRowUuidsInfoArchive", { TSCE_ColumnOrRowUuidsInfoArchive($0) as IWAMessage }))
+    into.append(("TSCE.RegionInfoArchive", { TSCE_RegionInfoArchive($0) as IWAMessage }))
+    into.append(("TSCE.RegionMovedInfoArchive", { TSCE_RegionMovedInfoArchive($0) as IWAMessage }))
+    into.append(("TSCE.MergeSourceArchive", { TSCE_MergeSourceArchive($0) as IWAMessage }))
+    into.append(("TSCE.HauntedOwnerArchive", { TSCE_HauntedOwnerArchive($0) as IWAMessage }))
+    into.append(("TSCE.SpillOwnerArchive", { TSCE_SpillOwnerArchive($0) as IWAMessage }))
+    into.append(("TSCE.CellCoordinateArchive", { TSCE_CellCoordinateArchive($0) as IWAMessage }))
+    into.append(("TSCE.CellCoordinateVectorArchive", { TSCE_CellCoordinateVectorArchive($0) as IWAMessage }))
+    into.append(("TSCE.ExpandedCellRefObjectPairArchive", { TSCE_ExpandedCellRefObjectPairArchive($0) as IWAMessage }))
+    into.append(("TSCE.ExpandedCellRefObjectMapArchive", { TSCE_ExpandedCellRefObjectMapArchive($0) as IWAMessage }))
+    into.append(("TSCE.FormulaAtCoordArchive", { TSCE_FormulaAtCoordArchive($0) as IWAMessage }))
+    into.append(("TSCE.FormulaCoordPairsByOwnerArchive", { TSCE_FormulaCoordPairsByOwnerArchive($0) as IWAMessage }))
+    into.append(("TSCE.FormulasForUndoArchive", { TSCE_FormulasForUndoArchive($0) as IWAMessage }))
+    into.append(("TSCE.FormulaRewriteCommandArchive", { TSCE_FormulaRewriteCommandArchive($0) as IWAMessage }))
+    into.append(("TSCE.TrackedReferenceArchive", { TSCE_TrackedReferenceArchive($0) as IWAMessage }))
+    into.append(("TSCE.ExpandedTrackedReferenceArchive", { TSCE_ExpandedTrackedReferenceArchive($0) as IWAMessage }))
+    into.append(("TSCE.TrackedReferenceStoreArchive", { TSCE_TrackedReferenceStoreArchive($0) as IWAMessage }))
+    into.append(("TSCE.ViewTractRefArchive", { TSCE_ViewTractRefArchive($0) as IWAMessage }))
+    into.append(("TSCE.BooleanCellValueArchive", { TSCE_BooleanCellValueArchive($0) as IWAMessage }))
+    into.append(("TSCE.DateCellValueArchive", { TSCE_DateCellValueArchive($0) as IWAMessage }))
+    into.append(("TSCE.NumberCellValueArchive", { TSCE_NumberCellValueArchive($0) as IWAMessage }))
+    into.append(("TSCE.StringCellValueArchive", { TSCE_StringCellValueArchive($0) as IWAMessage }))
+    into.append(("TSCE.ErrorCellValueArchive", { TSCE_ErrorCellValueArchive($0) as IWAMessage }))
+    into.append(("TSCE.CellValueArchive", { TSCE_CellValueArchive($0) as IWAMessage }))
 }

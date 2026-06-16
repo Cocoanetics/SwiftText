@@ -3,7 +3,7 @@
 import Foundation
 
 /// Generated wire model for `TSWP.SelectionArchive`.
-final class TSWP_SelectionArchive {
+final class TSWP_SelectionArchive: IWAMessage {
     var deprecatedType: Int32?
     var visualDefinitionRange: TSP_Range?
     var styleinsertionbehavior: Int32?
@@ -77,7 +77,7 @@ final class TSWP_SelectionArchive {
 }
 
 /// Generated wire model for `TSWP.ObjectAttributeTable`.
-final class TSWP_ObjectAttributeTable {
+final class TSWP_ObjectAttributeTable: IWAMessage {
     var entries: [TSWP_ObjectAttributeTable_ObjectAttribute] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -103,7 +103,7 @@ final class TSWP_ObjectAttributeTable {
 }
 
 /// Generated wire model for `TSWP.ObjectAttributeTable.ObjectAttribute`.
-final class TSWP_ObjectAttributeTable_ObjectAttribute {
+final class TSWP_ObjectAttributeTable_ObjectAttribute: IWAMessage {
     var characterIndex: UInt32?
     var object: TSP_Reference?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -135,7 +135,7 @@ final class TSWP_ObjectAttributeTable_ObjectAttribute {
 }
 
 /// Generated wire model for `TSWP.StringAttributeTable`.
-final class TSWP_StringAttributeTable {
+final class TSWP_StringAttributeTable: IWAMessage {
     var entries: [TSWP_StringAttributeTable_StringAttribute] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -161,7 +161,7 @@ final class TSWP_StringAttributeTable {
 }
 
 /// Generated wire model for `TSWP.StringAttributeTable.StringAttribute`.
-final class TSWP_StringAttributeTable_StringAttribute {
+final class TSWP_StringAttributeTable_StringAttribute: IWAMessage {
     var characterIndex: UInt32?
     var object: String?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -193,7 +193,7 @@ final class TSWP_StringAttributeTable_StringAttribute {
 }
 
 /// Generated wire model for `TSWP.ParaDataAttributeTable`.
-final class TSWP_ParaDataAttributeTable {
+final class TSWP_ParaDataAttributeTable: IWAMessage {
     var entries: [TSWP_ParaDataAttributeTable_ParaDataAttribute] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -219,7 +219,7 @@ final class TSWP_ParaDataAttributeTable {
 }
 
 /// Generated wire model for `TSWP.ParaDataAttributeTable.ParaDataAttribute`.
-final class TSWP_ParaDataAttributeTable_ParaDataAttribute {
+final class TSWP_ParaDataAttributeTable_ParaDataAttribute: IWAMessage {
     var characterIndex: UInt32?
     var first: UInt32?
     var second: UInt32?
@@ -257,7 +257,7 @@ final class TSWP_ParaDataAttributeTable_ParaDataAttribute {
 }
 
 /// Generated wire model for `TSWP.OverlappingFieldAttributeTable`.
-final class TSWP_OverlappingFieldAttributeTable {
+final class TSWP_OverlappingFieldAttributeTable: IWAMessage {
     var entries: [TSWP_OverlappingFieldAttributeTable_OverlappingFieldAttribute] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -283,7 +283,7 @@ final class TSWP_OverlappingFieldAttributeTable {
 }
 
 /// Generated wire model for `TSWP.OverlappingFieldAttributeTable.OverlappingFieldAttribute`.
-final class TSWP_OverlappingFieldAttributeTable_OverlappingFieldAttribute {
+final class TSWP_OverlappingFieldAttributeTable_OverlappingFieldAttribute: IWAMessage {
     var range: TSP_Range?
     var field: TSP_Reference?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -315,7 +315,7 @@ final class TSWP_OverlappingFieldAttributeTable_OverlappingFieldAttribute {
 }
 
 /// Generated wire model for `TSWP.StorageArchive`.
-final class TSWP_StorageArchive {
+final class TSWP_StorageArchive: IWAMessage {
     var kind: Int32?
     var styleSheet: TSP_Reference?
     var text: [String] = []
@@ -497,7 +497,7 @@ final class TSWP_StorageArchive {
 }
 
 /// Generated wire model for `TSWP.HighlightArchive`.
-final class TSWP_HighlightArchive {
+final class TSWP_HighlightArchive: IWAMessage {
     var commentstorage: TSP_Reference?
     var textAttributeUuidString: String?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -529,7 +529,7 @@ final class TSWP_HighlightArchive {
 }
 
 /// Generated wire model for `TSWP.PencilAnnotationArchive`.
-final class TSWP_PencilAnnotationArchive {
+final class TSWP_PencilAnnotationArchive: IWAMessage {
     var pencilAnnotationStorage: TSP_Reference?
     var textAttributeUuidString: String?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -561,7 +561,7 @@ final class TSWP_PencilAnnotationArchive {
 }
 
 /// Generated wire model for `TSWP.FontFeatureArchive`.
-final class TSWP_FontFeatureArchive {
+final class TSWP_FontFeatureArchive: IWAMessage {
     var featureType: UInt32?
     var featureSelector: UInt32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -593,7 +593,7 @@ final class TSWP_FontFeatureArchive {
 }
 
 /// Generated wire model for `TSWP.CharacterStylePropertiesArchive`.
-final class TSWP_CharacterStylePropertiesArchive {
+final class TSWP_CharacterStylePropertiesArchive: IWAMessage {
     var bold: Bool?
     var italic: Bool?
     var fontSize: Float?
@@ -895,7 +895,7 @@ final class TSWP_CharacterStylePropertiesArchive {
 }
 
 /// Generated wire model for `TSWP.CharacterStyleArchive`.
-final class TSWP_CharacterStyleArchive {
+final class TSWP_CharacterStyleArchive: IWAMessage {
     var `super`: TSS_StyleArchive?
     var overrideCount: UInt32?
     var charProperties: TSWP_CharacterStylePropertiesArchive?
@@ -933,7 +933,7 @@ final class TSWP_CharacterStyleArchive {
 }
 
 /// Generated wire model for `TSWP.TabArchive`.
-final class TSWP_TabArchive {
+final class TSWP_TabArchive: IWAMessage {
     var position: Float?
     var alignment: Int32?
     var leader: String?
@@ -971,7 +971,7 @@ final class TSWP_TabArchive {
 }
 
 /// Generated wire model for `TSWP.TabsArchive`.
-final class TSWP_TabsArchive {
+final class TSWP_TabsArchive: IWAMessage {
     var tabs: [TSWP_TabArchive] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -997,7 +997,7 @@ final class TSWP_TabsArchive {
 }
 
 /// Generated wire model for `TSWP.LineSpacingArchive`.
-final class TSWP_LineSpacingArchive {
+final class TSWP_LineSpacingArchive: IWAMessage {
     var mode: Int32?
     var amount: Float?
     var baselinerule: Float?
@@ -1035,7 +1035,7 @@ final class TSWP_LineSpacingArchive {
 }
 
 /// Generated wire model for `TSWP.ParagraphStylePropertiesArchive`.
-final class TSWP_ParagraphStylePropertiesArchive {
+final class TSWP_ParagraphStylePropertiesArchive: IWAMessage {
     var alignment: Int32?
     var decimalTabNull: Bool?
     var decimalTab: String?
@@ -1307,7 +1307,7 @@ final class TSWP_ParagraphStylePropertiesArchive {
 }
 
 /// Generated wire model for `TSWP.ParagraphStyleArchive`.
-final class TSWP_ParagraphStyleArchive {
+final class TSWP_ParagraphStyleArchive: IWAMessage {
     var `super`: TSS_StyleArchive?
     var overrideCount: UInt32?
     var charProperties: TSWP_CharacterStylePropertiesArchive?
@@ -1351,7 +1351,7 @@ final class TSWP_ParagraphStyleArchive {
 }
 
 /// Generated wire model for `TSWP.ListStyleArchive`.
-final class TSWP_ListStyleArchive {
+final class TSWP_ListStyleArchive: IWAMessage {
     var `super`: TSS_StyleArchive?
     var overrideCount: UInt32?
     var labelTypes: [Int32] = []
@@ -1470,7 +1470,7 @@ final class TSWP_ListStyleArchive {
 }
 
 /// Generated wire model for `TSWP.ListStyleArchive.LabelGeometry`.
-final class TSWP_ListStyleArchive_LabelGeometry {
+final class TSWP_ListStyleArchive_LabelGeometry: IWAMessage {
     var scale: Float?
     var baselineOffset: Float?
     var scaleWithText: Bool?
@@ -1508,7 +1508,7 @@ final class TSWP_ListStyleArchive_LabelGeometry {
 }
 
 /// Generated wire model for `TSWP.ListStyleArchive.LabelImage`.
-final class TSWP_ListStyleArchive_LabelImage {
+final class TSWP_ListStyleArchive_LabelImage: IWAMessage {
     var image: TSP_DataReference?
     var imageNull: Bool?
     var databaseImage: TSP_Reference?
@@ -1546,7 +1546,7 @@ final class TSWP_ListStyleArchive_LabelImage {
 }
 
 /// Generated wire model for `TSWP.TextStylePresetArchive`.
-final class TSWP_TextStylePresetArchive {
+final class TSWP_TextStylePresetArchive: IWAMessage {
     var presetIdentifier: String?
     var paragraphStyle: TSP_Reference?
     var listStyle: TSP_Reference?
@@ -1584,7 +1584,7 @@ final class TSWP_TextStylePresetArchive {
 }
 
 /// Generated wire model for `TSWP.ColumnsArchive`.
-final class TSWP_ColumnsArchive {
+final class TSWP_ColumnsArchive: IWAMessage {
     var equalColumns: TSWP_ColumnsArchive_EqualColumnsArchive?
     var nonEqualColumns: TSWP_ColumnsArchive_NonEqualColumnsArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1616,7 +1616,7 @@ final class TSWP_ColumnsArchive {
 }
 
 /// Generated wire model for `TSWP.ColumnsArchive.EqualColumnsArchive`.
-final class TSWP_ColumnsArchive_EqualColumnsArchive {
+final class TSWP_ColumnsArchive_EqualColumnsArchive: IWAMessage {
     var count: UInt32?
     var gap: Float?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1648,7 +1648,7 @@ final class TSWP_ColumnsArchive_EqualColumnsArchive {
 }
 
 /// Generated wire model for `TSWP.ColumnsArchive.NonEqualColumnsArchive`.
-final class TSWP_ColumnsArchive_NonEqualColumnsArchive {
+final class TSWP_ColumnsArchive_NonEqualColumnsArchive: IWAMessage {
     var first: Float?
     var following: [TSWP_ColumnsArchive_NonEqualColumnsArchive_GapWidthArchive] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1680,7 +1680,7 @@ final class TSWP_ColumnsArchive_NonEqualColumnsArchive {
 }
 
 /// Generated wire model for `TSWP.ColumnsArchive.NonEqualColumnsArchive.GapWidthArchive`.
-final class TSWP_ColumnsArchive_NonEqualColumnsArchive_GapWidthArchive {
+final class TSWP_ColumnsArchive_NonEqualColumnsArchive_GapWidthArchive: IWAMessage {
     var gap: Float?
     var width: Float?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -1712,7 +1712,7 @@ final class TSWP_ColumnsArchive_NonEqualColumnsArchive_GapWidthArchive {
 }
 
 /// Generated wire model for `TSWP.PaddingArchive`.
-final class TSWP_PaddingArchive {
+final class TSWP_PaddingArchive: IWAMessage {
     var left: Float?
     var top: Float?
     var right: Float?
@@ -1756,7 +1756,7 @@ final class TSWP_PaddingArchive {
 }
 
 /// Generated wire model for `TSWP.ColumnStylePropertiesArchive`.
-final class TSWP_ColumnStylePropertiesArchive {
+final class TSWP_ColumnStylePropertiesArchive: IWAMessage {
     var continuous: Bool?
     var shrinkToFit: Bool?
     var verticalText: Bool?
@@ -1848,7 +1848,7 @@ final class TSWP_ColumnStylePropertiesArchive {
 }
 
 /// Generated wire model for `TSWP.ColumnStyleArchive`.
-final class TSWP_ColumnStyleArchive {
+final class TSWP_ColumnStyleArchive: IWAMessage {
     var `super`: TSS_StyleArchive?
     var overrideCount: UInt32?
     var columnProperties: TSWP_ColumnStylePropertiesArchive?
@@ -1886,7 +1886,7 @@ final class TSWP_ColumnStyleArchive {
 }
 
 /// Generated wire model for `TSWP.ShapeStylePropertiesArchive`.
-final class TSWP_ShapeStylePropertiesArchive {
+final class TSWP_ShapeStylePropertiesArchive: IWAMessage {
     var shrinkToFit: Bool?
     var verticalAlignment: Int32?
     var columnsNull: Bool?
@@ -1972,7 +1972,7 @@ final class TSWP_ShapeStylePropertiesArchive {
 }
 
 /// Generated wire model for `TSWP.ShapeStyleArchive`.
-final class TSWP_ShapeStyleArchive {
+final class TSWP_ShapeStyleArchive: IWAMessage {
     var `super`: TSD_ShapeStyleArchive?
     var overrideCount: UInt32?
     var shapeProperties: TSWP_ShapeStylePropertiesArchive?
@@ -2010,7 +2010,7 @@ final class TSWP_ShapeStyleArchive {
 }
 
 /// Generated wire model for `TSWP.ThemePresetsArchive`.
-final class TSWP_ThemePresetsArchive {
+final class TSWP_ThemePresetsArchive: IWAMessage {
     var listStylePresets: [TSP_Reference] = []
     var textStylePresets: [TSP_Reference] = []
     var importedTextStylePresets: [TSP_Reference] = []
@@ -2078,7 +2078,7 @@ final class TSWP_ThemePresetsArchive {
 }
 
 /// Generated wire model for `TSWP.TextPresetDisplayItemArchive`.
-final class TSWP_TextPresetDisplayItemArchive {
+final class TSWP_TextPresetDisplayItemArchive: IWAMessage {
     var preset: TSP_Reference?
     var displayName: String?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -2110,7 +2110,7 @@ final class TSWP_TextPresetDisplayItemArchive {
 }
 
 /// Generated wire model for `TSWP.TOCEntryStylePropertiesArchive`.
-final class TSWP_TOCEntryStylePropertiesArchive {
+final class TSWP_TOCEntryStylePropertiesArchive: IWAMessage {
     var pageNumberStyleNull: Bool?
     var pageNumberStyle: TSP_Reference?
     var showPageNumber: Bool?
@@ -2148,7 +2148,7 @@ final class TSWP_TOCEntryStylePropertiesArchive {
 }
 
 /// Generated wire model for `TSWP.TOCEntryStyleArchive`.
-final class TSWP_TOCEntryStyleArchive {
+final class TSWP_TOCEntryStyleArchive: IWAMessage {
     var `super`: TSWP_ParagraphStyleArchive?
     var tocProperties: TSWP_TOCEntryStylePropertiesArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -2180,7 +2180,7 @@ final class TSWP_TOCEntryStyleArchive {
 }
 
 /// Generated wire model for `TSWP.TOCSettingsArchive`.
-final class TSWP_TOCSettingsArchive {
+final class TSWP_TOCSettingsArchive: IWAMessage {
     var tocName: String?
     var tocScope: UInt32?
     var entries: [TSWP_TOCSettingsArchive_TOCEntryData] = []
@@ -2218,7 +2218,7 @@ final class TSWP_TOCSettingsArchive {
 }
 
 /// Generated wire model for `TSWP.TOCSettingsArchive.TOCEntryData`.
-final class TSWP_TOCSettingsArchive_TOCEntryData {
+final class TSWP_TOCSettingsArchive_TOCEntryData: IWAMessage {
     var paragraphStyle: TSP_Reference?
     var tocEntryStyle: TSP_Reference?
     var showInToc: Bool?
@@ -2256,7 +2256,7 @@ final class TSWP_TOCSettingsArchive_TOCEntryData {
 }
 
 /// Generated wire model for `TSWP.TOCEntryInstanceArchive`.
-final class TSWP_TOCEntryInstanceArchive {
+final class TSWP_TOCEntryInstanceArchive: IWAMessage {
     var paragraphIndex: UInt32?
     var pageNumber: UInt32?
     var numberFormat: UInt32?
@@ -2330,7 +2330,7 @@ final class TSWP_TOCEntryInstanceArchive {
 }
 
 /// Generated wire model for `TSWP.UndoTransaction`.
-final class TSWP_UndoTransaction {
+final class TSWP_UndoTransaction: IWAMessage {
     var entries: [TSWP_UndoTransaction_UnionTransaction] = []
     var groupEntries: [TSWP_UndoTransaction_StorageActionGroup] = []
     var flags: UInt32?
@@ -2374,7 +2374,7 @@ final class TSWP_UndoTransaction {
 }
 
 /// Generated wire model for `TSWP.UndoTransaction.GenericTransaction`.
-final class TSWP_UndoTransaction_GenericTransaction {
+final class TSWP_UndoTransaction_GenericTransaction: IWAMessage {
     var value1: UInt32?
     var value2: UInt32?
     var value3: UInt32?
@@ -2412,7 +2412,7 @@ final class TSWP_UndoTransaction_GenericTransaction {
 }
 
 /// Generated wire model for `TSWP.UndoTransaction.TextTransaction`.
-final class TSWP_UndoTransaction_TextTransaction {
+final class TSWP_UndoTransaction_TextTransaction: IWAMessage {
     var insertLocation: UInt32?
     var insertLength: UInt32?
     var stringToDelete: String?
@@ -2450,7 +2450,7 @@ final class TSWP_UndoTransaction_TextTransaction {
 }
 
 /// Generated wire model for `TSWP.UndoTransaction.CharIndexTransaction`.
-final class TSWP_UndoTransaction_CharIndexTransaction {
+final class TSWP_UndoTransaction_CharIndexTransaction: IWAMessage {
     var charIndex: UInt32?
     var count: UInt32?
     var object: TSP_Reference?
@@ -2488,7 +2488,7 @@ final class TSWP_UndoTransaction_CharIndexTransaction {
 }
 
 /// Generated wire model for `TSWP.UndoTransaction.ReplaceCharIndexTransaction`.
-final class TSWP_UndoTransaction_ReplaceCharIndexTransaction {
+final class TSWP_UndoTransaction_ReplaceCharIndexTransaction: IWAMessage {
     var attributeIndex: UInt32?
     var charIndex: UInt32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -2520,7 +2520,7 @@ final class TSWP_UndoTransaction_ReplaceCharIndexTransaction {
 }
 
 /// Generated wire model for `TSWP.UndoTransaction.AttributeIndexTransaction`.
-final class TSWP_UndoTransaction_AttributeIndexTransaction {
+final class TSWP_UndoTransaction_AttributeIndexTransaction: IWAMessage {
     var attributeIndex: UInt32?
     var charIndex: UInt32?
     var object: TSP_Reference?
@@ -2564,7 +2564,7 @@ final class TSWP_UndoTransaction_AttributeIndexTransaction {
 }
 
 /// Generated wire model for `TSWP.UndoTransaction.InsertAttributeTransaction`.
-final class TSWP_UndoTransaction_InsertAttributeTransaction {
+final class TSWP_UndoTransaction_InsertAttributeTransaction: IWAMessage {
     var attributeIndex: UInt32?
     var attributeCount: UInt32?
     var object: TSP_Reference?
@@ -2608,7 +2608,7 @@ final class TSWP_UndoTransaction_InsertAttributeTransaction {
 }
 
 /// Generated wire model for `TSWP.UndoTransaction.InsertNilTransaction`.
-final class TSWP_UndoTransaction_InsertNilTransaction {
+final class TSWP_UndoTransaction_InsertNilTransaction: IWAMessage {
     var attributeIndex: UInt32?
     var attributeCount: UInt32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -2640,7 +2640,7 @@ final class TSWP_UndoTransaction_InsertNilTransaction {
 }
 
 /// Generated wire model for `TSWP.UndoTransaction.CharDeltaTransaction`.
-final class TSWP_UndoTransaction_CharDeltaTransaction {
+final class TSWP_UndoTransaction_CharDeltaTransaction: IWAMessage {
     var charIndex: UInt32?
     var attributeIndex: UInt32?
     var charDelta: Int32?
@@ -2678,7 +2678,7 @@ final class TSWP_UndoTransaction_CharDeltaTransaction {
 }
 
 /// Generated wire model for `TSWP.UndoTransaction.ParagraphDataTransaction`.
-final class TSWP_UndoTransaction_ParagraphDataTransaction {
+final class TSWP_UndoTransaction_ParagraphDataTransaction: IWAMessage {
     var attributeIndex: UInt32?
     var first: UInt32?
     var second: UInt32?
@@ -2722,7 +2722,7 @@ final class TSWP_UndoTransaction_ParagraphDataTransaction {
 }
 
 /// Generated wire model for `TSWP.UndoTransaction.ObjectDOLCTransaction`.
-final class TSWP_UndoTransaction_ObjectDOLCTransaction {
+final class TSWP_UndoTransaction_ObjectDOLCTransaction: IWAMessage {
     var flags: UInt32?
     var object: TSP_Reference?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -2754,7 +2754,7 @@ final class TSWP_UndoTransaction_ObjectDOLCTransaction {
 }
 
 /// Generated wire model for `TSWP.UndoTransaction.CTDateTransaction`.
-final class TSWP_UndoTransaction_CTDateTransaction {
+final class TSWP_UndoTransaction_CTDateTransaction: IWAMessage {
     var attributeIndex: UInt32?
     var date: TSP_Date?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -2786,7 +2786,7 @@ final class TSWP_UndoTransaction_CTDateTransaction {
 }
 
 /// Generated wire model for `TSWP.UndoTransaction.UnionTransaction`.
-final class TSWP_UndoTransaction_UnionTransaction {
+final class TSWP_UndoTransaction_UnionTransaction: IWAMessage {
     var kind: Int32?
     var table: UInt32?
     var generic: TSWP_UndoTransaction_GenericTransaction?
@@ -2884,7 +2884,7 @@ final class TSWP_UndoTransaction_UnionTransaction {
 }
 
 /// Generated wire model for `TSWP.UndoTransaction.StorageAction`.
-final class TSWP_UndoTransaction_StorageAction {
+final class TSWP_UndoTransaction_StorageAction: IWAMessage {
     var kind: Int32?
     var flags: UInt32?
     var table: UInt32?
@@ -2982,7 +2982,7 @@ final class TSWP_UndoTransaction_StorageAction {
 }
 
 /// Generated wire model for `TSWP.UndoTransaction.StorageActionGroup`.
-final class TSWP_UndoTransaction_StorageActionGroup {
+final class TSWP_UndoTransaction_StorageActionGroup: IWAMessage {
     var kind: Int32?
     var forwardActions: [TSWP_UndoTransaction_StorageAction] = []
     var inverseForwardActions: [TSWP_UndoTransaction_StorageAction] = []
@@ -3026,7 +3026,7 @@ final class TSWP_UndoTransaction_StorageActionGroup {
 }
 
 /// Generated wire model for `TSWP.UndoTransactionWrapperArchive`.
-final class TSWP_UndoTransactionWrapperArchive {
+final class TSWP_UndoTransactionWrapperArchive: IWAMessage {
     var undoTransaction: TSWP_UndoTransaction?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -3052,7 +3052,7 @@ final class TSWP_UndoTransactionWrapperArchive {
 }
 
 /// Generated wire model for `TSWP.ShapeInfoArchive`.
-final class TSWP_ShapeInfoArchive {
+final class TSWP_ShapeInfoArchive: IWAMessage {
     var `super`: TSD_ShapeArchive?
     var deprecatedStorage: TSP_Reference?
     var textFlow: TSP_Reference?
@@ -3102,7 +3102,7 @@ final class TSWP_ShapeInfoArchive {
 }
 
 /// Generated wire model for `TSWP.CommentInfoArchive`.
-final class TSWP_CommentInfoArchive {
+final class TSWP_CommentInfoArchive: IWAMessage {
     var `super`: TSWP_ShapeInfoArchive?
     var commentStorage: TSP_Reference?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -3134,7 +3134,7 @@ final class TSWP_CommentInfoArchive {
 }
 
 /// Generated wire model for `TSWP.TOCInfoArchive`.
-final class TSWP_TOCInfoArchive {
+final class TSWP_TOCInfoArchive: IWAMessage {
     var `super`: TSWP_ShapeInfoArchive?
     var tocSettings: TSP_Reference?
     var tocEntryData: [TSP_Reference] = []
@@ -3184,7 +3184,7 @@ final class TSWP_TOCInfoArchive {
 }
 
 /// Generated wire model for `TSWP.TOCLayoutHintArchive`.
-final class TSWP_TOCLayoutHintArchive {
+final class TSWP_TOCLayoutHintArchive: IWAMessage {
     var charrange: TSP_Range?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -3210,7 +3210,7 @@ final class TSWP_TOCLayoutHintArchive {
 }
 
 /// Generated wire model for `TSWP.EquationInfoArchive`.
-final class TSWP_EquationInfoArchive {
+final class TSWP_EquationInfoArchive: IWAMessage {
 
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -3232,7 +3232,7 @@ final class TSWP_EquationInfoArchive {
 }
 
 /// Generated wire model for `TSWP.TextualAttachmentArchive`.
-final class TSWP_TextualAttachmentArchive {
+final class TSWP_TextualAttachmentArchive: IWAMessage {
     var stringEquivalent: String?
     var kind: Int32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -3264,7 +3264,7 @@ final class TSWP_TextualAttachmentArchive {
 }
 
 /// Generated wire model for `TSWP.TSWPTOCPageNumberAttachmentArchive`.
-final class TSWP_TSWPTOCPageNumberAttachmentArchive {
+final class TSWP_TSWPTOCPageNumberAttachmentArchive: IWAMessage {
     var `super`: TSWP_TextualAttachmentArchive?
     var pageNumber: String?
     var bookmarkName: String?
@@ -3302,7 +3302,7 @@ final class TSWP_TSWPTOCPageNumberAttachmentArchive {
 }
 
 /// Generated wire model for `TSWP.UIGraphicalAttachment`.
-final class TSWP_UIGraphicalAttachment {
+final class TSWP_UIGraphicalAttachment: IWAMessage {
 
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -3324,7 +3324,7 @@ final class TSWP_UIGraphicalAttachment {
 }
 
 /// Generated wire model for `TSWP.DrawableAttachmentArchive`.
-final class TSWP_DrawableAttachmentArchive {
+final class TSWP_DrawableAttachmentArchive: IWAMessage {
     var drawable: TSP_Reference?
     var hOffsetType: UInt32?
     var hOffset: Float?
@@ -3374,7 +3374,7 @@ final class TSWP_DrawableAttachmentArchive {
 }
 
 /// Generated wire model for `TSWP.TOCAttachmentArchive`.
-final class TSWP_TOCAttachmentArchive {
+final class TSWP_TOCAttachmentArchive: IWAMessage {
     var `super`: TSWP_DrawableAttachmentArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -3400,7 +3400,7 @@ final class TSWP_TOCAttachmentArchive {
 }
 
 /// Generated wire model for `TSWP.FootnoteReferenceAttachmentArchive`.
-final class TSWP_FootnoteReferenceAttachmentArchive {
+final class TSWP_FootnoteReferenceAttachmentArchive: IWAMessage {
     var `super`: TSWP_TextualAttachmentArchive?
     var containedStorage: TSP_Reference?
     var customMarkString: String?
@@ -3438,7 +3438,7 @@ final class TSWP_FootnoteReferenceAttachmentArchive {
 }
 
 /// Generated wire model for `TSWP.NumberAttachmentArchive`.
-final class TSWP_NumberAttachmentArchive {
+final class TSWP_NumberAttachmentArchive: IWAMessage {
     var `super`: TSWP_TextualAttachmentArchive?
     var numberFormat: UInt32?
     var stringValue: String?
@@ -3482,7 +3482,7 @@ final class TSWP_NumberAttachmentArchive {
 }
 
 /// Generated wire model for `TSWP.SmartFieldArchive`.
-final class TSWP_SmartFieldArchive {
+final class TSWP_SmartFieldArchive: IWAMessage {
     var textAttributeUuidString: String?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -3508,7 +3508,7 @@ final class TSWP_SmartFieldArchive {
 }
 
 /// Generated wire model for `TSWP.HyperlinkFieldArchive`.
-final class TSWP_HyperlinkFieldArchive {
+final class TSWP_HyperlinkFieldArchive: IWAMessage {
     var `super`: TSWP_SmartFieldArchive?
     var urlRef: String?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -3540,7 +3540,7 @@ final class TSWP_HyperlinkFieldArchive {
 }
 
 /// Generated wire model for `TSWP.PlaceholderSmartFieldArchive`.
-final class TSWP_PlaceholderSmartFieldArchive {
+final class TSWP_PlaceholderSmartFieldArchive: IWAMessage {
     var `super`: TSWP_SmartFieldArchive?
     var localizable: Bool?
     var scriptTag: String?
@@ -3578,7 +3578,7 @@ final class TSWP_PlaceholderSmartFieldArchive {
 }
 
 /// Generated wire model for `TSWP.UnsupportedHyperlinkFieldArchive`.
-final class TSWP_UnsupportedHyperlinkFieldArchive {
+final class TSWP_UnsupportedHyperlinkFieldArchive: IWAMessage {
     var `super`: TSWP_PlaceholderSmartFieldArchive?
     var urlRef: String?
     var urlOriginalRef: String?
@@ -3616,7 +3616,7 @@ final class TSWP_UnsupportedHyperlinkFieldArchive {
 }
 
 /// Generated wire model for `TSWP.BibliographySmartFieldArchive`.
-final class TSWP_BibliographySmartFieldArchive {
+final class TSWP_BibliographySmartFieldArchive: IWAMessage {
     var `super`: TSWP_SmartFieldArchive?
     var citationRecords: [TSP_Reference] = []
     var localizable: Bool?
@@ -3660,7 +3660,7 @@ final class TSWP_BibliographySmartFieldArchive {
 }
 
 /// Generated wire model for `TSWP.CitationRecordArchive`.
-final class TSWP_CitationRecordArchive {
+final class TSWP_CitationRecordArchive: IWAMessage {
     var endnoteXml: String?
     var hideAuthorNames: Bool?
     var hideYear: Bool?
@@ -3740,7 +3740,7 @@ final class TSWP_CitationRecordArchive {
 }
 
 /// Generated wire model for `TSWP.CitationSmartFieldArchive`.
-final class TSWP_CitationSmartFieldArchive {
+final class TSWP_CitationSmartFieldArchive: IWAMessage {
     var `super`: TSWP_SmartFieldArchive?
     var citationRecords: [TSP_Reference] = []
     var localizable: Bool?
@@ -3784,7 +3784,7 @@ final class TSWP_CitationSmartFieldArchive {
 }
 
 /// Generated wire model for `TSWP.DateTimeSmartFieldArchive`.
-final class TSWP_DateTimeSmartFieldArchive {
+final class TSWP_DateTimeSmartFieldArchive: IWAMessage {
     var `super`: TSWP_SmartFieldArchive?
     var format: String?
     var localeIdentifier: String?
@@ -3852,7 +3852,7 @@ final class TSWP_DateTimeSmartFieldArchive {
 }
 
 /// Generated wire model for `TSWP.BookmarkFieldArchive`.
-final class TSWP_BookmarkFieldArchive {
+final class TSWP_BookmarkFieldArchive: IWAMessage {
     var `super`: TSWP_SmartFieldArchive?
     var name: String?
     var ranged: UInt32?
@@ -3896,7 +3896,7 @@ final class TSWP_BookmarkFieldArchive {
 }
 
 /// Generated wire model for `TSWP.FilenameSmartFieldArchive`.
-final class TSWP_FilenameSmartFieldArchive {
+final class TSWP_FilenameSmartFieldArchive: IWAMessage {
     var `super`: TSWP_PlaceholderSmartFieldArchive?
     var displayFlags: UInt32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -3928,7 +3928,7 @@ final class TSWP_FilenameSmartFieldArchive {
 }
 
 /// Generated wire model for `TSWP.MergeFieldTypeArchive`.
-final class TSWP_MergeFieldTypeArchive {
+final class TSWP_MergeFieldTypeArchive: IWAMessage {
     var contactsProperty: String?
     var contactsKey: String?
     var contactsLabel: String?
@@ -3972,7 +3972,7 @@ final class TSWP_MergeFieldTypeArchive {
 }
 
 /// Generated wire model for `TSWP.MergeSmartFieldArchive`.
-final class TSWP_MergeSmartFieldArchive {
+final class TSWP_MergeSmartFieldArchive: IWAMessage {
     var `super`: TSWP_PlaceholderSmartFieldArchive?
     var contactsProperty: String?
     var contactsKey: String?
@@ -4058,7 +4058,7 @@ final class TSWP_MergeSmartFieldArchive {
 }
 
 /// Generated wire model for `TSWP.TOCSmartFieldArchive`.
-final class TSWP_TOCSmartFieldArchive {
+final class TSWP_TOCSmartFieldArchive: IWAMessage {
     var `super`: TSWP_PlaceholderSmartFieldArchive?
     var tocEntries: [TSWP_TOCSmartFieldArchive_TOCEntry] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -4090,7 +4090,7 @@ final class TSWP_TOCSmartFieldArchive {
 }
 
 /// Generated wire model for `TSWP.TOCSmartFieldArchive.TOCEntry`.
-final class TSWP_TOCSmartFieldArchive_TOCEntry {
+final class TSWP_TOCSmartFieldArchive_TOCEntry: IWAMessage {
     var bookmarkName: String?
     var targetStyle: TSP_Reference?
     var range: TSP_Range?
@@ -4128,7 +4128,7 @@ final class TSWP_TOCSmartFieldArchive_TOCEntry {
 }
 
 /// Generated wire model for `TSWP.RubyFieldArchive`.
-final class TSWP_RubyFieldArchive {
+final class TSWP_RubyFieldArchive: IWAMessage {
     var `super`: TSWP_SmartFieldArchive?
     var rubyText: String?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -4160,7 +4160,7 @@ final class TSWP_RubyFieldArchive {
 }
 
 /// Generated wire model for `TSWP.TateChuYokoFieldArchive`.
-final class TSWP_TateChuYokoFieldArchive {
+final class TSWP_TateChuYokoFieldArchive: IWAMessage {
     var `super`: TSWP_SmartFieldArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -4186,7 +4186,7 @@ final class TSWP_TateChuYokoFieldArchive {
 }
 
 /// Generated wire model for `TSWP.ChangeArchive`.
-final class TSWP_ChangeArchive {
+final class TSWP_ChangeArchive: IWAMessage {
     var kind: Int32?
     var session: TSP_Reference?
     var date: TSP_Date?
@@ -4230,7 +4230,7 @@ final class TSWP_ChangeArchive {
 }
 
 /// Generated wire model for `TSWP.ChangeSessionArchive`.
-final class TSWP_ChangeSessionArchive {
+final class TSWP_ChangeSessionArchive: IWAMessage {
     var sessionUid: UInt32?
     var author: TSP_Reference?
     var date: TSP_Date?
@@ -4268,7 +4268,7 @@ final class TSWP_ChangeSessionArchive {
 }
 
 /// Generated wire model for `TSWP.SectionPlaceholderArchive`.
-final class TSWP_SectionPlaceholderArchive {
+final class TSWP_SectionPlaceholderArchive: IWAMessage {
     var parentStorage: TSP_Reference?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -4294,7 +4294,7 @@ final class TSWP_SectionPlaceholderArchive {
 }
 
 /// Generated wire model for `TSWP.HyperlinkSelectionArchive`.
-final class TSWP_HyperlinkSelectionArchive {
+final class TSWP_HyperlinkSelectionArchive: IWAMessage {
 
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -4316,7 +4316,7 @@ final class TSWP_HyperlinkSelectionArchive {
 }
 
 /// Generated wire model for `TSWP.DateTimeSelectionArchive`.
-final class TSWP_DateTimeSelectionArchive {
+final class TSWP_DateTimeSelectionArchive: IWAMessage {
 
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -4338,7 +4338,7 @@ final class TSWP_DateTimeSelectionArchive {
 }
 
 /// Generated wire model for `TSWP.FlowInfoArchive`.
-final class TSWP_FlowInfoArchive {
+final class TSWP_FlowInfoArchive: IWAMessage {
     var textStorage: TSP_Reference?
     var textboxes: [TSP_Reference] = []
     var userInterfaceIdentifier: UInt32?
@@ -4376,7 +4376,7 @@ final class TSWP_FlowInfoArchive {
 }
 
 /// Generated wire model for `TSWP.FlowInfoContainerArchive`.
-final class TSWP_FlowInfoContainerArchive {
+final class TSWP_FlowInfoContainerArchive: IWAMessage {
     var flowInfos: [TSP_Reference] = []
     var nextUserInterfaceIdentifier: UInt32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -4408,7 +4408,7 @@ final class TSWP_FlowInfoContainerArchive {
 }
 
 /// Generated wire model for `TSWP.DropCapArchive`.
-final class TSWP_DropCapArchive {
+final class TSWP_DropCapArchive: IWAMessage {
     var type: Int32?
     var numberOfLines: UInt32?
     var numberOfRaisedLines: UInt32?
@@ -4512,7 +4512,7 @@ final class TSWP_DropCapArchive {
 }
 
 /// Generated wire model for `TSWP.DropCapStylePropertiesArchive`.
-final class TSWP_DropCapStylePropertiesArchive {
+final class TSWP_DropCapStylePropertiesArchive: IWAMessage {
     var dropCap: TSWP_DropCapArchive?
     var dropCapShapeStroke: TSD_StrokeArchive?
     var dropCapShapeFillNull: Bool?
@@ -4556,7 +4556,7 @@ final class TSWP_DropCapStylePropertiesArchive {
 }
 
 /// Generated wire model for `TSWP.DropCapStyleArchive`.
-final class TSWP_DropCapStyleArchive {
+final class TSWP_DropCapStyleArchive: IWAMessage {
     var `super`: TSS_StyleArchive?
     var overrideCount: UInt32?
     var charProperties: TSWP_CharacterStylePropertiesArchive?
@@ -4600,7 +4600,7 @@ final class TSWP_DropCapStyleArchive {
 }
 
 /// Generated wire model for `TSWP.CollaboratorTextCursorSubselectionArchive`.
-final class TSWP_CollaboratorTextCursorSubselectionArchive {
+final class TSWP_CollaboratorTextCursorSubselectionArchive: IWAMessage {
     var textSelection: TSWP_SelectionArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -4623,4 +4623,103 @@ final class TSWP_CollaboratorTextCursorSubselectionArchive {
         for _f in unknownFields { _w.append(_f) }
         return _w.bytes
     }
+}
+
+/// Registers this file's archives into the reflective catalog.
+func registerIWA_TSWPArchives(_ into: inout [(name: String, decode: (ProtobufMessage) -> IWAMessage)]) {
+    into.append(("TSWP.SelectionArchive", { TSWP_SelectionArchive($0) as IWAMessage }))
+    into.append(("TSWP.ObjectAttributeTable", { TSWP_ObjectAttributeTable($0) as IWAMessage }))
+    into.append(("TSWP.ObjectAttributeTable.ObjectAttribute", { TSWP_ObjectAttributeTable_ObjectAttribute($0) as IWAMessage }))
+    into.append(("TSWP.StringAttributeTable", { TSWP_StringAttributeTable($0) as IWAMessage }))
+    into.append(("TSWP.StringAttributeTable.StringAttribute", { TSWP_StringAttributeTable_StringAttribute($0) as IWAMessage }))
+    into.append(("TSWP.ParaDataAttributeTable", { TSWP_ParaDataAttributeTable($0) as IWAMessage }))
+    into.append(("TSWP.ParaDataAttributeTable.ParaDataAttribute", { TSWP_ParaDataAttributeTable_ParaDataAttribute($0) as IWAMessage }))
+    into.append(("TSWP.OverlappingFieldAttributeTable", { TSWP_OverlappingFieldAttributeTable($0) as IWAMessage }))
+    into.append(("TSWP.OverlappingFieldAttributeTable.OverlappingFieldAttribute", { TSWP_OverlappingFieldAttributeTable_OverlappingFieldAttribute($0) as IWAMessage }))
+    into.append(("TSWP.StorageArchive", { TSWP_StorageArchive($0) as IWAMessage }))
+    into.append(("TSWP.HighlightArchive", { TSWP_HighlightArchive($0) as IWAMessage }))
+    into.append(("TSWP.PencilAnnotationArchive", { TSWP_PencilAnnotationArchive($0) as IWAMessage }))
+    into.append(("TSWP.FontFeatureArchive", { TSWP_FontFeatureArchive($0) as IWAMessage }))
+    into.append(("TSWP.CharacterStylePropertiesArchive", { TSWP_CharacterStylePropertiesArchive($0) as IWAMessage }))
+    into.append(("TSWP.CharacterStyleArchive", { TSWP_CharacterStyleArchive($0) as IWAMessage }))
+    into.append(("TSWP.TabArchive", { TSWP_TabArchive($0) as IWAMessage }))
+    into.append(("TSWP.TabsArchive", { TSWP_TabsArchive($0) as IWAMessage }))
+    into.append(("TSWP.LineSpacingArchive", { TSWP_LineSpacingArchive($0) as IWAMessage }))
+    into.append(("TSWP.ParagraphStylePropertiesArchive", { TSWP_ParagraphStylePropertiesArchive($0) as IWAMessage }))
+    into.append(("TSWP.ParagraphStyleArchive", { TSWP_ParagraphStyleArchive($0) as IWAMessage }))
+    into.append(("TSWP.ListStyleArchive", { TSWP_ListStyleArchive($0) as IWAMessage }))
+    into.append(("TSWP.ListStyleArchive.LabelGeometry", { TSWP_ListStyleArchive_LabelGeometry($0) as IWAMessage }))
+    into.append(("TSWP.ListStyleArchive.LabelImage", { TSWP_ListStyleArchive_LabelImage($0) as IWAMessage }))
+    into.append(("TSWP.TextStylePresetArchive", { TSWP_TextStylePresetArchive($0) as IWAMessage }))
+    into.append(("TSWP.ColumnsArchive", { TSWP_ColumnsArchive($0) as IWAMessage }))
+    into.append(("TSWP.ColumnsArchive.EqualColumnsArchive", { TSWP_ColumnsArchive_EqualColumnsArchive($0) as IWAMessage }))
+    into.append(("TSWP.ColumnsArchive.NonEqualColumnsArchive", { TSWP_ColumnsArchive_NonEqualColumnsArchive($0) as IWAMessage }))
+    into.append(("TSWP.ColumnsArchive.NonEqualColumnsArchive.GapWidthArchive", { TSWP_ColumnsArchive_NonEqualColumnsArchive_GapWidthArchive($0) as IWAMessage }))
+    into.append(("TSWP.PaddingArchive", { TSWP_PaddingArchive($0) as IWAMessage }))
+    into.append(("TSWP.ColumnStylePropertiesArchive", { TSWP_ColumnStylePropertiesArchive($0) as IWAMessage }))
+    into.append(("TSWP.ColumnStyleArchive", { TSWP_ColumnStyleArchive($0) as IWAMessage }))
+    into.append(("TSWP.ShapeStylePropertiesArchive", { TSWP_ShapeStylePropertiesArchive($0) as IWAMessage }))
+    into.append(("TSWP.ShapeStyleArchive", { TSWP_ShapeStyleArchive($0) as IWAMessage }))
+    into.append(("TSWP.ThemePresetsArchive", { TSWP_ThemePresetsArchive($0) as IWAMessage }))
+    into.append(("TSWP.TextPresetDisplayItemArchive", { TSWP_TextPresetDisplayItemArchive($0) as IWAMessage }))
+    into.append(("TSWP.TOCEntryStylePropertiesArchive", { TSWP_TOCEntryStylePropertiesArchive($0) as IWAMessage }))
+    into.append(("TSWP.TOCEntryStyleArchive", { TSWP_TOCEntryStyleArchive($0) as IWAMessage }))
+    into.append(("TSWP.TOCSettingsArchive", { TSWP_TOCSettingsArchive($0) as IWAMessage }))
+    into.append(("TSWP.TOCSettingsArchive.TOCEntryData", { TSWP_TOCSettingsArchive_TOCEntryData($0) as IWAMessage }))
+    into.append(("TSWP.TOCEntryInstanceArchive", { TSWP_TOCEntryInstanceArchive($0) as IWAMessage }))
+    into.append(("TSWP.UndoTransaction", { TSWP_UndoTransaction($0) as IWAMessage }))
+    into.append(("TSWP.UndoTransaction.GenericTransaction", { TSWP_UndoTransaction_GenericTransaction($0) as IWAMessage }))
+    into.append(("TSWP.UndoTransaction.TextTransaction", { TSWP_UndoTransaction_TextTransaction($0) as IWAMessage }))
+    into.append(("TSWP.UndoTransaction.CharIndexTransaction", { TSWP_UndoTransaction_CharIndexTransaction($0) as IWAMessage }))
+    into.append(("TSWP.UndoTransaction.ReplaceCharIndexTransaction", { TSWP_UndoTransaction_ReplaceCharIndexTransaction($0) as IWAMessage }))
+    into.append(("TSWP.UndoTransaction.AttributeIndexTransaction", { TSWP_UndoTransaction_AttributeIndexTransaction($0) as IWAMessage }))
+    into.append(("TSWP.UndoTransaction.InsertAttributeTransaction", { TSWP_UndoTransaction_InsertAttributeTransaction($0) as IWAMessage }))
+    into.append(("TSWP.UndoTransaction.InsertNilTransaction", { TSWP_UndoTransaction_InsertNilTransaction($0) as IWAMessage }))
+    into.append(("TSWP.UndoTransaction.CharDeltaTransaction", { TSWP_UndoTransaction_CharDeltaTransaction($0) as IWAMessage }))
+    into.append(("TSWP.UndoTransaction.ParagraphDataTransaction", { TSWP_UndoTransaction_ParagraphDataTransaction($0) as IWAMessage }))
+    into.append(("TSWP.UndoTransaction.ObjectDOLCTransaction", { TSWP_UndoTransaction_ObjectDOLCTransaction($0) as IWAMessage }))
+    into.append(("TSWP.UndoTransaction.CTDateTransaction", { TSWP_UndoTransaction_CTDateTransaction($0) as IWAMessage }))
+    into.append(("TSWP.UndoTransaction.UnionTransaction", { TSWP_UndoTransaction_UnionTransaction($0) as IWAMessage }))
+    into.append(("TSWP.UndoTransaction.StorageAction", { TSWP_UndoTransaction_StorageAction($0) as IWAMessage }))
+    into.append(("TSWP.UndoTransaction.StorageActionGroup", { TSWP_UndoTransaction_StorageActionGroup($0) as IWAMessage }))
+    into.append(("TSWP.UndoTransactionWrapperArchive", { TSWP_UndoTransactionWrapperArchive($0) as IWAMessage }))
+    into.append(("TSWP.ShapeInfoArchive", { TSWP_ShapeInfoArchive($0) as IWAMessage }))
+    into.append(("TSWP.CommentInfoArchive", { TSWP_CommentInfoArchive($0) as IWAMessage }))
+    into.append(("TSWP.TOCInfoArchive", { TSWP_TOCInfoArchive($0) as IWAMessage }))
+    into.append(("TSWP.TOCLayoutHintArchive", { TSWP_TOCLayoutHintArchive($0) as IWAMessage }))
+    into.append(("TSWP.EquationInfoArchive", { TSWP_EquationInfoArchive($0) as IWAMessage }))
+    into.append(("TSWP.TextualAttachmentArchive", { TSWP_TextualAttachmentArchive($0) as IWAMessage }))
+    into.append(("TSWP.TSWPTOCPageNumberAttachmentArchive", { TSWP_TSWPTOCPageNumberAttachmentArchive($0) as IWAMessage }))
+    into.append(("TSWP.UIGraphicalAttachment", { TSWP_UIGraphicalAttachment($0) as IWAMessage }))
+    into.append(("TSWP.DrawableAttachmentArchive", { TSWP_DrawableAttachmentArchive($0) as IWAMessage }))
+    into.append(("TSWP.TOCAttachmentArchive", { TSWP_TOCAttachmentArchive($0) as IWAMessage }))
+    into.append(("TSWP.FootnoteReferenceAttachmentArchive", { TSWP_FootnoteReferenceAttachmentArchive($0) as IWAMessage }))
+    into.append(("TSWP.NumberAttachmentArchive", { TSWP_NumberAttachmentArchive($0) as IWAMessage }))
+    into.append(("TSWP.SmartFieldArchive", { TSWP_SmartFieldArchive($0) as IWAMessage }))
+    into.append(("TSWP.HyperlinkFieldArchive", { TSWP_HyperlinkFieldArchive($0) as IWAMessage }))
+    into.append(("TSWP.PlaceholderSmartFieldArchive", { TSWP_PlaceholderSmartFieldArchive($0) as IWAMessage }))
+    into.append(("TSWP.UnsupportedHyperlinkFieldArchive", { TSWP_UnsupportedHyperlinkFieldArchive($0) as IWAMessage }))
+    into.append(("TSWP.BibliographySmartFieldArchive", { TSWP_BibliographySmartFieldArchive($0) as IWAMessage }))
+    into.append(("TSWP.CitationRecordArchive", { TSWP_CitationRecordArchive($0) as IWAMessage }))
+    into.append(("TSWP.CitationSmartFieldArchive", { TSWP_CitationSmartFieldArchive($0) as IWAMessage }))
+    into.append(("TSWP.DateTimeSmartFieldArchive", { TSWP_DateTimeSmartFieldArchive($0) as IWAMessage }))
+    into.append(("TSWP.BookmarkFieldArchive", { TSWP_BookmarkFieldArchive($0) as IWAMessage }))
+    into.append(("TSWP.FilenameSmartFieldArchive", { TSWP_FilenameSmartFieldArchive($0) as IWAMessage }))
+    into.append(("TSWP.MergeFieldTypeArchive", { TSWP_MergeFieldTypeArchive($0) as IWAMessage }))
+    into.append(("TSWP.MergeSmartFieldArchive", { TSWP_MergeSmartFieldArchive($0) as IWAMessage }))
+    into.append(("TSWP.TOCSmartFieldArchive", { TSWP_TOCSmartFieldArchive($0) as IWAMessage }))
+    into.append(("TSWP.TOCSmartFieldArchive.TOCEntry", { TSWP_TOCSmartFieldArchive_TOCEntry($0) as IWAMessage }))
+    into.append(("TSWP.RubyFieldArchive", { TSWP_RubyFieldArchive($0) as IWAMessage }))
+    into.append(("TSWP.TateChuYokoFieldArchive", { TSWP_TateChuYokoFieldArchive($0) as IWAMessage }))
+    into.append(("TSWP.ChangeArchive", { TSWP_ChangeArchive($0) as IWAMessage }))
+    into.append(("TSWP.ChangeSessionArchive", { TSWP_ChangeSessionArchive($0) as IWAMessage }))
+    into.append(("TSWP.SectionPlaceholderArchive", { TSWP_SectionPlaceholderArchive($0) as IWAMessage }))
+    into.append(("TSWP.HyperlinkSelectionArchive", { TSWP_HyperlinkSelectionArchive($0) as IWAMessage }))
+    into.append(("TSWP.DateTimeSelectionArchive", { TSWP_DateTimeSelectionArchive($0) as IWAMessage }))
+    into.append(("TSWP.FlowInfoArchive", { TSWP_FlowInfoArchive($0) as IWAMessage }))
+    into.append(("TSWP.FlowInfoContainerArchive", { TSWP_FlowInfoContainerArchive($0) as IWAMessage }))
+    into.append(("TSWP.DropCapArchive", { TSWP_DropCapArchive($0) as IWAMessage }))
+    into.append(("TSWP.DropCapStylePropertiesArchive", { TSWP_DropCapStylePropertiesArchive($0) as IWAMessage }))
+    into.append(("TSWP.DropCapStyleArchive", { TSWP_DropCapStyleArchive($0) as IWAMessage }))
+    into.append(("TSWP.CollaboratorTextCursorSubselectionArchive", { TSWP_CollaboratorTextCursorSubselectionArchive($0) as IWAMessage }))
 }
