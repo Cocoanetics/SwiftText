@@ -6,11 +6,15 @@ import Foundation
 /// a single raw Snappy block: a varint-encoded uncompressed length followed by a
 /// sequence of literal/copy elements.
 ///
-/// `decompress` reads that format; `compress` produces it (the foundation for
-/// writing `.iwa` files). The compressor is an original LZ77 implementation per
-/// the format spec — its output is valid Snappy but not byte-identical to
-/// Google's reference (match choices differ), which is fine: any compliant
-/// decompressor reads it back.
+/// `decompress` reads that format; `compress` produces it. The compressor is a
+/// faithful port of **Snappy 1.1.9's `CompressFragment`** — the exact version Apple's
+/// iWork ships — so its output is byte-identical to Apple's, not merely a valid
+/// alternative encoding. (Established by compiling the reference Snappy at every release
+/// tag and finding 1.1.9/1.1.10 reproduce real `.pages` blocks exactly, then matching
+/// this port against the 1.1.9 binary byte-for-byte.) The decisive details: the fixed
+/// `>> (32 - 14)` hash shift masked to the table size, the `CalculateTableSize`
+/// downsizing, the `skip += bytes_between` search heuristic, and the 64/60/remainder
+/// copy chunking.
 enum Snappy {
 	enum Error: Swift.Error {
 		case truncated
@@ -126,21 +130,28 @@ enum Snappy {
 		return output
 	}
 
-	/// Hash-table size for a fragment. The open-source Snappy *downsizes* the table for
-	/// small inputs (smallest power of two ≥ the fragment length), but the build iWork
-	/// ships does **not** — it always uses the full 2¹⁴ (16384) table. RE'd from a real
-	/// document: a 938-byte block diverged only because the reference's 1024-entry table
-	/// let two distinct 4-byte keys collide and evict a match the 16384 table keeps.
-	private static func hashTableSize(_ fragmentSize: Int) -> Int { 1 << 14 }
+	/// Hash-table size for a fragment, matching Snappy's `CalculateTableSize`: the
+	/// smallest power of two ≥ the fragment length, floored at 256 and capped at 2¹⁴
+	/// (16384). iWork uses this standard downsizing (confirmed by compiling the vendored
+	/// reference Snappy and matching its per-block output against real `.pages` files).
+	private static func hashTableSize(_ fragmentSize: Int) -> Int {
+		var size = 256
+		while size < (1 << 14) && size < fragmentSize { size <<= 1 }
+		return size
+	}
 
 	private static func load32(_ input: [UInt8], _ index: Int) -> UInt32 {
 		UInt32(input[index]) | (UInt32(input[index + 1]) << 8)
 			| (UInt32(input[index + 2]) << 16) | (UInt32(input[index + 3]) << 24)
 	}
 
-	/// `(bytes * 0x1e35a7bd) >> shift` — Snappy's `HashBytes`.
-	private static func hash(_ input: [UInt8], _ index: Int, _ shift: UInt32) -> Int {
-		Int((load32(input, index) &* 0x1e35a7bd) >> shift)
+	/// Snappy's `HashBytes`: `((bytes * 0x1e35a7bd) >> (32 - kMaxHashTableBits)) & mask`.
+	/// The shift is *fixed* at 18 (kMaxHashTableBits = 14) regardless of table size; only
+	/// the `& mask` narrows it to the table. Using a table-relative shift instead — which
+	/// looks equivalent for the full 16384 table but isn't for smaller ones — was the bug
+	/// that made small blocks (1024-entry tables) diverge from Apple.
+	private static func hash(_ input: [UInt8], _ index: Int, _ mask: UInt32) -> Int {
+		Int(((load32(input, index) &* 0x1e35a7bd) >> 18) & mask)
 	}
 
 	/// Bytes that match starting at `s1`/`s2`, bounded by the fragment `end`.
@@ -154,7 +165,7 @@ enum Snappy {
 	private static func compressFragment(_ input: [UInt8], _ start: Int, _ end: Int, into output: inout [UInt8]) {
 		let fragmentSize = end - start
 		let tableSize = hashTableSize(fragmentSize)
-		let shift = UInt32(32 - tableSize.trailingZeroBitCount)   // log2(tableSize) for a power of two
+		let mask = UInt32(tableSize - 1)                          // hash is masked to the table
 		var table = [Int](repeating: 0, count: tableSize)         // positions relative to `start`; 0 ⇒ start
 		var nextEmit = start
 		let kInputMargin = 15
@@ -162,7 +173,7 @@ enum Snappy {
 		if fragmentSize >= kInputMargin {
 			let ipLimit = end - kInputMargin
 			var ip = start + 1
-			var nextHash = hash(input, ip, shift)
+			var nextHash = hash(input, ip, mask)
 
 			outer: while true {
 				var skip = 32
@@ -176,7 +187,7 @@ enum Snappy {
 					skip += bytesBetween
 					nextIP = ip + bytesBetween
 					if nextIP > ipLimit { break outer }
-					nextHash = hash(input, nextIP, shift)
+					nextHash = hash(input, nextIP, mask)
 					candidate = start + table[h]
 					table[h] = ip - start
 					if load32(input, ip) == load32(input, candidate) { break }
@@ -193,13 +204,13 @@ enum Snappy {
 					nextEmit = ip
 					if ip >= ipLimit { break outer }
 					// Insert hashes for ip-1 and ip; continue copying if ip matches.
-					let prevHash = hash(input, ip - 1, shift)
+					let prevHash = hash(input, ip - 1, mask)
 					table[prevHash] = (ip - 1) - start
-					let curHash = hash(input, ip, shift)
+					let curHash = hash(input, ip, mask)
 					candidate = start + table[curHash]
 					table[curHash] = ip - start
 					if load32(input, ip) != load32(input, candidate) {
-						nextHash = hash(input, ip + 1, shift)
+						nextHash = hash(input, ip + 1, mask)
 						ip += 1
 						break
 					}

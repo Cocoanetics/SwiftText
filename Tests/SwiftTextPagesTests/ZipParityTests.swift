@@ -93,4 +93,19 @@ struct ZipParityTests {
 			#expect(try Snappy.decompress(Snappy.compress(sample)) == sample)
 		}
 	}
+
+	/// Golden vector: the encoder reproduces Snappy 1.1.9's exact output — the version
+	/// Apple's iWork ships. Captured from the compiled reference 1.1.9 binary on a 540-byte
+	/// input (a 1024-entry hash table, the small-table path where a table-relative hash
+	/// shift previously diverged from Apple). Locks in 1.1.9 byte-fidelity without needing
+	/// the external binary.
+	@Test("snappy output is byte-identical to reference 1.1.9")
+	func snappyMatchesReference119() throws {
+		let inputB64 = "VGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZy4gVGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZy4gVGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZy4gVGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZy4gVGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZy4gVGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZy4gVGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZy4gVGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZy4gVGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZy4gVGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZy4gVGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZy4gVGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZy4g"
+		let expectedB64 = "nASwVGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZy4g/i0A/i0A/i0A/i0A/i0A/i0A/i0Aui0A"
+		let input = [UInt8](Data(base64Encoded: inputB64)!)
+		let expected = [UInt8](Data(base64Encoded: expectedB64)!)
+		#expect(Snappy.compress(input) == expected)
+		#expect(try Snappy.decompress(Snappy.compress(input)) == input)
+	}
 }
