@@ -193,6 +193,28 @@ struct MarkdownToPagesTests {
 		#expect(readBack.contains("| Pear | a *ripe* one |"))
 	}
 
+	@Test("A cell that is both aligned and formatted keeps both (alignment + inline)")
+	func tableAlignedAndFormattedCellRoundTrips() throws {
+		let url = FileManager.default.temporaryDirectory
+			.appendingPathComponent("swifttext-alignfmt-\(UUID().uuidString).pages")
+		defer { try? FileManager.default.removeItem(at: url) }
+		// Center and Right columns have a rich cell in every body row, so the column
+		// alignment can only be recovered through the rich (storage paragraph style)
+		// path — proving inline formatting and alignment compose in one cell.
+		let markdown = """
+		| Left | Center | Right |
+		|:-----|:------:|------:|
+		| a | **b** | *c* |
+		| dd | **ee** | *ff* |
+		"""
+		try MarkdownToPages.convert(markdown, to: url)
+
+		let readBack = try PagesFile(url: url).markdown()
+		#expect(readBack.contains("| --- | :-: | --: |"))      // alignment survived
+		#expect(readBack.contains("| a | **b** | *c* |"))      // formatting survived
+		#expect(readBack.contains("| dd | **ee** | *ff* |"))
+	}
+
 	/// Loads every `Index/*.iwa` object from a written `.pages` into one store.
 	private func objectStore(at url: URL) throws -> IWAObjectStore {
 		var store = IWAObjectStore()

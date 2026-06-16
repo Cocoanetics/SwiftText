@@ -93,6 +93,11 @@ enum PagesTableBuilder {
 		var styleObjects: [(id: UInt64, payload: [UInt8], parent: UInt64)]
 		var headerKeys: [Int]   // per column: style key for the header cell (≥1)
 		var bodyKeys: [Int]     // per column: style key for the body cell (0 = unstyled/left)
+		/// Per column: the paragraph-style object id a *rich* cell's storage should use
+		/// so it inherits the column's alignment (base style for left, the synthesized
+		/// alignment style for center/right). Header and body rows differ in base style.
+		var headerParaStyleIDs: [UInt64]
+		var bodyParaStyleIDs: [UInt64]
 		var maxObjectID: UInt64
 	}
 
@@ -104,6 +109,7 @@ enum PagesTableBuilder {
 		var nextKey = 2
 		var nextSynth = alignmentStyleBase + UInt64(tableIndex) * 64
 		var cache: [String: Int] = [:]
+		var synthStyleID: [String: UInt64] = [:]
 		func key(for alignment: PagesColumnAlignment, header: Bool) -> Int {
 			if alignment == .left { return header ? 1 : 0 }
 			let cacheKey = "\(alignment)-\(header)"
@@ -111,19 +117,26 @@ enum PagesTableBuilder {
 			let parent = header ? headerCellBaseStyleID : bodyCellBaseStyleID
 			let styleID = nextSynth; nextSynth += 1
 			styleObjects.append((styleID, alignmentParagraphStyle(parent: parent, alignment: alignment), parent))
+			synthStyleID[cacheKey] = styleID
 			let k = nextKey; nextKey += 1
 			entries.append((k, styleID))
 			cache[cacheKey] = k
 			return k
 		}
 		var headerKeys = [Int](), bodyKeys = [Int]()
+		var headerParaStyleIDs = [UInt64](), bodyParaStyleIDs = [UInt64]()
 		for column in 0..<table.columns {
 			let alignment = table.alignment(ofColumn: column)
 			headerKeys.append(key(for: alignment, header: true))
 			bodyKeys.append(key(for: alignment, header: false))
+			// The paragraph style a rich cell's storage uses to inherit alignment.
+			headerParaStyleIDs.append(alignment == .left ? headerCellBaseStyleID : synthStyleID["\(alignment)-true"] ?? headerCellBaseStyleID)
+			bodyParaStyleIDs.append(alignment == .left ? bodyCellBaseStyleID : synthStyleID["\(alignment)-false"] ?? bodyCellBaseStyleID)
 		}
 		return Styling(styleTable: buildStyleTable(entries), styleObjects: styleObjects,
-		               headerKeys: headerKeys, bodyKeys: bodyKeys, maxObjectID: nextSynth - 1)
+		               headerKeys: headerKeys, bodyKeys: bodyKeys,
+		               headerParaStyleIDs: headerParaStyleIDs, bodyParaStyleIDs: bodyParaStyleIDs,
+		               maxObjectID: nextSynth - 1)
 	}
 
 	/// `DataStore.styleTable` (`DataList` list-id 4): `#1` listid=4, `#2` maxKey+1,
@@ -190,7 +203,7 @@ enum PagesTableBuilder {
 	/// Splits a table's cells into plain (string DataList) and rich (a `TSWP`
 	/// StorageArchive + char styles, keyed through the rich_text_table) and builds
 	/// every object Pages needs for in-cell bold/italic.
-	static func richContent(for table: PagesTable, offset: UInt64, tableIndex: Int) -> RichContent {
+	static func richContent(for table: PagesTable, offset: UInt64, tableIndex: Int, styling: Styling) -> RichContent {
 		let C = table.columns
 		var plans = [(isRich: Bool, key: Int)]()
 		var stringEntries = [(key: Int, string: String)]()
@@ -219,7 +232,12 @@ enum PagesTableBuilder {
 				nextStringKey += 1
 			} else {
 				let isHeader = index < C
-				let paraStyle = isHeader ? headerCellBaseStyleID : bodyCellBaseStyleID
+				let column = index % C
+				// Inherit the column's alignment via the storage's own paragraph style
+				// (base style for left columns, the synthesized alignment style otherwise).
+				let paraStyle = isHeader
+					? (column < styling.headerParaStyleIDs.count ? styling.headerParaStyleIDs[column] : headerCellBaseStyleID)
+					: (column < styling.bodyParaStyleIDs.count ? styling.bodyParaStyleIDs[column] : bodyCellBaseStyleID)
 				let storageID = nextStorage; nextStorage += 1
 				let wrapperID = nextWrapper; nextWrapper += 1
 				let (payload, refs) = cellStorage(text: table.cells[index], runs: runs, paraStyle: paraStyle, charStyleID: charStyleID)
@@ -409,7 +427,7 @@ enum PagesTableBuilder {
 			let offset = UInt64(tableIndex) * idOffsetStep
 			let R = table.rows, C = table.columns
 			let styling = styling(for: table, offset: offset, tableIndex: tableIndex)
-			let rich = richContent(for: table, offset: offset, tableIndex: tableIndex)
+			let rich = richContent(for: table, offset: offset, tableIndex: tableIndex, styling: styling)
 			artifacts.maxObjectID = max(artifacts.maxObjectID, rich.maxObjectID)
 			// Regenerate the dimension-dependent payloads (with base-table references,
 			// offset below alongside every cloned object).
@@ -496,7 +514,7 @@ enum PagesTableBuilder {
 	/// `TST.Tile` — top `#4` numrows = R, `#6`/per-row `#5` are storage_version (=5,
 	/// constant — NOT counts). One `TileRowInfo` (`#5`) per row with C 28/24-byte
 	/// string cells whose `u32@12` is the cell-string key (`r*C + c + 1`).
-	static func buildTile(rows R: Int, columns C: Int, styling: Styling = Styling(styleTable: [], styleObjects: [], headerKeys: [], bodyKeys: [], maxObjectID: 0), cellPlans: [(isRich: Bool, key: Int)] = []) -> [UInt8] {
+	static func buildTile(rows R: Int, columns C: Int, styling: Styling = Styling(styleTable: [], styleObjects: [], headerKeys: [], bodyKeys: [], headerParaStyleIDs: [], bodyParaStyleIDs: [], maxObjectID: 0), cellPlans: [(isRich: Bool, key: Int)] = []) -> [UInt8] {
 		var w = ProtobufWriter()
 		w.varintField(1, 0); w.varintField(2, 0); w.varintField(3, 0)   // maxColumn/maxRow/numCells
 		w.varintField(4, UInt64(R))                                     // numrows

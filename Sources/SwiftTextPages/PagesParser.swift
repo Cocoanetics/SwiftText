@@ -454,8 +454,12 @@ final class PagesParser {
 				let isRich = start + IWork.cellTypeByteOffset < buffer.count
 					&& buffer[start + IWork.cellTypeByteOffset] == IWork.cellRichType
 				if isRich, let storageID = richStorageByKey[key], let storage = store.object(storageID) {
-					// A rich cell's text + char-style runs reconstruct the inline markup.
+					// A rich cell's text + char-style runs reconstruct the inline markup;
+					// its column alignment comes from the storage's own paragraph style.
 					grid[rowIndex][column] = cellMarkdown(storage, store: store)
+					if rowIndex >= 1, let aligned = cellAlignment(storage, store: store) {
+						columnAlignments[column] = aligned
+					}
 				} else if let string = stringsByKey[key] {
 					grid[rowIndex][column] = string
 				}
@@ -483,6 +487,16 @@ final class PagesParser {
 		}
 		let paragraph = PagesDocument.Paragraph(text: text, emphasis: spans)
 		return paragraph.renderedText(inliningImages: false, applyingEmphasis: true)
+	}
+
+	/// A rich cell carries its column's alignment in its storage's own paragraph style
+	/// (`#5` run table → style → `#12 #1`), since the `05 09` record has no styleTable
+	/// key. Returns `nil` when the style sets no explicit alignment (i.e. left).
+	private func cellAlignment(_ storage: IWAObject, store: IWAObjectStore) -> PagesDocument.Paragraph.Table.ColumnAlignment? {
+		guard let styleID = paragraphStyleRuns(storage).first(where: { $0.styleID != nil })?.styleID,
+		      let style = store.object(styleID),
+		      let value = ProtobufMessage(style.payload).message(IWork.paragraphPropertiesField)?.varint(IWork.paragraphAlignmentField) else { return nil }
+		switch value { case 1: return .right; case 2: return .center; default: return nil }
 	}
 
 	/// Parses a tile row's `u16` cell-offset array (little-endian), terminated by the
