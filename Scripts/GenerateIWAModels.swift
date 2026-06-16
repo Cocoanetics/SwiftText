@@ -2,7 +2,8 @@
 //
 // GenerateIWAModels.swift — proto2 → Swift wire-model generator.
 //
-// Reads the vendored iWork `.proto` schemas (see `Protos/`) and emits Swift
+// Reads iWork `.proto` schemas — NOT vendored here; fetch them from
+// psobot/keynote-parser (MIT), see Docs/IWA-PROTOBUF-SCHEMAS.md — and emits Swift
 // structs/enums backed by SwiftText's own `ProtobufReader`/`ProtobufWriter`
 // (no swift-protobuf runtime dependency). Each generated message:
 //   • has typed properties (optional scalars, arrays for `repeated`, nested
@@ -11,7 +12,7 @@
 //   • encodes back via `ProtobufWriter`,
 //   • preserves any unknown / un-modeled fields verbatim (lossless round-trip).
 //
-// Usage:  swift Scripts/GenerateIWAModels.swift Protos Sources/SwiftTextPages/Generated/IWA
+// Usage:  swift Scripts/GenerateIWAModels.swift <protos-dir> Sources/SwiftTextPages/Generated/IWA
 //
 import Foundation
 

@@ -543,9 +543,10 @@ becomes a rich-text cell:
 ## Typed wire models — the programmatic read/write foundation (2026-06-16)
 
 Hand-decoding each setting by edit-and-diff is superseded by **generated typed models**.
-`Scripts/GenerateIWAModels.swift` (in-house proto2→Swift generator) reads the vendored
-iWork schemas (`Protos/`, from psobot/keynote-parser, MIT — see kreuzberg issue #486 for
-the prior-art catalog) and emits `Sources/SwiftTextPages/Generated/IWA/`: **483** message
+`Scripts/GenerateIWAModels.swift` (in-house proto2→Swift generator) reads the iWork
+schemas (from psobot/keynote-parser, MIT — **not vendored here**; see
+[IWA-PROTOBUF-SCHEMAS.md](IWA-PROTOBUF-SCHEMAS.md)) and emits
+`Sources/SwiftTextPages/Generated/IWA/`: **483** message
 structs backed by SwiftText's own `ProtobufReader`/`ProtobufWriter` (no swift-protobuf
 dep), plus `IWATypeRegistry` mapping **211** IWA type numbers → models.
 
@@ -571,8 +572,10 @@ A cell's appearance comes from **three** layers, not one:
    `CellStyleArchive` (6004) carrying `cellProperties` (fill/stroke/v-align/wrap).
 
 To build a setting in code: construct the relevant generated archive and `.encoded()` it,
-then wire it into the object graph via the appropriate layer above. Regenerate models with
-`swift Scripts/GenerateIWAModels.swift Protos Sources/SwiftTextPages/Generated/IWA`.
+then wire it into the object graph via the appropriate layer above. Regenerate models by
+fetching the upstream schemas (see [IWA-PROTOBUF-SCHEMAS.md](IWA-PROTOBUF-SCHEMAS.md)) into a
+local dir and running
+`swift Scripts/GenerateIWAModels.swift <protos-dir> Sources/SwiftTextPages/Generated/IWA`.
 
 ### Per-cell appearance — IMPLEMENTED via the comprehensive model (2026-06-16)
 
