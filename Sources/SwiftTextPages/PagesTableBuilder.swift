@@ -1,5 +1,13 @@
 import Foundation
 
+/// Horizontal text alignment of a table column (from the Markdown delimiter row).
+enum PagesColumnAlignment: Equatable {
+	case left, center, right
+	/// The `TSWP.ParagraphStylePropertiesArchive.alignment` (#1) value Pages uses for
+	/// an explicit override (empirically: right = 1, center = 2; left needs no style).
+	var paragraphValue: UInt64 { self == .right ? 1 : 2 }
+}
+
 /// A table destined for native iWork (`TST`) rendering: a rectangular grid of
 /// already-flattened cell strings, row-major, with the first row as the header.
 struct PagesTable {
@@ -7,6 +15,12 @@ struct PagesTable {
 	let columns: Int
 	/// `rows * columns` cell strings, row-major (row 0 = header row).
 	let cells: [String]
+	/// Per-column horizontal alignment (count == `columns`). Defaults to all-left.
+	var alignments: [PagesColumnAlignment] = []
+
+	func alignment(ofColumn column: Int) -> PagesColumnAlignment {
+		column < alignments.count ? alignments[column] : .left
+	}
 }
 
 /// The package-level artifacts for injecting native tables into the blank template.
@@ -20,6 +34,10 @@ struct PagesTableArtifacts {
 	/// The number of tables built — drives how many id-offset clones of the captured
 	/// `Index/Tables/*` `ComponentInfo`s (and base cross-references) the writer adds.
 	var tableCount = 0
+	/// Per styleTable component id: the synthesized alignment-style object ids it
+	/// references (in `DocumentStylesheet`). The writer adds matching `ComponentInfo`
+	/// `#6` cross-references so Pages can resolve them.
+	var styleComponentRefs: [UInt64: [UInt64]] = [:]
 	/// Highest object id used across all injected tables.
 	var maxObjectID: UInt64 = 0
 }
@@ -49,6 +67,111 @@ enum PagesTableBuilder {
 	/// get offset when relocating a table; references to base-document objects don't.
 	static let capturedIDs: Set<UInt64> = Set(PagesTableTemplate.records.map(\.id))
 
+	// Cell text alignment (see PAGES_WRITING.md). A cell's tile-record word W1 keys
+	// into the styleTable (`DataList` 1733212) → a paragraph style whose `#12 #1` is
+	// the alignment override. Header/body need different bold/regular parent bases.
+	static let styleTableID: UInt64 = 1733212
+	static let defaultCellStyleID: UInt64 = 1734364   // captured cell para style (left header, key 1)
+	static let headerCellBaseStyleID: UInt64 = 1731526 // "Table Style 1" (bold) — header parent
+	static let bodyCellBaseStyleID: UInt64 = 1731527   // "Table Style 2" (regular) — body parent
+	static let stylesheetID: UInt64 = 1732613
+	/// Base id for synthesized per-table alignment paragraph styles (well above the
+	/// captured/relocated table id ranges and below the synthesized char-style range).
+	static let alignmentStyleBase: UInt64 = 5_000_000
+
+	/// Per-table alignment styling: the regenerated styleTable, the synthesized
+	/// paragraph-style objects (for `DocumentStylesheet`), and the per-column W1 keys.
+	struct Styling {
+		var styleTable: [UInt8]
+		var styleObjects: [(id: UInt64, payload: [UInt8], parent: UInt64)]
+		var headerKeys: [Int]   // per column: style key for the header cell (≥1)
+		var bodyKeys: [Int]     // per column: style key for the body cell (0 = unstyled/left)
+		var maxObjectID: UInt64
+	}
+
+	/// Computes the alignment styling for a table. Left columns reuse the default
+	/// (key 1 header / unstyled body); center/right columns get synthesized styles.
+	static func styling(for table: PagesTable, offset: UInt64, tableIndex: Int) -> Styling {
+		var entries: [(key: Int, ref: UInt64)] = [(1, defaultCellStyleID)]  // relocated by the record loop
+		var styleObjects: [(UInt64, [UInt8], UInt64)] = []
+		var nextKey = 2
+		var nextSynth = alignmentStyleBase + UInt64(tableIndex) * 64
+		var cache: [String: Int] = [:]
+		func key(for alignment: PagesColumnAlignment, header: Bool) -> Int {
+			if alignment == .left { return header ? 1 : 0 }
+			let cacheKey = "\(alignment)-\(header)"
+			if let existing = cache[cacheKey] { return existing }
+			let parent = header ? headerCellBaseStyleID : bodyCellBaseStyleID
+			let styleID = nextSynth; nextSynth += 1
+			styleObjects.append((styleID, alignmentParagraphStyle(parent: parent, alignment: alignment), parent))
+			let k = nextKey; nextKey += 1
+			entries.append((k, styleID))
+			cache[cacheKey] = k
+			return k
+		}
+		var headerKeys = [Int](), bodyKeys = [Int]()
+		for column in 0..<table.columns {
+			let alignment = table.alignment(ofColumn: column)
+			headerKeys.append(key(for: alignment, header: true))
+			bodyKeys.append(key(for: alignment, header: false))
+		}
+		return Styling(styleTable: buildStyleTable(entries), styleObjects: styleObjects,
+		               headerKeys: headerKeys, bodyKeys: bodyKeys, maxObjectID: nextSynth - 1)
+	}
+
+	/// `DataStore.styleTable` (`DataList` list-id 4): `#1` listid=4, `#2` maxKey+1,
+	/// repeated `#3 { #1 key, #2 refcount, #4 { #1 styleRef } }`.
+	static func buildStyleTable(_ entries: [(key: Int, ref: UInt64)]) -> [UInt8] {
+		var w = ProtobufWriter()
+		w.varintField(1, 4)
+		w.varintField(2, UInt64((entries.map(\.key).max() ?? 0) + 1))
+		for entry in entries {
+			var ref = ProtobufWriter(); ref.varintField(1, entry.ref)
+			var body = ProtobufWriter()
+			body.varintField(1, UInt64(entry.key))
+			body.varintField(2, 1)
+			body.bytesField(4, ref.bytes)
+			w.bytesField(3, body.bytes)
+		}
+		return w.bytes
+	}
+
+	/// A `TSWP.ParagraphStyleArchive` (2022) that overrides only the alignment:
+	/// `#1` super (parent base style + stylesheet), `#12` para_properties `#1` = align.
+	static func alignmentParagraphStyle(parent: UInt64, alignment: PagesColumnAlignment) -> [UInt8] {
+		var parentRef = ProtobufWriter(); parentRef.varintField(1, parent)
+		var stylesheetRef = ProtobufWriter(); stylesheetRef.varintField(1, stylesheetID)
+		var styleSuper = ProtobufWriter()
+		styleSuper.bytesField(3, parentRef.bytes)
+		styleSuper.varintField(4, 1)
+		styleSuper.bytesField(5, stylesheetRef.bytes)
+		var paraProperties = ProtobufWriter()
+		paraProperties.varintField(1, alignment.paragraphValue)
+		var w = ProtobufWriter()
+		w.bytesField(1, styleSuper.bytes)   // super
+		w.varintField(10, 1)                // #10 (present on built-in styles)
+		w.bytesField(11, [])                // #11 char_properties (empty)
+		w.bytesField(12, paraProperties.bytes)
+		return w.bytes
+	}
+
+	/// Frames a synthesized paragraph style (2022) into one IWA record. The
+	/// `MessageInfo` must carry the version (`#2`) and `object_references` (`#5` = the
+	/// parent style) Pages uses to resolve inheritance — without `#5` the parent isn't
+	/// linked and the alignment override never applies.
+	static func styleRecord(id: UInt64, payload: [UInt8], parent: UInt64) -> [UInt8] {
+		var messageInfo = ProtobufWriter()
+		messageInfo.varintField(1, 2022)              // type
+		messageInfo.bytesField(2, [0x01, 0x00, 0x05]) // version (as Pages writes for a 2022)
+		messageInfo.varintField(3, UInt64(payload.count))
+		messageInfo.packedVarintField(5, [parent])    // object_references
+		var archiveInfo = ProtobufWriter(); archiveInfo.varintField(1, id); archiveInfo.bytesField(2, messageInfo.bytes)
+		var out = ProtobufWriter.varint(UInt64(archiveInfo.bytes.count))
+		out.append(contentsOf: archiveInfo.bytes)
+		out.append(contentsOf: payload)
+		return out
+	}
+
 	/// Builds artifacts for the given tables. The first table reuses the captured
 	/// object ids; each subsequent table relocates the whole object set by a fixed
 	/// id offset (and its `Index/Tables/*` files get id-suffixed names + their own
@@ -69,16 +192,18 @@ enum PagesTableBuilder {
 		for (tableIndex, table) in tables.enumerated() {
 			let offset = UInt64(tableIndex) * idOffsetStep
 			let R = table.rows, C = table.columns
+			let styling = styling(for: table, offset: offset, tableIndex: tableIndex)
 			// Regenerate the dimension-dependent payloads (with base-table references,
 			// offset below alongside every cloned object).
 			let rewritten: [UInt64: [UInt8]] = [
 				PagesTableTemplate.columnRowUIDsID: buildColumnRowUIDs(rows: R, columns: C),
-				PagesTableTemplate.tileID: buildTile(rows: R, columns: C),
+				PagesTableTemplate.tileID: buildTile(rows: R, columns: C, styling: styling),
 				PagesTableTemplate.cellStringsID: buildCellStrings(table.cells),
 				PagesTableTemplate.modelID: patchModel(try record(PagesTableTemplate.modelID).payloadOnly, rows: R, columns: C, name: "Table \(tableIndex + 1)"),
 				PagesTableTemplate.rowHeadersBucketID: buildBucket(try record(PagesTableTemplate.rowHeadersBucketID).payloadOnly, count: R, otherDimension: C, size: rowHeight),
 				PagesTableTemplate.columnHeadersBucketID: buildBucket(try record(PagesTableTemplate.columnHeadersBucketID).payloadOnly, count: C, otherDimension: R, size: columnWidth),
 				PagesTableTemplate.tableInfoID: hideTitleAndCaption(try record(PagesTableTemplate.tableInfoID).payloadOnly),
+				styleTableID: styling.styleTable,
 			]
 
 			for entry in records {
@@ -89,13 +214,28 @@ enum PagesTableBuilder {
 				if entry.file == "Index/Metadata.iwa" { continue }
 				let recordBytes = try record(entry.id)
 				let payload = rewritten[entry.id] ?? recordBytes.payloadOnly
-				let finalRecord = relocateRecord(recordBytes, newPayload: payload, offset: offset)
+				// The regenerated styleTable now references the synthesized alignment
+				// styles, so its object_references must list them (Pages resolves cell
+				// styles through this list, not just the payload).
+				let objectReferences: [UInt64]? = entry.id == styleTableID
+					? [defaultCellStyleID + offset] + styling.styleObjects.map(\.id)
+					: nil
+				let finalRecord = relocateRecord(recordBytes, newPayload: payload, offset: offset, objectReferences: objectReferences)
 				if entry.file.hasPrefix("Index/Tables/") {
 					let path = offset == 0 ? entry.file : relocatedTablePath(entry.file, newID: entry.id + offset)
 					artifacts.newFiles[path] = [UInt8](IWAArchive.encode(stream: finalRecord))
 				} else {
 					appendStreams[entry.file, default: []].append(contentsOf: finalRecord)
 				}
+			}
+			// Synthesized alignment paragraph styles live alongside the captured cell
+			// style in DocumentStylesheet; their ids are final (not relocated).
+			for style in styling.styleObjects {
+				appendStreams["Index/DocumentStylesheet.iwa", default: []].append(contentsOf: styleRecord(id: style.id, payload: style.payload, parent: style.parent))
+				artifacts.maxObjectID = max(artifacts.maxObjectID, style.id)
+			}
+			if !styling.styleObjects.isEmpty {
+				artifacts.styleComponentRefs[styleTableID + offset] = styling.styleObjects.map(\.id)
 			}
 			artifacts.attachmentIDs.append(PagesTableTemplate.attachmentID + offset)
 		}
@@ -126,17 +266,17 @@ enum PagesTableBuilder {
 	/// `TST.Tile` — top `#4` numrows = R, `#6`/per-row `#5` are storage_version (=5,
 	/// constant — NOT counts). One `TileRowInfo` (`#5`) per row with C 28/24-byte
 	/// string cells whose `u32@12` is the cell-string key (`r*C + c + 1`).
-	static func buildTile(rows R: Int, columns C: Int) -> [UInt8] {
+	static func buildTile(rows R: Int, columns C: Int, styling: Styling = Styling(styleTable: [], styleObjects: [], headerKeys: [], bodyKeys: [], maxObjectID: 0)) -> [UInt8] {
 		var w = ProtobufWriter()
 		w.varintField(1, 0); w.varintField(2, 0); w.varintField(3, 0)   // maxColumn/maxRow/numCells
 		w.varintField(4, UInt64(R))                                     // numrows
-		for r in 0..<R { w.bytesField(5, tileRow(r, columns: C)) }
+		for r in 0..<R { w.bytesField(5, tileRow(r, columns: C, styling: styling)) }
 		w.varintField(6, 5)                                             // storage_version (constant)
 		w.varintField(7, 1)                                             // last_saved_in_BNC
 		return w.bytes
 	}
 
-	private static func tileRow(_ row: Int, columns C: Int) -> [UInt8] {
+	private static func tileRow(_ row: Int, columns C: Int, styling: Styling) -> [UInt8] {
 		let columnMeta = (0..<C).flatMap { _ -> [UInt8] in [0x04, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }
 		let metaOffsets = (0..<C).map { $0 * 12 }
 		var cells = [UInt8]()
@@ -144,7 +284,13 @@ enum PagesTableBuilder {
 		for c in 0..<C {
 			cellStarts.append(cells.count)
 			let key = row * C + c + 1
-			cells.append(contentsOf: row == 0 ? headerCell(key: key) : bodyCell(key: key))
+			if row == 0 {
+				let styleKey = c < styling.headerKeys.count ? styling.headerKeys[c] : 1
+				cells.append(contentsOf: styledCell(key: key, styleKey: styleKey))
+			} else {
+				let styleKey = c < styling.bodyKeys.count ? styling.bodyKeys[c] : 0
+				cells.append(contentsOf: styleKey == 0 ? bodyCell(key: key) : styledCell(key: key, styleKey: styleKey))
+			}
 		}
 		var w = ProtobufWriter()
 		w.varintField(1, UInt64(row))                       // tile_row_index
@@ -157,9 +303,12 @@ enum PagesTableBuilder {
 		return w.bytes
 	}
 
-	private static func headerCell(key: Int) -> [UInt8] {
-		[0x05, 0x03, 0, 0, 0, 0, 0, 0] + [0x48, 0x10, 0x02, 0x00] + u32le(key) + [0x01, 0, 0, 0, 0x05, 0, 0, 0, 0x01, 0, 0, 0]
+	/// A 28-byte string cell that carries a styleTable key in W1 (SW `0x48` sets the
+	/// has-style-key flag). `styleKey` 1 = the default cell style; >1 = an alignment style.
+	private static func styledCell(key: Int, styleKey: Int) -> [UInt8] {
+		[0x05, 0x03, 0, 0, 0, 0, 0, 0] + [0x48, 0x10, 0x02, 0x00] + u32le(key) + u32le(styleKey) + [0x05, 0, 0, 0, 0x01, 0, 0, 0]
 	}
+	/// A 24-byte string cell with no style key (SW `0x08`) — left-aligned body default.
 	private static func bodyCell(key: Int) -> [UInt8] {
 		[0x05, 0x03, 0, 0, 0, 0, 0, 0] + [0x08, 0x10, 0x02, 0x00] + u32le(key) + [0x05, 0, 0, 0, 0x01, 0, 0, 0]
 	}
@@ -263,7 +412,7 @@ enum PagesTableBuilder {
 	/// targets a captured table object are shifted by `offset`. With `offset == 0`
 	/// this is a payload swap that preserves the `ArchiveInfo` exactly. Offset ids
 	/// stay 3-byte varints (see ``idOffsetStep``), so lengths never change.
-	static func relocateRecord(_ recordBytes: [UInt8], newPayload payload: [UInt8], offset: UInt64) -> [UInt8] {
+	static func relocateRecord(_ recordBytes: [UInt8], newPayload payload: [UInt8], offset: UInt64, objectReferences: [UInt64]? = nil) -> [UInt8] {
 		let newPayload = offset == 0 ? payload : offsetReferences(payload, by: offset)
 		var pos = 0
 		func readVarint() -> UInt64 {
@@ -281,7 +430,7 @@ enum PagesTableBuilder {
 				if case .varint(let id) = field.value { aiWriter.varintField(1, shifted(id, by: offset)) } else { aiWriter.append(field) }
 			case 2:
 				guard case .lengthDelimited(let messageInfo) = field.value else { aiWriter.append(field); continue }
-				aiWriter.bytesField(2, relocateMessageInfo(messageInfo, payloadLength: newPayload.count, offset: offset))
+				aiWriter.bytesField(2, relocateMessageInfo(messageInfo, payloadLength: newPayload.count, offset: offset, objectReferences: objectReferences))
 			default:
 				aiWriter.append(field)
 			}
@@ -294,9 +443,12 @@ enum PagesTableBuilder {
 
 	/// Rebuilds a `MessageInfo`: sets the payload length (#3) and, when relocating,
 	/// shifts the packed `object_references` (#5) and each `FieldInfo`'s (#4) inline
-	/// reference list. Other fields (type, version, data_references) are preserved.
-	private static func relocateMessageInfo(_ messageInfo: [UInt8], payloadLength: Int, offset: UInt64) -> [UInt8] {
+	/// reference list. When `objectReferences` is given (e.g. a regenerated styleTable
+	/// that now points at synthesized styles), `#5` is replaced with that list so Pages
+	/// resolves the new references. Other fields (type, version) are preserved.
+	private static func relocateMessageInfo(_ messageInfo: [UInt8], payloadLength: Int, offset: UInt64, objectReferences: [UInt64]? = nil) -> [UInt8] {
 		var writer = ProtobufWriter()
+		var wroteRefs = false
 		for field in ProtobufMessage(messageInfo).fields {
 			switch field.number {
 			case 3:
@@ -304,13 +456,15 @@ enum PagesTableBuilder {
 			case 4 where offset != 0:
 				guard case .lengthDelimited(let fieldInfo) = field.value else { writer.append(field); continue }
 				writer.bytesField(4, relocateFieldInfo(fieldInfo, offset: offset))
-			case 5 where offset != 0:
-				guard case .lengthDelimited(let refs) = field.value else { writer.append(field); continue }
-				writer.bytesField(5, offsetPackedVarints(refs, by: offset))
+			case 5:
+				if let objectReferences { writer.packedVarintField(5, objectReferences); wroteRefs = true }
+				else if offset != 0, case .lengthDelimited(let refs) = field.value { writer.bytesField(5, offsetPackedVarints(refs, by: offset)) }
+				else { writer.append(field) }
 			default:
 				writer.append(field)
 			}
 		}
+		if let objectReferences, !wroteRefs { writer.packedVarintField(5, objectReferences) }
 		return writer.bytes
 	}
 
@@ -434,7 +588,7 @@ enum PagesTableBuilder {
 	/// references (`#6`/`#7`) are cloned per id offset, and every `Index/Tables/*`
 	/// `ComponentInfo` is cloned (id, locator, references shifted) for each table
 	/// beyond the first. Other fields are preserved verbatim.
-	static func relocateComponentMetadata(_ payload: [UInt8], tableCount: Int, highWaterMark: UInt64) -> [UInt8] {
+	static func relocateComponentMetadata(_ payload: [UInt8], tableCount: Int, highWaterMark: UInt64, styleComponentRefs: [UInt64: [UInt64]] = [:]) -> [UInt8] {
 		let offsets = (1..<max(tableCount, 1)).map { UInt64($0) * idOffsetStep }
 		var writer = ProtobufWriter()
 		for field in ProtobufMessage(payload).fields {
@@ -446,9 +600,10 @@ enum PagesTableBuilder {
 				let message = ProtobufMessage(componentInfo)
 				let name = message.bytes(2).map { String(decoding: $0, as: UTF8.self) } ?? ""
 				if name.hasPrefix("Tables/") {
-					// A per-table component file: keep the original, add an offset clone per table.
-					writer.bytesField(3, componentInfo)
-					for offset in offsets { writer.bytesField(3, cloneTablesComponentInfo(message, offset: offset)) }
+					// A per-table component file: keep the original (+ any alignment-style
+					// cross-references), then add an offset clone per extra table.
+					writer.bytesField(3, addingStyleCrossReferences(message, styleComponentRefs: styleComponentRefs))
+					for offset in offsets { writer.bytesField(3, cloneTablesComponentInfo(message, offset: offset, styleComponentRefs: styleComponentRefs)) }
 				} else {
 					// A shared component: keep its fields and append the offset clones of
 					// every table-involving external reference for each extra table.
@@ -463,7 +618,7 @@ enum PagesTableBuilder {
 
 	/// Clones a `Tables/*` `ComponentInfo` at an id offset: the primary id (`#1`) and
 	/// locator (`#3`) embed the shifted id; external references (`#6`/`#7`) are shifted.
-	private static func cloneTablesComponentInfo(_ info: ProtobufMessage, offset: UInt64) -> [UInt8] {
+	private static func cloneTablesComponentInfo(_ info: ProtobufMessage, offset: UInt64, styleComponentRefs: [UInt64: [UInt64]] = [:]) -> [UInt8] {
 		let id = info.varint(1) ?? 0
 		let stem = (info.bytes(2).map { String(decoding: $0, as: UTF8.self) } ?? "Tables/").split(separator: "/").last.map(String.init) ?? ""
 		var writer = ProtobufWriter()
@@ -478,7 +633,28 @@ enum PagesTableBuilder {
 		// A non-suffixed component (`#3` absent in the original) still needs a locator,
 		// because the cloned file is always id-suffixed.
 		if info.bytes(3) == nil { writer.stringField(3, "Tables/\(stem)-\(id + offset)-2") }
+		// Alignment styles synthesized for this (relocated) table's styleTable.
+		for styleID in styleComponentRefs[id + offset] ?? [] { writer.bytesField(6, crossReference(component: stylesheetID, object: styleID)) }
 		return writer.bytes
+	}
+
+	/// Re-emits a `Tables/*` `ComponentInfo` verbatim, then appends a `#6` external
+	/// reference to each synthesized alignment style its styleTable points at.
+	private static func addingStyleCrossReferences(_ info: ProtobufMessage, styleComponentRefs: [UInt64: [UInt64]]) -> [UInt8] {
+		let id = info.varint(1) ?? 0
+		guard let styleIDs = styleComponentRefs[id] else { return reencode(info) }
+		var writer = ProtobufWriter()
+		for field in info.fields { writer.append(field) }
+		for styleID in styleIDs { writer.bytesField(6, crossReference(component: stylesheetID, object: styleID)) }
+		return writer.bytes
+	}
+
+	/// An external-reference message `{ #1 component, #2 object }`.
+	private static func crossReference(component: UInt64, object: UInt64) -> [UInt8] {
+		var w = ProtobufWriter(); w.varintField(1, component); w.varintField(2, object); return w.bytes
+	}
+	private static func reencode(_ message: ProtobufMessage) -> [UInt8] {
+		var w = ProtobufWriter(); for field in message.fields { w.append(field) }; return w.bytes
 	}
 
 	/// Re-emits a `ComponentInfo`'s fields, then appends an offset clone of each

@@ -49,7 +49,7 @@ Status as built (all validated opening + rendering in Pages 14.5; 214 tests gree
 | Horizontal rule | full-width box-drawing line | ◐ visual, not a native rule object |
 | Images | italic placeholder text (alt or `[image]`) | ✅ (matches DOCX exactly) |
 | Links | **clickable** hyperlink (TSWP type 2032 object + `#11` smart-field run table) + underline | ✅ |
-| Tables | **native iWork (`TST`) grid** (header row styled), any number per document; reads back as a Markdown table | ✅ |
+| Tables | **native iWork (`TST`) grid** (header row styled, **per-column alignment** from `:--`/`:-:`/`--:`), any number per document; reads back as a Markdown table | ✅ |
 | Inline HTML / HTML blocks | raw text / dropped | ✅ (matches DOCX) |
 
 **How it works.** `MarkdownToPages.convert(_:to:)` parses with swift-markdown, walks
@@ -482,9 +482,10 @@ visibility `v/h_strokes_visible` #33/#34 + separators #35–#37, `table_border_v
 #38, stroke styles #46–#61. Header/footer counts = model #9/#10/#11. Row/col sizes =
 `HeaderStorageBucket.Header.size` #2.
 
-**Cell text alignment — mechanism decoded, NOT YET IMPLEMENTED.** Horizontal alignment
-is NOT in the cell style (`CellStylePropertiesArchive` has only `vertical_alignment` #8,
-`text_wrap` #3, fill, strokes, padding). Instead:
+**Cell text alignment — IMPLEMENTED (2026-06-16); five interlocking pieces, all
+validated by Pages.** Horizontal alignment is NOT in the cell style
+(`CellStylePropertiesArchive` has only `vertical_alignment` #8, `text_wrap` #3, fill,
+strokes, padding). Instead:
 - Each tile cell record's word **W1** (bytes 16–19, right after the 4-byte string key) is
   a **key into `DataStore.styleTable`** (the `DataList` whose list-id is 4; sample id
   1733212), NOT a direct enum.
@@ -494,13 +495,19 @@ is NOT in the cell style (`CellStylePropertiesArchive` has only `vertical_alignm
 - Pages creates a distinct style per (alignment × header/body), because the **parent**
   base differs by bold: `1731526` "Table Style 1" (bold, header) vs `1731527`
   "Table Style 2" (regular, body); both parents have `#12 #1 = 4` (natural).
-- Observed body-cell values: **right → `#12 = 08 01`**, **center → `#12 = 08 02`**.
-  The default left style (1734364) is **also `08 02`**, differing from center only by
-  parent — so `#12 #1` alone is not a clean L/C/R enum; rendered result depends on
-  parent + override together. (Unresolved: the exact left-vs-center discriminator.)
-- To set a column's alignment: synthesize the matching paragraph style(s), add a
-  styleTable entry, and set each cell's W1 to that key. Left/default columns need no
-  change.
+- `#12 #1` override values: **right = 1, center = 2**. Left columns use no override —
+  their body cells are left *unstyled* (24-byte cell, SW `0x08`, no W1), so they fall
+  back to the default left. (This is the left-vs-center resolution: left isn't a `#12`
+  value, it's the absence of a style key.)
+- **Two more references must be registered or Pages silently drops the styling / reports
+  the doc "damaged":** (a) each synth style's `MessageInfo #5` object_references must
+  list its parent; (b) the styleTable's `MessageInfo #5` must list all the synth style
+  ids; (c) the styleTable component's `PackageMetadata ComponentInfo #6` must add
+  `{component = DocumentStylesheet, object = styleId}` per synth style.
+- Done in `PagesTableBuilder.styling(for:)` / `styleRecord` / `relocateComponentMetadata`,
+  `PagesWriter.tablePackageMetadata`, and `PagesParser.tableGrid(forAttachment:)` (reads
+  the style key → style `#12` to recover the alignment marker). Works for any number of
+  tables (synth style ids are allocated per table id offset).
 
 **In-cell bold/italic — NOT decoded/implemented.** Cells store plain strings in the
 `stringTable` DataList; rich (mixed-style) cell text needs a separate rich-text storage

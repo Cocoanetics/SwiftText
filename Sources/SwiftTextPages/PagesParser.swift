@@ -79,6 +79,17 @@ final class PagesParser {
 		static let dataListStringField = 3
 		/// A string cell stores its `DataList` key as a little-endian `u32` at byte 12.
 		static let cellKeyByteOffset = 12
+		/// `DataStore.styleTable` (cell paragraph styles), entry `#4 { #1 styleRef }`.
+		static let dataStoreStyleTableField = 5
+		static let styleTableRefField = 4
+		/// A cell's flags byte (offset 8); bit `0x40` set means a styleTable key (W1)
+		/// follows the string key at byte 16.
+		static let cellFlagsByteOffset = 8
+		static let cellStyleKeyBit: UInt8 = 0x40
+		static let cellStyleKeyByteOffset = 16
+		/// `ParagraphStylePropertiesArchive.alignment` (#1): 1 = right, 2 = center.
+		static let paragraphPropertiesField = 12
+		static let paragraphAlignmentField = 1
 	}
 
 	/// The kind of list marker a paragraph's list style defines at a given level.
@@ -208,7 +219,7 @@ final class PagesParser {
 		// so offsets are tracked in UTF-16 units.
 		var current = String.UnicodeScalarView()
 		var currentAttachments = [String?]()
-		var currentTables = [[[String]]]()
+		var currentTables = [PagesDocument.Paragraph.Table]()
 		var currentEmphasis = [PagesDocument.Paragraph.EmphasisSpan]()
 		var currentFootnotes = [PagesDocument.Paragraph.FootnoteMarker]()
 		var footnoteIndex = 0
@@ -327,7 +338,7 @@ final class PagesParser {
 	/// table grid it shows, when it anchors one. Anchors for images, text boxes, etc.
 	/// resolve to nothing. Scans every run-table-shaped field for anchor references
 	/// that resolve to a drawable attachment whose chain reaches a table model.
-	private func attachmentTableGrids(in storage: IWAObject, text: String, store: IWAObjectStore) -> [Int: [[String]]] {
+	private func attachmentTableGrids(in storage: IWAObject, text: String, store: IWAObjectStore) -> [Int: PagesDocument.Paragraph.Table] {
 		var anchorOffsets = Set<Int>()
 		var offset = 0
 		for scalar in text.unicodeScalars {
@@ -336,7 +347,7 @@ final class PagesParser {
 		}
 		guard !anchorOffsets.isEmpty else { return [:] }
 
-		var grids = [Int: [[String]]]()
+		var grids = [Int: PagesDocument.Paragraph.Table]()
 		for field in ProtobufMessage(storage.payload).fields {
 			guard case .lengthDelimited(let bytes) = field.value else { continue }
 			for entry in ProtobufMessage(bytes).messages(IWork.runEntryField) {
@@ -354,9 +365,10 @@ final class PagesParser {
 
 	/// Follows a drawable attachment (`type 2003`) through its `TableInfoArchive`
 	/// (`6000`) to the `TableModelArchive` (`6001`) and reconstructs the cell grid
-	/// from the tile (cell → `DataList` key) and the cell-string list. Returns `nil`
+	/// from the tile (cell → `DataList` key) and the cell-string list, plus each
+	/// column's alignment (from the styled cells' paragraph styles). Returns `nil`
 	/// when the object isn't a table attachment.
-	private func tableGrid(forAttachment attachmentID: UInt64, store: IWAObjectStore) -> [[String]]? {
+	private func tableGrid(forAttachment attachmentID: UInt64, store: IWAObjectStore) -> PagesDocument.Paragraph.Table? {
 		guard let attachment = store.object(attachmentID), attachment.type == IWork.drawableAttachmentType,
 		      let infoID = ProtobufMessage(attachment.payload).message(IWork.referenceIdentifierField)?.varint(IWork.referenceIdentifierField),
 		      let info = store.object(infoID), info.type == IWork.tableInfoType,
@@ -379,6 +391,23 @@ final class PagesParser {
 			}
 		}
 
+		// styleTable → key → cell paragraph style id (for alignment).
+		var styleIDByKey = [UInt64: UInt64]()
+		if let styleTableID = dataStore.message(IWork.dataStoreStyleTableField)?.varint(IWork.referenceIdentifierField),
+		   let styleList = store.object(styleTableID) {
+			for entry in ProtobufMessage(styleList.payload).messages(IWork.dataListEntryField) {
+				if let key = entry.varint(IWork.dataListKeyField),
+				   let styleID = entry.message(IWork.styleTableRefField)?.varint(IWork.referenceIdentifierField) {
+					styleIDByKey[key] = styleID
+				}
+			}
+		}
+		func alignment(forStyleKey key: UInt64) -> PagesDocument.Paragraph.Table.ColumnAlignment {
+			guard let styleID = styleIDByKey[key], let style = store.object(styleID),
+			      let value = ProtobufMessage(style.payload).message(IWork.paragraphPropertiesField)?.varint(IWork.paragraphAlignmentField) else { return .left }
+			switch value { case 1: return .right; case 2: return .center; default: return .left }
+		}
+
 		// tiles → the single tile holding all rows → per-row cell keys.
 		guard let tileID = dataStore.message(IWork.dataStoreTilesField)?
 				.message(IWork.tileStorageTileField)?
@@ -387,6 +416,7 @@ final class PagesParser {
 		      let tile = store.object(tileID) else { return nil }
 
 		var grid = Array(repeating: Array(repeating: "", count: columns), count: rows)
+		var columnAlignments = Array(repeating: PagesDocument.Paragraph.Table.ColumnAlignment.left, count: columns)
 		for rowInfo in ProtobufMessage(tile.payload).messages(IWork.tileRowInfosField) {
 			guard let rowIndex = rowInfo.varint(IWork.runCharIndexField).map(Int.init), rowIndex < rows,
 			      let buffer = rowInfo.bytes(IWork.tileCellBufferField),
@@ -397,9 +427,18 @@ final class PagesParser {
 				let base = start + IWork.cellKeyByteOffset
 				let key = UInt64(buffer[base]) | UInt64(buffer[base + 1]) << 8 | UInt64(buffer[base + 2]) << 16 | UInt64(buffer[base + 3]) << 24
 				if let string = stringsByKey[key] { grid[rowIndex][column] = string }
+				// Column alignment comes from body cells: a styled cell (flag bit set)
+				// carries a styleTable key in W1; an unstyled cell is left-aligned.
+				if rowIndex >= 1, start + IWork.cellFlagsByteOffset < buffer.count,
+				   buffer[start + IWork.cellFlagsByteOffset] & IWork.cellStyleKeyBit != 0,
+				   start + IWork.cellStyleKeyByteOffset + 4 <= buffer.count {
+					let styleBase = start + IWork.cellStyleKeyByteOffset
+					let styleKey = UInt64(buffer[styleBase]) | UInt64(buffer[styleBase + 1]) << 8 | UInt64(buffer[styleBase + 2]) << 16 | UInt64(buffer[styleBase + 3]) << 24
+					columnAlignments[column] = alignment(forStyleKey: styleKey)
+				}
 			}
 		}
-		return grid
+		return PagesDocument.Paragraph.Table(cells: grid, columnAlignments: columnAlignments)
 	}
 
 	/// Parses a tile row's `u16` cell-offset array (little-endian), terminated by the

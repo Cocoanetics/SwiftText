@@ -246,7 +246,15 @@ private struct BlockVisitor: MarkupVisitor {
 			for column in 0..<columns { cells.append(column < row.count ? cellText(row[column]) : "") }
 		}
 
-		let pagesTable = PagesTable(rows: 1 + bodyRows.count, columns: columns, cells: cells)
+		let alignments: [PagesColumnAlignment] = (0..<columns).map { column in
+			switch column < table.columnAlignments.count ? table.columnAlignments[column] : nil {
+			case .center: return .center
+			case .right: return .right
+			default: return .left   // .left and unspecified both render left
+			}
+		}
+		var pagesTable = PagesTable(rows: 1 + bodyRows.count, columns: columns, cells: cells)
+		pagesTable.alignments = alignments
 		paragraphs.append(BodyParagraph(
 			text: "\u{FFFC}",
 			paragraphStyle: PagesStyleID.body,

@@ -138,6 +138,31 @@ struct MarkdownToPagesTests {
 		#expect(readBack.contains("| Bob | Dev |"))
 	}
 
+	@Test("Markdown column alignment round-trips through native table cells")
+	func tableColumnAlignmentRoundTrips() throws {
+		let url = FileManager.default.temporaryDirectory
+			.appendingPathComponent("swifttext-align-\(UUID().uuidString).pages")
+		defer { try? FileManager.default.removeItem(at: url) }
+		let markdown = """
+		| Left | Center | Right |
+		|:-----|:------:|------:|
+		| a | b | c |
+		| dd | ee | ff |
+		"""
+		try MarkdownToPages.convert(markdown, to: url)
+
+		// Alignment styles are synthesized (a right `#12 = 1` and a center `#12 = 2`
+		// paragraph style) and reachable; the delimiter row round-trips the markers.
+		let store = try objectStore(at: url)
+		let alignmentValues = store.objects(ofType: 2022)
+			.compactMap { ProtobufMessage($0.payload).message(12)?.varint(1) }
+		#expect(alignmentValues.contains(1))
+		#expect(alignmentValues.contains(2))
+
+		let readBack = try PagesFile(url: url).markdown()
+		#expect(readBack.contains("| --- | :-: | --: |"))
+	}
+
 	/// Loads every `Index/*.iwa` object from a written `.pages` into one store.
 	private func objectStore(at url: URL) throws -> IWAObjectStore {
 		var store = IWAObjectStore()

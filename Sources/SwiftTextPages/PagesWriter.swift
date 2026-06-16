@@ -72,7 +72,8 @@ public final class PagesWriter {
 				let synthesizedMax = registry.didSynthesize ? registry.maxIdentifier : 0
 				data = try tablePackageMetadata(
 					highWaterMark: max(synthesizedMax, tableArtifacts!.maxObjectID),
-					tableCount: tableArtifacts!.tableCount
+					tableCount: tableArtifacts!.tableCount,
+					styleComponentRefs: tableArtifacts!.styleComponentRefs
 				)
 			case "Metadata/Properties.plist":
 				data = try rewritingProperties(data, identity: identity)
@@ -100,7 +101,7 @@ public final class PagesWriter {
 	/// table in this document: the id high-water mark (`#1`) is raised, each extra
 	/// table's `Index/Tables/*` components are registered, and the cross-references
 	/// are cloned at the matching id offsets (see `PagesTableBuilder`).
-	private func tablePackageMetadata(highWaterMark: UInt64, tableCount: Int) throws -> [UInt8] {
+	private func tablePackageMetadata(highWaterMark: UInt64, tableCount: Int, styleComponentRefs: [UInt64: [UInt64]]) throws -> [UInt8] {
 		guard let data = Data(base64Encoded: PagesTableTemplate.metadataBase64) else {
 			throw PagesWriteError.malformedTemplate("Index/Metadata.iwa")
 		}
@@ -109,7 +110,7 @@ public final class PagesWriter {
 		}
 		let current = ProtobufMessage(packageMetadata.payload).varint(1) ?? 0
 		let updated = try IWAArchive.replacingPayload(in: data, objectID: packageMetadata.identifier) { payload in
-			PagesTableBuilder.relocateComponentMetadata(payload, tableCount: tableCount, highWaterMark: max(highWaterMark, current))
+			PagesTableBuilder.relocateComponentMetadata(payload, tableCount: tableCount, highWaterMark: max(highWaterMark, current), styleComponentRefs: styleComponentRefs)
 		}
 		return [UInt8](updated)
 	}

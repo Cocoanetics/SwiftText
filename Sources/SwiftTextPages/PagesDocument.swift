@@ -83,9 +83,21 @@ public struct PagesDocument {
 		/// Footnote reference markers within the paragraph, by paragraph-relative
 		/// UTF-16 offset, sorted. Each becomes `[^number]` in Markdown.
 		public var footnoteMarkers: [FootnoteMarker]
-		/// Native tables anchored in this paragraph, in anchor order. Each is a grid
-		/// of cell strings (row 0 = header row); rendered as a Markdown table.
-		public var tables: [[[String]]]
+		/// Native tables anchored in this paragraph, in anchor order; rendered as
+		/// Markdown tables.
+		public var tables: [Table]
+
+		/// A native table reconstructed from the iWork grid: cell strings (row 0 =
+		/// header) plus per-column horizontal alignment.
+		public struct Table {
+			public enum ColumnAlignment: Sendable { case left, center, right }
+			public var cells: [[String]]
+			public var columnAlignments: [ColumnAlignment]
+			public init(cells: [[String]], columnAlignments: [ColumnAlignment] = []) {
+				self.cells = cells
+				self.columnAlignments = columnAlignments
+			}
+		}
 
 		public init(
 			text: String,
@@ -97,7 +109,7 @@ public struct PagesDocument {
 			listLevel: Int? = nil,
 			listOrdered: Bool = false,
 			footnoteMarkers: [FootnoteMarker] = [],
-			tables: [[[String]]] = []
+			tables: [Table] = []
 		) {
 			self.text = text
 			self.fontSize = fontSize
@@ -268,7 +280,7 @@ public struct PagesDocument {
 
 		for paragraph in paragraphs {
 			// Native tables anchored in this paragraph render as Markdown table blocks.
-			for table in paragraph.tables where !table.isEmpty {
+			for table in paragraph.tables where !table.cells.isEmpty {
 				lines.append(Self.markdownTable(table))
 				isListItem.append(false)
 			}
@@ -322,8 +334,10 @@ public struct PagesDocument {
 		return output
 	}
 
-	/// Renders a cell grid (row 0 = header) as a GitHub-flavored Markdown table.
-	static func markdownTable(_ grid: [[String]]) -> String {
+	/// Renders a table (row 0 = header) as a GitHub-flavored Markdown table, with the
+	/// delimiter row encoding each column's alignment (`:--`, `:-:`, `--:`).
+	static func markdownTable(_ table: Paragraph.Table) -> String {
+		let grid = table.cells
 		let columns = grid.map(\.count).max() ?? 0
 		guard columns > 0 else { return "" }
 		func cell(_ value: String) -> String {
@@ -335,8 +349,15 @@ public struct PagesDocument {
 			let padded = (0..<columns).map { $0 < cells.count ? cell(cells[$0]) : "" }
 			return "| " + padded.joined(separator: " | ") + " |"
 		}
+		func delimiter(_ column: Int) -> String {
+			switch column < table.columnAlignments.count ? table.columnAlignments[column] : .left {
+			case .left: return "---"
+			case .center: return ":-:"
+			case .right: return "--:"
+			}
+		}
 		var lines = [row(grid[0])]
-		lines.append("| " + Array(repeating: "---", count: columns).joined(separator: " | ") + " |")
+		lines.append("| " + (0..<columns).map(delimiter).joined(separator: " | ") + " |")
 		for bodyRow in grid.dropFirst() { lines.append(row(bodyRow)) }
 		return lines.joined(separator: "\n")
 	}
