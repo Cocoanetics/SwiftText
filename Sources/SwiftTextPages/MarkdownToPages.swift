@@ -9,10 +9,34 @@ import SwiftTextMarkdown
 /// try MarkdownToPages.convert(markdownString, to: outputURL)
 /// ```
 public enum MarkdownToPages {
+	/// The two on-disk forms Pages can save (Advanced ▸ Change File Type):
+	/// a single flat zip, or a directory bundle (`Index.zip` + loose `Metadata/`/previews).
+	public enum Packaging: Sendable {
+		case singleFile
+		case package
+	}
+
 	/// Converts Markdown text to a `.pages` file at the given URL.
-	public static func convert(_ markdown: String, to url: URL) throws {
+	///
+	/// `packaging` selects the single-file (flat zip, the default) or directory-package
+	/// form. The package form is produced by writing the flat document and re-emitting it
+	/// through ``IWAPackage`` (`Index/*` into a nested `Index.zip`, everything else loose),
+	/// so both forms share the same content.
+	public static func convert(_ markdown: String, to url: URL, packaging: Packaging = .singleFile) throws {
 		let paragraphs = MarkdownPagesBuilder.paragraphs(from: markdown)
-		try PagesWriter().write(paragraphs: paragraphs, to: url)
+		switch packaging {
+		case .singleFile:
+			try PagesWriter().write(paragraphs: paragraphs, to: url)
+		case .package:
+			let temp = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("\(UUID().uuidString).pages")
+			defer { try? FileManager.default.removeItem(at: temp) }
+			try PagesWriter().write(paragraphs: paragraphs, to: temp)
+			guard let pkg = IWAPackage.read(zip: [UInt8](try Data(contentsOf: temp))) else {
+				throw PagesWriteError.malformedTemplate("flat package")
+			}
+			try? FileManager.default.removeItem(at: url)
+			try pkg.writeDirectoryPackage(to: url)
+		}
 	}
 
 	/// Parses Markdown into the body paragraphs the writer renders.

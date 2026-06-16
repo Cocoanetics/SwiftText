@@ -44,6 +44,9 @@ struct Render: AsyncParsableCommand {
 	@Flag(name: .long, help: "Use landscape orientation (default: portrait).")
 	var landscape: Bool = false
 
+	@Flag(name: .long, help: "For Pages output, write a directory-package bundle instead of a single file.")
+	var package: Bool = false
+
 	func run() async throws {
 		guard #available(macOS 12.0, *) else {
 			throw ValidationError("The markdown command requires macOS 12 or newer.")
@@ -86,7 +89,7 @@ struct Render: AsyncParsableCommand {
 			try MarkdownToDocx.convert(markdownText, to: outputURL, pageSetup: docxPageSetup())
 			print(outputURL.path)
 		case .pages:
-			try MarkdownToPages.convert(markdownText, to: outputURL)
+			try MarkdownToPages.convert(markdownText, to: outputURL, packaging: package ? .package : .singleFile)
 			print(outputURL.path)
 		}
 	}

@@ -263,6 +263,25 @@ struct MarkdownToPagesTests {
 		return store
 	}
 
+	@Test("Package form writes a directory bundle (Index.zip + loose files) that re-reads")
+	func packageFormRoundTrips() throws {
+		let url = FileManager.default.temporaryDirectory
+			.appendingPathComponent("swifttext-pkg-\(UUID().uuidString).pages")
+		defer { try? FileManager.default.removeItem(at: url) }
+		try MarkdownToPages.convert("# Hi\n\nA **bold** word.", to: url, packaging: .package)
+
+		// It's a directory bundle: nested Index.zip + loose Metadata/ and previews.
+		var isDir: ObjCBool = false
+		#expect(FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) && isDir.boolValue)
+		#expect(FileManager.default.fileExists(atPath: url.appendingPathComponent("Index.zip").path))
+		#expect(FileManager.default.fileExists(atPath: url.appendingPathComponent("Metadata").path))
+
+		// And it reads back through the normal reader with the body text intact.
+		let text = try PagesFile(url: url).plainText()
+		#expect(text.contains("Hi"))
+		#expect(text.contains("A bold word."))
+	}
+
 	@Test("A link becomes a clickable hyperlink object (type 2032) referenced from the body")
 	func linkProducesHyperlinkObject() throws {
 		let url = FileManager.default.temporaryDirectory
