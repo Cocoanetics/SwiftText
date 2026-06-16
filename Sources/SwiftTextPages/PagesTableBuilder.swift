@@ -21,12 +21,31 @@ struct PagesTable {
 	/// Per-column horizontal alignment (count == `columns`). Defaults to all-left.
 	var alignments: [PagesColumnAlignment] = []
 
+	// MARK: Comprehensive table model (programmatic styling)
+
+	/// Per-cell appearance overrides (fill / borders / vertical alignment / wrap), keyed
+	/// by row-major cell index. Each distinct appearance becomes a `CellStyleArchive`.
+	var cellAppearances: [Int: PagesCellAppearance] = [:]
+	/// Per-column widths in points (empty → captured default for every column).
+	var columnWidths: [Float] = []
+	/// Per-row heights in points (empty → captured default for every row).
+	var rowHeights: [Float] = []
+	/// Number of header rows (default 1), header columns (default 0), footer rows (default 0).
+	var headerRows = 1
+	var headerColumns = 0
+	var footerRows = 0
+
 	func alignment(ofColumn column: Int) -> PagesColumnAlignment {
 		column < alignments.count ? alignments[column] : .left
 	}
 	/// The inline runs for a cell, or `[]` (plain) when none were provided.
 	func runs(ofCell index: Int) -> [BodyParagraph.StyledRun] {
 		index < cellRuns.count ? cellRuns[index].filter { $0.length > 0 && !$0.style.isPlain } : []
+	}
+	/// The non-empty appearance for a cell, or `nil`.
+	func appearance(ofCell index: Int) -> PagesCellAppearance? {
+		guard let a = cellAppearances[index], !a.isEmpty else { return nil }
+		return a
 	}
 }
 
@@ -82,15 +101,22 @@ enum PagesTableBuilder {
 	static let headerCellBaseStyleID: UInt64 = 1731526 // "Table Style 1" (bold) — header parent
 	static let bodyCellBaseStyleID: UInt64 = 1731527   // "Table Style 2" (regular) — body parent
 	static let stylesheetID: UInt64 = 1732613
+	/// A base-template default body cell style (`CellStyleArchive` 6004 in
+	/// `DocumentStylesheet`); the parent for synthesized per-cell appearance styles.
+	static let defaultBodyCellStyleID: UInt64 = 1731720
 	/// Base id for synthesized per-table alignment paragraph styles (well above the
 	/// captured/relocated table id ranges and below the synthesized char-style range).
 	static let alignmentStyleBase: UInt64 = 5_000_000
+	/// Base id for synthesized per-table cell-appearance styles (`CellStyleArchive`).
+	static let appearanceStyleBase: UInt64 = 5_100_000
 
-	/// Per-table alignment styling: the regenerated styleTable, the synthesized
-	/// paragraph-style objects (for `DocumentStylesheet`), and the per-column W1 keys.
+	/// Per-table styling: the regenerated styleTable, the synthesized style objects (for
+	/// `DocumentStylesheet`), per-column alignment keys, and per-cell appearance keys.
+	/// `styleObjects` mixes `2022` paragraph styles (alignment) and `6004` cell styles
+	/// (appearance); the record loop appends each with its own type.
 	struct Styling {
 		var styleTable: [UInt8]
-		var styleObjects: [(id: UInt64, payload: [UInt8], parent: UInt64)]
+		var styleObjects: [(id: UInt64, payload: [UInt8], parent: UInt64, type: UInt64)]
 		var headerKeys: [Int]   // per column: style key for the header cell (≥1)
 		var bodyKeys: [Int]     // per column: style key for the body cell (0 = unstyled/left)
 		/// Per column: the paragraph-style object id a *rich* cell's storage should use
@@ -98,6 +124,9 @@ enum PagesTableBuilder {
 		/// alignment style for center/right). Header and body rows differ in base style.
 		var headerParaStyleIDs: [UInt64]
 		var bodyParaStyleIDs: [UInt64]
+		/// Per cell index: a style key for the cell's appearance (`CellStyleArchive`),
+		/// overriding the column alignment key for that cell.
+		var cellAppearanceKeys: [Int: Int] = [:]
 		var maxObjectID: UInt64
 	}
 
@@ -105,7 +134,7 @@ enum PagesTableBuilder {
 	/// (key 1 header / unstyled body); center/right columns get synthesized styles.
 	static func styling(for table: PagesTable, offset: UInt64, tableIndex: Int) -> Styling {
 		var entries: [(key: Int, ref: UInt64)] = [(1, defaultCellStyleID)]  // relocated by the record loop
-		var styleObjects: [(UInt64, [UInt8], UInt64)] = []
+		var styleObjects: [(UInt64, [UInt8], UInt64, UInt64)] = []
 		var nextKey = 2
 		var nextSynth = alignmentStyleBase + UInt64(tableIndex) * 64
 		var cache: [String: Int] = [:]
@@ -116,7 +145,7 @@ enum PagesTableBuilder {
 			if let existing = cache[cacheKey] { return existing }
 			let parent = header ? headerCellBaseStyleID : bodyCellBaseStyleID
 			let styleID = nextSynth; nextSynth += 1
-			styleObjects.append((styleID, alignmentParagraphStyle(parent: parent, alignment: alignment), parent))
+			styleObjects.append((styleID, alignmentParagraphStyle(parent: parent, alignment: alignment), parent, 2022))
 			synthStyleID[cacheKey] = styleID
 			let k = nextKey; nextKey += 1
 			entries.append((k, styleID))
@@ -133,10 +162,67 @@ enum PagesTableBuilder {
 			headerParaStyleIDs.append(alignment == .left ? headerCellBaseStyleID : synthStyleID["\(alignment)-true"] ?? headerCellBaseStyleID)
 			bodyParaStyleIDs.append(alignment == .left ? bodyCellBaseStyleID : synthStyleID["\(alignment)-false"] ?? bodyCellBaseStyleID)
 		}
+
+		// Per-cell appearance (fill / borders / vertical alignment / wrap) → a
+		// `CellStyleArchive` (6004) referenced by the cell's W1 key, overriding alignment.
+		var cellAppearanceKeys = [Int: Int]()
+		var appearanceCache = [PagesCellAppearance: Int]()
+		var nextAppearance = appearanceStyleBase + UInt64(tableIndex) * 256
+		for index in table.cells.indices {
+			guard let appearance = table.appearance(ofCell: index) else { continue }
+			if let existing = appearanceCache[appearance] { cellAppearanceKeys[index] = existing; continue }
+			let styleID = nextAppearance; nextAppearance += 1
+			styleObjects.append((styleID, cellStyleArchive(appearance, parent: defaultBodyCellStyleID), defaultBodyCellStyleID, 6004))
+			let k = nextKey; nextKey += 1
+			entries.append((k, styleID))
+			appearanceCache[appearance] = k
+			cellAppearanceKeys[index] = k
+		}
+
 		return Styling(styleTable: buildStyleTable(entries), styleObjects: styleObjects,
 		               headerKeys: headerKeys, bodyKeys: bodyKeys,
 		               headerParaStyleIDs: headerParaStyleIDs, bodyParaStyleIDs: bodyParaStyleIDs,
-		               maxObjectID: nextSynth - 1)
+		               cellAppearanceKeys: cellAppearanceKeys,
+		               maxObjectID: max(nextSynth, nextAppearance) - 1)
+	}
+
+	/// Builds a `TST.CellStyleArchive` (6004) for a cell appearance via the generated
+	/// wire models: `super` parents to a base cell style, `cell_properties` carries the
+	/// fill / strokes / vertical alignment / wrap. Lives in `DocumentStylesheet`.
+	static func cellStyleArchive(_ appearance: PagesCellAppearance, parent: UInt64) -> [UInt8] {
+		func color(_ c: PagesColor) -> TSP_Color {
+			var tsp = TSP_Color(); tsp.model = 1
+			tsp.r = c.red; tsp.g = c.green; tsp.b = c.blue; tsp.a = c.alpha
+			return tsp
+		}
+		func stroke(_ b: PagesCellBorder) -> TSD_StrokeArchive {
+			var s = TSD_StrokeArchive(); s.color = color(b.color); s.width = b.width
+			s.cap = 0; s.join = 0                      // butt cap, miter join
+			var pattern = TSD_StrokePatternArchive()
+			pattern.type = 1                           // TSDSolidPattern — required or the stroke won't render
+			pattern.phase = 0; pattern.count = 0
+			s.pattern = pattern
+			return s
+		}
+		var sup = TSS_StyleArchive()
+		var parentRef = TSP_Reference(); parentRef.identifier = parent; sup.parent = parentRef
+		sup.isVariation = true
+		var sheetRef = TSP_Reference(); sheetRef.identifier = stylesheetID; sup.stylesheet = sheetRef
+
+		var props = TST_CellStylePropertiesArchive()
+		if let fill = appearance.fill { var f = TSD_FillArchive(); f.color = color(fill); props.cellFill = f }
+		if let valign = appearance.verticalAlignment { props.verticalAlignment = valign.rawValue }
+		if let wrap = appearance.textWrap { props.textWrap = wrap }
+		if let b = appearance.topBorder { props.topStroke = stroke(b) }
+		if let b = appearance.rightBorder { props.rightStroke = stroke(b) }
+		if let b = appearance.bottomBorder { props.bottomStroke = stroke(b) }
+		if let b = appearance.leftBorder { props.leftStroke = stroke(b) }
+
+		var cellStyle = TST_CellStyleArchive()
+		cellStyle.super = sup
+		cellStyle.overrideCount = 1
+		cellStyle.cellProperties = props
+		return cellStyle.encoded()
 	}
 
 	/// `DataStore.styleTable` (`DataList` list-id 4): `#1` listid=4, `#2` maxKey+1,
@@ -441,9 +527,9 @@ enum PagesTableBuilder {
 				PagesTableTemplate.columnRowUIDsID: buildColumnRowUIDs(rows: R, columns: C),
 				PagesTableTemplate.tileID: buildTile(rows: R, columns: C, styling: styling, cellPlans: rich.cellPlans),
 				PagesTableTemplate.cellStringsID: rich.cellStrings,
-				PagesTableTemplate.modelID: patchModel(try record(PagesTableTemplate.modelID).payloadOnly, rows: R, columns: C, name: "Table \(tableIndex + 1)"),
-				PagesTableTemplate.rowHeadersBucketID: buildBucket(try record(PagesTableTemplate.rowHeadersBucketID).payloadOnly, count: R, otherDimension: C, size: rowHeight),
-				PagesTableTemplate.columnHeadersBucketID: buildBucket(try record(PagesTableTemplate.columnHeadersBucketID).payloadOnly, count: C, otherDimension: R, size: columnWidth),
+				PagesTableTemplate.modelID: patchModel(try record(PagesTableTemplate.modelID).payloadOnly, rows: R, columns: C, name: "Table \(tableIndex + 1)", headerRows: table.headerRows, headerColumns: table.headerColumns, footerRows: table.footerRows),
+				PagesTableTemplate.rowHeadersBucketID: buildBucket(try record(PagesTableTemplate.rowHeadersBucketID).payloadOnly, count: R, otherDimension: C, size: rowHeight, sizes: table.rowHeights),
+				PagesTableTemplate.columnHeadersBucketID: buildBucket(try record(PagesTableTemplate.columnHeadersBucketID).payloadOnly, count: C, otherDimension: R, size: columnWidth, sizes: table.columnWidths),
 				PagesTableTemplate.tableInfoID: hideTitleAndCaption(try record(PagesTableTemplate.tableInfoID).payloadOnly),
 				styleTableID: styling.styleTable,
 			]
@@ -476,10 +562,10 @@ enum PagesTableBuilder {
 					appendStreams[entry.file, default: []].append(contentsOf: finalRecord)
 				}
 			}
-			// Synthesized alignment paragraph styles and cell character styles live in
-			// DocumentStylesheet; their ids are final (not relocated).
+			// Synthesized alignment paragraph styles (2022) and cell-appearance styles
+			// (6004) live in DocumentStylesheet; their ids are final (not relocated).
 			for style in styling.styleObjects {
-				appendStreams["Index/DocumentStylesheet.iwa", default: []].append(contentsOf: styleRecord(id: style.id, payload: style.payload, parent: style.parent))
+				appendStreams["Index/DocumentStylesheet.iwa", default: []].append(contentsOf: styleRecord(id: style.id, payload: style.payload, parent: style.parent, type: style.type))
 				artifacts.maxObjectID = max(artifacts.maxObjectID, style.id)
 			}
 			for charStyle in rich.charStyleRecords {
@@ -541,6 +627,9 @@ enum PagesTableBuilder {
 			let plan = index < cellPlans.count ? cellPlans[index] : (isRich: false, key: index + 1)
 			if plan.isRich {
 				cells.append(contentsOf: richCell(richKey: plan.key))
+			} else if let appearanceKey = styling.cellAppearanceKeys[index] {
+				// A per-cell appearance (fill/border/v-align) overrides the column alignment.
+				cells.append(contentsOf: appearanceCell(key: plan.key, styleKey: appearanceKey))
 			} else if row == 0 {
 				let styleKey = c < styling.headerKeys.count ? styling.headerKeys[c] : 1
 				cells.append(contentsOf: styledCell(key: plan.key, styleKey: styleKey))
@@ -561,9 +650,16 @@ enum PagesTableBuilder {
 	}
 
 	/// A 28-byte string cell that carries a styleTable key in W1 (SW `0x48` sets the
-	/// has-style-key flag). `styleKey` 1 = the default cell style; >1 = an alignment style.
+	/// `0x40` *paragraph*-style bit). `styleKey` 1 = the default cell style; >1 = an
+	/// alignment paragraph style.
 	private static func styledCell(key: Int, styleKey: Int) -> [UInt8] {
 		[0x05, 0x03, 0, 0, 0, 0, 0, 0] + [0x48, 0x10, 0x02, 0x00] + u32le(key) + u32le(styleKey) + [0x05, 0, 0, 0, 0x01, 0, 0, 0]
+	}
+	/// A 28-byte string cell whose W1 keys a *cell* style (SW `0x28`, the `0x20`
+	/// cell-style bit) rather than a paragraph style — for fill / border / vertical
+	/// alignment overrides (`CellStyleArchive`). Same layout as ``styledCell``.
+	private static func appearanceCell(key: Int, styleKey: Int) -> [UInt8] {
+		[0x05, 0x03, 0, 0, 0, 0, 0, 0] + [0x28, 0x10, 0x02, 0x00] + u32le(key) + u32le(styleKey) + [0x05, 0, 0, 0, 0x01, 0, 0, 0]
 	}
 	/// A 24-byte string cell with no style key (SW `0x08`) — left-aligned body default.
 	private static func bodyCell(key: Int) -> [UInt8] {
@@ -597,24 +693,31 @@ enum PagesTableBuilder {
 	}
 
 	/// `TableModelArchive`: set `#6` rows, `#7` columns, `#8` table name, `#9` header
-	/// rows = 1, `#10` header columns = 0 (Markdown has a header row, not a column),
-	/// `#22` table_name_enabled = 0 (Markdown tables have no visible title).
-	static func patchModel(_ payload: [UInt8], rows R: Int, columns C: Int, name: String) -> [UInt8] {
+	/// rows, `#10` header columns, `#11` footer rows, `#22` table_name_enabled = 0
+	/// (Markdown tables have no visible title; the programmatic model keeps that default).
+	static func patchModel(_ payload: [UInt8], rows R: Int, columns C: Int, name: String,
+	                       headerRows: Int = 1, headerColumns: Int = 0, footerRows: Int = 0) -> [UInt8] {
+		// Header + footer rows can't overlap or exceed the row count.
+		let hr = max(0, min(headerRows, R))
+		let fr = max(0, min(footerRows, R - hr))
+		let hc = max(0, min(headerColumns, C))
 		let model = ProtobufMessage(payload)
 		var w = ProtobufWriter()
-		var wroteHeaderColumns = false, wroteNameEnabled = false
+		var wroteHeaderColumns = false, wroteFooterRows = false, wroteNameEnabled = false
 		for field in model.fields {
 			switch field.number {
 			case 6: w.varintField(6, UInt64(R))
 			case 7: w.varintField(7, UInt64(C))
 			case 8: w.stringField(8, name)
-			case 9: w.varintField(9, 1)
-			case 10: w.varintField(10, 0); wroteHeaderColumns = true
+			case 9: w.varintField(9, UInt64(hr))
+			case 10: w.varintField(10, UInt64(hc)); wroteHeaderColumns = true
+			case 11: w.varintField(11, UInt64(fr)); wroteFooterRows = true
 			case 22: w.varintField(22, 0); wroteNameEnabled = true
 			default: w.append(field)
 			}
 		}
-		if !wroteHeaderColumns { w.varintField(10, 0) }
+		if !wroteHeaderColumns { w.varintField(10, UInt64(hc)) }
+		if !wroteFooterRows, fr > 0 { w.varintField(11, UInt64(fr)) }
 		if !wroteNameEnabled { w.varintField(22, 0) }
 		return w.bytes
 	}
@@ -645,15 +748,17 @@ enum PagesTableBuilder {
 	}
 
 	/// `HeaderStorageBucket` (row heights / column widths): `count` `Header`s
-	/// `{ #1 index, #2 f32 size, #3 0, #4 otherDimension }`. The entry count is one
-	/// of the grid dimensions; reuses the captured default size for every entry.
-	static func buildBucket(_ payload: [UInt8], count: Int, otherDimension: Int, size: Float) -> [UInt8] {
+	/// `{ #1 index, #2 f32 size, #3 0, #4 otherDimension }`. The entry count is one of
+	/// the grid dimensions. `sizes` gives a per-index point size; missing entries (and
+	/// an empty array) fall back to the captured default `size`.
+	static func buildBucket(_ payload: [UInt8], count: Int, otherDimension: Int, size: Float, sizes: [Float] = []) -> [UInt8] {
 		var w = ProtobufWriter()
 		w.varintField(1, 1)                                  // bucketHashFunction
 		for index in 0..<count {
 			var header = ProtobufWriter()
 			header.varintField(1, UInt64(index))
-			header.fixed32Field(2, size.bitPattern)
+			let entrySize = index < sizes.count && sizes[index] > 0 ? sizes[index] : size
+			header.fixed32Field(2, entrySize.bitPattern)
 			header.varintField(3, 0)
 			header.varintField(4, UInt64(otherDimension))
 			w.bytesField(2, header.bytes)
