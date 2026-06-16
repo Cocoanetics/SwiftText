@@ -310,12 +310,15 @@ private struct BlockVisitor: MarkupVisitor {
 		// Not representable; the DOCX writer drops these too.
 	}
 
-	/// Maps a Markdown heading level to a template paragraph style.
+	/// Maps a Markdown heading level to a template paragraph style. The blank theme
+	/// ships Heading 1–4; deeper levels (rare) reuse Heading 4. The reader recovers the
+	/// level from each style's stable `style_identifier`, so `#`…`####` round-trip exactly.
 	private static func headingStyle(level: Int) -> UInt64 {
 		switch level {
 		case 1: return PagesStyleID.heading1
 		case 2: return PagesStyleID.heading2
-		default: return PagesStyleID.heading3
+		case 3: return PagesStyleID.heading3
+		default: return PagesStyleID.heading4
 		}
 	}
 }

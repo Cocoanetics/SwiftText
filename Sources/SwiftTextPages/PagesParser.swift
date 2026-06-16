@@ -37,6 +37,10 @@ final class PagesParser {
 		static let referenceIdentifierField = 1
 		/// Char/paragraph `…StyleArchive.char_properties`.
 		static let charPropertiesField = 11
+		/// Within a paragraph/character style: the `super` TSS.StyleArchive (field 1),
+		/// which carries `name` (field 1) and the stable `style_identifier` (field 2).
+		static let styleSuperField = 1
+		static let styleIdentifierField = 2
 		/// Within char properties: bold, italic, strikethrough, and font size.
 		static let boldField = 1
 		static let italicField = 2
@@ -256,6 +260,7 @@ final class PagesParser {
 				text: paragraphText,
 				fontSize: style.fontSize,
 				bold: style.bold,
+				headingLevel: style.headingLevel,
 				attachmentReferences: currentAttachments,
 				emphasis: currentEmphasis,
 				listLevel: listLevel,
@@ -621,24 +626,45 @@ final class PagesParser {
 		return runs
 	}
 
-	/// Finds the style active at a character index, then resolves its font size
-	/// and bold flag from the referenced paragraph-style object.
-	private func resolvedStyle(atUTF16 index: Int, runs: [(index: Int, styleID: UInt64?)], store: IWAObjectStore) -> (fontSize: Double?, bold: Bool) {
+	/// Finds the style active at a character index, then resolves its font size,
+	/// bold flag, and — for a faithful Markdown round-trip — an explicit heading
+	/// level read from the paragraph style's stable `style_identifier`.
+	private func resolvedStyle(atUTF16 index: Int, runs: [(index: Int, styleID: UInt64?)], store: IWAObjectStore) -> (fontSize: Double?, bold: Bool, headingLevel: Int?) {
 		var activeStyleID: UInt64?
 		for run in runs {
 			guard run.index <= index else { break }
 			if let styleID = run.styleID { activeStyleID = styleID }
 		}
 		guard let activeStyleID, let styleObject = store.object(activeStyleID) else {
-			return (nil, false)
+			return (nil, false, nil)
 		}
 		let style = ProtobufMessage(styleObject.payload)
+		// The paragraph style's `super` (TSS.StyleArchive, field 1) carries the stable,
+		// non-localized `style_identifier` (field 2), e.g. "…-paragraphstyle-Heading 2".
+		let level = style.message(IWork.styleSuperField)
+			.flatMap { $0.bytes(IWork.styleIdentifierField) }
+			.map { String(decoding: $0, as: UTF8.self) }
+			.flatMap(Self.headingLevel(forStyleIdentifier:))
 		guard let charProperties = style.message(IWork.charPropertiesField) else {
-			return (nil, false)
+			return (nil, false, level)
 		}
 		let bold = (charProperties.varint(IWork.boldField) ?? 0) != 0
 		let fontSize = charProperties.float(IWork.fontSizeField).map(Double.init)
-		return (fontSize, bold)
+		return (fontSize, bold, level)
+	}
+
+	/// Maps a paragraph style's `style_identifier` to a Markdown heading level so
+	/// headings round-trip exactly (`#`↔Heading 1, `##`↔Heading 2, …). The identifier
+	/// is stable across localizations (e.g. "text-11-paragraphstyle-Heading 1"); a
+	/// document Title maps to level 1. Returns nil for body/other styles, leaving the
+	/// font-size heuristic to handle documents whose styles we don't recognize.
+	static func headingLevel(forStyleIdentifier identifier: String) -> Int? {
+		guard let range = identifier.range(of: "paragraphstyle-") else { return nil }
+		let suffix = String(identifier[range.upperBound...])
+		if suffix == "Title" { return 1 }
+		if suffix.hasPrefix("Heading ") { return Int(suffix.dropFirst(8)).map { min(max($0, 1), 6) } }
+		if suffix == "Heading" { return 1 }
+		return nil
 	}
 
 	/// Reads the character-style run table, resolving each run's referenced

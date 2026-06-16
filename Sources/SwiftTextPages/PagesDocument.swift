@@ -382,12 +382,16 @@ public struct PagesDocument {
 	/// (from a legacy style name) is honored directly; otherwise the level is
 	/// derived from how much larger than the body the paragraph is set.
 	private func headingLevel(for paragraph: PagesDocument.Paragraph, text: String, bodySize: Double?) -> Int? {
-		guard !text.isEmpty, text.count <= 200, !text.contains("\n") else {
-			return nil
+		// An explicit level read from the paragraph's style is authoritative — honor it
+		// regardless of length (a styled heading is a heading even if it's long).
+		if let explicit = paragraph.headingLevel, !text.isEmpty {
+			return max(1, min(explicit, 6))
 		}
 
-		if let explicit = paragraph.headingLevel {
-			return max(1, min(explicit, 6))
+		// Otherwise fall back to typography: a heading must be short and single-line so
+		// emphasized-but-long body paragraphs aren't promoted.
+		guard !text.isEmpty, text.count <= 200, !text.contains("\n") else {
+			return nil
 		}
 
 		guard
