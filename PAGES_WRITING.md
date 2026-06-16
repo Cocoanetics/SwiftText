@@ -413,9 +413,10 @@ stylesheet, ideally collapsed into a single component.
    `Snappy.compress` **per ≤64 KiB uncompressed slice**, one `0x00`+3-byte-LE chunk
    each, no stream-id/CRC; `MessageInfo` with `#5` object_references. Pure & unit-testable.
 2. **Round-trip harness**: read a corpus `.iwa` → re-serialize via the new writer →
-   assert the object graph survives `IWAArchive.objects` (object-for-object; exact
-   bytes may differ since our Snappy match choices differ from Apple's). Then that
-   Pages opens a re-zipped, otherwise-unchanged document. Validates the writer first.
+   assert the object graph survives `IWAArchive.objects` (object-for-object). Re-emitted
+   bytes are in fact **byte-identical** to Apple's: `Snappy.compress` is a faithful port
+   of Snappy 1.1.9 (the version iWork ships — see the byte-parity section below), so a
+   re-zipped, otherwise-unchanged document reproduces the original to the byte.
 3. **Template-mutation MVP**: bundle a blank `.pages`; edit the body storage `#3`
    text + run tables; re-serialize only `Document.iwa`; re-zip (STORED) carrying
    `Metadata/`+previews; confirm Pages opens and shows the new text.
@@ -659,3 +660,30 @@ The distinction from `PagesWriter` (which surgically edits archive bytes): the s
 holds the whole document as an inspectable typed graph, so references and metadata are
 derived generically instead of hand-patched per feature — the property that lets the same
 core extend to Numbers and Keynote.
+
+---
+
+## Byte-parity round-trip + Snappy 1.1.9 (2026-06-16)
+
+Reading a `.pages` and writing it back reproduces the file **byte-for-byte**, for both
+package layouts:
+- **Flat zip** (`IWAPackage.read(zip:)` → `write(to:)`) — every Downloads document.
+- **Directory bundle** (`read(directoryPackageAt:)` → `writeDirectoryPackage(to:)`) —
+  nested `Index.zip` + loose `Metadata/`/previews, all reproduced exactly.
+
+Three layers had to be exact: (1) **ZIP container** — `StoredZipWriter.Metadata` + `ZipReader`
+preserve per-entry DOS timestamp, version-made-by (`0x3e`), and the 16-byte Zip64-style
+*local* extra field Apple puts on non-`Index/` entries; (2) **verbatim IWA** — unchanged
+components re-emit their original compressed bytes; (3) **Snappy** — see below.
+
+**Apple's iWork ships Snappy 1.1.9.** Established empirically: compiling the reference
+Snappy at every release tag (1.1.3–1.2.2) and compressing real `.pages` blocks, only
+**1.1.9/1.1.10** reproduce Apple's output on every block; older tags miss small/large
+blocks and 1.2.0+ changed the inner loop. `Snappy.compress` is now a faithful port of
+1.1.9's `CompressFragment`, **byte-identical to the reference 1.1.9 binary** on every
+Apple-authored block — so even *recompressed* (modified/synthesized) content matches
+Apple, not just verbatim round-trips. The decisive detail was the hash:
+`((bytes * 0x1e35a7bd) >> (32 - 14)) & mask` (fixed shift, then masked to the table) — a
+table-relative shift looked equivalent for the full 16384 table but took different bits
+for the downsized tables small blocks use. Reference checkout:
+`/Users/oliver/Developer/Others/snappy`.
