@@ -94,6 +94,15 @@ struct BodyParagraph {
 		var source: String
 		var alt: String
 	}
+	/// Native footnote references anchored in this paragraph: a paragraph-relative UTF-16
+	/// offset plus the note text. The writer builds the footnote objects and the body's
+	/// `#16` reference run table.
+	var footnoteRefs: [FootnoteRef] = []
+
+	struct FootnoteRef {
+		var offset: Int
+		var text: String
+	}
 	/// Inline style spans, as UTF-16 ranges within `text`.
 	var runs: [StyledRun] = []
 	/// Hyperlink spans, as UTF-16 ranges within `text` plus the destination URL.
@@ -223,7 +232,7 @@ enum PagesBodySerializer {
 	/// The paragraph separator iWork uses inside a storage's text.
 	static let paragraphSeparator = "\u{2029}"
 
-	static func body(from paragraphs: [BodyParagraph], templatePayload: [UInt8], registry: CharacterStyleRegistry) -> [UInt8] {
+	static func body(from paragraphs: [BodyParagraph], templatePayload: [UInt8], registry: CharacterStyleRegistry, footnoteMarkIDs: [UInt64] = [], footnoteCharStyleID: UInt64? = nil) -> [UInt8] {
 		// 1. Assemble the full text and each paragraph's UTF-16 start offset.
 		var fullText = ""
 		var paragraphStarts = [Int]()
@@ -259,6 +268,13 @@ enum PagesBodySerializer {
 			let start = paragraphStarts[index]
 			for run in paragraph.runs.sorted(by: { $0.start < $1.start }) where run.length > 0 && !run.style.isPlain {
 				styledRuns.append((start + run.start, start + run.start + run.length, registry.identifier(for: run.style)))
+			}
+			// Each footnote reference is a `U+000E` character; style it with the footnote
+			// mark character style so Pages renders the superscript number.
+			if let footnoteCharStyleID {
+				for ref in paragraph.footnoteRefs {
+					styledRuns.append((start + ref.offset, start + ref.offset + 1, footnoteCharStyleID))
+				}
 			}
 		}
 		var characterEntries = [(index: Int, styleID: UInt64?)]()
@@ -306,6 +322,19 @@ enum PagesBodySerializer {
 			}
 		}
 
+		// 3d. Footnote reference run table (#16): each footnote reference maps a body
+		// character index to its mark object, consumed in document order from the
+		// builder's `footnoteMarkIDs`.
+		var footnoteEntries = [(index: Int, styleID: UInt64?)]()
+		var footnoteCursor = 0
+		for (index, paragraph) in paragraphs.enumerated() {
+			let start = paragraphStarts[index]
+			for ref in paragraph.footnoteRefs.sorted(by: { $0.offset < $1.offset }) where footnoteCursor < footnoteMarkIDs.count {
+				footnoteEntries.append((start + ref.offset, footnoteMarkIDs[footnoteCursor]))
+				footnoteCursor += 1
+			}
+		}
+
 		// 4. Rebuild the storage payload: keep all template fields, override text + tables.
 		var provided: [Int: [UInt8]] = [
 			3: Array(fullText.utf8),
@@ -321,6 +350,9 @@ enum PagesBodySerializer {
 		}
 		if !hyperlinkEntries.isEmpty {
 			provided[11] = runTable(hyperlinkEntries)
+		}
+		if !footnoteEntries.isEmpty {
+			provided[16] = runTable(footnoteEntries)
 		}
 
 		let template = ProtobufMessage(templatePayload)

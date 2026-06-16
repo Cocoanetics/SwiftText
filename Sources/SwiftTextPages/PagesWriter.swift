@@ -86,6 +86,12 @@ public final class PagesWriter {
 			}
 		}
 
+		// Native footnotes: collect every note (document order = paragraph order, then
+		// offset order) and build the content storage + marks; the body serializer wires
+		// the #16 reference run table from the resulting mark ids in the same order.
+		let footnoteTexts = paragraphs.flatMap { $0.footnoteRefs.sorted { $0.offset < $1.offset }.map(\.text) }
+		let footnoteArtifacts = footnoteTexts.isEmpty ? nil : PagesFootnoteBuilder.build(footnoteTexts)
+
 		var zip = StoredZipWriter()
 		for entry in template.entries {
 			guard var data = template.data(for: entry.path) else {
@@ -93,26 +99,30 @@ public final class PagesWriter {
 			}
 			switch entry.path {
 			case "Index/Document.iwa":
-				data = try buildDocument(from: data, paragraphs: paragraphs, registry: registry, extraObjects: imageArtifacts?.objects ?? [])
+				data = try buildDocument(from: data, paragraphs: paragraphs, registry: registry,
+				                         extraObjects: (imageArtifacts?.objects ?? []) + (footnoteArtifacts?.objects ?? []),
+				                         footnoteMarkIDs: footnoteArtifacts?.bodyMarkIDs ?? [],
+				                         footnoteCharStyleID: footnoteArtifacts?.charStyleID)
 			case "Index/DocumentStylesheet.iwa":
 				data = try applyingStylesheet(to: data)
-			case "Index/Metadata.iwa" where tableArtifacts != nil || imageArtifacts != nil:
+			case "Index/Metadata.iwa" where tableArtifacts != nil || imageArtifacts != nil || footnoteArtifacts != nil:
 				// Document.iwa is processed earlier in this loop, so `registry` already
 				// reflects any synthesized objects by the time Metadata is written.
 				let synthesizedMax = registry.didSynthesize ? registry.maxIdentifier : 0
-				let imageMax = imageArtifacts?.maxObjectID ?? 0
+				let newMax = max(synthesizedMax, imageArtifacts?.maxObjectID ?? 0, footnoteArtifacts?.maxObjectID ?? 0)
 				if let tableArtifacts {
 					// Tables ship their own captured PackageMetadata (component layout).
 					data = try tablePackageMetadata(
-						highWaterMark: max(synthesizedMax, tableArtifacts.maxObjectID, imageMax),
+						highWaterMark: max(newMax, tableArtifacts.maxObjectID),
 						tableCount: tableArtifacts.tableCount,
 						styleComponentRefs: tableArtifacts.styleComponentRefs
 					)
 				}
-				if let imageArtifacts {
-					// Register each embedded image's media (DataInfo #4) + raise the id mark.
-					data = try addingImageMetadata(to: data, dataInfos: imageArtifacts.dataInfos,
-					                                highWaterMark: max(synthesizedMax, imageMax))
+				if imageArtifacts != nil || footnoteArtifacts != nil {
+					// Register embedded image media (DataInfo #4) + raise the object-id mark
+					// to cover the appended image/footnote objects.
+					data = try addingImageMetadata(to: data, dataInfos: imageArtifacts?.dataInfos ?? [],
+					                                highWaterMark: newMax)
 				}
 			case "Metadata/Properties.plist":
 				data = try rewritingProperties(data, identity: identity)
@@ -189,11 +199,11 @@ public final class PagesWriter {
 
 	/// Rebuilds `Index/Document.iwa`: replaces the body storage with serialized
 	/// paragraphs, then appends any character-style objects the body references.
-	private func buildDocument(from documentIWA: [UInt8], paragraphs: [BodyParagraph], registry: CharacterStyleRegistry, extraObjects: [IWAObject] = []) throws -> [UInt8] {
+	private func buildDocument(from documentIWA: [UInt8], paragraphs: [BodyParagraph], registry: CharacterStyleRegistry, extraObjects: [IWAObject] = [], footnoteMarkIDs: [UInt64] = [], footnoteCharStyleID: UInt64? = nil) throws -> [UInt8] {
 		let data = Data(documentIWA)
 		let bodyID = try bodyStorageIdentifier(in: data)
 		var edited = try IWAArchive.replacingPayload(in: data, objectID: bodyID) { payload in
-			PagesBodySerializer.body(from: paragraphs, templatePayload: payload, registry: registry)
+			PagesBodySerializer.body(from: paragraphs, templatePayload: payload, registry: registry, footnoteMarkIDs: footnoteMarkIDs, footnoteCharStyleID: footnoteCharStyleID)
 		}
 		if registry.didSynthesize {
 			edited = try IWAArchive.appending(registry.synthesizedObjects, to: edited)

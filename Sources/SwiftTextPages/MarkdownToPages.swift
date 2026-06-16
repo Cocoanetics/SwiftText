@@ -54,10 +54,42 @@ public enum MarkdownToPages {
 /// styled via run tables.
 enum MarkdownPagesBuilder {
 	static func paragraphs(from markdown: String) -> [BodyParagraph] {
-		let document = Document(parsing: markdown, options: [])
+		// Footnote definitions (`[^id]: …`) aren't parsed by swift-markdown — extract them
+		// (and strip them from the source) so `[^id]` references can become real footnotes.
+		let (cleaned, definitions) = extractFootnoteDefinitions(markdown)
+		let document = Document(parsing: cleaned, options: [])
 		var visitor = BlockVisitor()
+		visitor.footnoteDefinitions = definitions
 		visitor.visit(document)
 		return visitor.paragraphs
+	}
+
+	/// Pulls `[^id]: text` definition blocks out of the Markdown source (with 4-space- or
+	/// tab-indented continuation lines), returning the cleaned source and `id → text`.
+	static func extractFootnoteDefinitions(_ markdown: String) -> (cleaned: String, definitions: [String: String]) {
+		var definitions = [String: String]()
+		var keptLines = [Substring]()
+		let lines = markdown.split(separator: "\n", omittingEmptySubsequences: false)
+		var index = 0
+		while index < lines.count {
+			let line = lines[index]
+			if line.first == "[", let colon = line.range(of: "]:"), line.hasPrefix("[^") {
+				let id = String(line[line.index(line.startIndex, offsetBy: 2)..<colon.lowerBound])
+				var text = String(line[colon.upperBound...]).trimmingCharacters(in: .whitespaces)
+				// Gather indented continuation lines.
+				var next = index + 1
+				while next < lines.count, lines[next].hasPrefix("    ") || lines[next].hasPrefix("\t") {
+					text += " " + lines[next].trimmingCharacters(in: .whitespaces)
+					next += 1
+				}
+				if !id.isEmpty { definitions[id] = text }
+				index = next
+				continue
+			}
+			keptLines.append(line)
+			index += 1
+		}
+		return (keptLines.joined(separator: "\n"), definitions)
 	}
 }
 
@@ -69,10 +101,14 @@ private struct InlineCollector {
 	private(set) var text = ""
 	private(set) var runs: [BodyParagraph.StyledRun] = []
 	private(set) var links: [BodyParagraph.LinkSpan] = []
+	private(set) var footnoteRefs: [BodyParagraph.FootnoteRef] = []
 	private var style: InlineStyle
+	/// `[^id]: …` definitions; a `[^id]` reference to a defined id becomes a footnote.
+	private let footnoteDefinitions: [String: String]
 
-	init(base: InlineStyle = InlineStyle()) {
+	init(base: InlineStyle = InlineStyle(), footnoteDefinitions: [String: String] = [:]) {
 		self.style = base
+		self.footnoteDefinitions = footnoteDefinitions
 	}
 
 	mutating func collect(from container: Markup) {
@@ -87,7 +123,7 @@ private struct InlineCollector {
 	private mutating func visit(_ markup: Markup) {
 		switch markup {
 		case let text as Text:
-			append(reverseSmartPunct(text.string), style: style)
+			appendText(reverseSmartPunct(text.string))
 		case let emphasis as Emphasis:
 			withStyle({ $0.italic = true }) { $0.collect(from: emphasis) }
 		case let strong as Strong:
@@ -133,6 +169,30 @@ private struct InlineCollector {
 		}
 	}
 
+	/// Appends text, turning each `[^id]` whose id has a definition into a footnote: a
+	/// `U+000E` reference character (the writer styles it + anchors the note). swift-markdown
+	/// doesn't parse footnote syntax, so the `[^id]` survives in the `Text` node verbatim.
+	private mutating func appendText(_ string: String) {
+		guard !footnoteDefinitions.isEmpty, string.contains("[^") else { append(string, style: style); return }
+		var rest = Substring(string)
+		while let open = rest.range(of: "[^") {
+			append(String(rest[rest.startIndex..<open.lowerBound]), style: style)
+			let afterOpen = rest[open.upperBound...]
+			if let close = afterOpen.firstIndex(of: "]") {
+				let id = String(afterOpen[afterOpen.startIndex..<close])
+				if let definition = footnoteDefinitions[id] {
+					footnoteRefs.append(.init(offset: text.utf16.count, text: definition))
+					text += "\u{0E}"                              // footnote reference character
+					rest = afterOpen[afterOpen.index(after: close)...]
+					continue
+				}
+			}
+			append("[^", style: style)                          // not a footnote — emit literally
+			rest = afterOpen
+		}
+		append(String(rest), style: style)
+	}
+
 	private mutating func withStyle(_ apply: (inout InlineStyle) -> Void, _ body: (inout InlineCollector) -> Void) {
 		let saved = style
 		apply(&style)
@@ -147,6 +207,7 @@ private struct BlockVisitor: MarkupVisitor {
 	typealias Result = Void
 
 	var paragraphs: [BodyParagraph] = []
+	var footnoteDefinitions: [String: String] = [:]
 	private var listDepth = 0
 	private var blockQuoteDepth = 0
 
@@ -172,26 +233,30 @@ private struct BlockVisitor: MarkupVisitor {
 			))
 			return
 		}
-		var collector = InlineCollector()
+		var collector = InlineCollector(footnoteDefinitions: footnoteDefinitions)
 		collector.collect(from: paragraph)
-		paragraphs.append(BodyParagraph(
+		var bodyParagraph = BodyParagraph(
 			text: collector.text,
 			paragraphStyle: PagesStyleID.body,
 			blockQuote: blockQuoteDepth > 0,
 			runs: collector.runs,
 			links: collector.links
-		))
+		)
+		bodyParagraph.footnoteRefs = collector.footnoteRefs
+		paragraphs.append(bodyParagraph)
 	}
 
 	mutating func visitHeading(_ heading: Heading) {
-		var collector = InlineCollector()
+		var collector = InlineCollector(footnoteDefinitions: footnoteDefinitions)
 		collector.collect(from: heading)
-		paragraphs.append(BodyParagraph(
+		var bodyParagraph = BodyParagraph(
 			text: collector.text,
 			paragraphStyle: Self.headingStyle(level: heading.level),
 			runs: collector.runs,
 			links: collector.links
-		))
+		)
+		bodyParagraph.footnoteRefs = collector.footnoteRefs
+		paragraphs.append(bodyParagraph)
 	}
 
 	mutating func visitCodeBlock(_ codeBlock: CodeBlock) {

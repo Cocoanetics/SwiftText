@@ -250,6 +250,10 @@ public struct PagesDocument {
 				case "\u{2028}":
 					flushRun()
 					output += "\n"
+				case "\u{000E}":
+					// Footnote reference character — the `[^n]` marker is emitted separately
+					// (see emitFootnotes), so drop the placeholder char itself.
+					break
 				case "\u{FFFC}":
 					flushRun()
 					if inliningImages, anchorIndex < attachmentReferences.count,
