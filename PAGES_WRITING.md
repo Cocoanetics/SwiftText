@@ -538,3 +538,37 @@ becomes a rich-text cell:
   beyond the text length are filtered out in both the cell and body builders.
 - Reader: a `05 09` cell → rich_text_table key → 6218 wrapper → storage → `#8` run table
   → inline markup (reusing the body's emphasis machinery), plus `#5 → #12 #1` alignment.
+
+## Typed wire models — the programmatic read/write foundation (2026-06-16)
+
+Hand-decoding each setting by edit-and-diff is superseded by **generated typed models**.
+`Scripts/GenerateIWAModels.swift` (in-house proto2→Swift generator) reads the vendored
+iWork schemas (`Protos/`, from psobot/keynote-parser, MIT — see kreuzberg issue #486 for
+the prior-art catalog) and emits `Sources/SwiftTextPages/Generated/IWA/`: **483** message
+structs backed by SwiftText's own `ProtobufReader`/`ProtobufWriter` (no swift-protobuf
+dep), plus `IWATypeRegistry` mapping **211** IWA type numbers → models.
+
+Each model decodes from a `ProtobufMessage`, re-encodes via `ProtobufWriter`, honors
+`[packed]`, and preserves un-modeled fields (`unknownFields`) for lossless round-trips.
+**Validated: 3004/3004 modeled objects across six real `.pages` round-trip byte-identical
+(canonical compare).** So every documented setting is now typed and named — e.g.
+`TST_CellStylePropertiesArchive { cellFill, verticalAlignment, textWrap, padding,
+{top,right,bottom,left}Stroke }`, `TSD_FillArchive { color, gradient, image }`,
+`TSD_StrokeArchive { color, width, cap, join, … }`, `TSP_Color { model, r,g,b,a, … }`.
+
+### Cell-styling layers (decoded via the models)
+
+A cell's appearance comes from **three** layers, not one:
+1. **Table-style preset** — `TableStyleArchive` (6003) / `DefaultCellStylesContainerArchive`
+   (6302) hold the `CellStyleArchive` (6004) objects that paint header / body /
+   alternating-row fills by *region*. In `CustomTable.pages` these are the ~60 fills
+   (e.g. header `rgba(0,0.64,1,1)`); they are **not** per-cell overrides.
+2. **Per-cell paragraph override** — `DataStore.styletable` (#5, a `TableDataList`) maps a
+   cell's tile-record style key → a **`ParagraphStyleArchive` (2022)** (`#12 #1` = text
+   alignment). Confirmed: matches the committed column-alignment implementation.
+3. **Per-cell cell-style override** — a manually-filled single cell references a
+   `CellStyleArchive` (6004) carrying `cellProperties` (fill/stroke/v-align/wrap).
+
+To build a setting in code: construct the relevant generated archive and `.encoded()` it,
+then wire it into the object graph via the appropriate layer above. Regenerate models with
+`swift Scripts/GenerateIWAModels.swift Protos Sources/SwiftTextPages/Generated/IWA`.
