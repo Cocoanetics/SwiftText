@@ -163,7 +163,7 @@ private let scalarSwift: [String: String] = [
     "fixed32": "UInt32", "fixed64": "UInt64", "sfixed32": "Int32", "sfixed64": "Int64",
     "bool": "Bool", "string": "String", "bytes": "[UInt8]",
 ]
-enum Wire { case varint, zigzag, fixed32, fixed64, lengthString, lengthBytes, message, enumVarint }
+enum Wire { case varint, zigzag, fixed32, fixed64, lengthString, lengthBytes, message, enumVarint, unresolved }
 
 private func swiftTypeName(_ fqn: String) -> String { fqn.replacingOccurrences(of: ".", with: "_") }
 
@@ -239,7 +239,10 @@ func resolve(_ type: String, scopeFQN: String) -> (swift: String, wire: Wire) {
             scope.removeLast()
         }
     }
-    return ("[UInt8]", .lengthBytes)                       // unresolved (TSCE/TSCK/etc.) → raw bytes
+    return ("", .unresolved)                               // type from an un-vendored archive (or an
+                                                            // enum we don't have) → not modeled as a typed
+                                                            // field; preserved verbatim via unknownFields so
+                                                            // any wire type round-trips losslessly.
 }
 
 // Emit support runtime once.
@@ -293,6 +296,7 @@ func emitMessage(_ msg: ProtoMessage) -> String {
 
     for f in msg.fields {
         let (swift, wire) = resolve(f.type, scopeFQN: msg.fqn)
+        if wire == .unresolved { continue }   // leave to unknownFields — lossless, any wire type
         let prop = camel(f.name)
         let repeated = f.label == "repeated"
 
@@ -308,6 +312,7 @@ func emitMessage(_ msg: ProtoMessage) -> String {
         case .lengthString: read = "if case .lengthDelimited(let _b) = _f.value { _v = String(decoding: _b, as: UTF8.self) }"
         case .lengthBytes:  read = "if case .lengthDelimited(let _b) = _f.value { _v = _b }"
         case .message:      read = "if case .lengthDelimited(let _b) = _f.value { _v = \(swift)(ProtobufMessage(_b)) }"
+        case .unresolved:   read = ""   // unreachable (skipped above), present for exhaustiveness
         }
 
         if repeated && (wire == .varint || wire == .enumVarint || wire == .zigzag) {
@@ -389,6 +394,7 @@ func encodeStatement(field: Int, wire: Wire, swift: String, valueExpr x: String)
     case .lengthString: return "_w.stringField(\(field), \(x))"
     case .lengthBytes:  return "_w.bytesField(\(field), \(x))"
     case .message:      return "_w.bytesField(\(field), \(x).encoded())"
+    case .unresolved:   return ""   // unreachable (skipped above)
     }
 }
 

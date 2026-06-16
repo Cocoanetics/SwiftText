@@ -85,6 +85,34 @@ enum IWATypeRegistry {
         case 416: return TSS_ThemeReplaceColorPresetCommandArchive(m).encoded()
         case 417: return TSS_ThemeMovePresetCommandArchive(m).encoded()
         case 419: return TSS_ThemeReplaceStylePresetAndDisconnectStylesCommandArchive(m).encoded()
+        case 600: return TSA_DocumentArchive(m).encoded()
+        case 601: return TSA_FunctionBrowserStateArchive(m).encoded()
+        case 602: return TSA_PropagatePresetCommandArchive(m).encoded()
+        case 603: return TSA_ShortcutControllerArchive(m).encoded()
+        case 604: return TSA_ShortcutCommandArchive(m).encoded()
+        case 605: return TSA_AddCustomFormatCommandArchive(m).encoded()
+        case 606: return TSA_UpdateCustomFormatCommandArchive(m).encoded()
+        case 607: return TSA_ReplaceCustomFormatCommandArchive(m).encoded()
+        case 612: return TSA_InducedVerifyObjectsWithServerCommandArchive(m).encoded()
+        case 616: return TSA_NeedsMediaCompatibilityUpgradeCommandArchive(m).encoded()
+        case 617: return TSA_ChangeDocumentLocaleCommandArchive(m).encoded()
+        case 618: return TSA_StyleUpdatePropertyMapCommandArchive(m).encoded()
+        case 619: return TSA_RemoteDataChangeCommandArchive(m).encoded()
+        case 623: return TSA_GalleryItem(m).encoded()
+        case 624: return TSA_GallerySelectionTransformer(m).encoded()
+        case 625: return TSA_GalleryItemSelection(m).encoded()
+        case 626: return TSA_GalleryItemSelectionTransformer(m).encoded()
+        case 627: return TSA_GalleryInfoSetValueCommandArchive(m).encoded()
+        case 628: return TSA_GalleryItemSetGeometryCommand(m).encoded()
+        case 629: return TSA_GalleryItemSetValueCommand(m).encoded()
+        case 630: return TSA_InducedVerifyTransformHistoryWithServerCommandArchive(m).encoded()
+        case 633: return TSA_CaptionInfoArchive(m).encoded()
+        case 634: return TSA_CaptionPlacementArchive(m).encoded()
+        case 635: return TSA_TitlePlacementCommandArchive(m).encoded()
+        case 636: return TSA_GalleryInfoInsertItemsCommandArchive(m).encoded()
+        case 637: return TSA_GalleryInfoRemoveItemsCommandArchive(m).encoded()
+        case 641: return TSA_Object3DInfoSetValueCommandArchive(m).encoded()
+        case 642: return TSA_Object3DInfoCommandArchive(m).encoded()
         case 2001: return TSWP_StorageArchive(m).encoded()
         case 2002: return TSWP_SelectionArchive(m).encoded()
         case 2003: return TSWP_DrawableAttachmentArchive(m).encoded()
@@ -270,5 +298,5 @@ enum IWATypeRegistry {
     }
 
     /// The set of IWA type numbers this build can decode into a typed model.
-    static let modeledTypes: Set<UInt64> = [14, 200, 201, 202, 203, 205, 210, 211, 212, 213, 215, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 238, 240, 241, 242, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255, 256, 257, 258, 260, 261, 262, 263, 264, 265, 273, 275, 279, 280, 281, 282, 283, 284, 285, 286, 289, 400, 401, 402, 412, 413, 414, 415, 416, 417, 419, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2013, 2014, 2015, 2016, 2021, 2022, 2023, 2024, 2025, 2026, 2031, 2032, 2033, 2034, 2035, 2036, 2037, 2038, 2039, 2040, 2041, 2042, 2043, 2050, 2051, 2052, 2060, 2061, 2062, 2240, 2241, 2242, 2409, 2410, 2411, 2413, 3002, 3003, 3004, 3005, 3006, 3007, 3008, 3009, 3015, 3016, 3045, 3047, 3056, 3057, 3061, 3062, 3063, 3070, 3083, 3086, 3089, 3090, 3091, 3097, 4000, 4001, 4003, 4004, 4005, 4007, 4008, 4009, 4010, 4011, 6000, 6001, 6002, 6003, 6004, 6005, 6006, 6007, 6008, 6009, 6010, 6011, 6030, 6031, 6032, 6033, 6034, 6144, 6179, 6181, 6182, 6183, 6184, 6185, 6186, 6187, 6188, 6189, 6190, 6191, 6192, 6193, 6194, 6195, 6196, 6197, 6198, 6199, 6201, 6204, 6206, 6218, 6220, 6235, 6247, 6264, 6267, 6271, 6273, 6283, 6284, 6295, 6298, 6302, 6305, 6306, 6311, 6312, 6316, 6317, 6318, 6357, 6363, 6365, 6366, 6367, 6368, 6369, 6370, 6372, 6373, 6374, 6382, 6383, 6384, 10011, 10023, 10024, 11000, 11006, 11007, 11008, 11009, 11010, 11011, 11012, 11013, 11014, 11015, 11016, 11017, 11018, 11019, 11020, 11021, 11024, 11025, 11026, 11027]
+    static let modeledTypes: Set<UInt64> = [14, 200, 201, 202, 203, 205, 210, 211, 212, 213, 215, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 238, 240, 241, 242, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255, 256, 257, 258, 260, 261, 262, 263, 264, 265, 273, 275, 279, 280, 281, 282, 283, 284, 285, 286, 289, 400, 401, 402, 412, 413, 414, 415, 416, 417, 419, 600, 601, 602, 603, 604, 605, 606, 607, 612, 616, 617, 618, 619, 623, 624, 625, 626, 627, 628, 629, 630, 633, 634, 635, 636, 637, 641, 642, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2013, 2014, 2015, 2016, 2021, 2022, 2023, 2024, 2025, 2026, 2031, 2032, 2033, 2034, 2035, 2036, 2037, 2038, 2039, 2040, 2041, 2042, 2043, 2050, 2051, 2052, 2060, 2061, 2062, 2240, 2241, 2242, 2409, 2410, 2411, 2413, 3002, 3003, 3004, 3005, 3006, 3007, 3008, 3009, 3015, 3016, 3045, 3047, 3056, 3057, 3061, 3062, 3063, 3070, 3083, 3086, 3089, 3090, 3091, 3097, 4000, 4001, 4003, 4004, 4005, 4007, 4008, 4009, 4010, 4011, 6000, 6001, 6002, 6003, 6004, 6005, 6006, 6007, 6008, 6009, 6010, 6011, 6030, 6031, 6032, 6033, 6034, 6144, 6179, 6181, 6182, 6183, 6184, 6185, 6186, 6187, 6188, 6189, 6190, 6191, 6192, 6193, 6194, 6195, 6196, 6197, 6198, 6199, 6201, 6204, 6206, 6218, 6220, 6235, 6247, 6264, 6267, 6271, 6273, 6283, 6284, 6295, 6298, 6302, 6305, 6306, 6311, 6312, 6316, 6317, 6318, 6357, 6363, 6365, 6366, 6367, 6368, 6369, 6370, 6372, 6373, 6374, 6382, 6383, 6384, 10011, 10023, 10024, 11000, 11006, 11007, 11008, 11009, 11010, 11011, 11012, 11013, 11014, 11015, 11016, 11017, 11018, 11019, 11020, 11021, 11024, 11025, 11026, 11027]
 }
