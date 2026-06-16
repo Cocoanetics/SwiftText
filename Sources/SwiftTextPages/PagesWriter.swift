@@ -63,7 +63,7 @@ public final class PagesWriter {
 			case "Index/Document.iwa":
 				data = try buildDocument(from: data, paragraphs: paragraphs, registry: registry)
 			case "Index/DocumentStylesheet.iwa":
-				data = try applyingParagraphSpacing(to: data)
+				data = try applyingStylesheet(to: data)
 			case "Index/Metadata.iwa" where tableArtifacts != nil:
 				// Tables add `Index/Tables/*` components; use the captured table
 				// document's PackageMetadata (its component layout matches the output).
@@ -131,42 +131,67 @@ public final class PagesWriter {
 		return [UInt8](edited)
 	}
 
-	/// Paragraph spacing (points: before, after) applied to the template's
-	/// body/heading styles so written documents have Markdown-like vertical rhythm
-	/// (the blank template ships every style with zero spacing).
-	private static let spacingSpecs: [(styleID: UInt64, before: Float, after: Float)] = [
-		(PagesStyleID.body, 0, 8),
-		(PagesStyleID.title, 0, 16),
-		(PagesStyleID.heading1, 16, 6),
-		(PagesStyleID.heading2, 14, 6),
-		(PagesStyleID.heading3, 12, 4),
+	/// One paragraph style's curated appearance. Every value is written into the *style
+	/// object* (not per paragraph), so editing the style in Pages — e.g. resizing
+	/// "Heading 1" — recascades to every paragraph that uses it.
+	private struct StyleSpec {
+		let id: UInt64
+		var fontSize: Float? = nil          // points (char_properties)
+		var spaceBefore: Float = 0          // points
+		var spaceAfter: Float = 0           // points
+		var lineSpacing: Float? = nil       // relative multiple
+		var color: (r: Float, g: Float, b: Float)? = nil
+	}
+
+	/// The default "stylesheet" applied to generated documents — the Pages counterpart
+	/// to the MD→HTML/PDF CSS. A clear size hierarchy (the blank theme's headings are
+	/// nearly the same size), comfortable body line spacing, and a neutral Heading 4
+	/// (the theme ships it red). Tunable defaults: the user can still edit any style.
+	private static let stylesheet: [StyleSpec] = [
+		.init(id: PagesStyleID.body,     spaceAfter: 8, lineSpacing: 1.2),
+		.init(id: PagesStyleID.title,    fontSize: 32, spaceAfter: 16),
+		.init(id: PagesStyleID.heading1, fontSize: 24, spaceBefore: 18, spaceAfter: 6),
+		.init(id: PagesStyleID.heading2, fontSize: 18, spaceBefore: 16, spaceAfter: 6),
+		.init(id: PagesStyleID.heading3, fontSize: 15, spaceBefore: 14, spaceAfter: 4),
+		// Heading 4 is rebuilt below (the theme's "Heading Red" can't be recolored via
+		// the paragraph style — see applyingStylesheet).
 	]
 
-	/// Edits `DocumentStylesheet.iwa` to give the body and heading styles paragraph
-	/// spacing. Each style object is rewritten in place; all others are preserved.
-	private func applyingParagraphSpacing(to stylesheetIWA: [UInt8]) throws -> [UInt8] {
+	/// Edits `DocumentStylesheet.iwa` to install the default stylesheet: each style
+	/// object is rewritten in place (size/spacing/line-spacing/color), the block-quote
+	/// style is built, and link text is colored. All other styles are preserved.
+	private func applyingStylesheet(to stylesheetIWA: [UInt8]) throws -> [UInt8] {
 		var data = Data(stylesheetIWA)
-		for spec in Self.spacingSpecs {
-			data = try IWAArchive.replacingPayload(in: data, objectID: spec.styleID) { payload in
-				PagesBodySerializer.settingSpacing(in: payload, spaceBefore: spec.before, spaceAfter: spec.after)
+		for spec in Self.stylesheet {
+			data = try IWAArchive.replacingPayload(in: data, objectID: spec.id) { payload in
+				var p = PagesBodySerializer.settingSpacing(in: payload, spaceBefore: spec.spaceBefore, spaceAfter: spec.spaceAfter)
+				if let size = spec.fontSize { p = PagesBodySerializer.settingFontSize(in: p, points: size) }
+				if let ls = spec.lineSpacing { p = PagesBodySerializer.settingLineSpacing(in: p, multiple: ls) }
+				if let c = spec.color { p = PagesBodySerializer.settingTextColor(in: p, red: c.r, green: c.g, blue: c.b) }
+				return p
 			}
 		}
-		// Body line spacing: a 1.2× multiple for comfortable reading rhythm — the Pages
-		// counterpart to the HTML/PDF stylesheet's `line-height: 1.6` (Pages line
-		// multiples run tighter than CSS for the same perceived spacing).
-		data = try IWAArchive.replacingPayload(in: data, objectID: PagesStyleID.body) { payload in
-			PagesBodySerializer.settingLineSpacing(in: payload, multiple: 1.2)
-		}
-		// Repurpose the (unused) "Subtitle" style as an indented block-quote style by
-		// overwriting it with a copy of the (known-safe) Body style plus a left indent
-		// and a unique identifier. Editing/referencing a real style applies its
-		// para_properties without the crash the special "Default" style caused.
 		if let body = try IWAArchive.objects(from: data).first(where: { $0.identifier == PagesStyleID.body })?.payload {
+			// Block quote: a copy of the (known-safe) Body style, indented + italic, with
+			// a unique identifier. (Editing the special "Default" style crashes Pages;
+			// repurposing a real style is safe.)
 			var blockQuote = PagesBodySerializer.settingStyleIdentity(in: body, name: "Block Quote", identifier: "swifttext-block-quote")
 			blockQuote = PagesBodySerializer.settingSpacing(in: blockQuote, spaceBefore: 8, spaceAfter: 8)
 			blockQuote = PagesBodySerializer.settingLeftIndent(in: blockQuote, points: 36)
 			blockQuote = PagesBodySerializer.settingItalic(in: blockQuote)
+			blockQuote = PagesBodySerializer.settingTextColor(in: blockQuote, red: 0.4, green: 0.4, blue: 0.4)
 			data = try IWAArchive.replacingPayload(in: data, objectID: PagesStyleID.blockQuote) { _ in blockQuote }
+
+			// Heading 4: the blank theme ships it as a red "Heading Red", and text color
+			// resolves from the character style on the run (not the paragraph style's
+			// char_properties), so it can't be recolored in place. Rebuild it from the
+			// Body style — bold, 13pt, keeping the stable "Heading 4" identifier so the
+			// reader still maps `####` ↔ this style.
+			var heading4 = PagesBodySerializer.settingStyleIdentity(in: body, name: "Heading 4", identifier: "text-14-paragraphstyle-Heading 4")
+			heading4 = PagesBodySerializer.settingBold(in: heading4)
+			heading4 = PagesBodySerializer.settingFontSize(in: heading4, points: 13)
+			heading4 = PagesBodySerializer.settingSpacing(in: heading4, spaceBefore: 12, spaceAfter: 4)
+			data = try IWAArchive.replacingPayload(in: data, objectID: PagesStyleID.heading4) { _ in heading4 }
 		}
 		return [UInt8](data)
 	}

@@ -365,6 +365,66 @@ enum PagesBodySerializer {
 		return writer.bytes
 	}
 
+	/// Rewrites a style's char_properties (field 11), letting `transform` rebuild the
+	/// inner fields. Creates char_properties if the style has none.
+	private static func editCharProperties(in stylePayload: [UInt8], _ transform: ([ProtobufField]) -> [UInt8]) -> [UInt8] {
+		let style = ProtobufMessage(stylePayload)
+		var writer = ProtobufWriter()
+		var found = false
+		for field in style.fields {
+			if field.number == 11, case .lengthDelimited(let charProperties) = field.value {
+				writer.bytesField(11, transform(ProtobufMessage(charProperties).fields))
+				found = true
+			} else {
+				writer.append(field)
+			}
+		}
+		if !found { writer.bytesField(11, transform([])) }
+		return writer.bytes
+	}
+
+	/// Returns a style payload with bold set in its char_properties (field 1).
+	static func settingBold(in stylePayload: [UInt8]) -> [UInt8] {
+		editCharProperties(in: stylePayload) { fields in
+			var inner = ProtobufWriter()
+			for field in fields where field.number != 1 { inner.append(field) }
+			inner.varintField(1, 1)
+			return inner.bytes
+		}
+	}
+
+	/// Returns a style payload with `font_size` (char_properties field 3) set to `points`.
+	static func settingFontSize(in stylePayload: [UInt8], points: Float) -> [UInt8] {
+		editCharProperties(in: stylePayload) { fields in
+			var inner = ProtobufWriter()
+			for field in fields where field.number != 3 { inner.append(field) }
+			inner.fixed32Field(3, points.bitPattern)
+			return inner.bytes
+		}
+	}
+
+	/// Returns a style payload with `font_color` (char_properties field 7, a `TSP.Color`)
+	/// set to the given RGB components. The component layout — `model=1` (RGB),
+	/// `space=1` (sRGB), `a=1`, with the field numbers below — is exactly what Pages
+	/// writes for the colored text in its own templates (verified against modern cv /
+	/// classic letter), so it renders identically. The matching `font_color_null` flag
+	/// (field 6) is dropped, since Pages omits it whenever a real color is present.
+	static func settingTextColor(in stylePayload: [UInt8], red: Float, green: Float, blue: Float) -> [UInt8] {
+		var color = ProtobufWriter()
+		color.varintField(1, 1)                              // model = rgb
+		color.fixed32Field(3, red.bitPattern)
+		color.fixed32Field(4, green.bitPattern)
+		color.fixed32Field(5, blue.bitPattern)
+		color.fixed32Field(6, Float(1).bitPattern)           // alpha
+		color.varintField(12, 1)                             // rgbspace = sRGB
+		return editCharProperties(in: stylePayload) { fields in
+			var inner = ProtobufWriter()
+			for field in fields where field.number != 6 && field.number != 7 { inner.append(field) }
+			inner.bytesField(7, color.bytes)
+			return inner.bytes
+		}
+	}
+
 	/// Returns a style payload with italic set in its char_properties (field 11).
 	static func settingItalic(in stylePayload: [UInt8]) -> [UInt8] {
 		let style = ProtobufMessage(stylePayload)
