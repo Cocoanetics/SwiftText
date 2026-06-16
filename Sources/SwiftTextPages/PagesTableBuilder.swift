@@ -295,7 +295,12 @@ enum PagesTableBuilder {
 	/// table over the inline runs. Returns the payload and the object ids it references.
 	static func cellStorage(text: String, runs: [BodyParagraph.StyledRun], paraStyle: UInt64, charStyleID: (InlineStyle) -> UInt64) -> (payload: [UInt8], references: [UInt64]) {
 		// Char-style run table: a partition starting unstyled at 0, then each run's
-		// style and a bare entry back to unstyled (same shape as the body's #8).
+		// style and a bare entry back to unstyled (same shape as the body's #8). A run
+		// extends to the next entry's index, so the closing "back to unstyled" entry is
+		// only needed when plain text follows. An entry at index == text length is past
+		// the last character — Pages discards the whole run table if one is present, so
+		// such entries are filtered out below.
+		let textLength = text.utf16.count
 		var entries: [(index: Int, styleID: UInt64?)] = [(0, nil)]
 		var referencedStyles = [UInt64]()
 		for run in runs.sorted(by: { $0.start < $1.start }) {
@@ -304,6 +309,7 @@ enum PagesTableBuilder {
 			entries.append((run.start, id))
 			entries.append((run.start + run.length, nil))
 		}
+		entries = normalizedRuns(entries).filter { $0.index < textLength }
 		var writer = ProtobufWriter()
 		writer.varintField(1, 5)                                  // kind = cell
 		writer.bytesField(2, reference(stylesheetID))             // style ref
@@ -311,7 +317,7 @@ enum PagesTableBuilder {
 		writer.bytesField(5, runTable([(0, paraStyle)]))          // para-style
 		writer.bytesField(6, paragraphDataTable())                // para-data
 		writer.bytesField(7, runTable([(0, listNoneStyleID)]))    // list-style
-		writer.bytesField(8, runTable(normalizedRuns(entries)))   // char-style
+		writer.bytesField(8, runTable(entries))                   // char-style
 		writer.varintField(10, 1)
 		writer.bytesField(14, paragraphDataTable())
 		writer.bytesField(24, paragraphDataTable())

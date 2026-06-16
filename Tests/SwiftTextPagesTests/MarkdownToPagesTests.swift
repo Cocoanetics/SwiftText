@@ -215,6 +215,44 @@ struct MarkdownToPagesTests {
 		#expect(readBack.contains("| dd | **ee** | *ff* |"))
 	}
 
+	@Test("A fully-styled cell emits no out-of-range char run (Pages would drop it)")
+	func tableFullCellStyleStaysInRange() throws {
+		let url = FileManager.default.temporaryDirectory
+			.appendingPathComponent("swifttext-whole-\(UUID().uuidString).pages")
+		defer { try? FileManager.default.removeItem(at: url) }
+		// The styled span is the entire cell, so the run reaches the text end — the case
+		// that produced an out-of-range trailing char-run entry.
+		try MarkdownToPages.convert("| A | B |\n|---|---|\n| x | **whole** |", to: url)
+
+		let storage = try #require(try objectStore(at: url).objects(ofType: 2001).first {
+			ProtobufMessage($0.payload).bytes(3).map { String(decoding: $0, as: UTF8.self) } == "whole"
+		})
+		let message = ProtobufMessage(storage.payload)
+		let length = UInt64(message.bytes(3).map { String(decoding: $0, as: UTF8.self).utf16.count } ?? 0)
+		let runIndices = message.message(8)?.messages(1).compactMap { $0.varint(1) } ?? []
+		#expect(!runIndices.isEmpty)
+		#expect(runIndices.allSatisfy { $0 < length })   // no entry at/after the text end
+		#expect(try PagesFile(url: url).markdown().contains("| x | **whole** |"))
+	}
+
+	@Test("A document ending in a styled run keeps its char-run table in range")
+	func bodyEndingInStyleStaysInRange() throws {
+		let url = FileManager.default.temporaryDirectory
+			.appendingPathComponent("swifttext-bodyend-\(UUID().uuidString).pages")
+		defer { try? FileManager.default.removeItem(at: url) }
+		try MarkdownToPages.convert("A final word in **bold**", to: url)
+
+		let storage = try #require(try objectStore(at: url).objects(ofType: 2001).first {
+			(ProtobufMessage($0.payload).bytes(3).map { String(decoding: $0, as: UTF8.self) } ?? "").contains("A final word")
+		})
+		let message = ProtobufMessage(storage.payload)
+		let length = UInt64(message.bytes(3).map { String(decoding: $0, as: UTF8.self).utf16.count } ?? 0)
+		let runIndices = message.message(8)?.messages(1).compactMap { $0.varint(1) } ?? []
+		#expect(!runIndices.isEmpty)
+		#expect(runIndices.allSatisfy { $0 < length })   // a trailing styled run extends to the end
+		#expect(try PagesFile(url: url).markdown().contains("**bold**"))
+	}
+
 	/// Loads every `Index/*.iwa` object from a written `.pages` into one store.
 	private func objectStore(at url: URL) throws -> IWAObjectStore {
 		var store = IWAObjectStore()

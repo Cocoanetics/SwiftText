@@ -235,7 +235,10 @@ enum PagesBodySerializer {
 				characterEntries.append((run.start, run.styleID))
 				characterEntries.append((run.end, nil))  // bare entry: back to unstyled
 			}
-			characterEntries = normalizedRunEntries(characterEntries)
+			// An entry at index == text length is past the last character; Pages discards
+			// the whole run table if one is present (so a document ending in a styled run
+			// would lose all formatting). A run simply extends to the end instead.
+			characterEntries = normalizedRunEntries(characterEntries).filter { $0.index < fullText.utf16.count }
 		}
 
 		// 3b. Smart-field run table (#11): map each link's range to a synthesized
