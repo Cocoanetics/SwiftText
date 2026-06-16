@@ -439,6 +439,8 @@ try catalog.write(to: outDir.appendingPathComponent("IWACatalog.gen.swift"), ato
 let mappingURL = inDir.appendingPathComponent("mapping.py")
 if let mapping = try? String(contentsOf: mappingURL, encoding: .utf8) {
     var cases = [String]()
+    var decodeCases = [String]()
+    var nameCases = [String]()
     var seen = 0
     for line in mapping.split(separator: "\n") {
         let trimmed = line.trimmingCharacters(in: .whitespaces)
@@ -448,8 +450,10 @@ if let mapping = try? String(contentsOf: mappingURL, encoding: .utf8) {
               let q1 = trimmed.firstIndex(of: "\""), let q2 = trimmed[trimmed.index(after: q1)...].firstIndex(of: "\"") else { continue }
         let fqn = String(trimmed[trimmed.index(after: q1)..<q2])
         seen += 1
+        nameCases.append("        case \(number): return \"\(fqn)\"")
         if messageFQNs.contains(fqn) {
             cases.append("        case \(number): return \(swiftTypeName(fqn))(m).encoded()")
+            decodeCases.append("        case \(number): return \(swiftTypeName(fqn))(m)")
         }
     }
     let registry = """
@@ -467,6 +471,26 @@ if let mapping = try? String(contentsOf: mappingURL, encoding: .utf8) {
             let m = ProtobufMessage(payload)
             switch type {
     \(cases.joined(separator: "\n"))
+            default: return nil
+            }
+        }
+
+        /// Decodes a known object payload into its typed model. Returns nil for types
+        /// this build does not model (the caller keeps the raw bytes).
+        static func decode(type: UInt64, payload: [UInt8]) -> IWAMessage? {
+            let m = ProtobufMessage(payload)
+            switch type {
+    \(decodeCases.joined(separator: "\n"))
+            default: return nil
+            }
+        }
+
+        /// The fully-qualified persistence name (e.g. "TST.TableModelArchive") for an
+        /// IWA type number, across every type in the registry — modeled or not — for
+        /// diagnostics, blueprints, and binder output. Nil for unknown numbers.
+        static func typeName(_ type: UInt64) -> String? {
+            switch type {
+    \(nameCases.joined(separator: "\n"))
             default: return nil
             }
         }

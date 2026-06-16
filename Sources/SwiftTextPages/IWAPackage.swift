@@ -13,9 +13,19 @@ struct IWARecord {
 	struct Part {
 		var messageInfo: [ProtobufField]
 		var payload: [UInt8]
+		/// When set, the part is *synthesized*: `framed` emits a fresh `MessageInfo`
+		/// (`#1` type, `#3` length, `#5` these object references as packed varints)
+		/// rather than preserving `messageInfo`. nil means "preserve Apple's framing".
+		var synthesizedReferences: [UInt64]?
 		var type: UInt64 {
 			for field in messageInfo where field.number == 1 { if case .varint(let v) = field.value { return v } }
 			return 0
+		}
+
+		/// A synthesized part: minimal `MessageInfo` (`#1` type) plus computed references.
+		static func synthesized(type: UInt64, payload: [UInt8], references: [UInt64]) -> Part {
+			Part(messageInfo: [ProtobufField(number: 1, value: .varint(type))],
+			     payload: payload, synthesizedReferences: references)
 		}
 	}
 	var identifier: UInt64
@@ -33,12 +43,19 @@ struct IWARecord {
 		archive.varintField(1, identifier)
 		for part in parts {
 			var info = ProtobufWriter()
-			var wroteLength = false
-			for field in part.messageInfo {
-				if field.number == 3 { info.varintField(3, UInt64(part.payload.count)); wroteLength = true }
-				else { info.append(field) }
+			if let references = part.synthesizedReferences {
+				// Synthesized framing: type (#1), length (#3), object_references (#5).
+				info.varintField(1, part.type)
+				info.varintField(3, UInt64(part.payload.count))
+				if !references.isEmpty { info.packedVarintField(5, references) }
+			} else {
+				var wroteLength = false
+				for field in part.messageInfo {
+					if field.number == 3 { info.varintField(3, UInt64(part.payload.count)); wroteLength = true }
+					else { info.append(field) }
+				}
+				if !wroteLength { info.varintField(3, UInt64(part.payload.count)) }
 			}
-			if !wroteLength { info.varintField(3, UInt64(part.payload.count)) }
 			archive.bytesField(2, info.bytes)
 		}
 		var out = ProtobufWriter.varint(UInt64(archive.bytes.count))
