@@ -78,7 +78,7 @@ struct PagesTableArtifacts {
 /// The grid extent is governed by `base_column_row_uids` (column/row UID counts);
 /// the tile, cell-string list, header buckets, model counts, and frame are all
 /// regenerated to match. Every other captured object is cloned verbatim. The full
-/// recipe is recorded in `PAGES_WRITING.md`.
+/// recipe is recorded in `Docs/PAGES_WRITING.md`.
 enum PagesTableBuilder {
 	/// Default cell metrics captured from the template (points).
 	private static let columnWidth: Float = 120.38605
@@ -96,7 +96,7 @@ enum PagesTableBuilder {
 	/// get offset when relocating a table; references to base-document objects don't.
 	static let capturedIDs: Set<UInt64> = Set(PagesTableTemplate.records.map(\.id))
 
-	// Cell text alignment (see PAGES_WRITING.md). A cell's tile-record word W1 keys
+	// Cell text alignment (see Docs/PAGES_WRITING.md). A cell's tile-record word W1 keys
 	// into the styleTable (`DataList` 1733212) → a paragraph style whose `#12 #1` is
 	// the alignment override. Header/body need different bold/regular parent bases.
 	static let styleTableID: UInt64 = 1733212
@@ -667,7 +667,7 @@ enum PagesTableBuilder {
 		return artifacts
 	}
 
-	// MARK: Dimension-object payloads (see PAGES_WRITING.md for the byte format)
+	// MARK: Dimension-object payloads (see Docs/PAGES_WRITING.md for the byte format)
 
 	/// `base_column_row_uids` — C column UIDs (#1) + R row UIDs (#4) drive the grid
 	/// extent. Orderings (#2/#3 columns, #5/#6 rows) are identity. UIDs are fresh
