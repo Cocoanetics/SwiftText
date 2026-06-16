@@ -74,6 +74,17 @@ struct PagesTableStyleTests {
 		#expect(model.varint(11) == 1)   // footer rows
 	}
 
+	@Test("A visible table title is set on the model (#22 enabled, #8 text)")
+	func tableTitleRoundTrips() throws {
+		var table = PagesTable(rows: 2, columns: 2, cells: ["A", "B", "1", "2"])
+		table.title = "Quarterly Results"
+		let (url, store) = try writeStyledTable(table)
+		defer { try? FileManager.default.removeItem(at: url) }
+		let model = ProtobufMessage(try #require(store.objects(ofType: 6001).first).payload)
+		#expect(model.varint(22) == 1)    // table_name_enabled
+		#expect(model.bytes(8).map { String(decoding: $0, as: UTF8.self) } == "Quarterly Results")
+	}
+
 	@Test("Custom column widths are written into the header-storage bucket")
 	func customColumnWidthsRoundTrip() throws {
 		var table = PagesTable(rows: 2, columns: 3, cells: ["A", "B", "C", "1", "2", "3"])

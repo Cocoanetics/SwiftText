@@ -34,6 +34,9 @@ struct PagesTable {
 	var headerRows = 1
 	var headerColumns = 0
 	var footerRows = 0
+	/// A visible table title shown above the grid (`nil` = hidden, the default for
+	/// Markdown tables). Realised as `TableModelArchive` `#8` text + `#22` enabled.
+	var title: String?
 
 	func alignment(ofColumn column: Int) -> PagesColumnAlignment {
 		column < alignments.count ? alignments[column] : .left
@@ -600,10 +603,10 @@ enum PagesTableBuilder {
 				PagesTableTemplate.columnRowUIDsID: buildColumnRowUIDs(rows: R, columns: C),
 				PagesTableTemplate.tileID: buildTile(rows: R, columns: C, styling: styling, cellPlans: rich.cellPlans),
 				PagesTableTemplate.cellStringsID: rich.cellStrings,
-				PagesTableTemplate.modelID: patchModel(try record(PagesTableTemplate.modelID).payloadOnly, rows: R, columns: C, name: "Table \(tableIndex + 1)", headerRows: table.headerRows, headerColumns: table.headerColumns, footerRows: table.footerRows),
+				PagesTableTemplate.modelID: patchModel(try record(PagesTableTemplate.modelID).payloadOnly, rows: R, columns: C, name: table.title ?? "Table \(tableIndex + 1)", titleVisible: table.title != nil, headerRows: table.headerRows, headerColumns: table.headerColumns, footerRows: table.footerRows),
 				PagesTableTemplate.rowHeadersBucketID: buildBucket(try record(PagesTableTemplate.rowHeadersBucketID).payloadOnly, count: R, otherDimension: C, size: rowHeight, sizes: table.rowHeights),
 				PagesTableTemplate.columnHeadersBucketID: buildBucket(try record(PagesTableTemplate.columnHeadersBucketID).payloadOnly, count: C, otherDimension: R, size: columnWidth, sizes: table.columnWidths),
-				PagesTableTemplate.tableInfoID: hideTitleAndCaption(try record(PagesTableTemplate.tableInfoID).payloadOnly),
+				PagesTableTemplate.tableInfoID: hideTitleAndCaption(try record(PagesTableTemplate.tableInfoID).payloadOnly, titleHidden: table.title == nil),
 				styleTableID: styling.styleTable,
 			]
 			if !rich.storageRecords.isEmpty { rewritten[richTextTableID] = rich.richTextTable }
@@ -775,7 +778,7 @@ enum PagesTableBuilder {
 	/// `TableModelArchive`: set `#6` rows, `#7` columns, `#8` table name, `#9` header
 	/// rows, `#10` header columns, `#11` footer rows, `#22` table_name_enabled = 0
 	/// (Markdown tables have no visible title; the programmatic model keeps that default).
-	static func patchModel(_ payload: [UInt8], rows R: Int, columns C: Int, name: String,
+	static func patchModel(_ payload: [UInt8], rows R: Int, columns C: Int, name: String, titleVisible: Bool = false,
 	                       headerRows: Int = 1, headerColumns: Int = 0, footerRows: Int = 0) -> [UInt8] {
 		// Header + footer rows can't overlap or exceed the row count.
 		let hr = max(0, min(headerRows, R))
@@ -792,13 +795,13 @@ enum PagesTableBuilder {
 			case 9: w.varintField(9, UInt64(hr))
 			case 10: w.varintField(10, UInt64(hc)); wroteHeaderColumns = true
 			case 11: w.varintField(11, UInt64(fr)); wroteFooterRows = true
-			case 22: w.varintField(22, 0); wroteNameEnabled = true
+			case 22: w.varintField(22, titleVisible ? 1 : 0); wroteNameEnabled = true
 			default: w.append(field)
 			}
 		}
 		if !wroteHeaderColumns { w.varintField(10, UInt64(hc)) }
 		if !wroteFooterRows, fr > 0 { w.varintField(11, UInt64(fr)) }
-		if !wroteNameEnabled { w.varintField(22, 0) }
+		if !wroteNameEnabled { w.varintField(22, titleVisible ? 1 : 0) }
 		return w.bytes
 	}
 
@@ -806,7 +809,7 @@ enum PagesTableBuilder {
 	/// `super` (`TSD.DrawableArchive`) `#12` title_hidden and `#13` caption_hidden —
 	/// Markdown tables carry neither. Other drawable fields (geometry, the title and
 	/// caption storages) are preserved.
-	static func hideTitleAndCaption(_ payload: [UInt8]) -> [UInt8] {
+	static func hideTitleAndCaption(_ payload: [UInt8], titleHidden: Bool = true, captionHidden: Bool = true) -> [UInt8] {
 		let info = ProtobufMessage(payload)
 		var writer = ProtobufWriter()
 		for field in info.fields {
@@ -815,13 +818,13 @@ enum PagesTableBuilder {
 			var wroteTitle = false, wroteCaption = false
 			for drawableField in ProtobufMessage(drawable).fields {
 				switch drawableField.number {
-				case 12: drawableWriter.varintField(12, 1); wroteTitle = true
-				case 13: drawableWriter.varintField(13, 1); wroteCaption = true
+				case 12: drawableWriter.varintField(12, titleHidden ? 1 : 0); wroteTitle = true
+				case 13: drawableWriter.varintField(13, captionHidden ? 1 : 0); wroteCaption = true
 				default: drawableWriter.append(drawableField)
 				}
 			}
-			if !wroteTitle { drawableWriter.varintField(12, 1) }
-			if !wroteCaption { drawableWriter.varintField(13, 1) }
+			if !wroteTitle { drawableWriter.varintField(12, titleHidden ? 1 : 0) }
+			if !wroteCaption { drawableWriter.varintField(13, captionHidden ? 1 : 0) }
 			writer.bytesField(1, drawableWriter.bytes)
 		}
 		return writer.bytes
