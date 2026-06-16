@@ -50,6 +50,40 @@ struct ZipParityTests {
 		#expect(bytesA == bytesB)
 	}
 
+	/// A *directory-style* package (nested `Index.zip` + loose `Metadata/`/previews) reads
+	/// and writes back byte-for-byte. Materialized from the bundled blank template, so no
+	/// external files are needed; the read→write pair is proven an exact inverse.
+	@Test("directory package read → write is byte-identical")
+	func directoryPackageRoundTrip() throws {
+		let entries = PagesTemplate.blank.entries.compactMap { e -> (path: String, bytes: [UInt8])? in
+			PagesTemplate.blank.data(for: e.path).map { (e.path, $0) }
+		}
+		let dirA = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("parityDirA.pages")
+		let dirB = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("parityDirB.pages")
+		for d in [dirA, dirB] { try? FileManager.default.removeItem(at: d) }
+		defer { for d in [dirA, dirB] { try? FileManager.default.removeItem(at: d) } }
+
+		try IWAPackage.read(entries).writeDirectoryPackage(to: dirA)
+		let reread = try #require(IWAPackage.read(directoryPackageAt: dirA))
+		try reread.writeDirectoryPackage(to: dirB)
+
+		// Index/* must be inside Index.zip (not loose), and every file must match dirA.
+		#expect(FileManager.default.fileExists(atPath: dirA.appendingPathComponent("Index.zip").path))
+		func files(_ base: URL) -> [String: [UInt8]] {
+			var map = [String: [UInt8]](); let root = base.resolvingSymlinksInPath().path
+			for case let u as URL in (FileManager.default.enumerator(at: base, includingPropertiesForKeys: [.isRegularFileKey]) ?? .init()) {
+				guard (try? u.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true else { continue }
+				let p = u.resolvingSymlinksInPath().path
+				if p.hasPrefix(root + "/") { map[String(p.dropFirst(root.count + 1))] = (try? [UInt8](Data(contentsOf: u))) ?? [] }
+			}
+			return map
+		}
+		let a = files(dirA), b = files(dirB)
+		#expect(!a.isEmpty)
+		#expect(Set(a.keys) == Set(b.keys))
+		for (path, bytes) in a { #expect(b[path] == bytes) }
+	}
+
 	/// The faithful Snappy encoder is an exact inverse of the decompressor for arbitrary
 	/// content (round-trip correctness, independent of matching Apple's byte choices).
 	@Test("snappy compress → decompress is identity")

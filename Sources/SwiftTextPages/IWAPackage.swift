@@ -126,28 +126,84 @@ struct IWAPackage {
 		}
 	}
 
-	/// Serializes the package to a `.pages` (STORED zip) at `url`.
+	/// The on-disk bytes for one file: an unchanged `.iwa` component is re-emitted from
+	/// its original compressed bytes verbatim (exact round-trip); a modified one is
+	/// re-framed and re-compressed; raw files pass through.
+	private func serialized(_ content: Content) -> [UInt8] {
+		switch content {
+		case .iwa(let records, let original):
+			let dirty = records.contains { $0.parts.contains { $0.synthesizedReferences != nil } }
+			if let original, !dirty { return original }
+			var stream = [UInt8]()
+			for record in records { stream.append(contentsOf: record.framed) }
+			return [UInt8](IWAArchive.encode(stream: stream))
+		case .raw(let bytes):
+			return bytes
+		}
+	}
+
+	/// Serializes the package to a flat (single-file STORED zip) `.pages` at `url`.
 	func write(to url: URL) throws {
 		var zip = StoredZipWriter()
 		for file in files {
-			let meta = zipMeta[file.path] ?? StoredZipWriter.Metadata()
-			switch file.content {
-			case .iwa(let records, let original):
-				// Unchanged component (no synthesized parts) → re-emit the original bytes
-				// verbatim for an exact round-trip; otherwise re-frame and re-compress.
-				let dirty = records.contains { $0.parts.contains { $0.synthesizedReferences != nil } }
-				if let original, !dirty {
-					zip.add(path: file.path, data: original, meta: meta)
-				} else {
-					var stream = [UInt8]()
-					for record in records { stream.append(contentsOf: record.framed) }
-					zip.add(path: file.path, data: [UInt8](IWAArchive.encode(stream: stream)), meta: meta)
-				}
-			case .raw(let bytes):
-				zip.add(path: file.path, data: bytes, meta: meta)
-			}
+			zip.add(path: file.path, data: serialized(file.content), meta: zipMeta[file.path] ?? StoredZipWriter.Metadata())
 		}
 		try zip.finish().write(to: url)
+	}
+
+	/// Reads a *directory-style* `.pages` package: a folder whose `Index/*.iwa` files
+	/// live in a nested STORED `Index.zip`, with `Metadata/…` and previews as loose
+	/// files on disk. Captures the nested zip's per-entry metadata for a byte-faithful
+	/// round-trip. Returns nil if `url` isn't a directory package with a readable index.
+	static func read(directoryPackageAt url: URL) -> IWAPackage? {
+		let fm = FileManager.default
+		var isDir: ObjCBool = false
+		guard fm.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue else { return nil }
+		let indexZip = url.appendingPathComponent("Index.zip")
+		guard let zipBytes = try? [UInt8](Data(contentsOf: indexZip)), let entries = ZipReader.read(zipBytes) else { return nil }
+
+		var package = IWAPackage(files: [])
+		for entry in entries {
+			if entry.path.hasSuffix(".iwa"), let records = try? parseRecords(Data(entry.data)) {
+				package.files.append((entry.path, .iwa(records, original: entry.data)))
+			} else {
+				package.files.append((entry.path, .raw(entry.data)))
+			}
+			package.zipMeta[entry.path] = entry.meta
+		}
+		// Loose files: everything in the bundle except Index.zip, by relative path.
+		// Resolve symlinks on both sides — the enumerator yields canonical `/private/var`
+		// paths while `url` may be `/var`, so a naive prefix strip would mangle the path.
+		let rootPath = url.resolvingSymlinksInPath().path
+		if let walker = fm.enumerator(at: url, includingPropertiesForKeys: [.isRegularFileKey]) {
+			for case let fileURL as URL in walker {
+				guard (try? fileURL.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true else { continue }
+				let path = fileURL.resolvingSymlinksInPath().path
+				guard path.hasPrefix(rootPath + "/") else { continue }
+				let rel = String(path.dropFirst(rootPath.count + 1))
+				if rel == "Index.zip" { continue }
+				if let bytes = try? [UInt8](Data(contentsOf: fileURL)) { package.files.append((rel, .raw(bytes))) }
+			}
+		}
+		return package
+	}
+
+	/// Writes a *directory-style* `.pages` package at `url`: the `Index/*.iwa` files are
+	/// re-zipped into `Index.zip` (preserving the nested zip's metadata), and every other
+	/// file is written loose, recreating the bundle byte-for-byte for an unchanged read.
+	func writeDirectoryPackage(to url: URL) throws {
+		let fm = FileManager.default
+		try fm.createDirectory(at: url, withIntermediateDirectories: true)
+		var zip = StoredZipWriter()
+		for file in files where file.path.hasPrefix("Index/") {
+			zip.add(path: file.path, data: serialized(file.content), meta: zipMeta[file.path] ?? StoredZipWriter.Metadata())
+		}
+		try zip.finish().write(to: url.appendingPathComponent("Index.zip"))
+		for file in files where !file.path.hasPrefix("Index/") {
+			let dest = url.appendingPathComponent(file.path)
+			try fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
+			try Data(serialized(file.content)).write(to: dest)
+		}
 	}
 
 	/// Splits a decompressed `.iwa` record stream into framing-preserving records.
