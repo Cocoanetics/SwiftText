@@ -449,6 +449,12 @@ final class PagesParser {
 
 		var grid = Array(repeating: Array(repeating: "", count: columns), count: rows)
 		var columnAlignments = Array(repeating: PagesDocument.Paragraph.Table.ColumnAlignment.left, count: columns)
+		// Per-column body-cell census, for the implicit alignment Pages applies by value
+		// type: a column whose body cells are all numeric/date (no text) right-aligns by
+		// default — matching the display — unless an explicit alignment override is set.
+		var columnHasNumber = Array(repeating: false, count: columns)
+		var columnHasText = Array(repeating: false, count: columns)
+		var columnExplicitlyAligned = Array(repeating: false, count: columns)
 		for rowInfo in ProtobufMessage(tile.payload).messages(IWork.tileRowInfosField) {
 			guard let rowIndex = rowInfo.varint(IWork.runCharIndexField).map(Int.init), rowIndex < rows,
 			      let buffer = rowInfo.bytes(IWork.tileCellBufferField),
@@ -473,6 +479,15 @@ final class PagesParser {
 				} else if let string = stringsByKey[key] {
 					grid[rowIndex][column] = string
 				}
+				// Census body cells by value type for the implicit-alignment default.
+				if rowIndex >= 1 {
+					switch typeByte {
+					case IWork.cellNumberType, IWork.cellDateType, IWork.cellDurationType, IWork.cellBoolType:
+						columnHasNumber[column] = true
+					default:
+						if !grid[rowIndex][column].isEmpty { columnHasText[column] = true }
+					}
+				}
 				// Column alignment comes from body cells: a styled cell (flag bit set)
 				// carries a styleTable key in W1; an unstyled cell is left-aligned.
 				if rowIndex >= 1, start + IWork.cellFlagsByteOffset < buffer.count,
@@ -481,8 +496,14 @@ final class PagesParser {
 					let styleBase = start + IWork.cellStyleKeyByteOffset
 					let styleKey = UInt64(buffer[styleBase]) | UInt64(buffer[styleBase + 1]) << 8 | UInt64(buffer[styleBase + 2]) << 16 | UInt64(buffer[styleBase + 3]) << 24
 					columnAlignments[column] = alignment(forStyleKey: styleKey)
+					columnExplicitlyAligned[column] = true
 				}
 			}
+		}
+		// Implicit default: a column of purely numeric/date values right-aligns (as Pages
+		// displays it) unless an explicit alignment override is present.
+		for column in 0..<columns where !columnExplicitlyAligned[column] && columnHasNumber[column] && !columnHasText[column] {
+			columnAlignments[column] = .right
 		}
 		return PagesDocument.Paragraph.Table(cells: grid, columnAlignments: columnAlignments)
 	}
