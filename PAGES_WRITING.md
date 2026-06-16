@@ -572,3 +572,29 @@ A cell's appearance comes from **three** layers, not one:
 To build a setting in code: construct the relevant generated archive and `.encoded()` it,
 then wire it into the object graph via the appropriate layer above. Regenerate models with
 `swift Scripts/GenerateIWAModels.swift Protos Sources/SwiftTextPages/Generated/IWA`.
+
+### Per-cell appearance — IMPLEMENTED via the comprehensive model (2026-06-16)
+
+`PagesTable` carries a programmatic styling layer: `cellAppearances` (fill / vertical
+alignment / text wrap / per-edge borders), `columnWidths` / `rowHeights`, and
+`headerRows` / `headerColumns` / `footerRows`. The builder synthesizes each distinct
+appearance into a `TST.CellStyleArchive` (6004) via the generated wire models
+(`cellStyleArchive(_:parent:)`): `super.parent` → a base cell style (1731720),
+`cell_properties` = fill (`TSD.FillArchive` → `TSP.Color` model 1 RGBA) / strokes
+(`TSD.StrokeArchive`) / `vertical_alignment` (#8) / `text_wrap` (#3). It lives in
+`DocumentStylesheet`, joins the style table, and is cross-referenced like the alignment
+styles.
+
+**The decisive detail (cost a "fill doesn't render" bug): the cell's tile record flag.**
+A per-cell *paragraph* style (alignment, 2022) is keyed via SW byte `0x48` (the `0x40`
+bit). A per-cell **cell** style (appearance, 6004) is keyed via SW byte **`0x28`** (the
+`0x20` bit) — same 28-byte layout, same offset-16 key slot, different flag. A 6004
+referenced through the `0x40` paragraph key is silently ignored; it must be `0x20`.
+(RE'd by filling a string cell in Pages and diffing: `05 03 … 28 10 02 00 <strKey>
+<styleKey> …`.)
+
+Header/footer counts patch `TableModelArchive` #9/#10/#11; widths/heights fill the
+`HeaderStorageBucket` `#2` f32 sizes. **Pages-validated rendering: fill, vertical
+alignment, column widths.** Per-cell borders are emitted as solid `TSD.StrokeArchive`s
+and round-trip, but Pages renders cell borders from the table's stroke layer rather than
+per-cell `cell_properties` strokes — still to wire.
