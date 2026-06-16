@@ -49,7 +49,7 @@ Status as built (all validated opening + rendering in Pages 14.5; 214 tests gree
 | Horizontal rule | full-width box-drawing line | ◐ visual, not a native rule object |
 | Images | italic placeholder text (alt or `[image]`) | ✅ (matches DOCX exactly) |
 | Links | **clickable** hyperlink (TSWP type 2032 object + `#11` smart-field run table) + underline | ✅ |
-| Tables | **native iWork (`TST`) grid** (header row styled, **per-column alignment** from `:--`/`:-:`/`--:`), any number per document; reads back as a Markdown table | ✅ |
+| Tables | **native iWork (`TST`) grid** (header row styled, **per-column alignment** from `:--`/`:-:`/`--:`, **in-cell `**bold**`/`*italic*`/`~~strike~~`** that composes with alignment), any number per document; reads back as a Markdown table | ✅ |
 | Inline HTML / HTML blocks | raw text / dropped | ✅ (matches DOCX) |
 
 **How it works.** `MarkdownToPages.convert(_:to:)` parses with swift-markdown, walks
@@ -509,19 +509,32 @@ strokes, padding). Instead:
   the style key → style `#12` to recover the alignment marker). Works for any number of
   tables (synth style ids are allocated per table id offset).
 
-**In-cell bold/italic — DECODED (2026-06-16), not yet implemented.** A cell with mixed
-character styling stops being a plain string and becomes a rich-text cell:
+**In-cell bold/italic — IMPLEMENTED (2026-06-16); validated by Pages.** A cell with any
+inline `**bold**`/`*italic*`/`~~strike~~`/`` `code` `` stops being a plain string and
+becomes a rich-text cell:
 - The cell's text leaves the `stringTable` `DataList` and moves into a **`TSWP`
-  `StorageArchive` (type 2001)** — same shape as the body storage: `#3` text + `#8`
-  char-style run table → synthesized char styles (type 2021, e.g. bold `#11 #1 = 1`).
+  `StorageArchive` (type 2001)** — same shape as the body storage: `#3` text (no markup)
+  + `#8` char-style run table → synthesized char styles (type 2021, parented to the
+  None char style `1731539`, e.g. bold `#11 #1 = 1`, italic `#11 #2 = 1`).
 - `DataStore` `#17` = `rich_text_table` → a `DataList` (list-id 8). Entry =
-  `{ #1 key, #2 1, #9 { #1 storageRef } }` (note `#9`, vs `#4` styleTable / `#3` strings).
+  `{ #1 key, #2 1, #9 { #1 ref } }` (note `#9`, vs `#4` styleTable / `#3` strings). The
+  ref is **not** the storage directly but a **type-6218 wrapper** (`#1 { #1 storageRef }`,
+  `#3` = a captured-verbatim "whole range" descriptor); the wrapper points at the 2001.
 - The tile cell record flips from `05 03` to **`05 09`**, its flags word from `08/48` to
   **`10 10 02 00`** (the `0x10` "has rich id" bit), and the `u32` at byte 12 becomes the
   **rich_text_table key** instead of the string key.
-- Implementation path (all infrastructure already exists): reuse `PagesBodySerializer`
-  to build the per-cell `StorageArchive`, `CharacterStyleRegistry` for the char styles,
-  the styleTable/cross-ref machinery (`MessageInfo #5` + `ComponentInfo #6`) for the
-  rich_text_table → storage and storage → char-style references, and emit `05 09` cells.
-  Reader: a `05 09` cell → rich_text_table key → storage → run table → inline markup.
-  Comparable scope to the alignment work above.
+- Cross-refs: the storage's `MessageInfo #5` lists `[paraStyle, listNone, charStyleIDs]`
+  (**not** the stylesheet root); the wrapper's `#5` lists `[storageID]`; the
+  rich_text_table component's `ComponentInfo #6` cross-references every char/para style
+  the storages reach (all in `DocumentStylesheet` 1732613) or Pages reports "damaged".
+- **Alignment composes with formatting:** a rich cell has no styleTable key to hang a
+  paragraph style on, so it takes the column's alignment through its **own** storage
+  paragraph style (`#5` run table → the synthesized alignment style for center/right).
+  The reader recovers a rich cell's alignment from that same `#5 → #12 #1`.
+- **Gotcha (cost a real "renders regular" bug):** a char-run "back to unstyled" entry at
+  index == text length is one past the last character; Pages discards the *entire* run
+  table when one is present, so a fully-styled cell (or a body ending in a styled run)
+  loses all formatting. A run extends to the next entry / the text end, so entries at or
+  beyond the text length are filtered out in both the cell and body builders.
+- Reader: a `05 09` cell → rich_text_table key → 6218 wrapper → storage → `#8` run table
+  → inline markup (reusing the body's emphasis machinery), plus `#5 → #12 #1` alignment.
