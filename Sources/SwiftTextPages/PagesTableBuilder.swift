@@ -169,7 +169,7 @@ enum PagesTableBuilder {
 		var appearanceCache = [PagesCellAppearance: Int]()
 		var nextAppearance = appearanceStyleBase + UInt64(tableIndex) * 256
 		for index in table.cells.indices {
-			guard let appearance = table.appearance(ofCell: index) else { continue }
+			guard let appearance = table.appearance(ofCell: index), appearance.hasCellProperties else { continue }
 			if let existing = appearanceCache[appearance] { cellAppearanceKeys[index] = existing; continue }
 			let styleID = nextAppearance; nextAppearance += 1
 			styleObjects.append((styleID, cellStyleArchive(appearance, parent: defaultBodyCellStyleID), defaultBodyCellStyleID, 6004))
@@ -186,43 +186,114 @@ enum PagesTableBuilder {
 		               maxObjectID: max(nextSynth, nextAppearance) - 1)
 	}
 
+	/// A `TSP.Color` in the RGB "model 1" form Pages uses for fills and strokes.
+	static func tspColor(_ c: PagesColor) -> TSP_Color {
+		var tsp = TSP_Color(); tsp.model = 1
+		tsp.r = c.red; tsp.g = c.green; tsp.b = c.blue; tsp.a = c.alpha
+		return tsp
+	}
+	/// A solid `TSD.StrokeArchive` (color + width). The solid `pattern` is required or
+	/// Pages renders nothing.
+	static func strokeArchive(_ border: PagesCellBorder) -> TSD_StrokeArchive {
+		var s = TSD_StrokeArchive(); s.color = tspColor(border.color); s.width = border.width
+		s.cap = 0; s.join = 0                          // butt cap, miter join
+		var pattern = TSD_StrokePatternArchive()
+		pattern.type = 1                               // TSDSolidPattern
+		pattern.phase = 0; pattern.count = 0
+		s.pattern = pattern
+		return s
+	}
+
 	/// Builds a `TST.CellStyleArchive` (6004) for a cell appearance via the generated
 	/// wire models: `super` parents to a base cell style, `cell_properties` carries the
-	/// fill / strokes / vertical alignment / wrap. Lives in `DocumentStylesheet`.
+	/// fill / vertical alignment / wrap. Lives in `DocumentStylesheet`. Borders are NOT
+	/// here — Pages paints cell borders from the table stroke sidecar (see `strokeSidecar`).
 	static func cellStyleArchive(_ appearance: PagesCellAppearance, parent: UInt64) -> [UInt8] {
-		func color(_ c: PagesColor) -> TSP_Color {
-			var tsp = TSP_Color(); tsp.model = 1
-			tsp.r = c.red; tsp.g = c.green; tsp.b = c.blue; tsp.a = c.alpha
-			return tsp
-		}
-		func stroke(_ b: PagesCellBorder) -> TSD_StrokeArchive {
-			var s = TSD_StrokeArchive(); s.color = color(b.color); s.width = b.width
-			s.cap = 0; s.join = 0                      // butt cap, miter join
-			var pattern = TSD_StrokePatternArchive()
-			pattern.type = 1                           // TSDSolidPattern — required or the stroke won't render
-			pattern.phase = 0; pattern.count = 0
-			s.pattern = pattern
-			return s
-		}
 		var sup = TSS_StyleArchive()
 		var parentRef = TSP_Reference(); parentRef.identifier = parent; sup.parent = parentRef
 		sup.isVariation = true
 		var sheetRef = TSP_Reference(); sheetRef.identifier = stylesheetID; sup.stylesheet = sheetRef
 
 		var props = TST_CellStylePropertiesArchive()
-		if let fill = appearance.fill { var f = TSD_FillArchive(); f.color = color(fill); props.cellFill = f }
+		if let fill = appearance.fill { var f = TSD_FillArchive(); f.color = tspColor(fill); props.cellFill = f }
 		if let valign = appearance.verticalAlignment { props.verticalAlignment = valign.rawValue }
 		if let wrap = appearance.textWrap { props.textWrap = wrap }
-		if let b = appearance.topBorder { props.topStroke = stroke(b) }
-		if let b = appearance.rightBorder { props.rightStroke = stroke(b) }
-		if let b = appearance.bottomBorder { props.bottomStroke = stroke(b) }
-		if let b = appearance.leftBorder { props.leftStroke = stroke(b) }
 
 		var cellStyle = TST_CellStyleArchive()
 		cellStyle.super = sup
 		cellStyle.overrideCount = 1
 		cellStyle.cellProperties = props
 		return cellStyle.encoded()
+	}
+
+	// MARK: Cell borders — the table stroke sidecar (StrokeSidecarArchive 6305)
+
+	/// The captured table's `stroke_sidecar` (model `#49`), regenerated to carry borders.
+	static let strokeSidecarID: UInt64 = 1733259
+	/// Base id for synthesized per-table stroke layers (`StrokeLayerArchive` 6306).
+	static let strokeLayerBase: UInt64 = 5_500_000
+
+	/// A regenerated `StrokeSidecarArchive` (6305) plus its `StrokeLayerArchive` (6306)
+	/// objects, built from the table's per-cell borders. Pages organizes cell borders as
+	/// run-length stroke layers per grid line — one layer per row/column edge, each a list
+	/// of `{origin, length, stroke}` runs — not per cell.
+	struct StrokeSidecar {
+		var sidecar: [UInt8]
+		var layers: [(id: UInt64, payload: [UInt8])]
+		var layerIDs: [UInt64]
+		var maxObjectID: UInt64
+	}
+
+	/// Builds the stroke sidecar for a table's cell borders, or `nil` if none.
+	static func strokeSidecar(for table: PagesTable, tableIndex: Int) -> StrokeSidecar? {
+		let C = table.columns
+		// side → grid-line index → [(perpendicular index, border)]
+		var top = [Int: [(Int, PagesCellBorder)]](), bottom = [Int: [(Int, PagesCellBorder)]]()
+		var left = [Int: [(Int, PagesCellBorder)]](), right = [Int: [(Int, PagesCellBorder)]]()
+		for index in table.cells.indices {
+			guard let ap = table.appearance(ofCell: index), ap.hasBorders else { continue }
+			let r = index / C, c = index % C
+			if let b = ap.topBorder { top[r, default: []].append((c, b)) }
+			if let b = ap.bottomBorder { bottom[r, default: []].append((c, b)) }
+			if let b = ap.leftBorder { left[c, default: []].append((r, b)) }
+			if let b = ap.rightBorder { right[c, default: []].append((r, b)) }
+		}
+		guard !(top.isEmpty && bottom.isEmpty && left.isEmpty && right.isEmpty) else { return nil }
+
+		var layers = [(id: UInt64, payload: [UInt8])]()
+		var nextLayer = strokeLayerBase + UInt64(tableIndex) * 256
+		var order: UInt32 = 1
+		func buildLayers(_ map: [Int: [(Int, PagesCellBorder)]]) -> [UInt64] {
+			var ids = [UInt64]()
+			for (lineIndex, runs) in map.sorted(by: { $0.key < $1.key }) {
+				var layer = TST_StrokeLayerArchive()
+				layer.rowColumnIndex = UInt32(lineIndex)
+				for (origin, border) in runs.sorted(by: { $0.0 < $1.0 }) {
+					var run = TST_StrokeLayerArchive_StrokeRunArchive()
+					run.origin = Int32(origin); run.length = 1
+					run.stroke = strokeArchive(border); run.order = order; order += 1
+					layer.strokeRuns.append(run)
+				}
+				let id = nextLayer; nextLayer += 1
+				layers.append((id, layer.encoded()))
+				ids.append(id)
+			}
+			return ids
+		}
+		let leftIDs = buildLayers(left), rightIDs = buildLayers(right)
+		let topIDs = buildLayers(top), bottomIDs = buildLayers(bottom)
+		func refs(_ ids: [UInt64]) -> [TSP_Reference] { ids.map { var r = TSP_Reference(); r.identifier = $0; return r } }
+
+		var sidecar = TST_StrokeSidecarArchive()
+		sidecar.maxOrder = order
+		sidecar.columnCount = UInt32(table.columns)
+		sidecar.rowCount = UInt32(table.rows)
+		sidecar.leftColumnStrokeLayers = refs(leftIDs)
+		sidecar.rightColumnStrokeLayers = refs(rightIDs)
+		sidecar.topRowStrokeLayers = refs(topIDs)
+		sidecar.bottomRowStrokeLayers = refs(bottomIDs)
+		let allIDs = leftIDs + rightIDs + topIDs + bottomIDs
+		return StrokeSidecar(sidecar: sidecar.encoded(), layers: layers, layerIDs: allIDs, maxObjectID: nextLayer - 1)
 	}
 
 	/// `DataStore.styleTable` (`DataList` list-id 4): `#1` listid=4, `#2` maxKey+1,
@@ -520,7 +591,9 @@ enum PagesTableBuilder {
 			let R = table.rows, C = table.columns
 			let styling = styling(for: table, offset: offset, tableIndex: tableIndex)
 			let rich = richContent(for: table, offset: offset, tableIndex: tableIndex, styling: styling)
+			let borders = strokeSidecar(for: table, tableIndex: tableIndex)
 			artifacts.maxObjectID = max(artifacts.maxObjectID, rich.maxObjectID)
+			if let borders { artifacts.maxObjectID = max(artifacts.maxObjectID, borders.maxObjectID) }
 			// Regenerate the dimension-dependent payloads (with base-table references,
 			// offset below alongside every cloned object).
 			var rewritten: [UInt64: [UInt8]] = [
@@ -534,6 +607,7 @@ enum PagesTableBuilder {
 				styleTableID: styling.styleTable,
 			]
 			if !rich.storageRecords.isEmpty { rewritten[richTextTableID] = rich.richTextTable }
+			if let borders { rewritten[strokeSidecarID] = borders.sidecar }
 
 			for entry in records {
 				artifacts.maxObjectID = max(artifacts.maxObjectID, entry.id + offset)
@@ -550,7 +624,7 @@ enum PagesTableBuilder {
 					? [defaultCellStyleID + offset] + styling.styleObjects.map(\.id)
 					: (entry.id == richTextTableID && !rich.storageRecords.isEmpty
 						? rich.storageIDs
-						: nil)
+						: (entry.id == strokeSidecarID ? borders?.layerIDs : nil))
 				let finalRecord = relocateRecord(recordBytes, newPayload: payload, offset: offset, objectReferences: objectReferences)
 				if entry.file.hasPrefix("Index/Tables/") {
 					let path = offset == 0 ? entry.file : relocatedTablePath(entry.file, newID: entry.id + offset)
@@ -560,6 +634,12 @@ enum PagesTableBuilder {
 					artifacts.newFiles[path] = [UInt8](IWAArchive.encode(stream: stream))
 				} else {
 					appendStreams[entry.file, default: []].append(contentsOf: finalRecord)
+					// Stroke layers live in the sidecar's component (CalculationEngine).
+					if entry.id == strokeSidecarID, let borders {
+						for layer in borders.layers {
+							appendStreams[entry.file, default: []].append(contentsOf: recordWithReferences(id: layer.id, type: 6306, version: [0x01, 0x00, 0x05], payload: layer.payload, references: []))
+						}
+					}
 				}
 			}
 			// Synthesized alignment paragraph styles (2022) and cell-appearance styles

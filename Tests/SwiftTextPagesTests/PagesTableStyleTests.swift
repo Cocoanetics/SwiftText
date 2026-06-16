@@ -44,9 +44,13 @@ struct PagesTableStyleTests {
 			return (c.r ?? 0) > 0.9 && (c.g ?? 1) < 0.1 && (c.b ?? 1) < 0.1
 		})
 		#expect(decoded.contains { $0.cellProperties?.verticalAlignment == PagesVerticalAlignment.bottom.rawValue })
-		#expect(decoded.contains { $0.cellProperties?.topStroke?.width == 2 })
 
-		// They parent to a base cell style and live referenced from the table style table.
+		// The border lives in the table stroke sidecar (a 6306 layer), not the cell style.
+		let borderWidths = store.objects(ofType: 6306)
+			.flatMap { TST_StrokeLayerArchive(ProtobufMessage($0.payload)).strokeRuns.compactMap { $0.stroke?.width } }
+		#expect(borderWidths.contains(2))
+
+		// The cell styles parent to a base cell style and are referenced from the style table.
 		#expect(decoded.allSatisfy { $0.super?.parent?.identifier == PagesTableBuilder.defaultBodyCellStyleID })
 		let model = try #require(store.objects(ofType: 6001).first)
 		let styleTableID = try #require(ProtobufMessage(model.payload).message(4)?.message(5)?.varint(1))

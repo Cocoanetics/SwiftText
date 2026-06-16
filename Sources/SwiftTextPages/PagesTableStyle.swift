@@ -51,8 +51,9 @@ public struct PagesCellAppearance: Equatable, Hashable, Sendable {
 		self.init(fill: fill, topBorder: border, rightBorder: border, bottomBorder: border, leftBorder: border)
 	}
 
-	public var isEmpty: Bool {
-		fill == nil && verticalAlignment == nil && textWrap == nil
-			&& topBorder == nil && rightBorder == nil && bottomBorder == nil && leftBorder == nil
-	}
+	public var isEmpty: Bool { !hasCellProperties && !hasBorders }
+	/// Settings carried by a `CellStyleArchive` (style-table) — fill / v-align / wrap.
+	var hasCellProperties: Bool { fill != nil || verticalAlignment != nil || textWrap != nil }
+	/// Settings carried by the table stroke sidecar — per-edge borders.
+	var hasBorders: Bool { topBorder != nil || rightBorder != nil || bottomBorder != nil || leftBorder != nil }
 }
