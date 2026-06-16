@@ -87,6 +87,14 @@ final class PagesParser {
 		static let cellFlagsByteOffset = 8
 		static let cellStyleKeyBit: UInt8 = 0x40
 		static let cellStyleKeyByteOffset = 16
+		/// `DataStore.rich_text_table` (#17): a `DataList` whose entries (`#9 { #1 ref }`)
+		/// reach a cell's rich text (via a 6218 wrapper → 2001 `StorageArchive`).
+		static let dataStoreRichTextTableField = 17
+		static let dataListWrapperRefField = 9
+		/// A cell's type byte (offset 1): `0x03` = plain string, `0x09` = rich text. Its
+		/// `u32@12` is then a rich_text_table key rather than a string-table key.
+		static let cellTypeByteOffset = 1
+		static let cellRichType: UInt8 = 0x09
 		/// `ParagraphStylePropertiesArchive.alignment` (#1): 1 = right, 2 = center.
 		static let paragraphPropertiesField = 12
 		static let paragraphAlignmentField = 1
@@ -408,6 +416,23 @@ final class PagesParser {
 			switch value { case 1: return .right; case 2: return .center; default: return .left }
 		}
 
+		// rich_text_table → key → cell text StorageArchive id (for in-cell bold/italic).
+		// Each entry's reference is a 6218 wrapper around the 2001 storage; a direct
+		// storage reference is also tolerated for resilience against other writers.
+		var richStorageByKey = [UInt64: UInt64]()
+		if let richTableID = dataStore.message(IWork.dataStoreRichTextTableField)?.varint(IWork.referenceIdentifierField),
+		   let richList = store.object(richTableID) {
+			for entry in ProtobufMessage(richList.payload).messages(IWork.dataListEntryField) {
+				guard let key = entry.varint(IWork.dataListKeyField),
+				      let refID = entry.message(IWork.dataListWrapperRefField)?.varint(IWork.referenceIdentifierField),
+				      let ref = store.object(refID) else { continue }
+				let storageID = ref.type == IWork.storageArchiveType
+					? refID
+					: ProtobufMessage(ref.payload).message(IWork.referenceIdentifierField)?.varint(IWork.referenceIdentifierField)
+				if let storageID { richStorageByKey[key] = storageID }
+			}
+		}
+
 		// tiles → the single tile holding all rows → per-row cell keys.
 		guard let tileID = dataStore.message(IWork.dataStoreTilesField)?
 				.message(IWork.tileStorageTileField)?
@@ -426,7 +451,14 @@ final class PagesParser {
 				guard start + IWork.cellKeyByteOffset + 4 <= buffer.count else { continue }
 				let base = start + IWork.cellKeyByteOffset
 				let key = UInt64(buffer[base]) | UInt64(buffer[base + 1]) << 8 | UInt64(buffer[base + 2]) << 16 | UInt64(buffer[base + 3]) << 24
-				if let string = stringsByKey[key] { grid[rowIndex][column] = string }
+				let isRich = start + IWork.cellTypeByteOffset < buffer.count
+					&& buffer[start + IWork.cellTypeByteOffset] == IWork.cellRichType
+				if isRich, let storageID = richStorageByKey[key], let storage = store.object(storageID) {
+					// A rich cell's text + char-style runs reconstruct the inline markup.
+					grid[rowIndex][column] = cellMarkdown(storage, store: store)
+				} else if let string = stringsByKey[key] {
+					grid[rowIndex][column] = string
+				}
 				// Column alignment comes from body cells: a styled cell (flag bit set)
 				// carries a styleTable key in W1; an unstyled cell is left-aligned.
 				if rowIndex >= 1, start + IWork.cellFlagsByteOffset < buffer.count,
@@ -439,6 +471,18 @@ final class PagesParser {
 			}
 		}
 		return PagesDocument.Paragraph.Table(cells: grid, columnAlignments: columnAlignments)
+	}
+
+	/// Reconstructs a rich cell's Markdown: the cell-storage text with each
+	/// character-emphasis run wrapped in `**`/`*`/`~~` — reusing the body's emphasis
+	/// machinery so inline bold/italic/strikethrough round-trip out of a table cell.
+	private func cellMarkdown(_ storage: IWAObject, store: IWAObjectStore) -> String {
+		let text = storageText(storage)
+		let spans = characterRuns(storage, store: store).map {
+			PagesDocument.Paragraph.EmphasisSpan(start: $0.index, bold: $0.bold, italic: $0.italic, strike: $0.strike)
+		}
+		let paragraph = PagesDocument.Paragraph(text: text, emphasis: spans)
+		return paragraph.renderedText(inliningImages: false, applyingEmphasis: true)
 	}
 
 	/// Parses a tile row's `u16` cell-offset array (little-endian), terminated by the

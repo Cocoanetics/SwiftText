@@ -163,6 +163,36 @@ struct MarkdownToPagesTests {
 		#expect(readBack.contains("| --- | :-: | --: |"))
 	}
 
+	@Test("In-cell bold/italic round-trips through native table rich-text cells")
+	func tableInCellFormattingRoundTrips() throws {
+		let url = FileManager.default.temporaryDirectory
+			.appendingPathComponent("swifttext-cellfmt-\(UUID().uuidString).pages")
+		defer { try? FileManager.default.removeItem(at: url) }
+		let markdown = """
+		| Fruit | Note |
+		|-------|------|
+		| Apple | **fresh** fruit |
+		| Pear | a *ripe* one |
+		"""
+		try MarkdownToPages.convert(markdown, to: url)
+
+		let store = try objectStore(at: url)
+		// A rich cell becomes a cell-text StorageArchive (2001) wrapped by a type-6218
+		// object that the rich_text_table points at. The storage holds the *unmarked*
+		// text; the bold/italic live in 2021 character-style runs (#8).
+		#expect(store.objects(ofType: 6218).count == 2)
+		let cellStorageTexts = store.objects(ofType: 2001).compactMap {
+			ProtobufMessage($0.payload).bytes(3).map { String(decoding: $0, as: UTF8.self) }
+		}
+		#expect(cellStorageTexts.contains("fresh fruit"))   // no `**` in the stored text
+		#expect(cellStorageTexts.contains("a ripe one"))    // no `*` in the stored text
+
+		// The reader reconstructs the inline markers from those runs.
+		let readBack = try PagesFile(url: url).markdown()
+		#expect(readBack.contains("| Apple | **fresh** fruit |"))
+		#expect(readBack.contains("| Pear | a *ripe* one |"))
+	}
+
 	/// Loads every `Index/*.iwa` object from a written `.pages` into one store.
 	private func objectStore(at url: URL) throws -> IWAObjectStore {
 		var store = IWAObjectStore()

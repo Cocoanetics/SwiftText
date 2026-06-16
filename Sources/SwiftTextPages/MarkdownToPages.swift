@@ -235,15 +235,18 @@ private struct BlockVisitor: MarkupVisitor {
 			return
 		}
 
-		func cellText(_ cell: Table.Cell) -> String {
+		func cellContent(_ cell: Table.Cell?) -> (text: String, runs: [BodyParagraph.StyledRun]) {
+			guard let cell else { return ("", []) }
 			var collector = InlineCollector()
 			collector.collect(from: cell)
-			return collector.text
+			return (collector.text, collector.runs)
 		}
 		var cells = [String]()
-		for column in 0..<columns { cells.append(column < headerCells.count ? cellText(headerCells[column]) : "") }
+		var cellRuns = [[BodyParagraph.StyledRun]]()
+		func append(_ cell: Table.Cell?) { let c = cellContent(cell); cells.append(c.text); cellRuns.append(c.runs) }
+		for column in 0..<columns { append(column < headerCells.count ? headerCells[column] : nil) }
 		for row in bodyRows {
-			for column in 0..<columns { cells.append(column < row.count ? cellText(row[column]) : "") }
+			for column in 0..<columns { append(column < row.count ? row[column] : nil) }
 		}
 
 		let alignments: [PagesColumnAlignment] = (0..<columns).map { column in
@@ -254,6 +257,7 @@ private struct BlockVisitor: MarkupVisitor {
 			}
 		}
 		var pagesTable = PagesTable(rows: 1 + bodyRows.count, columns: columns, cells: cells)
+		pagesTable.cellRuns = cellRuns
 		pagesTable.alignments = alignments
 		paragraphs.append(BodyParagraph(
 			text: "\u{FFFC}",

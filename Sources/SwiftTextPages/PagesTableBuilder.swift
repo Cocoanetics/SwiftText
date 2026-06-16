@@ -15,11 +15,18 @@ struct PagesTable {
 	let columns: Int
 	/// `rows * columns` cell strings, row-major (row 0 = header row).
 	let cells: [String]
+	/// Per-cell inline style runs, parallel to `cells`. A cell with any non-plain run
+	/// becomes a rich-text cell; an empty list means a plain string cell.
+	var cellRuns: [[BodyParagraph.StyledRun]] = []
 	/// Per-column horizontal alignment (count == `columns`). Defaults to all-left.
 	var alignments: [PagesColumnAlignment] = []
 
 	func alignment(ofColumn column: Int) -> PagesColumnAlignment {
 		column < alignments.count ? alignments[column] : .left
+	}
+	/// The inline runs for a cell, or `[]` (plain) when none were provided.
+	func runs(ofCell index: Int) -> [BodyParagraph.StyledRun] {
+		index < cellRuns.count ? cellRuns[index].filter { $0.length > 0 && !$0.style.isPlain } : []
 	}
 }
 
@@ -155,21 +162,230 @@ enum PagesTableBuilder {
 		return w.bytes
 	}
 
-	/// Frames a synthesized paragraph style (2022) into one IWA record. The
-	/// `MessageInfo` must carry the version (`#2`) and `object_references` (`#5` = the
-	/// parent style) Pages uses to resolve inheritance — without `#5` the parent isn't
-	/// linked and the alignment override never applies.
-	static func styleRecord(id: UInt64, payload: [UInt8], parent: UInt64) -> [UInt8] {
+	// MARK: Rich-text cells (in-cell bold/italic)
+
+	static let richTextTableID: UInt64 = 1733197
+	static let noneCharStyleID: UInt64 = 1731539
+	static let listNoneStyleID: UInt64 = 1731481
+	/// Base ids for synthesized per-table cell storages (2001) and cell char styles (2021).
+	static let cellStorageBase: UInt64 = 5_300_000
+	static let cellCharStyleBase: UInt64 = 5_200_000
+	static let cellWrapperBase: UInt64 = 5_400_000
+
+	/// The rich-text content for a table: regenerated string + rich_text_table
+	/// payloads, the cell storages (for the rich_text_table component file) and char
+	/// styles (for `DocumentStylesheet`), per-cell plans (plain string key vs rich
+	/// key), and the styles the rich_text_table component must cross-reference.
+	struct RichContent {
+		var cellStrings: [UInt8]
+		var richTextTable: [UInt8]
+		var storageRecords: [[UInt8]]
+		var storageIDs: [UInt64]
+		var charStyleRecords: [(id: UInt64, payload: [UInt8])]
+		var cellPlans: [(isRich: Bool, key: Int)]
+		var crossRefStyleIDs: [UInt64]
+		var maxObjectID: UInt64
+	}
+
+	/// Splits a table's cells into plain (string DataList) and rich (a `TSWP`
+	/// StorageArchive + char styles, keyed through the rich_text_table) and builds
+	/// every object Pages needs for in-cell bold/italic.
+	static func richContent(for table: PagesTable, offset: UInt64, tableIndex: Int) -> RichContent {
+		let C = table.columns
+		var plans = [(isRich: Bool, key: Int)]()
+		var stringEntries = [(key: Int, string: String)]()
+		var richEntries = [(key: Int, wrapperID: UInt64)]()
+		var storageRecords = [[UInt8]]()
+		var charStyleRecords = [(UInt64, [UInt8])]()
+		var crossRefs = Set<UInt64>()
+		var nextStringKey = 1, nextRichKey = 1
+		var nextStorage = cellStorageBase + UInt64(tableIndex) * 4096
+		var nextCharStyle = cellCharStyleBase + UInt64(tableIndex) * 256
+		var charStyleByStyle = [InlineStyle: UInt64]()
+		func charStyleID(_ style: InlineStyle) -> UInt64 {
+			if let existing = charStyleByStyle[style] { return existing }
+			let id = nextCharStyle; nextCharStyle += 1
+			charStyleRecords.append((id, cellCharacterStyle(style)))
+			charStyleByStyle[style] = id
+			crossRefs.insert(id)
+			return id
+		}
+		var nextWrapper = cellWrapperBase + UInt64(tableIndex) * 4096
+		for index in table.cells.indices {
+			let runs = table.runs(ofCell: index)
+			if runs.isEmpty {
+				plans.append((false, nextStringKey))
+				stringEntries.append((nextStringKey, table.cells[index]))
+				nextStringKey += 1
+			} else {
+				let isHeader = index < C
+				let paraStyle = isHeader ? headerCellBaseStyleID : bodyCellBaseStyleID
+				let storageID = nextStorage; nextStorage += 1
+				let wrapperID = nextWrapper; nextWrapper += 1
+				let (payload, refs) = cellStorage(text: table.cells[index], runs: runs, paraStyle: paraStyle, charStyleID: charStyleID)
+				// Both the 2001 storage and its 6218 wrapper live in the rich_text_table
+				// component; the entry points at the wrapper, the wrapper at the storage.
+				storageRecords.append(recordWithReferences(id: storageID, type: 2001, version: [0x01, 0x00, 0x05], payload: payload, references: refs))
+				storageRecords.append(recordWithReferences(id: wrapperID, type: 6218, version: [0x01, 0x00, 0x05], payload: cellTextWrapper(storageID: storageID), references: [storageID]))
+				crossRefs.formUnion([paraStyle, listNoneStyleID])
+				richEntries.append((nextRichKey, wrapperID))
+				plans.append((true, nextRichKey))
+				nextRichKey += 1
+			}
+		}
+		return RichContent(
+			cellStrings: buildKeyedStrings(stringEntries),
+			richTextTable: buildRichTextTable(richEntries),
+			storageRecords: storageRecords,
+			storageIDs: richEntries.map(\.wrapperID),
+			charStyleRecords: charStyleRecords.map { ($0.0, $0.1) },
+			cellPlans: plans,
+			crossRefStyleIDs: Array(crossRefs).sorted(),
+			maxObjectID: max(nextStorage, max(nextWrapper, nextCharStyle)) &- 1
+		)
+	}
+
+	/// Cell-string DataList from explicit `(key, string)` entries (only plain cells).
+	static func buildKeyedStrings(_ entries: [(key: Int, string: String)]) -> [UInt8] {
+		var w = ProtobufWriter()
+		w.varintField(1, 1)
+		w.varintField(2, UInt64((entries.map(\.key).max() ?? 0) + 1))
+		for entry in entries {
+			var cell = ProtobufWriter()
+			cell.varintField(1, UInt64(entry.key)); cell.varintField(2, 1); cell.stringField(3, entry.string)
+			w.bytesField(3, cell.bytes)
+		}
+		return w.bytes
+	}
+
+	/// `DataStore.rich_text_table` (`DataList` list-id 8): entry
+	/// `{ #1 key, #2 1, #9 { #1 storageRef } }` → a cell text storage.
+	static func buildRichTextTable(_ entries: [(key: Int, wrapperID: UInt64)]) -> [UInt8] {
+		var w = ProtobufWriter()
+		w.varintField(1, 8)
+		w.varintField(2, UInt64((entries.map(\.key).max() ?? 0) + 1))
+		for entry in entries {
+			var ref = ProtobufWriter(); ref.varintField(1, entry.wrapperID)
+			var body = ProtobufWriter()
+			body.varintField(1, UInt64(entry.key)); body.varintField(2, 1); body.bytesField(9, ref.bytes)
+			w.bytesField(3, body.bytes)
+		}
+		return w.bytes
+	}
+
+	/// A `TSWP.StorageArchive` (2001, kind 5 = cell): `#3` text + `#8` char-style run
+	/// table over the inline runs. Returns the payload and the object ids it references.
+	static func cellStorage(text: String, runs: [BodyParagraph.StyledRun], paraStyle: UInt64, charStyleID: (InlineStyle) -> UInt64) -> (payload: [UInt8], references: [UInt64]) {
+		// Char-style run table: a partition starting unstyled at 0, then each run's
+		// style and a bare entry back to unstyled (same shape as the body's #8).
+		var entries: [(index: Int, styleID: UInt64?)] = [(0, nil)]
+		var referencedStyles = [UInt64]()
+		for run in runs.sorted(by: { $0.start < $1.start }) {
+			let id = charStyleID(run.style)
+			referencedStyles.append(id)
+			entries.append((run.start, id))
+			entries.append((run.start + run.length, nil))
+		}
+		var writer = ProtobufWriter()
+		writer.varintField(1, 5)                                  // kind = cell
+		writer.bytesField(2, reference(stylesheetID))             // style ref
+		writer.bytesField(3, Array(text.utf8))                    // text
+		writer.bytesField(5, runTable([(0, paraStyle)]))          // para-style
+		writer.bytesField(6, paragraphDataTable())                // para-data
+		writer.bytesField(7, runTable([(0, listNoneStyleID)]))    // list-style
+		writer.bytesField(8, runTable(normalizedRuns(entries)))   // char-style
+		writer.varintField(10, 1)
+		writer.bytesField(14, paragraphDataTable())
+		writer.bytesField(24, paragraphDataTable())
+		return (writer.bytes, [paraStyle, listNoneStyleID] + referencedStyles)
+	}
+
+	/// A 2021 character style overriding only char_properties (bold/italic/code/...).
+	static func cellCharacterStyle(_ style: InlineStyle) -> [UInt8] {
+		var styleSuper = ProtobufWriter()
+		styleSuper.bytesField(3, reference(noneCharStyleID))
+		styleSuper.varintField(4, 1)
+		styleSuper.bytesField(5, reference(stylesheetID))
+		var charProperties = ProtobufWriter()
+		if style.bold { charProperties.varintField(1, 1) }
+		if style.italic { charProperties.varintField(2, 1) }
+		if style.code { charProperties.stringField(5, "Menlo-Regular") }
+		if style.link { charProperties.varintField(11, 1) }
+		if style.strikethrough { charProperties.varintField(12, 1) }
+		var w = ProtobufWriter()
+		w.bytesField(1, styleSuper.bytes)
+		w.varintField(10, 1)
+		w.bytesField(11, charProperties.bytes)
+		return w.bytes
+	}
+
+	/// A cell text wrapper (type 6218): `#1` references the cell's 2001 text storage,
+	/// `#3` is a full-range descriptor captured verbatim (sentinel "whole range" max
+	/// bounds: fixed32 0x00ffffff + a `{ #2 0x7fff, #3 0x7fffffff }` sub-range). The
+	/// rich_text_table entry points at this wrapper, which in turn points at the storage.
+	private static func cellTextWrapper(storageID: UInt64) -> [UInt8] {
+		var w = ProtobufWriter()
+		w.bytesField(1, reference(storageID))
+		w.bytesField(3, [0x0d, 0xff, 0xff, 0xff, 0x00, 0x12, 0x0a, 0x10, 0xff, 0xff, 0x01, 0x18, 0xff, 0xff, 0xff, 0xff, 0x07])
+		return w.bytes
+	}
+
+	/// A 24-byte rich-text cell: flags `05 09`, SW `10 10 02 00` (has-rich-id), and the
+	/// rich_text_table key at byte 12.
+	private static func richCell(richKey: Int) -> [UInt8] {
+		[0x05, 0x09, 0, 0, 0, 0, 0, 0] + [0x10, 0x10, 0x02, 0x00] + u32le(richKey) + [0x05, 0, 0, 0, 0x01, 0, 0, 0]
+	}
+
+	private static func reference(_ id: UInt64) -> [UInt8] { var w = ProtobufWriter(); w.varintField(1, id); return w.bytes }
+	private static func runTable(_ entries: [(index: Int, styleID: UInt64?)]) -> [UInt8] {
+		var w = ProtobufWriter()
+		for entry in entries {
+			var e = ProtobufWriter(); e.varintField(1, UInt64(entry.index))
+			if let styleID = entry.styleID { e.bytesField(2, reference(styleID)) }
+			w.bytesField(1, e.bytes)
+		}
+		return w.bytes
+	}
+	private static func paragraphDataTable() -> [UInt8] {
+		var e = ProtobufWriter(); e.varintField(1, 0); e.varintField(2, 0); e.varintField(3, 0)
+		var w = ProtobufWriter(); w.bytesField(1, e.bytes); return w.bytes
+	}
+	/// Merges run entries at the same index (last wins) and drops no-op changes.
+	private static func normalizedRuns(_ entries: [(index: Int, styleID: UInt64?)]) -> [(index: Int, styleID: UInt64?)] {
+		var byIndex = [(index: Int, styleID: UInt64?)]()
+		for entry in entries {
+			if let last = byIndex.last, last.index == entry.index { byIndex[byIndex.count - 1].styleID = entry.styleID }
+			else { byIndex.append(entry) }
+		}
+		var result = [(index: Int, styleID: UInt64?)]()
+		for entry in byIndex { if let last = result.last, last.styleID == entry.styleID { continue }; result.append(entry) }
+		return result
+	}
+	/// Frames a cell storage (2001) record with its object_references (#5).
+	private static func storageRecord(id: UInt64, payload: [UInt8], references: [UInt64]) -> [UInt8] {
+		recordWithReferences(id: id, type: 2001, version: [0x01, 0x00, 0x05], payload: payload, references: references)
+	}
+
+	/// Frames an object record whose `MessageInfo` carries the version (`#2`) and the
+	/// `object_references` (`#5`) Pages uses to resolve references — without `#5` the
+	/// referenced parent/styles aren't linked and the styling is silently dropped.
+	static func recordWithReferences(id: UInt64, type: UInt64, version: [UInt8], payload: [UInt8], references: [UInt64]) -> [UInt8] {
 		var messageInfo = ProtobufWriter()
-		messageInfo.varintField(1, 2022)              // type
-		messageInfo.bytesField(2, [0x01, 0x00, 0x05]) // version (as Pages writes for a 2022)
+		messageInfo.varintField(1, type)
+		messageInfo.bytesField(2, version)
 		messageInfo.varintField(3, UInt64(payload.count))
-		messageInfo.packedVarintField(5, [parent])    // object_references
+		if !references.isEmpty { messageInfo.packedVarintField(5, references) }
 		var archiveInfo = ProtobufWriter(); archiveInfo.varintField(1, id); archiveInfo.bytesField(2, messageInfo.bytes)
 		var out = ProtobufWriter.varint(UInt64(archiveInfo.bytes.count))
 		out.append(contentsOf: archiveInfo.bytes)
 		out.append(contentsOf: payload)
 		return out
+	}
+
+	/// A synthesized paragraph (2022) or character (2021) style record whose `#5`
+	/// object_references list its parent — required or Pages drops the inheritance.
+	static func styleRecord(id: UInt64, payload: [UInt8], parent: UInt64, type: UInt64 = 2022) -> [UInt8] {
+		recordWithReferences(id: id, type: type, version: [0x01, 0x00, 0x05], payload: payload, references: [parent])
 	}
 
 	/// Builds artifacts for the given tables. The first table reuses the captured
@@ -193,18 +409,21 @@ enum PagesTableBuilder {
 			let offset = UInt64(tableIndex) * idOffsetStep
 			let R = table.rows, C = table.columns
 			let styling = styling(for: table, offset: offset, tableIndex: tableIndex)
+			let rich = richContent(for: table, offset: offset, tableIndex: tableIndex)
+			artifacts.maxObjectID = max(artifacts.maxObjectID, rich.maxObjectID)
 			// Regenerate the dimension-dependent payloads (with base-table references,
 			// offset below alongside every cloned object).
-			let rewritten: [UInt64: [UInt8]] = [
+			var rewritten: [UInt64: [UInt8]] = [
 				PagesTableTemplate.columnRowUIDsID: buildColumnRowUIDs(rows: R, columns: C),
-				PagesTableTemplate.tileID: buildTile(rows: R, columns: C, styling: styling),
-				PagesTableTemplate.cellStringsID: buildCellStrings(table.cells),
+				PagesTableTemplate.tileID: buildTile(rows: R, columns: C, styling: styling, cellPlans: rich.cellPlans),
+				PagesTableTemplate.cellStringsID: rich.cellStrings,
 				PagesTableTemplate.modelID: patchModel(try record(PagesTableTemplate.modelID).payloadOnly, rows: R, columns: C, name: "Table \(tableIndex + 1)"),
 				PagesTableTemplate.rowHeadersBucketID: buildBucket(try record(PagesTableTemplate.rowHeadersBucketID).payloadOnly, count: R, otherDimension: C, size: rowHeight),
 				PagesTableTemplate.columnHeadersBucketID: buildBucket(try record(PagesTableTemplate.columnHeadersBucketID).payloadOnly, count: C, otherDimension: R, size: columnWidth),
 				PagesTableTemplate.tableInfoID: hideTitleAndCaption(try record(PagesTableTemplate.tableInfoID).payloadOnly),
 				styleTableID: styling.styleTable,
 			]
+			if !rich.storageRecords.isEmpty { rewritten[richTextTableID] = rich.richTextTable }
 
 			for entry in records {
 				artifacts.maxObjectID = max(artifacts.maxObjectID, entry.id + offset)
@@ -214,28 +433,39 @@ enum PagesTableBuilder {
 				if entry.file == "Index/Metadata.iwa" { continue }
 				let recordBytes = try record(entry.id)
 				let payload = rewritten[entry.id] ?? recordBytes.payloadOnly
-				// The regenerated styleTable now references the synthesized alignment
-				// styles, so its object_references must list them (Pages resolves cell
-				// styles through this list, not just the payload).
+				// A regenerated styleTable / rich_text_table must list (in its
+				// object_references) the styles / storages it now points at, or Pages
+				// won't resolve them through the table.
 				let objectReferences: [UInt64]? = entry.id == styleTableID
 					? [defaultCellStyleID + offset] + styling.styleObjects.map(\.id)
-					: nil
+					: (entry.id == richTextTableID && !rich.storageRecords.isEmpty
+						? rich.storageIDs
+						: nil)
 				let finalRecord = relocateRecord(recordBytes, newPayload: payload, offset: offset, objectReferences: objectReferences)
 				if entry.file.hasPrefix("Index/Tables/") {
 					let path = offset == 0 ? entry.file : relocatedTablePath(entry.file, newID: entry.id + offset)
-					artifacts.newFiles[path] = [UInt8](IWAArchive.encode(stream: finalRecord))
+					// Cell text storages live in the rich_text_table's component file.
+					var stream = finalRecord
+					if entry.id == richTextTableID { for storage in rich.storageRecords { stream.append(contentsOf: storage) } }
+					artifacts.newFiles[path] = [UInt8](IWAArchive.encode(stream: stream))
 				} else {
 					appendStreams[entry.file, default: []].append(contentsOf: finalRecord)
 				}
 			}
-			// Synthesized alignment paragraph styles live alongside the captured cell
-			// style in DocumentStylesheet; their ids are final (not relocated).
+			// Synthesized alignment paragraph styles and cell character styles live in
+			// DocumentStylesheet; their ids are final (not relocated).
 			for style in styling.styleObjects {
 				appendStreams["Index/DocumentStylesheet.iwa", default: []].append(contentsOf: styleRecord(id: style.id, payload: style.payload, parent: style.parent))
 				artifacts.maxObjectID = max(artifacts.maxObjectID, style.id)
 			}
+			for charStyle in rich.charStyleRecords {
+				appendStreams["Index/DocumentStylesheet.iwa", default: []].append(contentsOf: styleRecord(id: charStyle.id, payload: charStyle.payload, parent: noneCharStyleID, type: 2021))
+			}
 			if !styling.styleObjects.isEmpty {
 				artifacts.styleComponentRefs[styleTableID + offset] = styling.styleObjects.map(\.id)
+			}
+			if !rich.crossRefStyleIDs.isEmpty {
+				artifacts.styleComponentRefs[richTextTableID + offset] = rich.crossRefStyleIDs
 			}
 			artifacts.attachmentIDs.append(PagesTableTemplate.attachmentID + offset)
 		}
@@ -266,30 +496,33 @@ enum PagesTableBuilder {
 	/// `TST.Tile` — top `#4` numrows = R, `#6`/per-row `#5` are storage_version (=5,
 	/// constant — NOT counts). One `TileRowInfo` (`#5`) per row with C 28/24-byte
 	/// string cells whose `u32@12` is the cell-string key (`r*C + c + 1`).
-	static func buildTile(rows R: Int, columns C: Int, styling: Styling = Styling(styleTable: [], styleObjects: [], headerKeys: [], bodyKeys: [], maxObjectID: 0)) -> [UInt8] {
+	static func buildTile(rows R: Int, columns C: Int, styling: Styling = Styling(styleTable: [], styleObjects: [], headerKeys: [], bodyKeys: [], maxObjectID: 0), cellPlans: [(isRich: Bool, key: Int)] = []) -> [UInt8] {
 		var w = ProtobufWriter()
 		w.varintField(1, 0); w.varintField(2, 0); w.varintField(3, 0)   // maxColumn/maxRow/numCells
 		w.varintField(4, UInt64(R))                                     // numrows
-		for r in 0..<R { w.bytesField(5, tileRow(r, columns: C, styling: styling)) }
+		for r in 0..<R { w.bytesField(5, tileRow(r, columns: C, styling: styling, cellPlans: cellPlans)) }
 		w.varintField(6, 5)                                             // storage_version (constant)
 		w.varintField(7, 1)                                             // last_saved_in_BNC
 		return w.bytes
 	}
 
-	private static func tileRow(_ row: Int, columns C: Int, styling: Styling) -> [UInt8] {
+	private static func tileRow(_ row: Int, columns C: Int, styling: Styling, cellPlans: [(isRich: Bool, key: Int)]) -> [UInt8] {
 		let columnMeta = (0..<C).flatMap { _ -> [UInt8] in [0x04, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }
 		let metaOffsets = (0..<C).map { $0 * 12 }
 		var cells = [UInt8]()
 		var cellStarts = [Int]()
 		for c in 0..<C {
 			cellStarts.append(cells.count)
-			let key = row * C + c + 1
-			if row == 0 {
+			let index = row * C + c
+			let plan = index < cellPlans.count ? cellPlans[index] : (isRich: false, key: index + 1)
+			if plan.isRich {
+				cells.append(contentsOf: richCell(richKey: plan.key))
+			} else if row == 0 {
 				let styleKey = c < styling.headerKeys.count ? styling.headerKeys[c] : 1
-				cells.append(contentsOf: styledCell(key: key, styleKey: styleKey))
+				cells.append(contentsOf: styledCell(key: plan.key, styleKey: styleKey))
 			} else {
 				let styleKey = c < styling.bodyKeys.count ? styling.bodyKeys[c] : 0
-				cells.append(contentsOf: styleKey == 0 ? bodyCell(key: key) : styledCell(key: key, styleKey: styleKey))
+				cells.append(contentsOf: styleKey == 0 ? bodyCell(key: plan.key) : styledCell(key: plan.key, styleKey: styleKey))
 			}
 		}
 		var w = ProtobufWriter()
