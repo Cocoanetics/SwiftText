@@ -91,9 +91,16 @@ final class PagesParser {
 		/// reach a cell's rich text (via a 6218 wrapper → 2001 `StorageArchive`).
 		static let dataStoreRichTextTableField = 17
 		static let dataListWrapperRefField = 9
-		/// A cell's type byte (offset 1): `0x03` = plain string, `0x09` = rich text. Its
-		/// `u32@12` is then a rich_text_table key rather than a string-table key.
+		/// A cell's type byte (offset 1): `0x02` number, `0x03` string, `0x05` date,
+		/// `0x06` duration, `0x07` bool, `0x09` rich. For numeric kinds the *frozen*
+		/// value (the cached formula result, no recalculation) lives at byte 12: a
+		/// decimal128 (number), a `double` of seconds-since-2001 (date), or a `double`
+		/// (duration / bool). String/rich cells carry a `u32@12` key instead.
 		static let cellTypeByteOffset = 1
+		static let cellNumberType: UInt8 = 0x02
+		static let cellDateType: UInt8 = 0x05
+		static let cellDurationType: UInt8 = 0x06
+		static let cellBoolType: UInt8 = 0x07
 		static let cellRichType: UInt8 = 0x09
 		/// `ParagraphStylePropertiesArchive.alignment` (#1): 1 = right, 2 = center.
 		static let paragraphPropertiesField = 12
@@ -451,15 +458,18 @@ final class PagesParser {
 				guard start + IWork.cellKeyByteOffset + 4 <= buffer.count else { continue }
 				let base = start + IWork.cellKeyByteOffset
 				let key = UInt64(buffer[base]) | UInt64(buffer[base + 1]) << 8 | UInt64(buffer[base + 2]) << 16 | UInt64(buffer[base + 3]) << 24
-				let isRich = start + IWork.cellTypeByteOffset < buffer.count
-					&& buffer[start + IWork.cellTypeByteOffset] == IWork.cellRichType
-				if isRich, let storageID = richStorageByKey[key], let storage = store.object(storageID) {
+				let typeByte = start + IWork.cellTypeByteOffset < buffer.count ? buffer[start + IWork.cellTypeByteOffset] : 0
+				if typeByte == IWork.cellRichType, let storageID = richStorageByKey[key], let storage = store.object(storageID) {
 					// A rich cell's text + char-style runs reconstruct the inline markup;
 					// its column alignment comes from the storage's own paragraph style.
 					grid[rowIndex][column] = cellMarkdown(storage, store: store)
 					if rowIndex >= 1, let aligned = cellAlignment(storage, store: store) {
 						columnAlignments[column] = aligned
 					}
+				} else if let frozen = frozenValue(buffer, at: start, type: typeByte) {
+					// Numeric / date / bool / duration cells store their cached value — the
+					// formula result, no recalculation — so the table reads as static text.
+					grid[rowIndex][column] = frozen
 				} else if let string = stringsByKey[key] {
 					grid[rowIndex][column] = string
 				}
@@ -497,6 +507,64 @@ final class PagesParser {
 		      let style = store.object(styleID),
 		      let value = ProtobufMessage(style.payload).message(IWork.paragraphPropertiesField)?.varint(IWork.paragraphAlignmentField) else { return nil }
 		switch value { case 1: return .right; case 2: return .center; default: return nil }
+	}
+
+	/// The frozen (cached) value of a numeric / date / bool / duration cell rendered as
+	/// static text — the displayed formula result, no recalculation. Returns `nil` for
+	/// text cells (which carry a string-table key the caller resolves instead).
+	private func frozenValue(_ b: [UInt8], at start: Int, type: UInt8) -> String? {
+		let o = start + IWork.cellKeyByteOffset
+		func readDouble(_ off: Int) -> Double? {
+			guard off + 8 <= b.count else { return nil }
+			var bits: UInt64 = 0; for k in 0..<8 { bits |= UInt64(b[off + k]) << (8 * k) }
+			return Double(bitPattern: bits)
+		}
+		switch type {
+		case IWork.cellNumberType:
+			return Self.decimal128String(b, at: o)
+		case IWork.cellDateType:
+			guard let seconds = readDouble(o) else { return nil }
+			let formatter = DateFormatter()
+			formatter.dateFormat = "yyyy-MM-dd HH:mm"
+			formatter.timeZone = TimeZone(identifier: "UTC")
+			return formatter.string(from: Date(timeIntervalSinceReferenceDate: seconds))
+		case IWork.cellBoolType:
+			guard let v = readDouble(o) else { return nil }
+			return v != 0 ? "true" : "false"
+		case IWork.cellDurationType:
+			guard let s = readDouble(o) else { return nil }
+			return "\(Int(s.rounded()))s"
+		default:
+			return nil
+		}
+	}
+
+	/// Decodes an IEEE 754-2008 decimal128 (BID) at `o` (16 bytes, little-endian) to an
+	/// exact decimal string: value = coefficient × 10^(exponent). Handles the common
+	/// small-coefficient form (≤ 64-bit coefficient); returns `nil` for the rarer large
+	/// form so the caller falls back gracefully.
+	static func decimal128String(_ b: [UInt8], at o: Int) -> String? {
+		guard o + 16 <= b.count else { return nil }
+		func u64(_ off: Int) -> UInt64 { var v: UInt64 = 0; for k in 0..<8 { v |= UInt64(b[off + k]) << (8 * k) }; return v }
+		let lo = u64(o), hi = u64(o + 8)
+		let sign = (hi >> 63) & 1
+		guard (hi >> 61) & 0x3 != 0x3 else { return nil }     // large-coefficient/special form
+		let exponent = Int((hi >> 49) & 0x3FFF) - 6176
+		guard hi & 0x1_FFFF_FFFF_FFFF == 0 else { return nil } // >64-bit coefficient
+		var digits = String(lo)
+		let result: String
+		if exponent >= 0 {
+			result = digits + String(repeating: "0", count: min(exponent, 40))
+		} else {
+			let frac = -exponent
+			if digits.count <= frac { digits = String(repeating: "0", count: frac - digits.count + 1) + digits }
+			let split = digits.index(digits.endIndex, offsetBy: -frac)
+			let intPart = String(digits[..<split])
+			var fracPart = String(digits[split...])
+			while fracPart.hasSuffix("0") { fracPart.removeLast() }
+			result = fracPart.isEmpty ? intPart : "\(intPart).\(fracPart)"
+		}
+		return sign == 1 && result != "0" ? "-" + result : result
 	}
 
 	/// Parses a tile row's `u16` cell-offset array (little-endian), terminated by the
