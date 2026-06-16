@@ -33,7 +33,7 @@ public final class PagesWriter {
 
 	/// Writes a document whose body is the given paragraphs (each carrying its
 	/// paragraph style, list membership, and inline style runs).
-	func write(paragraphs inputParagraphs: [BodyParagraph], to url: URL) throws {
+	func write(paragraphs inputParagraphs: [BodyParagraph], baseURL: URL? = nil, to url: URL) throws {
 		let identity = DocumentIdentity.fresh()
 		let registry = CharacterStyleRegistry()
 
@@ -54,6 +54,38 @@ public final class PagesWriter {
 			}
 		}
 
+		// Inline images: resolve each image paragraph's source against `baseURL`, embed
+		// the bytes (`Data/` + a PackageMetadata DataInfo), and point its #9 anchor at
+		// the image's drawable attachment. Unresolved images degrade to alt-text.
+		guard let documentTemplate = template.data(for: "Index/Document.iwa") else {
+			throw PagesWriteError.malformedTemplate("Index/Document.iwa")
+		}
+		let bodyID = try bodyStorageIdentifier(in: Data(documentTemplate))
+		var imageInputs = [PagesImageBuilder.Input]()
+		var imageParagraphIndices = [Int]()
+		for index in paragraphs.indices {
+			guard let ref = paragraphs[index].image else { continue }
+			let source = URL(fileURLWithPath: ref.source)
+			if let baseURL,
+			   let bytes = try? [UInt8](Data(contentsOf: baseURL.appendingPathComponent(ref.source))), !bytes.isEmpty {
+				let base = Self.imageBaseName(source.deletingPathExtension().lastPathComponent)
+				let ext = source.pathExtension.isEmpty ? "png" : source.pathExtension.lowercased()
+				imageInputs.append(.init(bytes: bytes, baseName: base, pathExtension: ext))
+				imageParagraphIndices.append(index)
+			} else {
+				paragraphs[index].text = ref.alt.isEmpty ? "[image]" : ref.alt
+				paragraphs[index].image = nil
+				var italic = InlineStyle(); italic.italic = true
+				paragraphs[index].runs = [BodyParagraph.StyledRun(start: 0, length: paragraphs[index].text.utf16.count, style: italic)]
+			}
+		}
+		let imageArtifacts = imageInputs.isEmpty ? nil : PagesImageBuilder.build(imageInputs, bodyStorageID: bodyID)
+		if let imageArtifacts {
+			for (k, index) in imageParagraphIndices.enumerated() {
+				paragraphs[index].attachment = imageArtifacts.attachmentIDs[k]
+			}
+		}
+
 		var zip = StoredZipWriter()
 		for entry in template.entries {
 			guard var data = template.data(for: entry.path) else {
@@ -61,20 +93,27 @@ public final class PagesWriter {
 			}
 			switch entry.path {
 			case "Index/Document.iwa":
-				data = try buildDocument(from: data, paragraphs: paragraphs, registry: registry)
+				data = try buildDocument(from: data, paragraphs: paragraphs, registry: registry, extraObjects: imageArtifacts?.objects ?? [])
 			case "Index/DocumentStylesheet.iwa":
 				data = try applyingStylesheet(to: data)
-			case "Index/Metadata.iwa" where tableArtifacts != nil:
-				// Tables add `Index/Tables/*` components; use the captured table
-				// document's PackageMetadata (its component layout matches the output).
+			case "Index/Metadata.iwa" where tableArtifacts != nil || imageArtifacts != nil:
 				// Document.iwa is processed earlier in this loop, so `registry` already
 				// reflects any synthesized objects by the time Metadata is written.
 				let synthesizedMax = registry.didSynthesize ? registry.maxIdentifier : 0
-				data = try tablePackageMetadata(
-					highWaterMark: max(synthesizedMax, tableArtifacts!.maxObjectID),
-					tableCount: tableArtifacts!.tableCount,
-					styleComponentRefs: tableArtifacts!.styleComponentRefs
-				)
+				let imageMax = imageArtifacts?.maxObjectID ?? 0
+				if let tableArtifacts {
+					// Tables ship their own captured PackageMetadata (component layout).
+					data = try tablePackageMetadata(
+						highWaterMark: max(synthesizedMax, tableArtifacts.maxObjectID, imageMax),
+						tableCount: tableArtifacts.tableCount,
+						styleComponentRefs: tableArtifacts.styleComponentRefs
+					)
+				}
+				if let imageArtifacts {
+					// Register each embedded image's media (DataInfo #4) + raise the id mark.
+					data = try addingImageMetadata(to: data, dataInfos: imageArtifacts.dataInfos,
+					                                highWaterMark: max(synthesizedMax, imageMax))
+				}
 			case "Metadata/Properties.plist":
 				data = try rewritingProperties(data, identity: identity)
 			case "Metadata/DocumentIdentifier":
@@ -94,7 +133,38 @@ public final class PagesWriter {
 				zip.add(path: path, data: fileData)
 			}
 		}
+		// Add embedded image media files (`Data/*`).
+		if let imageArtifacts {
+			for file in imageArtifacts.dataFiles {
+				zip.add(path: file.path, data: file.bytes)
+			}
+		}
 		try zip.finish().write(to: url, options: .atomic)
+	}
+
+	/// A cleaned base name for an embedded image's `Data/` file: alphanumerics and
+	/// dashes only, so the on-disk name is portable.
+	private static func imageBaseName(_ raw: String) -> String {
+		let cleaned = raw.unicodeScalars.map { CharacterSet.alphanumerics.contains($0) ? Character($0) : "-" }
+		let name = String(cleaned).trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+		return name.isEmpty ? "image" : name
+	}
+
+	/// Adds image media registrations to a `PackageMetadata`: appends each `DataInfo`
+	/// (field #4) and raises the object-id high-water mark (field #1).
+	private func addingImageMetadata(to metadataIWA: [UInt8], dataInfos: [[UInt8]], highWaterMark: UInt64) throws -> [UInt8] {
+		let data = Data(metadataIWA)
+		guard let pm = try IWAArchive.objects(from: data).first(where: { $0.type == 11006 }) else { return metadataIWA }
+		let updated = try IWAArchive.replacingPayload(in: data, objectID: pm.identifier) { payload in
+			let message = ProtobufMessage(payload)
+			let current = message.varint(1) ?? 0
+			var writer = ProtobufWriter()
+			for field in message.fields where field.number != 1 { writer.append(field) }
+			writer.varintField(1, max(current, highWaterMark))
+			for dataInfo in dataInfos { writer.bytesField(4, dataInfo) }
+			return writer.bytes
+		}
+		return [UInt8](updated)
 	}
 
 	/// The captured table document's `PackageMetadata`, relocated to cover every
@@ -119,7 +189,7 @@ public final class PagesWriter {
 
 	/// Rebuilds `Index/Document.iwa`: replaces the body storage with serialized
 	/// paragraphs, then appends any character-style objects the body references.
-	private func buildDocument(from documentIWA: [UInt8], paragraphs: [BodyParagraph], registry: CharacterStyleRegistry) throws -> [UInt8] {
+	private func buildDocument(from documentIWA: [UInt8], paragraphs: [BodyParagraph], registry: CharacterStyleRegistry, extraObjects: [IWAObject] = []) throws -> [UInt8] {
 		let data = Data(documentIWA)
 		let bodyID = try bodyStorageIdentifier(in: data)
 		var edited = try IWAArchive.replacingPayload(in: data, objectID: bodyID) { payload in
@@ -127,6 +197,9 @@ public final class PagesWriter {
 		}
 		if registry.didSynthesize {
 			edited = try IWAArchive.appending(registry.synthesizedObjects, to: edited)
+		}
+		if !extraObjects.isEmpty {
+			edited = try IWAArchive.appending(extraObjects, to: edited)
 		}
 		return [UInt8](edited)
 	}

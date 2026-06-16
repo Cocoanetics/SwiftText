@@ -22,15 +22,18 @@ public enum MarkdownToPages {
 	/// form. The package form is produced by writing the flat document and re-emitting it
 	/// through ``IWAPackage`` (`Index/*` into a nested `Index.zip`, everything else loose),
 	/// so both forms share the same content.
-	public static func convert(_ markdown: String, to url: URL, packaging: Packaging = .singleFile) throws {
+	/// - Parameter baseURL: the directory Markdown image paths are resolved against
+	///   (typically the source `.md` file's folder). When `nil`, images fall back to
+	///   alt-text placeholders.
+	public static func convert(_ markdown: String, to url: URL, packaging: Packaging = .singleFile, baseURL: URL? = nil) throws {
 		let paragraphs = MarkdownPagesBuilder.paragraphs(from: markdown)
 		switch packaging {
 		case .singleFile:
-			try PagesWriter().write(paragraphs: paragraphs, to: url)
+			try PagesWriter().write(paragraphs: paragraphs, baseURL: baseURL, to: url)
 		case .package:
 			let temp = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("\(UUID().uuidString).pages")
 			defer { try? FileManager.default.removeItem(at: temp) }
-			try PagesWriter().write(paragraphs: paragraphs, to: temp)
+			try PagesWriter().write(paragraphs: paragraphs, baseURL: baseURL, to: temp)
 			guard let pkg = IWAPackage.read(zip: [UInt8](try Data(contentsOf: temp))) else {
 				throw PagesWriteError.malformedTemplate("flat package")
 			}
@@ -156,6 +159,19 @@ private struct BlockVisitor: MarkupVisitor {
 	}
 
 	mutating func visitParagraph(_ paragraph: Paragraph) {
+		// A paragraph that is solely an image becomes an inline-image attachment
+		// (a single U+FFFC the writer embeds + anchors). Images mixed with text still
+		// fall back to alt-text placeholders (see InlineCollector).
+		let children = Array(paragraph.children)
+		if children.count == 1, let image = children.first as? Image,
+		   let source = image.source, !source.isEmpty {
+			paragraphs.append(BodyParagraph(
+				text: "\u{FFFC}",
+				paragraphStyle: PagesStyleID.body,
+				image: BodyParagraph.ImageRef(source: source, alt: reverseSmartPunct(swiftMarkdownPlainText(of: image)))
+			))
+			return
+		}
 		var collector = InlineCollector()
 		collector.collect(from: paragraph)
 		paragraphs.append(BodyParagraph(

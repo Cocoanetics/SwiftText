@@ -84,6 +84,16 @@ struct BodyParagraph {
 	/// The native table this attachment paragraph anchors, if any. The writer builds
 	/// its object set and injects it; the paragraph text is a single `U+FFFC`.
 	var table: PagesTable?
+	/// An inline image this attachment paragraph anchors, if any. The writer embeds the
+	/// resolved bytes and points the `#9` anchor at the image's drawable attachment;
+	/// the paragraph text is a single `U+FFFC`.
+	var image: ImageRef?
+
+	/// A Markdown image reference to embed: the (relative) source path and alt text.
+	struct ImageRef {
+		var source: String
+		var alt: String
+	}
 	/// Inline style spans, as UTF-16 ranges within `text`.
 	var runs: [StyledRun] = []
 	/// Hyperlink spans, as UTF-16 ranges within `text` plus the destination URL.

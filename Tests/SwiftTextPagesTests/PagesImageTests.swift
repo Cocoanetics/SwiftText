@@ -122,4 +122,58 @@ struct PagesImageTests {
 		let urls = try pages.extractImages(to: outDir)
 		#expect(urls.map { $0.lastPathComponent } == ["photo.png"])
 	}
+
+	// MARK: - Embedding (MD → Pages)
+
+	/// A tiny but valid 1×1 PNG.
+	static let onePixelPNG = Data(base64Encoded:
+		"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC")!
+
+	@Test("A Markdown image embeds into the package and round-trips back out")
+	func imageEmbedsAndExtracts() throws {
+		let dir = FileManager.default.temporaryDirectory.appendingPathComponent("img-\(UUID().uuidString)")
+		try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+		defer { try? FileManager.default.removeItem(at: dir) }
+		try PagesImageTests.onePixelPNG.write(to: dir.appendingPathComponent("pic.png"))
+		let out = dir.appendingPathComponent("doc.pages")
+
+		try MarkdownToPages.convert("# Title\n\n![a picture](pic.png)\n", to: out, baseURL: dir)
+
+		// Embedded: a Data/ file carrying the exact image bytes.
+		let dataEntries = try PagesContainer.entries(at: out, prefix: "Data/")
+		let image = try #require(dataEntries.first { $0.path.hasSuffix(".png") })
+		#expect(image.data == PagesImageTests.onePixelPNG)
+
+		// Round-trips: the parser recovers an image reference and re-emits `![...]`.
+		let file = try PagesFile(url: out)
+		#expect(file.document.imageAssets.count == 1)
+		#expect(file.markdown().contains("!["))
+
+		// Extracts: the original bytes come back out to disk.
+		let extracted = try file.extractImages(to: dir.appendingPathComponent("out"))
+		#expect(extracted.count == 1)
+		#expect(try Data(contentsOf: try #require(extracted.first)) == PagesImageTests.onePixelPNG)
+	}
+
+	@Test("A missing image falls back to alt text (no Data file, still opens)")
+	func missingImageFallsBack() throws {
+		let dir = FileManager.default.temporaryDirectory.appendingPathComponent("img-\(UUID().uuidString)")
+		try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+		defer { try? FileManager.default.removeItem(at: dir) }
+		let out = dir.appendingPathComponent("doc.pages")
+
+		try MarkdownToPages.convert("![the alt text](nope.png)\n", to: out, baseURL: dir)
+
+		#expect(try PagesContainer.entries(at: out, prefix: "Data/").isEmpty)
+		#expect(try PagesFile(url: out).markdown().contains("the alt text"))
+	}
+
+	@Test("PNG dimensions are parsed from the header; SHA-1 matches RFC 3174")
+	func dimensionsAndDigest() {
+		#expect(PagesImageBuilder.dimensions(of: [UInt8](PagesImageTests.onePixelPNG))?.width == 1)
+		#expect(PagesImageBuilder.dimensions(of: [UInt8](PagesImageTests.onePixelPNG))?.height == 1)
+		// SHA1("abc") = a9993e364706816aba3e25717850c26c9cd0d89d
+		let digest = SHA1.hash(Array("abc".utf8)).map { String(format: "%02x", $0) }.joined()
+		#expect(digest == "a9993e364706816aba3e25717850c26c9cd0d89d")
+	}
 }

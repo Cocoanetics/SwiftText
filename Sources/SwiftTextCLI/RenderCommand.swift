@@ -89,7 +89,7 @@ struct Render: AsyncParsableCommand {
 			try MarkdownToDocx.convert(markdownText, to: outputURL, pageSetup: docxPageSetup())
 			print(outputURL.path)
 		case .pages:
-			try MarkdownToPages.convert(markdownText, to: outputURL, packaging: package ? .package : .singleFile)
+			try MarkdownToPages.convert(markdownText, to: outputURL, packaging: package ? .package : .singleFile, baseURL: baseURL)
 			print(outputURL.path)
 		}
 	}
