@@ -509,6 +509,19 @@ strokes, padding). Instead:
   the style key → style `#12` to recover the alignment marker). Works for any number of
   tables (synth style ids are allocated per table id offset).
 
-**In-cell bold/italic — NOT decoded/implemented.** Cells store plain strings in the
-`stringTable` DataList; rich (mixed-style) cell text needs a separate rich-text storage
-(`DataStore.rich_text_table` #17), a larger mechanism not yet reverse-engineered.
+**In-cell bold/italic — DECODED (2026-06-16), not yet implemented.** A cell with mixed
+character styling stops being a plain string and becomes a rich-text cell:
+- The cell's text leaves the `stringTable` `DataList` and moves into a **`TSWP`
+  `StorageArchive` (type 2001)** — same shape as the body storage: `#3` text + `#8`
+  char-style run table → synthesized char styles (type 2021, e.g. bold `#11 #1 = 1`).
+- `DataStore` `#17` = `rich_text_table` → a `DataList` (list-id 8). Entry =
+  `{ #1 key, #2 1, #9 { #1 storageRef } }` (note `#9`, vs `#4` styleTable / `#3` strings).
+- The tile cell record flips from `05 03` to **`05 09`**, its flags word from `08/48` to
+  **`10 10 02 00`** (the `0x10` "has rich id" bit), and the `u32` at byte 12 becomes the
+  **rich_text_table key** instead of the string key.
+- Implementation path (all infrastructure already exists): reuse `PagesBodySerializer`
+  to build the per-cell `StorageArchive`, `CharacterStyleRegistry` for the char styles,
+  the styleTable/cross-ref machinery (`MessageInfo #5` + `ComponentInfo #6`) for the
+  rich_text_table → storage and storage → char-style references, and emit `05 09` cells.
+  Reader: a `05 09` cell → rich_text_table key → storage → run table → inline markup.
+  Comparable scope to the alignment work above.
