@@ -126,13 +126,12 @@ enum Snappy {
 		return output
 	}
 
-	/// Snappy's hash-table size for a fragment: the smallest power of two ≥ the
-	/// fragment length, starting at 256 and capped at 2¹⁴ (16384).
-	private static func hashTableSize(_ fragmentSize: Int) -> Int {
-		var size = 256
-		while size < (1 << 14) && size < fragmentSize { size <<= 1 }
-		return size
-	}
+	/// Hash-table size for a fragment. The open-source Snappy *downsizes* the table for
+	/// small inputs (smallest power of two ≥ the fragment length), but the build iWork
+	/// ships does **not** — it always uses the full 2¹⁴ (16384) table. RE'd from a real
+	/// document: a 938-byte block diverged only because the reference's 1024-entry table
+	/// let two distinct 4-byte keys collide and evict a match the 16384 table keeps.
+	private static func hashTableSize(_ fragmentSize: Int) -> Int { 1 << 14 }
 
 	private static func load32(_ input: [UInt8], _ index: Int) -> UInt32 {
 		UInt32(input[index]) | (UInt32(input[index + 1]) << 8)
