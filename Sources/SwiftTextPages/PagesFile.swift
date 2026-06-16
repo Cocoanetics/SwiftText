@@ -1,4 +1,5 @@
 import Foundation
+import Markdown
 
 /// A parsed Pages (`.pages`) document with convenience helpers for plain text
 /// or Markdown output.
@@ -37,6 +38,13 @@ public final class PagesFile {
 	/// typography.
 	public func markdown() -> String {
 		document.markdown()
+	}
+
+	/// Returns the document as a swift-markdown AST (`Markdown.Document`) — the inverse
+	/// of `MarkdownToPages`, which walks an AST to generate Pages. Use this to feed the
+	/// HTML/DOCX renderers or any other AST consumer; `markdown()` is the string form.
+	public func markdownDocument() -> Markdown.Document {
+		document.markdownDocument()
 	}
 
 	/// Extracts the document's embedded content images to the given directory.

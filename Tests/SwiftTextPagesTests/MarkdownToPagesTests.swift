@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import Markdown
 
 @testable import SwiftTextPages
 
@@ -261,6 +262,29 @@ struct MarkdownToPagesTests {
 			for object in objects { store.add(object) }
 		}
 		return store
+	}
+
+	@Test("markdownDocument() builds a swift-markdown AST mirroring MarkdownToPages' input")
+	func readBackProducesAST() throws {
+		let url = FileManager.default.temporaryDirectory
+			.appendingPathComponent("swifttext-ast-\(UUID().uuidString).pages")
+		defer { try? FileManager.default.removeItem(at: url) }
+		try MarkdownToPages.convert("# Heading\n\nText with a [link](https://x.com) and `code`.\n\n- one\n- two", to: url)
+
+		let ast = try PagesFile(url: url).markdownDocument()
+		let blocks = Array(ast.children)
+		// First block is a level-1 heading; the inline content includes a Link + InlineCode.
+		#expect((blocks.first as? Heading)?.level == 1)
+		let inlineKinds = blocks.compactMap { $0 as? Markdown.Paragraph }
+			.flatMap { Array($0.children) }
+		#expect(inlineKinds.contains { $0 is Link })
+		#expect(inlineKinds.contains { $0 is InlineCode })
+		// A list block is present.
+		#expect(blocks.contains { $0 is UnorderedList })
+		// And it serializes to valid Markdown that re-parses to the same shape.
+		let formatted = ast.format()
+		#expect(formatted.contains("# Heading"))
+		#expect(formatted.contains("[link](https://x.com)"))
 	}
 
 	@Test("Package form writes a directory bundle (Index.zip + loose files) that re-reads")

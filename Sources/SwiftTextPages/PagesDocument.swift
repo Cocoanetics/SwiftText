@@ -1,4 +1,5 @@
 import Foundation
+import Markdown
 
 /// A parsed Pages document reduced to its ordered body paragraphs.
 ///
@@ -324,8 +325,15 @@ public struct PagesDocument {
 		plainTextParagraphs().joined(separator: "\n\n")
 	}
 
-	/// Returns the document as Markdown: inline bold/italic, headings inferred
-	/// from font size, bullet/numbered lists, and inline image links.
+	/// Returns the document as Markdown.
+	///
+	/// The decoded structure is also available as a swift-markdown AST via
+	/// `markdownDocument()` (the inverse of `MarkdownToPages`, which walks an AST to
+	/// generate Pages) — use that to compose with the HTML/DOCX renderers or any other
+	/// AST consumer. This convenience serializer is kept hand-rolled rather than going
+	/// through `MarkupFormatter` because cmark emits non-standard single-tilde
+	/// strikethrough (`~x~`) and width-padded table cells; this keeps `~~`/`*`/`` ` ``
+	/// and clean GFM tables.
 	public func markdown() -> String {
 		let bodySize = dominantBodyFontSize()
 		var lines = [String]()
@@ -418,7 +426,7 @@ public struct PagesDocument {
 
 	/// The most common font size across body text, weighted by paragraph length.
 	/// This is the baseline that headings are measured against.
-	private func dominantBodyFontSize() -> Double? {
+	func dominantBodyFontSize() -> Double? {
 		var weights = [Double: Int]()
 		for paragraph in paragraphs {
 			guard let size = paragraph.fontSize else { continue }
@@ -435,7 +443,7 @@ public struct PagesDocument {
 	/// emphasized-but-long body paragraphs from being promoted. An explicit level
 	/// (from a legacy style name) is honored directly; otherwise the level is
 	/// derived from how much larger than the body the paragraph is set.
-	private func headingLevel(for paragraph: PagesDocument.Paragraph, text: String, bodySize: Double?) -> Int? {
+	func headingLevel(for paragraph: PagesDocument.Paragraph, text: String, bodySize: Double?) -> Int? {
 		// An explicit level read from the paragraph's style is authoritative — honor it
 		// regardless of length (a styled heading is a heading even if it's long).
 		if let explicit = paragraph.headingLevel, !text.isEmpty {
