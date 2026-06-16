@@ -12,9 +12,11 @@ reads them to generate Swift wire-model types (`Sources/SwiftTextPages/Generated
 backed by SwiftText's own `ProtobufReader`/`ProtobufWriter`. No protobuf runtime
 dependency is introduced — the generated encoders/decoders are SwiftText's own.
 
-Only the subset needed for Pages document structure is vendored (TSP, TSS, TSD,
-TSWP, TST, TSK). References into un-vendored archives (TSCE calculation engine,
-TSCK collaboration) decode through a lossless `unknownFields` passthrough.
+The subset needed for Pages document content is vendored: TSP, TSS, TSD, TSWP,
+TST, TSK, plus TSCE (calculation engine) and TSCK (collaboration). References into
+still-un-vendored archives (charts TSCH, Keynote KN, Pages-app TP types, and the
+transient command/undo archives) decode through a lossless `unknownFields`
+passthrough, so any document still round-trips byte-for-byte.
 
 Upstream license: MIT (keynote-parser). See the upstream repository for the full
 license text.

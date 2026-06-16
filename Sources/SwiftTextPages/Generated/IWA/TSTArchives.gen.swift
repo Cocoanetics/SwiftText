@@ -5,7 +5,7 @@ import Foundation
 /// Generated wire model for `TST.CellID`.
 final class TST_CellID {
     var packeddata: UInt32?
-    var expandedCoord: [UInt8]?
+    var expandedCoord: TSCE_CellCoordinateArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
 
@@ -18,8 +18,8 @@ final class TST_CellID {
             if case .fixed32(let _b) = _f.value { _v = IWAWire.u32(_b) }
             if let _v { packeddata = _v }
         case 2:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_CellCoordinateArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_CellCoordinateArchive(ProtobufMessage(_b)) }
             if let _v { expandedCoord = _v }
                 default: unknownFields.append(_f)
             }
@@ -28,7 +28,7 @@ final class TST_CellID {
     func encoded() -> [UInt8] {
         var _w = ProtobufWriter()
         if let _x = packeddata { _w.fixed32Field(1, _x) }
-        if let _x = expandedCoord { _w.bytesField(2, _x) }
+        if let _x = expandedCoord { _w.bytesField(2, _x.encoded()) }
         for _f in unknownFields { _w.append(_f) }
         return _w.bytes
     }
@@ -36,8 +36,8 @@ final class TST_CellID {
 
 /// Generated wire model for `TST.CellUIDLookupListArchive`.
 final class TST_CellUIDLookupListArchive {
-    var columnUids: [UInt8]?
-    var rowUids: [UInt8]?
+    var columnUids: TSCE_UidLookupListArchive?
+    var rowUids: TSCE_UidLookupListArchive?
     var columnIndexes: [Int32] = []
     var rowIndexes: [Int32] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -48,12 +48,12 @@ final class TST_CellUIDLookupListArchive {
         for _f in _pb.fields {
             switch _f.number {
         case 1:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_UidLookupListArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_UidLookupListArchive(ProtobufMessage(_b)) }
             if let _v { columnUids = _v }
         case 2:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_UidLookupListArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_UidLookupListArchive(ProtobufMessage(_b)) }
             if let _v { rowUids = _v }
         case 3:
             if case .varint(let _u) = _f.value { columnIndexes.append(Int32(truncatingIfNeeded: _u)) }
@@ -67,8 +67,8 @@ final class TST_CellUIDLookupListArchive {
     }
     func encoded() -> [UInt8] {
         var _w = ProtobufWriter()
-        if let _x = columnUids { _w.bytesField(1, _x) }
-        if let _x = rowUids { _w.bytesField(2, _x) }
+        if let _x = columnUids { _w.bytesField(1, _x.encoded()) }
+        if let _x = rowUids { _w.bytesField(2, _x.encoded()) }
         for _x in columnIndexes { _w.varintField(3, UInt64(truncatingIfNeeded: _x)) }
         for _x in rowIndexes { _w.varintField(4, UInt64(truncatingIfNeeded: _x)) }
         for _f in unknownFields { _w.append(_f) }
@@ -228,7 +228,7 @@ final class TST_CellRange {
 
 /// Generated wire model for `TST.ExpandedCellRange`.
 final class TST_ExpandedCellRange {
-    var origin: [UInt8]?
+    var origin: TSCE_CellCoordinateArchive?
     var size: TST_ExpandedTableSize?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -238,8 +238,8 @@ final class TST_ExpandedCellRange {
         for _f in _pb.fields {
             switch _f.number {
         case 1:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_CellCoordinateArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_CellCoordinateArchive(ProtobufMessage(_b)) }
             if let _v { origin = _v }
         case 2:
             var _v: TST_ExpandedTableSize?
@@ -251,7 +251,7 @@ final class TST_ExpandedCellRange {
     }
     func encoded() -> [UInt8] {
         var _w = ProtobufWriter()
-        if let _x = origin { _w.bytesField(1, _x) }
+        if let _x = origin { _w.bytesField(1, _x.encoded()) }
         if let _x = size { _w.bytesField(2, _x.encoded()) }
         for _f in unknownFields { _w.append(_f) }
         return _w.bytes
@@ -511,7 +511,7 @@ final class TST_TileStorage_Tile {
 /// Generated wire model for `TST.PopUpMenuModel`.
 final class TST_PopUpMenuModel {
     var item: [TST_PopUpMenuModel_CellValue] = []
-    var tsceItem: [[UInt8]] = []
+    var tsceItem: [TSCE_CellValueArchive] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
 
@@ -524,8 +524,8 @@ final class TST_PopUpMenuModel {
             if case .lengthDelimited(let _b) = _f.value { _v = TST_PopUpMenuModel_CellValue(ProtobufMessage(_b)) }
             if let _v { item.append(_v) }
         case 2:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_CellValueArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_CellValueArchive(ProtobufMessage(_b)) }
             if let _v { tsceItem.append(_v) }
                 default: unknownFields.append(_f)
             }
@@ -534,7 +534,7 @@ final class TST_PopUpMenuModel {
     func encoded() -> [UInt8] {
         var _w = ProtobufWriter()
         for _x in item { _w.bytesField(1, _x.encoded()) }
-        for _x in tsceItem { _w.bytesField(2, _x) }
+        for _x in tsceItem { _w.bytesField(2, _x.encoded()) }
         for _f in unknownFields { _w.append(_f) }
         return _w.bytes
     }
@@ -543,10 +543,10 @@ final class TST_PopUpMenuModel {
 /// Generated wire model for `TST.PopUpMenuModel.CellValue`.
 final class TST_PopUpMenuModel_CellValue {
     var cellValueType: Int32?
-    var booleanValue: [UInt8]?
-    var dateValue: [UInt8]?
-    var numberValue: [UInt8]?
-    var stringValue: [UInt8]?
+    var booleanValue: TSCE_BooleanCellValueArchive?
+    var dateValue: TSCE_DateCellValueArchive?
+    var numberValue: TSCE_NumberCellValueArchive?
+    var stringValue: TSCE_StringCellValueArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
 
@@ -559,20 +559,20 @@ final class TST_PopUpMenuModel_CellValue {
             if case .varint(let _u) = _f.value { _v = Int32(truncatingIfNeeded: _u) }
             if let _v { cellValueType = _v }
         case 2:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_BooleanCellValueArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_BooleanCellValueArchive(ProtobufMessage(_b)) }
             if let _v { booleanValue = _v }
         case 3:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_DateCellValueArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_DateCellValueArchive(ProtobufMessage(_b)) }
             if let _v { dateValue = _v }
         case 4:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_NumberCellValueArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_NumberCellValueArchive(ProtobufMessage(_b)) }
             if let _v { numberValue = _v }
         case 5:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_StringCellValueArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_StringCellValueArchive(ProtobufMessage(_b)) }
             if let _v { stringValue = _v }
                 default: unknownFields.append(_f)
             }
@@ -581,10 +581,10 @@ final class TST_PopUpMenuModel_CellValue {
     func encoded() -> [UInt8] {
         var _w = ProtobufWriter()
         if let _x = cellValueType { _w.varintField(1, UInt64(truncatingIfNeeded: _x)) }
-        if let _x = booleanValue { _w.bytesField(2, _x) }
-        if let _x = dateValue { _w.bytesField(3, _x) }
-        if let _x = numberValue { _w.bytesField(4, _x) }
-        if let _x = stringValue { _w.bytesField(5, _x) }
+        if let _x = booleanValue { _w.bytesField(2, _x.encoded()) }
+        if let _x = dateValue { _w.bytesField(3, _x.encoded()) }
+        if let _x = numberValue { _w.bytesField(4, _x.encoded()) }
+        if let _x = stringValue { _w.bytesField(5, _x.encoded()) }
         for _f in unknownFields { _w.append(_f) }
         return _w.bytes
     }
@@ -609,7 +609,7 @@ final class TST_ImportWarningSetArchive {
     var originalDataFormat: String?
     var formulaWarningFilteredColumnFormulaNotCopied: Bool?
     var durationFormatRangeChanged: Bool?
-    var sortedWarnings: [[UInt8]] = []
+    var sortedWarnings: [TSCE_WarningArchive] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
 
@@ -686,8 +686,8 @@ final class TST_ImportWarningSetArchive {
             if case .varint(let _u) = _f.value { _v = _u != 0 }
             if let _v { durationFormatRangeChanged = _v }
         case 18:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_WarningArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_WarningArchive(ProtobufMessage(_b)) }
             if let _v { sortedWarnings.append(_v) }
                 default: unknownFields.append(_f)
             }
@@ -712,7 +712,7 @@ final class TST_ImportWarningSetArchive {
         if let _x = originalDataFormat { _w.stringField(15, _x) }
         if let _x = formulaWarningFilteredColumnFormulaNotCopied { _w.varintField(16, _x ? 1 : 0) }
         if let _x = durationFormatRangeChanged { _w.varintField(17, _x ? 1 : 0) }
-        for _x in sortedWarnings { _w.bytesField(18, _x) }
+        for _x in sortedWarnings { _w.bytesField(18, _x.encoded()) }
         for _f in unknownFields { _w.append(_f) }
         return _w.bytes
     }
@@ -764,7 +764,7 @@ final class TST_ImportWarningSetArchive_FormulaImportWarning {
 
 /// Generated wire model for `TST.CellRefImportWarningSetPairArchive`.
 final class TST_CellRefImportWarningSetPairArchive {
-    var cellRef: [UInt8]?
+    var cellRef: TSCE_CellReferenceArchive?
     var warningSet: TST_ImportWarningSetArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -774,8 +774,8 @@ final class TST_CellRefImportWarningSetPairArchive {
         for _f in _pb.fields {
             switch _f.number {
         case 1:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_CellReferenceArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_CellReferenceArchive(ProtobufMessage(_b)) }
             if let _v { cellRef = _v }
         case 3:
             var _v: TST_ImportWarningSetArchive?
@@ -787,7 +787,7 @@ final class TST_CellRefImportWarningSetPairArchive {
     }
     func encoded() -> [UInt8] {
         var _w = ProtobufWriter()
-        if let _x = cellRef { _w.bytesField(1, _x) }
+        if let _x = cellRef { _w.bytesField(1, _x.encoded()) }
         if let _x = warningSet { _w.bytesField(3, _x.encoded()) }
         for _f in unknownFields { _w.append(_f) }
         return _w.bytes
@@ -876,7 +876,7 @@ final class TST_TableDataList_ListEntry {
     var refcount: UInt32?
     var string: String?
     var reference: TSP_Reference?
-    var formula: [UInt8]?
+    var formula: TSCE_FormulaArchive?
     var format: TSK_FormatStructArchive?
     var customFormat: TSK_CustomFormatArchive?
     var richTextPayload: TSP_Reference?
@@ -907,8 +907,8 @@ final class TST_TableDataList_ListEntry {
             if case .lengthDelimited(let _b) = _f.value { _v = TSP_Reference(ProtobufMessage(_b)) }
             if let _v { reference = _v }
         case 5:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_FormulaArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_FormulaArchive(ProtobufMessage(_b)) }
             if let _v { formula = _v }
         case 6:
             var _v: TSK_FormatStructArchive?
@@ -944,7 +944,7 @@ final class TST_TableDataList_ListEntry {
         if let _x = refcount { _w.varintField(2, UInt64(truncatingIfNeeded: _x)) }
         if let _x = string { _w.stringField(3, _x) }
         if let _x = reference { _w.bytesField(4, _x.encoded()) }
-        if let _x = formula { _w.bytesField(5, _x) }
+        if let _x = formula { _w.bytesField(5, _x.encoded()) }
         if let _x = format { _w.bytesField(6, _x.encoded()) }
         if let _x = customFormat { _w.bytesField(8, _x.encoded()) }
         if let _x = richTextPayload { _w.bytesField(9, _x.encoded()) }
@@ -1336,7 +1336,7 @@ final class TST_TableInfoArchive {
     var hiddenStatesUuid: TSP_UUID?
     var formulaCoordSpaceInPre40: UInt32?
     var formulaCoordSpace: UInt32?
-    var pasteboardCoordMapper: [UInt8]?
+    var pasteboardCoordMapper: TSCE_CoordMapperArchive?
     var layoutEngine: TST_LayoutEngineArchive?
     var pivotDataModel: TSP_Reference?
     var isAPivotTable: Bool?
@@ -1389,8 +1389,8 @@ final class TST_TableInfoArchive {
             if case .varint(let _u) = _f.value { _v = UInt32(truncatingIfNeeded: _u) }
             if let _v { formulaCoordSpace = _v }
         case 13:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_CoordMapperArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_CoordMapperArchive(ProtobufMessage(_b)) }
             if let _v { pasteboardCoordMapper = _v }
         case 14:
             var _v: TST_LayoutEngineArchive?
@@ -1424,7 +1424,7 @@ final class TST_TableInfoArchive {
         if let _x = hiddenStatesUuid { _w.bytesField(8, _x.encoded()) }
         if let _x = formulaCoordSpaceInPre40 { _w.varintField(9, UInt64(truncatingIfNeeded: _x)) }
         if let _x = formulaCoordSpace { _w.varintField(10, UInt64(truncatingIfNeeded: _x)) }
-        if let _x = pasteboardCoordMapper { _w.bytesField(13, _x) }
+        if let _x = pasteboardCoordMapper { _w.bytesField(13, _x.encoded()) }
         if let _x = layoutEngine { _w.bytesField(14, _x.encoded()) }
         if let _x = pivotDataModel { _w.bytesField(15, _x.encoded()) }
         if let _x = isAPivotTable { _w.varintField(16, _x ? 1 : 0) }
@@ -2149,7 +2149,7 @@ final class TST_TableModelArchive {
     var categoryOwnerDeprecated: TST_CategoryOwnerArchive?
     var pencilAnnotationOwner: TST_PencilAnnotationOwnerArchive?
     var fromGroupByUid: String?
-    var hauntedOwner: [UInt8]?
+    var hauntedOwner: TSCE_HauntedOwnerArchive?
     var pivotOwner: TSP_Reference?
     var categoryOwner: TSP_Reference?
     var pivotBodySummaryRowStyle: TSP_Reference?
@@ -2158,7 +2158,7 @@ final class TST_TableModelArchive {
     var pivotValueTypesByCol: [UInt32] = []
     var pivotDateGroupingColumns: [UInt32] = []
     var pivotDateGroupingTypes: [UInt32] = []
-    var spillOwner: [UInt8]?
+    var spillOwner: TSCE_SpillOwnerArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
 
@@ -2467,8 +2467,8 @@ final class TST_TableModelArchive {
             if case .lengthDelimited(let _b) = _f.value { _v = String(decoding: _b, as: UTF8.self) }
             if let _v { fromGroupByUid = _v }
         case 84:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_HauntedOwnerArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_HauntedOwnerArchive(ProtobufMessage(_b)) }
             if let _v { hauntedOwner = _v }
         case 85:
             var _v: TSP_Reference?
@@ -2500,8 +2500,8 @@ final class TST_TableModelArchive {
             if case .varint(let _u) = _f.value { pivotDateGroupingTypes.append(UInt32(truncatingIfNeeded: _u)) }
             else if case .lengthDelimited(let _b) = _f.value { for _u in IWAWire.unpackVarints(_b) { pivotDateGroupingTypes.append(UInt32(truncatingIfNeeded: _u)) } }
         case 93:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_SpillOwnerArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_SpillOwnerArchive(ProtobufMessage(_b)) }
             if let _v { spillOwner = _v }
                 default: unknownFields.append(_f)
             }
@@ -2584,7 +2584,7 @@ final class TST_TableModelArchive {
         if let _x = categoryOwnerDeprecated { _w.bytesField(81, _x.encoded()) }
         if let _x = pencilAnnotationOwner { _w.bytesField(82, _x.encoded()) }
         if let _x = fromGroupByUid { _w.stringField(83, _x) }
-        if let _x = hauntedOwner { _w.bytesField(84, _x) }
+        if let _x = hauntedOwner { _w.bytesField(84, _x.encoded()) }
         if let _x = pivotOwner { _w.bytesField(85, _x.encoded()) }
         if let _x = categoryOwner { _w.bytesField(86, _x.encoded()) }
         if let _x = pivotBodySummaryRowStyle { _w.bytesField(87, _x.encoded()) }
@@ -2593,7 +2593,7 @@ final class TST_TableModelArchive {
         for _x in pivotValueTypesByCol { _w.varintField(90, UInt64(truncatingIfNeeded: _x)) }
         for _x in pivotDateGroupingColumns { _w.varintField(91, UInt64(truncatingIfNeeded: _x)) }
         for _x in pivotDateGroupingTypes { _w.varintField(92, UInt64(truncatingIfNeeded: _x)) }
-        if let _x = spillOwner { _w.bytesField(93, _x) }
+        if let _x = spillOwner { _w.bytesField(93, _x.encoded()) }
         for _f in unknownFields { _w.append(_f) }
         return _w.bytes
     }
@@ -3241,7 +3241,7 @@ final class TST_MergeRegionMapArchive {
 final class TST_CellMapArchive {
     var cellTiles: [TSP_Reference] = []
     var uidBased: Bool?
-    var expandedCellIds: [[UInt8]] = []
+    var expandedCellIds: [TSCE_CellCoordinateArchive] = []
     var cellUidList: TST_CellUIDListArchive?
     var mergeUidRanges: [TSP_UUIDRectArchive] = []
     var unmergeUidRanges: [TSP_UUIDRectArchive] = []
@@ -3265,8 +3265,8 @@ final class TST_CellMapArchive {
             if case .varint(let _u) = _f.value { _v = _u != 0 }
             if let _v { uidBased = _v }
         case 14:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_CellCoordinateArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_CellCoordinateArchive(ProtobufMessage(_b)) }
             if let _v { expandedCellIds.append(_v) }
         case 5:
             var _v: TST_CellUIDListArchive?
@@ -3304,7 +3304,7 @@ final class TST_CellMapArchive {
         var _w = ProtobufWriter()
         for _x in cellTiles { _w.bytesField(2, _x.encoded()) }
         if let _x = uidBased { _w.varintField(3, _x ? 1 : 0) }
-        for _x in expandedCellIds { _w.bytesField(14, _x) }
+        for _x in expandedCellIds { _w.bytesField(14, _x.encoded()) }
         if let _x = cellUidList { _w.bytesField(5, _x.encoded()) }
         for _x in mergeUidRanges { _w.bytesField(7, _x.encoded()) }
         for _x in unmergeUidRanges { _w.bytesField(9, _x.encoded()) }
@@ -3656,7 +3656,7 @@ final class TST_CellFormatAndValueArchive {
 /// Generated wire model for `TST.CellSpecArchive`.
 final class TST_CellSpecArchive {
     var interactionType: UInt32?
-    var formula: [UInt8]?
+    var formula: TSCE_FormulaArchive?
     var rangeControlMin: Double?
     var rangeControlMax: Double?
     var rangeControlInc: Double?
@@ -3675,8 +3675,8 @@ final class TST_CellSpecArchive {
             if case .varint(let _u) = _f.value { _v = UInt32(truncatingIfNeeded: _u) }
             if let _v { interactionType = _v }
         case 2:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_FormulaArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_FormulaArchive(ProtobufMessage(_b)) }
             if let _v { formula = _v }
         case 3:
             var _v: Double?
@@ -3709,7 +3709,7 @@ final class TST_CellSpecArchive {
     func encoded() -> [UInt8] {
         var _w = ProtobufWriter()
         if let _x = interactionType { _w.varintField(1, UInt64(truncatingIfNeeded: _x)) }
-        if let _x = formula { _w.bytesField(2, _x) }
+        if let _x = formula { _w.bytesField(2, _x.encoded()) }
         if let _x = rangeControlMin { _w.fixed64Field(3, _x.bitPattern) }
         if let _x = rangeControlMax { _w.fixed64Field(4, _x.bitPattern) }
         if let _x = rangeControlInc { _w.fixed64Field(5, _x.bitPattern) }
@@ -3840,7 +3840,7 @@ final class TST_CellDiffArraySegment {
 /// Generated wire model for `TST.CellDiffMapArchive`.
 final class TST_CellDiffMapArchive {
     var uidBased: Bool?
-    var expandedCellIds: [[UInt8]] = []
+    var expandedCellIds: [TSCE_CellCoordinateArchive] = []
     var cellUids: TST_CellUIDListArchive?
     var cellDiffArray: TSP_Reference?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -3855,8 +3855,8 @@ final class TST_CellDiffMapArchive {
             if case .varint(let _u) = _f.value { _v = _u != 0 }
             if let _v { uidBased = _v }
         case 2:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_CellCoordinateArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_CellCoordinateArchive(ProtobufMessage(_b)) }
             if let _v { expandedCellIds.append(_v) }
         case 3:
             var _v: TST_CellUIDListArchive?
@@ -3873,7 +3873,7 @@ final class TST_CellDiffMapArchive {
     func encoded() -> [UInt8] {
         var _w = ProtobufWriter()
         if let _x = uidBased { _w.varintField(1, _x ? 1 : 0) }
-        for _x in expandedCellIds { _w.bytesField(2, _x) }
+        for _x in expandedCellIds { _w.bytesField(2, _x.encoded()) }
         if let _x = cellUids { _w.bytesField(3, _x.encoded()) }
         if let _x = cellDiffArray { _w.bytesField(4, _x.encoded()) }
         for _f in unknownFields { _w.append(_f) }
@@ -4633,15 +4633,15 @@ final class TST_FormulaPredArgDataArchive {
 final class TST_FormulaPredArgArchive {
     var argType: Int32?
     var argValue: TST_FormulaPredArgDataArchive?
-    var baseCellRef: [UInt8]?
-    var relativeCellRef: [UInt8]?
-    var categoryRef: [UInt8]?
-    var uidTractList: [UInt8]?
-    var hostCellCoord: [UInt8]?
+    var baseCellRef: TSCE_CellReferenceArchive?
+    var relativeCellRef: TSCE_RelativeCellRefArchive?
+    var categoryRef: TSCE_CategoryReferenceArchive?
+    var uidTractList: TSCE_ASTNodeArrayArchive_ASTUidTractList?
+    var hostCellCoord: TSCE_CellCoordinateArchive?
     var preserveRow: Bool?
     var preserveColumn: Bool?
     var listEntries: [TST_FormulaPredArgDataArchive] = []
-    var viewTractRef: [UInt8]?
+    var viewTractRef: TSCE_ViewTractRefArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
 
@@ -4658,24 +4658,24 @@ final class TST_FormulaPredArgArchive {
             if case .lengthDelimited(let _b) = _f.value { _v = TST_FormulaPredArgDataArchive(ProtobufMessage(_b)) }
             if let _v { argValue = _v }
         case 3:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_CellReferenceArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_CellReferenceArchive(ProtobufMessage(_b)) }
             if let _v { baseCellRef = _v }
         case 4:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_RelativeCellRefArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_RelativeCellRefArchive(ProtobufMessage(_b)) }
             if let _v { relativeCellRef = _v }
         case 5:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_CategoryReferenceArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_CategoryReferenceArchive(ProtobufMessage(_b)) }
             if let _v { categoryRef = _v }
         case 6:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_ASTNodeArrayArchive_ASTUidTractList?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_ASTNodeArrayArchive_ASTUidTractList(ProtobufMessage(_b)) }
             if let _v { uidTractList = _v }
         case 7:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_CellCoordinateArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_CellCoordinateArchive(ProtobufMessage(_b)) }
             if let _v { hostCellCoord = _v }
         case 8:
             var _v: Bool?
@@ -4690,8 +4690,8 @@ final class TST_FormulaPredArgArchive {
             if case .lengthDelimited(let _b) = _f.value { _v = TST_FormulaPredArgDataArchive(ProtobufMessage(_b)) }
             if let _v { listEntries.append(_v) }
         case 11:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_ViewTractRefArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_ViewTractRefArchive(ProtobufMessage(_b)) }
             if let _v { viewTractRef = _v }
                 default: unknownFields.append(_f)
             }
@@ -4701,15 +4701,15 @@ final class TST_FormulaPredArgArchive {
         var _w = ProtobufWriter()
         if let _x = argType { _w.varintField(1, UInt64(truncatingIfNeeded: _x)) }
         if let _x = argValue { _w.bytesField(2, _x.encoded()) }
-        if let _x = baseCellRef { _w.bytesField(3, _x) }
-        if let _x = relativeCellRef { _w.bytesField(4, _x) }
-        if let _x = categoryRef { _w.bytesField(5, _x) }
-        if let _x = uidTractList { _w.bytesField(6, _x) }
-        if let _x = hostCellCoord { _w.bytesField(7, _x) }
+        if let _x = baseCellRef { _w.bytesField(3, _x.encoded()) }
+        if let _x = relativeCellRef { _w.bytesField(4, _x.encoded()) }
+        if let _x = categoryRef { _w.bytesField(5, _x.encoded()) }
+        if let _x = uidTractList { _w.bytesField(6, _x.encoded()) }
+        if let _x = hostCellCoord { _w.bytesField(7, _x.encoded()) }
         if let _x = preserveRow { _w.varintField(8, _x ? 1 : 0) }
         if let _x = preserveColumn { _w.varintField(9, _x ? 1 : 0) }
         for _x in listEntries { _w.bytesField(10, _x.encoded()) }
-        if let _x = viewTractRef { _w.bytesField(11, _x) }
+        if let _x = viewTractRef { _w.bytesField(11, _x.encoded()) }
         for _f in unknownFields { _w.append(_f) }
         return _w.bytes
     }
@@ -4717,7 +4717,7 @@ final class TST_FormulaPredArgArchive {
 
 /// Generated wire model for `TST.FormulaPredicatePrePivotArchive`.
 final class TST_FormulaPredicatePrePivotArchive {
-    var formula: [UInt8]?
+    var formula: TSCE_FormulaArchive?
     var predicateType: Int32?
     var qualifier1: Int32?
     var qualifier2: Int32?
@@ -4732,8 +4732,8 @@ final class TST_FormulaPredicatePrePivotArchive {
         for _f in _pb.fields {
             switch _f.number {
         case 1:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_FormulaArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_FormulaArchive(ProtobufMessage(_b)) }
             if let _v { formula = _v }
         case 2:
             var _v: Int32?
@@ -4765,7 +4765,7 @@ final class TST_FormulaPredicatePrePivotArchive {
     }
     func encoded() -> [UInt8] {
         var _w = ProtobufWriter()
-        if let _x = formula { _w.bytesField(1, _x) }
+        if let _x = formula { _w.bytesField(1, _x.encoded()) }
         if let _x = predicateType { _w.varintField(2, UInt64(truncatingIfNeeded: _x)) }
         if let _x = qualifier1 { _w.varintField(3, UInt64(truncatingIfNeeded: _x)) }
         if let _x = qualifier2 { _w.varintField(4, UInt64(truncatingIfNeeded: _x)) }
@@ -4785,7 +4785,7 @@ final class TST_FormulaPredicateArchive {
     var paramValue0: TST_FormulaPredArgArchive?
     var paramValue1: TST_FormulaPredArgArchive?
     var paramValue2: TST_FormulaPredArgArchive?
-    var formula: [UInt8]?
+    var formula: TSCE_FormulaArchive?
     var forConditionalStyle: Bool?
     var hostTableUid: TSP_UUID?
     var hostColumnUid: TSP_UUID?
@@ -4822,8 +4822,8 @@ final class TST_FormulaPredicateArchive {
             if case .lengthDelimited(let _b) = _f.value { _v = TST_FormulaPredArgArchive(ProtobufMessage(_b)) }
             if let _v { paramValue2 = _v }
         case 7:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_FormulaArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_FormulaArchive(ProtobufMessage(_b)) }
             if let _v { formula = _v }
         case 8:
             var _v: Bool?
@@ -4853,7 +4853,7 @@ final class TST_FormulaPredicateArchive {
         if let _x = paramValue0 { _w.bytesField(4, _x.encoded()) }
         if let _x = paramValue1 { _w.bytesField(5, _x.encoded()) }
         if let _x = paramValue2 { _w.bytesField(6, _x.encoded()) }
-        if let _x = formula { _w.bytesField(7, _x) }
+        if let _x = formula { _w.bytesField(7, _x.encoded()) }
         if let _x = forConditionalStyle { _w.varintField(8, _x ? 1 : 0) }
         if let _x = hostTableUid { _w.bytesField(9, _x.encoded()) }
         if let _x = hostColumnUid { _w.bytesField(10, _x.encoded()) }
@@ -5132,12 +5132,12 @@ final class TST_HiddenStateExtentArchive {
     var hiddenStateExtentUid: TSP_UUID?
     var baseHiddenStates: [TST_HiddenStateExtentArchive_RowOrColumnState] = []
     var rowOrColumnDirection: Int32?
-    var thresholdValue: [[UInt8]] = []
+    var thresholdValue: [TSCE_CellValueArchive] = []
     var needsToUpdateFilterSetForImport: Bool?
     var collapsedGroupUids: [TSP_UUID] = []
     var filterSet: TSP_Reference?
-    var summaryPivotHiddenIndexes: [UInt8]?
-    var summaryFilteredIndexes: [UInt8]?
+    var summaryPivotHiddenIndexes: TSCE_IndexSetArchive?
+    var summaryFilteredIndexes: TSCE_IndexSetArchive?
     var uniqueIndexes: [TST_UniqueIndexArchive] = []
     var summaryHiddenStates: [TST_HiddenStateExtentArchive_RowOrColumnState] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -5160,8 +5160,8 @@ final class TST_HiddenStateExtentArchive {
             if case .varint(let _u) = _f.value { _v = Int32(truncatingIfNeeded: _u) }
             if let _v { rowOrColumnDirection = _v }
         case 5:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_CellValueArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_CellValueArchive(ProtobufMessage(_b)) }
             if let _v { thresholdValue.append(_v) }
         case 6:
             var _v: Bool?
@@ -5176,12 +5176,12 @@ final class TST_HiddenStateExtentArchive {
             if case .lengthDelimited(let _b) = _f.value { _v = TSP_Reference(ProtobufMessage(_b)) }
             if let _v { filterSet = _v }
         case 9:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_IndexSetArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_IndexSetArchive(ProtobufMessage(_b)) }
             if let _v { summaryPivotHiddenIndexes = _v }
         case 10:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_IndexSetArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_IndexSetArchive(ProtobufMessage(_b)) }
             if let _v { summaryFilteredIndexes = _v }
         case 11:
             var _v: TST_UniqueIndexArchive?
@@ -5200,12 +5200,12 @@ final class TST_HiddenStateExtentArchive {
         if let _x = hiddenStateExtentUid { _w.bytesField(1, _x.encoded()) }
         for _x in baseHiddenStates { _w.bytesField(2, _x.encoded()) }
         if let _x = rowOrColumnDirection { _w.varintField(3, UInt64(truncatingIfNeeded: _x)) }
-        for _x in thresholdValue { _w.bytesField(5, _x) }
+        for _x in thresholdValue { _w.bytesField(5, _x.encoded()) }
         if let _x = needsToUpdateFilterSetForImport { _w.varintField(6, _x ? 1 : 0) }
         for _x in collapsedGroupUids { _w.bytesField(7, _x.encoded()) }
         if let _x = filterSet { _w.bytesField(8, _x.encoded()) }
-        if let _x = summaryPivotHiddenIndexes { _w.bytesField(9, _x) }
-        if let _x = summaryFilteredIndexes { _w.bytesField(10, _x) }
+        if let _x = summaryPivotHiddenIndexes { _w.bytesField(9, _x.encoded()) }
+        if let _x = summaryFilteredIndexes { _w.bytesField(10, _x.encoded()) }
         for _x in uniqueIndexes { _w.bytesField(11, _x.encoded()) }
         for _x in summaryHiddenStates { _w.bytesField(12, _x.encoded()) }
         for _f in unknownFields { _w.append(_f) }
@@ -5834,14 +5834,14 @@ final class TST_DateNodeArchive {
 /// Generated wire model for `TST.ReferenceNodeArchive`.
 final class TST_ReferenceNodeArchive {
     var `super`: TST_ExpressionNodeArchive?
-    var rangereference: [UInt8]?
+    var rangereference: TSCE_RangeReferenceArchive?
     var preserveFlags: UInt32?
     var hosttableid: String?
-    var hostCellRef: [UInt8]?
+    var hostCellRef: TSCE_CellReferenceArchive?
     var tableUid: TSP_UUID?
     var rangeTopLeft: TSP_UUIDCoordArchive?
     var rangeBottomRight: TSP_UUIDCoordArchive?
-    var categoryRef: [UInt8]?
+    var categoryRef: TSCE_CategoryReferenceArchive?
     var uidRangeRect: TSP_UUIDRectArchive?
     var spillRangeOpSuffix: Bool?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -5856,8 +5856,8 @@ final class TST_ReferenceNodeArchive {
             if case .lengthDelimited(let _b) = _f.value { _v = TST_ExpressionNodeArchive(ProtobufMessage(_b)) }
             if let _v { `super` = _v }
         case 2:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_RangeReferenceArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_RangeReferenceArchive(ProtobufMessage(_b)) }
             if let _v { rangereference = _v }
         case 3:
             var _v: UInt32?
@@ -5868,8 +5868,8 @@ final class TST_ReferenceNodeArchive {
             if case .lengthDelimited(let _b) = _f.value { _v = String(decoding: _b, as: UTF8.self) }
             if let _v { hosttableid = _v }
         case 10:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_CellReferenceArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_CellReferenceArchive(ProtobufMessage(_b)) }
             if let _v { hostCellRef = _v }
         case 5:
             var _v: TSP_UUID?
@@ -5884,8 +5884,8 @@ final class TST_ReferenceNodeArchive {
             if case .lengthDelimited(let _b) = _f.value { _v = TSP_UUIDCoordArchive(ProtobufMessage(_b)) }
             if let _v { rangeBottomRight = _v }
         case 8:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_CategoryReferenceArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_CategoryReferenceArchive(ProtobufMessage(_b)) }
             if let _v { categoryRef = _v }
         case 9:
             var _v: TSP_UUIDRectArchive?
@@ -5902,14 +5902,14 @@ final class TST_ReferenceNodeArchive {
     func encoded() -> [UInt8] {
         var _w = ProtobufWriter()
         if let _x = `super` { _w.bytesField(1, _x.encoded()) }
-        if let _x = rangereference { _w.bytesField(2, _x) }
+        if let _x = rangereference { _w.bytesField(2, _x.encoded()) }
         if let _x = preserveFlags { _w.varintField(3, UInt64(truncatingIfNeeded: _x)) }
         if let _x = hosttableid { _w.stringField(4, _x) }
-        if let _x = hostCellRef { _w.bytesField(10, _x) }
+        if let _x = hostCellRef { _w.bytesField(10, _x.encoded()) }
         if let _x = tableUid { _w.bytesField(5, _x.encoded()) }
         if let _x = rangeTopLeft { _w.bytesField(6, _x.encoded()) }
         if let _x = rangeBottomRight { _w.bytesField(7, _x.encoded()) }
-        if let _x = categoryRef { _w.bytesField(8, _x) }
+        if let _x = categoryRef { _w.bytesField(8, _x.encoded()) }
         if let _x = uidRangeRect { _w.bytesField(9, _x.encoded()) }
         if let _x = spillRangeOpSuffix { _w.varintField(11, _x ? 1 : 0) }
         for _f in unknownFields { _w.append(_f) }
@@ -6078,7 +6078,7 @@ final class TST_VariableNodeArchive {
 /// Generated wire model for `TST.SpillOriginRefNodeArchive`.
 final class TST_SpillOriginRefNodeArchive {
     var `super`: TST_ExpressionNodeArchive?
-    var spillOriginCoord: [UInt8]?
+    var spillOriginCoord: TSCE_CellCoordinateArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
 
@@ -6091,8 +6091,8 @@ final class TST_SpillOriginRefNodeArchive {
             if case .lengthDelimited(let _b) = _f.value { _v = TST_ExpressionNodeArchive(ProtobufMessage(_b)) }
             if let _v { `super` = _v }
         case 2:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_CellCoordinateArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_CellCoordinateArchive(ProtobufMessage(_b)) }
             if let _v { spillOriginCoord = _v }
                 default: unknownFields.append(_f)
             }
@@ -6101,7 +6101,7 @@ final class TST_SpillOriginRefNodeArchive {
     func encoded() -> [UInt8] {
         var _w = ProtobufWriter()
         if let _x = `super` { _w.bytesField(1, _x.encoded()) }
-        if let _x = spillOriginCoord { _w.bytesField(2, _x) }
+        if let _x = spillOriginCoord { _w.bytesField(2, _x.encoded()) }
         for _f in unknownFields { _w.append(_f) }
         return _w.bytes
     }
@@ -6222,7 +6222,7 @@ final class TST_CompletionTokenAttachmentArchive {
 /// Generated wire model for `TST.HiddenStateFormulaOwnerArchive`.
 final class TST_HiddenStateFormulaOwnerArchive {
     var ownerId: TSP_CFUUIDArchive?
-    var thresholdValue: [[UInt8]] = []
+    var thresholdValue: [TSCE_CellValueArchive] = []
     var needsToUpdateFilterSetForImport: Bool?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -6236,8 +6236,8 @@ final class TST_HiddenStateFormulaOwnerArchive {
             if case .lengthDelimited(let _b) = _f.value { _v = TSP_CFUUIDArchive(ProtobufMessage(_b)) }
             if let _v { ownerId = _v }
         case 2:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_CellValueArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_CellValueArchive(ProtobufMessage(_b)) }
             if let _v { thresholdValue.append(_v) }
         case 3:
             var _v: Bool?
@@ -6250,7 +6250,7 @@ final class TST_HiddenStateFormulaOwnerArchive {
     func encoded() -> [UInt8] {
         var _w = ProtobufWriter()
         if let _x = ownerId { _w.bytesField(1, _x.encoded()) }
-        for _x in thresholdValue { _w.bytesField(2, _x) }
+        for _x in thresholdValue { _w.bytesField(2, _x.encoded()) }
         if let _x = needsToUpdateFilterSetForImport { _w.varintField(3, _x ? 1 : 0) }
         for _f in unknownFields { _w.append(_f) }
         return _w.bytes
@@ -6292,7 +6292,7 @@ final class TST_FormulaStoreArchive {
 /// Generated wire model for `TST.FormulaStoreArchive.FormulaStorePair`.
 final class TST_FormulaStoreArchive_FormulaStorePair {
     var formulaIndex: UInt32?
-    var formula: [UInt8]?
+    var formula: TSCE_FormulaArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
 
@@ -6305,8 +6305,8 @@ final class TST_FormulaStoreArchive_FormulaStorePair {
             if case .varint(let _u) = _f.value { _v = UInt32(truncatingIfNeeded: _u) }
             if let _v { formulaIndex = _v }
         case 2:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_FormulaArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_FormulaArchive(ProtobufMessage(_b)) }
             if let _v { formula = _v }
                 default: unknownFields.append(_f)
             }
@@ -6315,7 +6315,7 @@ final class TST_FormulaStoreArchive_FormulaStorePair {
     func encoded() -> [UInt8] {
         var _w = ProtobufWriter()
         if let _x = formulaIndex { _w.varintField(1, UInt64(truncatingIfNeeded: _x)) }
-        if let _x = formula { _w.bytesField(2, _x) }
+        if let _x = formula { _w.bytesField(2, _x.encoded()) }
         for _f in unknownFields { _w.append(_f) }
         return _w.bytes
     }
@@ -6325,7 +6325,7 @@ final class TST_FormulaStoreArchive_FormulaStorePair {
 final class TST_MergeOperationArchive {
     var mergeType: Int32?
     var mergeRanges: [TSP_UUIDRectArchive] = []
-    var mergeFormulas: [[UInt8]] = []
+    var mergeFormulas: [TSCE_FormulaArchive] = []
     var mergeFormulaIndexes: [UInt32] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -6343,8 +6343,8 @@ final class TST_MergeOperationArchive {
             if case .lengthDelimited(let _b) = _f.value { _v = TSP_UUIDRectArchive(ProtobufMessage(_b)) }
             if let _v { mergeRanges.append(_v) }
         case 3:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_FormulaArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_FormulaArchive(ProtobufMessage(_b)) }
             if let _v { mergeFormulas.append(_v) }
         case 4:
             if case .varint(let _u) = _f.value { mergeFormulaIndexes.append(UInt32(truncatingIfNeeded: _u)) }
@@ -6357,7 +6357,7 @@ final class TST_MergeOperationArchive {
         var _w = ProtobufWriter()
         if let _x = mergeType { _w.varintField(1, UInt64(truncatingIfNeeded: _x)) }
         for _x in mergeRanges { _w.bytesField(2, _x.encoded()) }
-        for _x in mergeFormulas { _w.bytesField(3, _x) }
+        for _x in mergeFormulas { _w.bytesField(3, _x.encoded()) }
         for _x in mergeFormulaIndexes { _w.varintField(4, UInt64(truncatingIfNeeded: _x)) }
         for _f in unknownFields { _w.append(_f) }
         return _w.bytes
@@ -6473,16 +6473,16 @@ final class TST_AccumulatorArchive {
     var dateCount: UInt32?
     var durationCount: UInt32?
     var stringCount: UInt32?
-    var minValue: [UInt8]?
-    var maxValue: [UInt8]?
-    var numberTotalValue: [UInt8]?
-    var firstDateSeen: [UInt8]?
+    var minValue: TSCE_CellValueArchive?
+    var maxValue: TSCE_CellValueArchive?
+    var numberTotalValue: TSCE_CellValueArchive?
+    var firstDateSeen: TSCE_CellValueArchive?
     var totalSecsSinceRefDate: Double?
     var secsToAdd: Double?
     var boolTrueCount: UInt32?
     var errorCount: UInt32?
     var isCircularRef: Bool?
-    var productValue: [UInt8]?
+    var productValue: TSCE_CellValueArchive?
     var noContentCount: UInt32?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -6512,20 +6512,20 @@ final class TST_AccumulatorArchive {
             if case .varint(let _u) = _f.value { _v = UInt32(truncatingIfNeeded: _u) }
             if let _v { stringCount = _v }
         case 6:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_CellValueArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_CellValueArchive(ProtobufMessage(_b)) }
             if let _v { minValue = _v }
         case 7:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_CellValueArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_CellValueArchive(ProtobufMessage(_b)) }
             if let _v { maxValue = _v }
         case 8:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_CellValueArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_CellValueArchive(ProtobufMessage(_b)) }
             if let _v { numberTotalValue = _v }
         case 9:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_CellValueArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_CellValueArchive(ProtobufMessage(_b)) }
             if let _v { firstDateSeen = _v }
         case 10:
             var _v: Double?
@@ -6548,8 +6548,8 @@ final class TST_AccumulatorArchive {
             if case .varint(let _u) = _f.value { _v = _u != 0 }
             if let _v { isCircularRef = _v }
         case 15:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_CellValueArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_CellValueArchive(ProtobufMessage(_b)) }
             if let _v { productValue = _v }
         case 16:
             var _v: UInt32?
@@ -6566,16 +6566,16 @@ final class TST_AccumulatorArchive {
         if let _x = dateCount { _w.varintField(3, UInt64(truncatingIfNeeded: _x)) }
         if let _x = durationCount { _w.varintField(4, UInt64(truncatingIfNeeded: _x)) }
         if let _x = stringCount { _w.varintField(5, UInt64(truncatingIfNeeded: _x)) }
-        if let _x = minValue { _w.bytesField(6, _x) }
-        if let _x = maxValue { _w.bytesField(7, _x) }
-        if let _x = numberTotalValue { _w.bytesField(8, _x) }
-        if let _x = firstDateSeen { _w.bytesField(9, _x) }
+        if let _x = minValue { _w.bytesField(6, _x.encoded()) }
+        if let _x = maxValue { _w.bytesField(7, _x.encoded()) }
+        if let _x = numberTotalValue { _w.bytesField(8, _x.encoded()) }
+        if let _x = firstDateSeen { _w.bytesField(9, _x.encoded()) }
         if let _x = totalSecsSinceRefDate { _w.fixed64Field(10, _x.bitPattern) }
         if let _x = secsToAdd { _w.fixed64Field(11, _x.bitPattern) }
         if let _x = boolTrueCount { _w.varintField(12, UInt64(truncatingIfNeeded: _x)) }
         if let _x = errorCount { _w.varintField(13, UInt64(truncatingIfNeeded: _x)) }
         if let _x = isCircularRef { _w.varintField(14, _x ? 1 : 0) }
-        if let _x = productValue { _w.bytesField(15, _x) }
+        if let _x = productValue { _w.bytesField(15, _x.encoded()) }
         if let _x = noContentCount { _w.varintField(16, UInt64(truncatingIfNeeded: _x)) }
         for _f in unknownFields { _w.append(_f) }
         return _w.bytes
@@ -6586,7 +6586,7 @@ final class TST_AccumulatorArchive {
 final class TST_GroupColumnArchive {
     var columnUid: TSP_UUID?
     var groupingType: UInt32?
-    var groupingFunctor: [UInt8]?
+    var groupingFunctor: TSCE_FunctorArchive?
     var groupingColumnUid: TSP_UUID?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -6604,8 +6604,8 @@ final class TST_GroupColumnArchive {
             if case .varint(let _u) = _f.value { _v = UInt32(truncatingIfNeeded: _u) }
             if let _v { groupingType = _v }
         case 3:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_FunctorArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_FunctorArchive(ProtobufMessage(_b)) }
             if let _v { groupingFunctor = _v }
         case 4:
             var _v: TSP_UUID?
@@ -6619,7 +6619,7 @@ final class TST_GroupColumnArchive {
         var _w = ProtobufWriter()
         if let _x = columnUid { _w.bytesField(1, _x.encoded()) }
         if let _x = groupingType { _w.varintField(2, UInt64(truncatingIfNeeded: _x)) }
-        if let _x = groupingFunctor { _w.bytesField(3, _x) }
+        if let _x = groupingFunctor { _w.bytesField(3, _x.encoded()) }
         if let _x = groupingColumnUid { _w.bytesField(4, _x.encoded()) }
         for _f in unknownFields { _w.append(_f) }
         return _w.bytes
@@ -6742,16 +6742,16 @@ final class TST_GroupByArchive {
     var aggregator: [TST_GroupByArchive_AggregatorArchive] = []
     var columnAggType: [TST_ColumnAggregateArchive] = []
     var isEnabled: Bool?
-    var indirectAggTypeChangeFormula: [UInt8]?
-    var groupingColumnsFormula: [UInt8]?
-    var aggsInGroupRootFormula: [UInt8]?
-    var groupingColumnHeadersFormula: [UInt8]?
-    var columnOrderChangedFormula: [UInt8]?
-    var rowOrderChangedFormula: [UInt8]?
-    var rowOrderChangedIgnoringRecalcFormula: [UInt8]?
+    var indirectAggTypeChangeFormula: TSCE_CellCoordinateArchive?
+    var groupingColumnsFormula: TSCE_CellCoordinateArchive?
+    var aggsInGroupRootFormula: TSCE_CellCoordinateArchive?
+    var groupingColumnHeadersFormula: TSCE_CellCoordinateArchive?
+    var columnOrderChangedFormula: TSCE_CellCoordinateArchive?
+    var rowOrderChangedFormula: TSCE_CellCoordinateArchive?
+    var rowOrderChangedIgnoringRecalcFormula: TSCE_CellCoordinateArchive?
     var ownerIndex: Int32?
-    var rowUidLookup: [UInt8]?
-    var hiddenStatesChangedFormula: [UInt8]?
+    var rowUidLookup: TSCE_UidLookupListArchive?
+    var hiddenStatesChangedFormula: TSCE_CellCoordinateArchive?
     var aggregatorRef: [TSP_Reference] = []
     var groupNodeRootRef: TSP_Reference?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -6786,44 +6786,44 @@ final class TST_GroupByArchive {
             if case .varint(let _u) = _f.value { _v = _u != 0 }
             if let _v { isEnabled = _v }
         case 7:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_CellCoordinateArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_CellCoordinateArchive(ProtobufMessage(_b)) }
             if let _v { indirectAggTypeChangeFormula = _v }
         case 8:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_CellCoordinateArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_CellCoordinateArchive(ProtobufMessage(_b)) }
             if let _v { groupingColumnsFormula = _v }
         case 9:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_CellCoordinateArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_CellCoordinateArchive(ProtobufMessage(_b)) }
             if let _v { aggsInGroupRootFormula = _v }
         case 10:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_CellCoordinateArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_CellCoordinateArchive(ProtobufMessage(_b)) }
             if let _v { groupingColumnHeadersFormula = _v }
         case 11:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_CellCoordinateArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_CellCoordinateArchive(ProtobufMessage(_b)) }
             if let _v { columnOrderChangedFormula = _v }
         case 12:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_CellCoordinateArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_CellCoordinateArchive(ProtobufMessage(_b)) }
             if let _v { rowOrderChangedFormula = _v }
         case 13:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_CellCoordinateArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_CellCoordinateArchive(ProtobufMessage(_b)) }
             if let _v { rowOrderChangedIgnoringRecalcFormula = _v }
         case 14:
             var _v: Int32?
             if case .varint(let _u) = _f.value { _v = Int32(truncatingIfNeeded: _u) }
             if let _v { ownerIndex = _v }
         case 15:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_UidLookupListArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_UidLookupListArchive(ProtobufMessage(_b)) }
             if let _v { rowUidLookup = _v }
         case 16:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_CellCoordinateArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_CellCoordinateArchive(ProtobufMessage(_b)) }
             if let _v { hiddenStatesChangedFormula = _v }
         case 17:
             var _v: TSP_Reference?
@@ -6845,16 +6845,16 @@ final class TST_GroupByArchive {
         for _x in aggregator { _w.bytesField(4, _x.encoded()) }
         for _x in columnAggType { _w.bytesField(5, _x.encoded()) }
         if let _x = isEnabled { _w.varintField(6, _x ? 1 : 0) }
-        if let _x = indirectAggTypeChangeFormula { _w.bytesField(7, _x) }
-        if let _x = groupingColumnsFormula { _w.bytesField(8, _x) }
-        if let _x = aggsInGroupRootFormula { _w.bytesField(9, _x) }
-        if let _x = groupingColumnHeadersFormula { _w.bytesField(10, _x) }
-        if let _x = columnOrderChangedFormula { _w.bytesField(11, _x) }
-        if let _x = rowOrderChangedFormula { _w.bytesField(12, _x) }
-        if let _x = rowOrderChangedIgnoringRecalcFormula { _w.bytesField(13, _x) }
+        if let _x = indirectAggTypeChangeFormula { _w.bytesField(7, _x.encoded()) }
+        if let _x = groupingColumnsFormula { _w.bytesField(8, _x.encoded()) }
+        if let _x = aggsInGroupRootFormula { _w.bytesField(9, _x.encoded()) }
+        if let _x = groupingColumnHeadersFormula { _w.bytesField(10, _x.encoded()) }
+        if let _x = columnOrderChangedFormula { _w.bytesField(11, _x.encoded()) }
+        if let _x = rowOrderChangedFormula { _w.bytesField(12, _x.encoded()) }
+        if let _x = rowOrderChangedIgnoringRecalcFormula { _w.bytesField(13, _x.encoded()) }
         if let _x = ownerIndex { _w.varintField(14, UInt64(truncatingIfNeeded: _x)) }
-        if let _x = rowUidLookup { _w.bytesField(15, _x) }
-        if let _x = hiddenStatesChangedFormula { _w.bytesField(16, _x) }
+        if let _x = rowUidLookup { _w.bytesField(15, _x.encoded()) }
+        if let _x = hiddenStatesChangedFormula { _w.bytesField(16, _x.encoded()) }
         for _x in aggregatorRef { _w.bytesField(17, _x.encoded()) }
         if let _x = groupNodeRootRef { _w.bytesField(18, _x.encoded()) }
         for _f in unknownFields { _w.append(_f) }
@@ -6864,7 +6864,7 @@ final class TST_GroupByArchive {
 
 /// Generated wire model for `TST.GroupByArchive.AggNodeArchive`.
 final class TST_GroupByArchive_AggNodeArchive {
-    var formulaCoord: [UInt8]?
+    var formulaCoord: TSCE_CellCoordinateArchive?
     var accum: TST_AccumulatorArchive?
     var child: [TST_GroupByArchive_AggNodeArchive] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
@@ -6875,8 +6875,8 @@ final class TST_GroupByArchive_AggNodeArchive {
         for _f in _pb.fields {
             switch _f.number {
         case 1:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_CellCoordinateArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_CellCoordinateArchive(ProtobufMessage(_b)) }
             if let _v { formulaCoord = _v }
         case 2:
             var _v: TST_AccumulatorArchive?
@@ -6892,7 +6892,7 @@ final class TST_GroupByArchive_AggNodeArchive {
     }
     func encoded() -> [UInt8] {
         var _w = ProtobufWriter()
-        if let _x = formulaCoord { _w.bytesField(1, _x) }
+        if let _x = formulaCoord { _w.bytesField(1, _x.encoded()) }
         if let _x = accum { _w.bytesField(2, _x.encoded()) }
         for _x in child { _w.bytesField(3, _x.encoded()) }
         for _f in unknownFields { _w.append(_f) }
@@ -6937,11 +6937,11 @@ final class TST_GroupByArchive_GroupNodeArchive {
     var groupUid: TSP_UUID?
     var child: [TST_GroupByArchive_GroupNodeArchive] = []
     var rowUid: [TSP_UUID] = []
-    var aggFormulaCoords: [[UInt8]] = []
+    var aggFormulaCoords: [TSCE_CellCoordinateArchive] = []
     var formatManager: TST_GroupByArchive_GroupNodeArchive_FormatManagerArchive?
-    var groupCellValue: [UInt8]?
-    var rowIndexes: [UInt8]?
-    var rowLookupUids: [UInt8]?
+    var groupCellValue: TSCE_CellValueArchive?
+    var rowIndexes: TSCE_IndexSetArchive?
+    var rowLookupUids: TSCE_IndexSetArchive?
     var childRef: [TSP_Reference] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
@@ -6963,24 +6963,24 @@ final class TST_GroupByArchive_GroupNodeArchive {
             if case .lengthDelimited(let _b) = _f.value { _v = TSP_UUID(ProtobufMessage(_b)) }
             if let _v { rowUid.append(_v) }
         case 5:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_CellCoordinateArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_CellCoordinateArchive(ProtobufMessage(_b)) }
             if let _v { aggFormulaCoords.append(_v) }
         case 6:
             var _v: TST_GroupByArchive_GroupNodeArchive_FormatManagerArchive?
             if case .lengthDelimited(let _b) = _f.value { _v = TST_GroupByArchive_GroupNodeArchive_FormatManagerArchive(ProtobufMessage(_b)) }
             if let _v { formatManager = _v }
         case 7:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_CellValueArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_CellValueArchive(ProtobufMessage(_b)) }
             if let _v { groupCellValue = _v }
         case 8:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_IndexSetArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_IndexSetArchive(ProtobufMessage(_b)) }
             if let _v { rowIndexes = _v }
         case 9:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_IndexSetArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_IndexSetArchive(ProtobufMessage(_b)) }
             if let _v { rowLookupUids = _v }
         case 10:
             var _v: TSP_Reference?
@@ -6995,11 +6995,11 @@ final class TST_GroupByArchive_GroupNodeArchive {
         if let _x = groupUid { _w.bytesField(1, _x.encoded()) }
         for _x in child { _w.bytesField(3, _x.encoded()) }
         for _x in rowUid { _w.bytesField(4, _x.encoded()) }
-        for _x in aggFormulaCoords { _w.bytesField(5, _x) }
+        for _x in aggFormulaCoords { _w.bytesField(5, _x.encoded()) }
         if let _x = formatManager { _w.bytesField(6, _x.encoded()) }
-        if let _x = groupCellValue { _w.bytesField(7, _x) }
-        if let _x = rowIndexes { _w.bytesField(8, _x) }
-        if let _x = rowLookupUids { _w.bytesField(9, _x) }
+        if let _x = groupCellValue { _w.bytesField(7, _x.encoded()) }
+        if let _x = rowIndexes { _w.bytesField(8, _x.encoded()) }
+        if let _x = rowLookupUids { _w.bytesField(9, _x.encoded()) }
         for _x in childRef { _w.bytesField(10, _x.encoded()) }
         for _f in unknownFields { _w.append(_f) }
         return _w.bytes
@@ -7008,10 +7008,10 @@ final class TST_GroupByArchive_GroupNodeArchive {
 
 /// Generated wire model for `TST.GroupByArchive.GroupNodeArchive.FormatManagerArchive`.
 final class TST_GroupByArchive_GroupNodeArchive_FormatManagerArchive {
-    var cellValue: [UInt8]?
+    var cellValue: TSCE_CellValueArchive?
     var formats: [TSK_FormatStructArchive] = []
     var rowSets: [TST_GroupByArchive_GroupNodeArchive_FormatManagerArchive_RowSetArchive] = []
-    var rowUidLookupSets: [[UInt8]] = []
+    var rowUidLookupSets: [TSCE_IndexSetArchive] = []
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
 
@@ -7020,8 +7020,8 @@ final class TST_GroupByArchive_GroupNodeArchive_FormatManagerArchive {
         for _f in _pb.fields {
             switch _f.number {
         case 1:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_CellValueArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_CellValueArchive(ProtobufMessage(_b)) }
             if let _v { cellValue = _v }
         case 2:
             var _v: TSK_FormatStructArchive?
@@ -7032,8 +7032,8 @@ final class TST_GroupByArchive_GroupNodeArchive_FormatManagerArchive {
             if case .lengthDelimited(let _b) = _f.value { _v = TST_GroupByArchive_GroupNodeArchive_FormatManagerArchive_RowSetArchive(ProtobufMessage(_b)) }
             if let _v { rowSets.append(_v) }
         case 4:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_IndexSetArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_IndexSetArchive(ProtobufMessage(_b)) }
             if let _v { rowUidLookupSets.append(_v) }
                 default: unknownFields.append(_f)
             }
@@ -7041,10 +7041,10 @@ final class TST_GroupByArchive_GroupNodeArchive_FormatManagerArchive {
     }
     func encoded() -> [UInt8] {
         var _w = ProtobufWriter()
-        if let _x = cellValue { _w.bytesField(1, _x) }
+        if let _x = cellValue { _w.bytesField(1, _x.encoded()) }
         for _x in formats { _w.bytesField(2, _x.encoded()) }
         for _x in rowSets { _w.bytesField(3, _x.encoded()) }
-        for _x in rowUidLookupSets { _w.bytesField(4, _x) }
+        for _x in rowUidLookupSets { _w.bytesField(4, _x.encoded()) }
         for _f in unknownFields { _w.append(_f) }
         return _w.bytes
     }
@@ -7650,7 +7650,7 @@ final class TST_MultiTableRemapperArchive {
     var mappingPurpose: Int32?
     var shouldStealReferences: Bool?
     var canReuseTableNames: Bool?
-    var ownerUidMapper: [[UInt8]] = []
+    var ownerUidMapper: [TSCE_OwnerUIDMapperArchive] = []
     var backingTablesForCharts: TSP_UUIDMapArchive?
     var crossDocumentPaste: Bool?
     var nestedInnerMapper: Bool?
@@ -7674,8 +7674,8 @@ final class TST_MultiTableRemapperArchive {
             if case .varint(let _u) = _f.value { _v = _u != 0 }
             if let _v { canReuseTableNames = _v }
         case 4:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_OwnerUIDMapperArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_OwnerUIDMapperArchive(ProtobufMessage(_b)) }
             if let _v { ownerUidMapper.append(_v) }
         case 5:
             var _v: TSP_UUIDMapArchive?
@@ -7698,7 +7698,7 @@ final class TST_MultiTableRemapperArchive {
         if let _x = mappingPurpose { _w.varintField(1, UInt64(truncatingIfNeeded: _x)) }
         if let _x = shouldStealReferences { _w.varintField(2, _x ? 1 : 0) }
         if let _x = canReuseTableNames { _w.varintField(3, _x ? 1 : 0) }
-        for _x in ownerUidMapper { _w.bytesField(4, _x) }
+        for _x in ownerUidMapper { _w.bytesField(4, _x.encoded()) }
         if let _x = backingTablesForCharts { _w.bytesField(5, _x.encoded()) }
         if let _x = crossDocumentPaste { _w.varintField(6, _x ? 1 : 0) }
         if let _x = nestedInnerMapper { _w.varintField(7, _x ? 1 : 0) }
@@ -7968,8 +7968,8 @@ final class TST_HeaderNameMgrTileArchive {
 /// Generated wire model for `TST.HeaderNameMgrTileArchive.NameFragmentArchive`.
 final class TST_HeaderNameMgrTileArchive_NameFragmentArchive {
     var nameFragment: String?
-    var namePrecedent: [UInt8]?
-    var usesOfNameFragment: [UInt8]?
+    var namePrecedent: TSCE_CellCoordinateArchive?
+    var usesOfNameFragment: TSCE_UidCellRefSetArchive?
     /// Fields not modeled above, preserved verbatim for lossless round-trip.
     var unknownFields: [ProtobufField] = []
 
@@ -7982,12 +7982,12 @@ final class TST_HeaderNameMgrTileArchive_NameFragmentArchive {
             if case .lengthDelimited(let _b) = _f.value { _v = String(decoding: _b, as: UTF8.self) }
             if let _v { nameFragment = _v }
         case 2:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_CellCoordinateArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_CellCoordinateArchive(ProtobufMessage(_b)) }
             if let _v { namePrecedent = _v }
         case 3:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_UidCellRefSetArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_UidCellRefSetArchive(ProtobufMessage(_b)) }
             if let _v { usesOfNameFragment = _v }
                 default: unknownFields.append(_f)
             }
@@ -7996,8 +7996,8 @@ final class TST_HeaderNameMgrTileArchive_NameFragmentArchive {
     func encoded() -> [UInt8] {
         var _w = ProtobufWriter()
         if let _x = nameFragment { _w.stringField(1, _x) }
-        if let _x = namePrecedent { _w.bytesField(2, _x) }
-        if let _x = usesOfNameFragment { _w.bytesField(3, _x) }
+        if let _x = namePrecedent { _w.bytesField(2, _x.encoded()) }
+        if let _x = usesOfNameFragment { _w.bytesField(3, _x.encoded()) }
         for _f in unknownFields { _w.append(_f) }
         return _w.bytes
     }
@@ -8050,7 +8050,7 @@ final class TST_HeaderNameMgrArchive {
 /// Generated wire model for `TST.HeaderNameMgrArchive.PerTableArchive`.
 final class TST_HeaderNameMgrArchive_PerTableArchive {
     var tableUid: TSP_UUID?
-    var perTablePrecedent: [UInt8]?
+    var perTablePrecedent: TSCE_CellCoordinateArchive?
     var isDeleted: Bool?
     var headerRowUids: [TSP_UUID] = []
     var headerColumnUids: [TSP_UUID] = []
@@ -8068,8 +8068,8 @@ final class TST_HeaderNameMgrArchive_PerTableArchive {
             if case .lengthDelimited(let _b) = _f.value { _v = TSP_UUID(ProtobufMessage(_b)) }
             if let _v { tableUid = _v }
         case 2:
-            var _v: [UInt8]?
-            if case .lengthDelimited(let _b) = _f.value { _v = _b }
+            var _v: TSCE_CellCoordinateArchive?
+            if case .lengthDelimited(let _b) = _f.value { _v = TSCE_CellCoordinateArchive(ProtobufMessage(_b)) }
             if let _v { perTablePrecedent = _v }
         case 3:
             var _v: Bool?
@@ -8098,7 +8098,7 @@ final class TST_HeaderNameMgrArchive_PerTableArchive {
     func encoded() -> [UInt8] {
         var _w = ProtobufWriter()
         if let _x = tableUid { _w.bytesField(1, _x.encoded()) }
-        if let _x = perTablePrecedent { _w.bytesField(2, _x) }
+        if let _x = perTablePrecedent { _w.bytesField(2, _x.encoded()) }
         if let _x = isDeleted { _w.varintField(3, _x ? 1 : 0) }
         for _x in headerRowUids { _w.bytesField(5, _x.encoded()) }
         for _x in headerColumnUids { _w.bytesField(6, _x.encoded()) }
