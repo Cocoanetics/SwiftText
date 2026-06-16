@@ -337,6 +337,34 @@ enum PagesBodySerializer {
 		}
 	}
 
+	/// Returns a paragraph-style payload with relative line spacing (a multiple of the
+	/// line height, e.g. 1.2) set in its para_properties (field 12). Sets the
+	/// `line_spacing` message (field 13, mode = relative, amount = `multiple`) and
+	/// clears the `line_spacing_null` flag (field 12); all other fields preserved.
+	static func settingLineSpacing(in stylePayload: [UInt8], multiple: Float) -> [UInt8] {
+		var spacing = ProtobufWriter()
+		spacing.varintField(1, 0)                                   // kRelativeLineSpacing
+		spacing.fixed32Field(2, multiple.bitPattern)                // amount
+		let style = ProtobufMessage(stylePayload)
+		var writer = ProtobufWriter()
+		var wrote = false
+		for field in style.fields {
+			guard field.number == 12, case .lengthDelimited(let paraProperties) = field.value else { writer.append(field); continue }
+			var inner = ProtobufWriter()
+			for property in ProtobufMessage(paraProperties).fields where property.number != 12 && property.number != 13 {
+				inner.append(property)                              // keep all but the null flag / old line_spacing
+			}
+			inner.bytesField(13, spacing.bytes)
+			writer.bytesField(12, inner.bytes)
+			wrote = true
+		}
+		if !wrote {                                                 // no para_properties yet — add one
+			var inner = ProtobufWriter(); inner.bytesField(13, spacing.bytes)
+			writer.bytesField(12, inner.bytes)
+		}
+		return writer.bytes
+	}
+
 	/// Returns a style payload with italic set in its char_properties (field 11).
 	static func settingItalic(in stylePayload: [UInt8]) -> [UInt8] {
 		let style = ProtobufMessage(stylePayload)

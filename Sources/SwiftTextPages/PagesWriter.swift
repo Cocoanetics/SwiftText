@@ -151,6 +151,12 @@ public final class PagesWriter {
 				PagesBodySerializer.settingSpacing(in: payload, spaceBefore: spec.before, spaceAfter: spec.after)
 			}
 		}
+		// Body line spacing: a 1.2× multiple for comfortable reading rhythm — the Pages
+		// counterpart to the HTML/PDF stylesheet's `line-height: 1.6` (Pages line
+		// multiples run tighter than CSS for the same perceived spacing).
+		data = try IWAArchive.replacingPayload(in: data, objectID: PagesStyleID.body) { payload in
+			PagesBodySerializer.settingLineSpacing(in: payload, multiple: 1.2)
+		}
 		// Repurpose the (unused) "Subtitle" style as an indented block-quote style by
 		// overwriting it with a copy of the (known-safe) Body style plus a left indent
 		// and a unique identifier. Editing/referencing a real style applies its
