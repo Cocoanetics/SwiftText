@@ -78,6 +78,7 @@ enum PagesTableBuilder {
 				PagesTableTemplate.modelID: patchModel(try record(PagesTableTemplate.modelID).payloadOnly, rows: R, columns: C, name: "Table \(tableIndex + 1)"),
 				PagesTableTemplate.rowHeadersBucketID: buildBucket(try record(PagesTableTemplate.rowHeadersBucketID).payloadOnly, count: R, otherDimension: C, size: rowHeight),
 				PagesTableTemplate.columnHeadersBucketID: buildBucket(try record(PagesTableTemplate.columnHeadersBucketID).payloadOnly, count: C, otherDimension: R, size: columnWidth),
+				PagesTableTemplate.tableInfoID: hideTitleAndCaption(try record(PagesTableTemplate.tableInfoID).payloadOnly),
 			]
 
 			for entry in records {
@@ -190,11 +191,12 @@ enum PagesTableBuilder {
 	}
 
 	/// `TableModelArchive`: set `#6` rows, `#7` columns, `#8` table name, `#9` header
-	/// rows = 1, `#10` header columns = 0 (Markdown has a header row, not a column).
+	/// rows = 1, `#10` header columns = 0 (Markdown has a header row, not a column),
+	/// `#22` table_name_enabled = 0 (Markdown tables have no visible title).
 	static func patchModel(_ payload: [UInt8], rows R: Int, columns C: Int, name: String) -> [UInt8] {
 		let model = ProtobufMessage(payload)
 		var w = ProtobufWriter()
-		var wroteHeaderColumns = false
+		var wroteHeaderColumns = false, wroteNameEnabled = false
 		for field in model.fields {
 			switch field.number {
 			case 6: w.varintField(6, UInt64(R))
@@ -202,11 +204,38 @@ enum PagesTableBuilder {
 			case 8: w.stringField(8, name)
 			case 9: w.varintField(9, 1)
 			case 10: w.varintField(10, 0); wroteHeaderColumns = true
+			case 22: w.varintField(22, 0); wroteNameEnabled = true
 			default: w.append(field)
 			}
 		}
 		if !wroteHeaderColumns { w.varintField(10, 0) }
+		if !wroteNameEnabled { w.varintField(22, 0) }
 		return w.bytes
+	}
+
+	/// `TableInfoArchive` (6000): hide the table title and caption by setting the
+	/// `super` (`TSD.DrawableArchive`) `#12` title_hidden and `#13` caption_hidden —
+	/// Markdown tables carry neither. Other drawable fields (geometry, the title and
+	/// caption storages) are preserved.
+	static func hideTitleAndCaption(_ payload: [UInt8]) -> [UInt8] {
+		let info = ProtobufMessage(payload)
+		var writer = ProtobufWriter()
+		for field in info.fields {
+			guard field.number == 1, case .lengthDelimited(let drawable) = field.value else { writer.append(field); continue }
+			var drawableWriter = ProtobufWriter()
+			var wroteTitle = false, wroteCaption = false
+			for drawableField in ProtobufMessage(drawable).fields {
+				switch drawableField.number {
+				case 12: drawableWriter.varintField(12, 1); wroteTitle = true
+				case 13: drawableWriter.varintField(13, 1); wroteCaption = true
+				default: drawableWriter.append(drawableField)
+				}
+			}
+			if !wroteTitle { drawableWriter.varintField(12, 1) }
+			if !wroteCaption { drawableWriter.varintField(13, 1) }
+			writer.bytesField(1, drawableWriter.bytes)
+		}
+		return writer.bytes
 	}
 
 	/// `HeaderStorageBucket` (row heights / column widths): `count` `Header`s
