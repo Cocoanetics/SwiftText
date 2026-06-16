@@ -376,6 +376,7 @@ enum PagesBodySerializer {
 	private enum ParaProperty {
 		static let firstLineIndent = 7
 		static let leftIndent = 11
+		static let rightIndent = 19
 		static let spaceAfter = 20
 		static let spaceBefore = 21
 	}
@@ -408,41 +409,84 @@ enum PagesBodySerializer {
 	/// ``settingLeftRule(in:red:green:blue:width:)``) Pages draws the bar at the
 	/// first-line indent and flows all text from the larger left indent — i.e. the
 	/// HTML block-quote look of bar → gap → text. Other fields are preserved.
-	static func settingIndents(in stylePayload: [UInt8], left: Float, firstLine: Float) -> [UInt8] {
+	static func settingIndents(in stylePayload: [UInt8], left: Float, firstLine: Float, right: Float? = nil) -> [UInt8] {
 		editingParaProperties(in: stylePayload) { overrides, touched in
 			touched.insert(ParaProperty.leftIndent)
 			touched.insert(ParaProperty.firstLineIndent)
 			overrides[ParaProperty.leftIndent] = ProtobufWriter.fixed32(left.bitPattern)
 			overrides[ParaProperty.firstLineIndent] = ProtobufWriter.fixed32(firstLine.bitPattern)
+			if let right {
+				touched.insert(ParaProperty.rightIndent)
+				overrides[ParaProperty.rightIndent] = ProtobufWriter.fixed32(right.bitPattern)
+			}
 		}
 	}
 
-	/// Returns a paragraph-style payload carrying a **left vertical rule** — the
-	/// HTML-style block-quote bar — in its para_properties (field 12). Encodes exactly
-	/// what Pages writes when a left paragraph border is added (reverse-engineered from
-	/// a Pages-authored document):
-	///   - `stroke` (#32): a `TSD.StrokeArchive` with a solid `pattern` (type 1),
-	///     a `color`, and `width` in points;
-	///   - `border_positions` (#45) = 4 and the legacy `borders` (#15) = 8 — the bitmask
-	///     for the *left* edge.
-	/// The stroke colour reuses ``colorBytes(red:green:blue:)`` (the layout Pages renders).
-	/// All other para_properties (indents, spacing, line spacing, …) are preserved;
-	/// `stroke_null` (#31) is dropped so the stroke is honoured.
+	/// Returns a paragraph-style payload with a **left vertical rule** — the HTML-style
+	/// block-quote bar: a solid `stroke` on the left edge only. See
+	/// ``settingParagraphBorder(in:fill:stroke:borderPositions:borders:rounded:)`` for the
+	/// encoding; the colour reuses ``colorBytes(red:green:blue:alpha:)``.
 	static func settingLeftRule(in stylePayload: [UInt8], red: Float, green: Float, blue: Float, width: Float) -> [UInt8] {
-		var pattern = ProtobufWriter()                       // solid line, as Pages emits
+		settingParagraphBorder(
+			in: stylePayload,
+			fill: nil,
+			stroke: solidStroke(color: colorBytes(red: red, green: green, blue: blue), width: width),
+			borderPositions: 4,            // left edge
+			borders: 8,                    // legacy left bit
+			rounded: false
+		)
+	}
+
+	/// Returns a paragraph-style payload framed like an HTML `<pre>` block: a filled,
+	/// rounded box bordered on all four edges. Encodes a para_properties background
+	/// `fill` (#6, an RGBA `TSP.Color`), a solid all-edges `stroke` (#32), and rounded
+	/// corners (#46) — reverse-engineered from a Pages-authored code block. Pair with
+	/// ``settingIndents(in:left:firstLine:right:)`` for the interior padding.
+	static func settingBoxFrame(in stylePayload: [UInt8], fill: (r: Float, g: Float, b: Float, a: Float), stroke: (r: Float, g: Float, b: Float), strokeWidth: Float) -> [UInt8] {
+		settingParagraphBorder(
+			in: stylePayload,
+			fill: colorBytes(red: fill.r, green: fill.g, blue: fill.b, alpha: fill.a),
+			stroke: solidStroke(color: colorBytes(red: stroke.r, green: stroke.g, blue: stroke.b), width: strokeWidth),
+			borderPositions: 15,           // all four edges (1|2|4|8)
+			borders: 4,                    // legacy box bit
+			rounded: true
+		)
+	}
+
+	/// A solid `TSD.StrokeArchive` (`color` + `width`) with the all-zero dash `pattern`
+	/// (type 1 = solid) Pages emits. Shared by the block-quote bar and the box frame.
+	private static func solidStroke(color: [UInt8], width: Float) -> [UInt8] {
+		var pattern = ProtobufWriter()
 		pattern.varintField(1, 1)                            // type = solid
 		pattern.fixed32Field(2, Float(0).bitPattern)         // phase
 		pattern.varintField(3, 0)                            // count
 		for _ in 0..<6 { pattern.fixed32Field(4, Float(0).bitPattern) }  // dash array (all-zero = solid)
 
 		var stroke = ProtobufWriter()
-		stroke.bytesField(1, colorBytes(red: red, green: green, blue: blue))   // color
+		stroke.bytesField(1, color)                          // color
 		stroke.fixed32Field(2, width.bitPattern)             // width (points)
 		stroke.varintField(3, 0)                             // cap = butt
 		stroke.varintField(4, 0)                             // join = miter
 		stroke.fixed32Field(5, Float(4).bitPattern)          // miter limit
 		stroke.bytesField(6, pattern.bytes)                  // pattern
-		let strokeBytes = stroke.bytes
+		return stroke.bytes
+	}
+
+	/// Core paragraph-border writer: rewrites para_properties (field 12) with an optional
+	/// background `fill` (#6, clearing `fill_null` #5), a `stroke` (#32), the edge bitmask
+	/// `borderPositions` (#45) + legacy `borders` (#15), and optional `roundedCorners` (#46).
+	/// `stroke_null` (#31) is dropped so the stroke renders. All other properties preserved.
+	private static func settingParagraphBorder(in stylePayload: [UInt8], fill: [UInt8]?, stroke: [UInt8], borderPositions: UInt64, borders: UInt64, rounded: Bool) -> [UInt8] {
+		var drop: Set<Int> = [15, 31, 32, 45, 46]
+		if fill != nil { drop.insert(5); drop.insert(6) }    // replace fill + clear fill_null
+
+		func appendBorder(to inner: inout ProtobufWriter) {
+			if let fill { inner.bytesField(6, fill) }
+			inner.varintField(15, borders)
+			inner.bytesField(32, stroke)
+			inner.varintField(45, borderPositions)
+			if rounded { inner.varintField(46, 1) }
+		}
 
 		let style = ProtobufMessage(stylePayload)
 		var writer = ProtobufWriter()
@@ -450,20 +494,16 @@ enum PagesBodySerializer {
 		for field in style.fields {
 			guard field.number == 12, case .lengthDelimited(let paraProperties) = field.value else { writer.append(field); continue }
 			var inner = ProtobufWriter()
-			for property in ProtobufMessage(paraProperties).fields where ![15, 31, 32, 45].contains(property.number) {
+			for property in ProtobufMessage(paraProperties).fields where !drop.contains(property.number) {
 				inner.append(property)
 			}
-			inner.varintField(15, 8)                         // deprecated borders = left
-			inner.bytesField(32, strokeBytes)                // stroke
-			inner.varintField(45, 4)                         // border positions = left
+			appendBorder(to: &inner)
 			writer.bytesField(12, inner.bytes)
 			wrote = true
 		}
 		if !wrote {                                          // no para_properties yet — add one
 			var inner = ProtobufWriter()
-			inner.varintField(15, 8)
-			inner.bytesField(32, strokeBytes)
-			inner.varintField(45, 4)
+			appendBorder(to: &inner)
 			writer.bytesField(12, inner.bytes)
 		}
 		return writer.bytes
@@ -553,13 +593,13 @@ enum PagesBodySerializer {
 	/// A `TSP.Color` in the exact byte layout Pages writes for rendered color:
 	/// `model=1` (RGB), `r/g/b`, `a=1` (#6), `rgbspace=1` (#12, sRGB), trailing `#13=1`.
 	/// Verified byte-for-byte against Apple's own templates.
-	static func colorBytes(red: Float, green: Float, blue: Float) -> [UInt8] {
+	static func colorBytes(red: Float, green: Float, blue: Float, alpha: Float = 1) -> [UInt8] {
 		var color = ProtobufWriter()
 		color.varintField(1, 1)                              // model = rgb
 		color.fixed32Field(3, red.bitPattern)
 		color.fixed32Field(4, green.bitPattern)
 		color.fixed32Field(5, blue.bitPattern)
-		color.fixed32Field(6, Float(1).bitPattern)           // alpha
+		color.fixed32Field(6, alpha.bitPattern)              // alpha (1 = opaque)
 		color.varintField(12, 1)                             // rgbspace = sRGB
 		color.fixed32Field(13, Float(1).bitPattern)          // opacity flag Pages always writes
 		return color.bytes

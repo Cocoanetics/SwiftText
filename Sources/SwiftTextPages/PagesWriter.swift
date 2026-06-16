@@ -255,15 +255,14 @@ public final class PagesWriter {
 			}
 		}
 		if let body = try IWAArchive.objects(from: data).first(where: { $0.identifier == PagesStyleID.body })?.payload {
-			// Block quote: a copy of the (known-safe) Body style, indented + italic + gray,
-			// with a left vertical rule (the HTML-style bar), and a unique identifier.
-			// (Editing the special "Default" style crashes Pages; repurposing a real style
-			// is safe.) Indents/bar/colour reverse-engineered from a Pages-authored quote:
-			// the bar sits at the first-line indent (14.173pt ≈ 0.5cm) with the text block
-			// flowing from the left indent (36pt) — bar → gap → text, like HTML.
+			// Block quote: a copy of the (known-safe) Body style — left-aligned (a modest
+			// 14.173pt ≈ 0.5cm indent, not a deep inset), italic + gray, with a left vertical
+			// rule (the HTML-style bar), under a unique identifier. (Editing the special
+			// "Default" style crashes Pages; repurposing a real style is safe.) Indents/bar/
+			// colour reverse-engineered from a Pages-authored quote.
 			var blockQuote = PagesBodySerializer.settingStyleIdentity(in: body, name: "Block Quote", identifier: PagesStyleIdentifier.blockQuote)
 			blockQuote = PagesBodySerializer.settingSpacing(in: blockQuote, spaceBefore: 8, spaceAfter: 8)
-			blockQuote = PagesBodySerializer.settingIndents(in: blockQuote, left: 36, firstLine: 14.173)
+			blockQuote = PagesBodySerializer.settingIndents(in: blockQuote, left: 14.173, firstLine: 14.173)
 			blockQuote = PagesBodySerializer.settingItalic(in: blockQuote)
 			blockQuote = PagesBodySerializer.settingTextColor(in: blockQuote, red: 0.4, green: 0.4, blue: 0.4)
 			blockQuote = PagesBodySerializer.settingLeftRule(in: blockQuote, red: 0.795, green: 0.795, blue: 0.795, width: 4)
@@ -280,18 +279,21 @@ public final class PagesWriter {
 			data = try IWAArchive.replacingPayload(in: data, objectID: PagesStyleID.heading4) { _ in heading4 }
 
 			// Code block ("preformatted"): a copy of Body in a monospace face, a touch
-			// smaller, tight line spacing, a left inset, distinct code color, and clear
-			// space before/after (the whole block is one paragraph with soft line breaks,
-			// so this spacing is a margin around the block, not a gap between lines).
+			// smaller, tight line spacing, distinct code color, and clear space before/after
+			// (the whole block is one paragraph with soft line breaks, so this spacing is a
+			// margin around the block, not a gap between lines). It's framed like an HTML
+			// `<pre>`: a rounded box with a subtle gray fill and a thin border on all edges,
+			// with ~5.669pt (0.2cm) interior padding via the indents (RE'd from a Pages quote).
 			// Repurposes the unused "Caption" style (real style ⇒ its para_properties apply).
 			let code = PagesBodySerializer.codeTextColor
 			var codeBlock = PagesBodySerializer.settingStyleIdentity(in: body, name: "Code Block", identifier: PagesStyleIdentifier.codeBlock)
 			codeBlock = PagesBodySerializer.settingFontName(in: codeBlock, name: "Menlo-Regular")
 			codeBlock = PagesBodySerializer.settingFontSize(in: codeBlock, points: 10)
 			codeBlock = PagesBodySerializer.settingLineSpacing(in: codeBlock, multiple: 1.2)
-			codeBlock = PagesBodySerializer.settingLeftIndent(in: codeBlock, points: 12)
+			codeBlock = PagesBodySerializer.settingIndents(in: codeBlock, left: 5.669, firstLine: 5.669, right: 5.669)
 			codeBlock = PagesBodySerializer.settingSpacing(in: codeBlock, spaceBefore: 12, spaceAfter: 12)
 			codeBlock = PagesBodySerializer.settingTextColor(in: codeBlock, red: code.r, green: code.g, blue: code.b)
+			codeBlock = PagesBodySerializer.settingBoxFrame(in: codeBlock, fill: (0.572, 0.572, 0.572, 0.121), stroke: (0, 0, 0), strokeWidth: 0.25)
 			data = try IWAArchive.replacingPayload(in: data, objectID: PagesStyleID.codeBlock) { _ in codeBlock }
 		}
 		return [UInt8](data)

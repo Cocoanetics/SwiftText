@@ -68,10 +68,30 @@ struct StylesheetTests {
         #expect(bar.model == 1)            // RGB
         #expect(pp.borderPositions == 4)   // left edge
 
-        // The bar sits at the first-line indent; the text block flows from the larger
-        // left indent — bar → gap → text, like an HTML block quote.
+        // Left-aligned: a modest ~0.5cm indent, first-line and left equal (a clean block).
         #expect(abs((pp.firstLineIndent ?? 0) - 14.173) < 0.01)
-        #expect(abs((pp.leftIndent ?? 0) - 36) < 0.01)
+        #expect(abs((pp.leftIndent ?? 0) - 14.173) < 0.01)
+    }
+
+    @Test("Code block is framed like HTML <pre> — a filled, rounded, all-edge bordered box")
+    func codeBlockIsFramed() throws {
+        let styles = try generatedStyles("```\nlet x = 1\n```\n")
+        let code = try #require(styles[PagesStyleID.codeBlock])
+        let pp = try #require(TSWP_ParagraphStyleArchive(ProtobufMessage(code.payload)).paraProperties)
+
+        // Subtle gray background fill (RGBA, ~12% alpha) — RE'd from a Pages-authored block.
+        let fill = try #require(pp.fill)
+        #expect(abs((fill.r ?? 0) - 0.572) < 0.01)
+        #expect(abs((fill.a ?? 1) - 0.121) < 0.01)
+        #expect(fill.model == 1)
+        // A thin border on all four edges (bitmask 1|2|4|8 = 15), rounded corners.
+        #expect(pp.borderPositions == 15)
+        #expect(pp.roundedCorners == true)
+        let stroke = try #require(pp.stroke)
+        #expect(abs((stroke.width ?? 0) - 0.25) < 0.01)
+        // Interior padding (~0.2cm) via the left/right indents.
+        #expect(abs((pp.leftIndent ?? 0) - 5.669) < 0.01)
+        #expect(abs((pp.rightIndent ?? 0) - 5.669) < 0.01)
     }
 
     @Test("Heading 4 is rebuilt black + bold (the blank theme ships it red)")
@@ -87,7 +107,7 @@ struct StylesheetTests {
         #expect(cp.bold == true)
     }
 
-    @Test("Code block is a dedicated monospace, colored style (no background shading)")
+    @Test("Code block is a dedicated monospace, colored style")
     func codeBlockStyle() throws {
         let styles = try generatedStyles("```\nlet x = 1\n```\n")
         let code = try #require(styles[PagesStyleID.codeBlock])
@@ -95,12 +115,12 @@ struct StylesheetTests {
 
         // Monospace face lives in the style (no per-run override needed).
         #expect(para.charProperties?.fontName == "Menlo-Regular")
-        // Code reads as a distinct color (rendered via the fill) — not background shading.
+        // Code text reads as a distinct dark-red color (rendered via the fill).
         let color = try #require(para.charProperties?.tsdFill?.color)
         #expect((color.r ?? 0) > 0.5)
         #expect((color.g ?? 1) < 0.2)
-        #expect(para.paraProperties?.fill == nil)            // no paragraph background
-        // Real margin around the block, and a named, round-trippable style.
+        // Real margin around the framed block (the box fill itself is covered by
+        // `codeBlockIsFramed`), and a named, round-trippable style.
         #expect((para.paraProperties?.spaceBefore ?? 0) > 0)
         #expect((para.paraProperties?.spaceAfter ?? 0) > 0)
         #expect(para.super?.styleIdentifier == "swifttext-code-block")
