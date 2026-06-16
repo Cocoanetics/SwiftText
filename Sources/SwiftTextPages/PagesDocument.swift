@@ -89,6 +89,9 @@ public struct PagesDocument {
 		/// Native tables anchored in this paragraph, in anchor order; rendered as
 		/// Markdown tables.
 		public var tables: [Table]
+		/// Whether this paragraph belongs to a preformatted code block (the "Code
+		/// Block" style). Consecutive code-block paragraphs render as one fenced block.
+		public var isCodeBlock: Bool
 
 		/// A native table reconstructed from the iWork grid: cell strings (row 0 =
 		/// header) plus per-column horizontal alignment.
@@ -113,7 +116,8 @@ public struct PagesDocument {
 			listLevel: Int? = nil,
 			listOrdered: Bool = false,
 			footnoteMarkers: [FootnoteMarker] = [],
-			tables: [Table] = []
+			tables: [Table] = [],
+			isCodeBlock: Bool = false
 		) {
 			self.text = text
 			self.fontSize = fontSize
@@ -126,6 +130,7 @@ public struct PagesDocument {
 			self.listOrdered = listOrdered
 			self.footnoteMarkers = footnoteMarkers
 			self.tables = tables
+			self.isCodeBlock = isCodeBlock
 		}
 
 		/// A footnote reference at a paragraph-relative UTF-16 offset.
@@ -278,6 +283,13 @@ public struct PagesDocument {
 		public func normalizedText() -> String {
 			renderedText(inliningImages: false, applyingEmphasis: false)
 		}
+
+		/// The literal text for a fenced code block: soft line breaks (U+2028) become
+		/// newlines, but indentation is preserved — unlike `normalizedText()`, which
+		/// trims surrounding whitespace (fatal for code).
+		public func codeText() -> String {
+			String(String.UnicodeScalarView(text.unicodeScalars.map { $0 == "\u{2028}" ? "\n" : $0 }))
+		}
 	}
 
 	/// Wraps `text`'s non-whitespace core in the Markdown emphasis markers for the
@@ -340,15 +352,31 @@ public struct PagesDocument {
 		var isListItem = [Bool]()
 		var counters = [Int: Int]()
 
-		for paragraph in paragraphs {
+		var index = 0
+		while index < paragraphs.count {
+			let paragraph = paragraphs[index]
 			// Native tables anchored in this paragraph render as Markdown table blocks.
 			for table in paragraph.tables where !table.cells.isEmpty {
 				lines.append(Self.markdownTable(table))
 				isListItem.append(false)
 			}
 
+			// A run of code-block paragraphs becomes one fenced block; use the raw
+			// (un-marked-up) text so indentation and literal characters survive.
+			if paragraph.isCodeBlock {
+				var codeLines = [String]()
+				while index < paragraphs.count, paragraphs[index].isCodeBlock {
+					codeLines.append(paragraphs[index].codeText())
+					index += 1
+				}
+				counters.removeAll()
+				lines.append("```\n" + codeLines.joined(separator: "\n") + "\n```")
+				isListItem.append(false)
+				continue
+			}
+
 			let rendered = paragraph.renderedText(inliningImages: true, applyingEmphasis: true)
-			guard !rendered.isEmpty else { continue }
+			guard !rendered.isEmpty else { index += 1; continue }
 
 			if let level = paragraph.listLevel {
 				let indent = String(repeating: "  ", count: max(level, 0))
@@ -373,6 +401,7 @@ public struct PagesDocument {
 				}
 				isListItem.append(false)
 			}
+			index += 1
 		}
 
 		// Consecutive list items are kept tight (single newline); everything else

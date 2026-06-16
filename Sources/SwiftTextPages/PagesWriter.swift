@@ -175,23 +175,35 @@ public final class PagesWriter {
 			// Block quote: a copy of the (known-safe) Body style, indented + italic, with
 			// a unique identifier. (Editing the special "Default" style crashes Pages;
 			// repurposing a real style is safe.)
-			var blockQuote = PagesBodySerializer.settingStyleIdentity(in: body, name: "Block Quote", identifier: "swifttext-block-quote")
+			var blockQuote = PagesBodySerializer.settingStyleIdentity(in: body, name: "Block Quote", identifier: PagesStyleIdentifier.blockQuote)
 			blockQuote = PagesBodySerializer.settingSpacing(in: blockQuote, spaceBefore: 8, spaceAfter: 8)
 			blockQuote = PagesBodySerializer.settingLeftIndent(in: blockQuote, points: 36)
 			blockQuote = PagesBodySerializer.settingItalic(in: blockQuote)
 			blockQuote = PagesBodySerializer.settingTextColor(in: blockQuote, red: 0.4, green: 0.4, blue: 0.4)
 			data = try IWAArchive.replacingPayload(in: data, objectID: PagesStyleID.blockQuote) { _ in blockQuote }
 
-			// Heading 4: the blank theme ships it as a red "Heading Red", and text color
-			// resolves from the character style on the run (not the paragraph style's
-			// char_properties), so it can't be recolored in place. Rebuild it from the
-			// Body style — bold, 13pt, keeping the stable "Heading 4" identifier so the
-			// reader still maps `####` ↔ this style.
+			// Heading 4: the blank theme ships it as a red "Heading Red". Rather than
+			// recolor in place, rebuild it from the Body style — black, bold, 13pt —
+			// keeping the stable "Heading 4" identifier so the reader still maps
+			// `####` ↔ this style.
 			var heading4 = PagesBodySerializer.settingStyleIdentity(in: body, name: "Heading 4", identifier: "text-14-paragraphstyle-Heading 4")
 			heading4 = PagesBodySerializer.settingBold(in: heading4)
 			heading4 = PagesBodySerializer.settingFontSize(in: heading4, points: 13)
 			heading4 = PagesBodySerializer.settingSpacing(in: heading4, spaceBefore: 12, spaceAfter: 4)
 			data = try IWAArchive.replacingPayload(in: data, objectID: PagesStyleID.heading4) { _ in heading4 }
+
+			// Code block ("preformatted"): a copy of Body in a monospace face, a touch
+			// smaller, with tight line spacing, a small left inset, and a light gray
+			// background fill — the Pages counterpart to the HTML/PDF `pre` block.
+			// Repurposes the unused "Caption" style (real style ⇒ its para_properties apply).
+			var codeBlock = PagesBodySerializer.settingStyleIdentity(in: body, name: "Code Block", identifier: PagesStyleIdentifier.codeBlock)
+			codeBlock = PagesBodySerializer.settingFontName(in: codeBlock, name: "Menlo-Regular")
+			codeBlock = PagesBodySerializer.settingFontSize(in: codeBlock, points: 10)
+			codeBlock = PagesBodySerializer.settingLineSpacing(in: codeBlock, multiple: 1.1)
+			codeBlock = PagesBodySerializer.settingLeftIndent(in: codeBlock, points: 8)
+			codeBlock = PagesBodySerializer.settingSpacing(in: codeBlock, spaceBefore: 8, spaceAfter: 8)
+			codeBlock = PagesBodySerializer.settingParagraphFill(in: codeBlock, red: 0.94, green: 0.94, blue: 0.95)
+			data = try IWAArchive.replacingPayload(in: data, objectID: PagesStyleID.codeBlock) { _ in codeBlock }
 		}
 		return [UInt8](data)
 	}

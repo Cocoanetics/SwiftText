@@ -181,13 +181,11 @@ private struct BlockVisitor: MarkupVisitor {
 	mutating func visitCodeBlock(_ codeBlock: CodeBlock) {
 		var code = codeBlock.code
 		if code.hasSuffix("\n") { code.removeLast() }
-		// One paragraph per line, the whole line in a monospace run.
+		// One paragraph per line in the dedicated "Code Block" style — its monospace
+		// font, tight line spacing, and background fill all live in the style object
+		// (so editing the style re-cascades), so the lines need no per-run override.
 		for line in code.split(separator: "\n", omittingEmptySubsequences: false) {
-			let text = String(line)
-			let runs = text.isEmpty
-				? []
-				: [BodyParagraph.StyledRun(start: 0, length: text.utf16.count, style: InlineStyle(code: true))]
-			paragraphs.append(BodyParagraph(text: text, paragraphStyle: PagesStyleID.body, runs: runs))
+			paragraphs.append(BodyParagraph(text: String(line), paragraphStyle: PagesStyleID.codeBlock))
 		}
 	}
 

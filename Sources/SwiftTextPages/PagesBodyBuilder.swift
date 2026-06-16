@@ -13,6 +13,12 @@ enum PagesStyleID {
 	static let heading4: UInt64 = 1731505
 	static let caption: UInt64 = 1731517
 
+	/// "Caption" — another normal, referenceable style the Markdown writer doesn't
+	/// otherwise use, repurposed as the code-block ("preformatted") style: a copy of
+	/// Body in a monospace face, tight line spacing, and a light background fill. Same
+	/// rationale as [blockQuote] — a real style's para_properties apply.
+	static let codeBlock: UInt64 = 1731517
+
 	// Character styles (TSWP.CharacterStyleArchive, type 2021)
 	static let noneChar: UInt64 = 1731539
 	static let linkChar: UInt64 = 1731540
@@ -38,6 +44,14 @@ enum PagesStyleID {
 	/// First identifier handed out to objects we synthesize. Well above the
 	/// template's range (~1.73M) so new ids never collide with captured ones.
 	static let synthesizedBase: UInt64 = 6_000_000
+}
+
+/// Stable `style_identifier` strings for the styles the Markdown writer repurposes,
+/// shared so the writer (which stamps them) and the parser (which reads them back to
+/// recover block quotes / code fences on round-trip) can't drift apart.
+enum PagesStyleIdentifier {
+	static let blockQuote = "swifttext-block-quote"
+	static let codeBlock = "swifttext-code-block"
 }
 
 /// An inline character styling combination.
@@ -157,11 +171,16 @@ final class CharacterStyleRegistry {
 		styleSuper.messageField(5, parentReference.bytes)   // TSS.StyleArchive.parent
 
 		var charProperties = ProtobufWriter()
-		if style.code { charProperties.stringField(5, "Menlo-Regular") }  // monospace font
 		if style.bold { charProperties.varintField(1, 1) }
 		if style.italic { charProperties.varintField(2, 1) }
 		if style.link { charProperties.varintField(11, 1) }              // underline
 		if style.strikethrough { charProperties.varintField(12, 1) }
+		if style.code {
+			charProperties.stringField(5, "Menlo-Regular")              // monospace font
+			// A light gray text-background highlight (char_properties #26), like inline
+			// `code` on the web.
+			charProperties.bytesField(26, PagesBodySerializer.colorBytes(red: 0.94, green: 0.94, blue: 0.95))
+		}
 
 		var archive = ProtobufWriter()
 		archive.messageField(1, styleSuper.bytes)            // TSWP.CharacterStyleArchive.super
@@ -414,7 +433,10 @@ enum PagesBodySerializer {
 	/// byte-for-byte what Pages writes in its own templates (verified against modern cv).
 	/// `font_color_null` (#6 of char_properties) and `tsdFill_null` (#45) are dropped so
 	/// both color slots are honored.
-	static func settingTextColor(in stylePayload: [UInt8], red: Float, green: Float, blue: Float) -> [UInt8] {
+	/// A `TSP.Color` in the exact byte layout Pages writes for rendered color:
+	/// `model=1` (RGB), `r/g/b`, `a=1` (#6), `rgbspace=1` (#12, sRGB), trailing `#13=1`.
+	/// Verified byte-for-byte against Apple's own templates.
+	static func colorBytes(red: Float, green: Float, blue: Float) -> [UInt8] {
 		var color = ProtobufWriter()
 		color.varintField(1, 1)                              // model = rgb
 		color.fixed32Field(3, red.bitPattern)
@@ -423,7 +445,11 @@ enum PagesBodySerializer {
 		color.fixed32Field(6, Float(1).bitPattern)           // alpha
 		color.varintField(12, 1)                             // rgbspace = sRGB
 		color.fixed32Field(13, Float(1).bitPattern)          // opacity flag Pages always writes
-		let colorBytes = color.bytes
+		return color.bytes
+	}
+
+	static func settingTextColor(in stylePayload: [UInt8], red: Float, green: Float, blue: Float) -> [UInt8] {
+		let colorBytes = Self.colorBytes(red: red, green: green, blue: blue)
 
 		var fill = ProtobufWriter()
 		fill.bytesField(1, colorBytes)                       // TSD.FillArchive.color
@@ -436,6 +462,45 @@ enum PagesBodySerializer {
 			inner.bytesField(46, fillBytes)                  // tsdFill (what Pages actually renders)
 			return inner.bytes
 		}
+	}
+
+	/// Returns a style payload whose font family (char_properties field 5) is `name` —
+	/// e.g. a monospace face for code blocks. Clears `font_name_null` (#4). Like
+	/// font size, the family resolves from the paragraph style, so the whole paragraph
+	/// renders in `name` without any per-run override.
+	static func settingFontName(in stylePayload: [UInt8], name: String) -> [UInt8] {
+		editCharProperties(in: stylePayload) { fields in
+			var inner = ProtobufWriter()
+			for field in fields where field.number != 4 && field.number != 5 { inner.append(field) }
+			inner.stringField(5, name)
+			return inner.bytes
+		}
+	}
+
+	/// Returns a style payload with a paragraph background fill (shading) — the
+	/// `para_properties` `fill` (field 6, a `TSP.Color`), with `fill_null` (#5) cleared.
+	/// The color uses the same byte layout Pages writes for text color.
+	static func settingParagraphFill(in stylePayload: [UInt8], red: Float, green: Float, blue: Float) -> [UInt8] {
+		let colorBytes = Self.colorBytes(red: red, green: green, blue: blue)
+
+		let style = ProtobufMessage(stylePayload)
+		var writer = ProtobufWriter()
+		var wrote = false
+		for field in style.fields {
+			guard field.number == 12, case .lengthDelimited(let paraProperties) = field.value else { writer.append(field); continue }
+			var inner = ProtobufWriter()
+			for property in ProtobufMessage(paraProperties).fields where property.number != 5 && property.number != 6 {
+				inner.append(property)                          // keep all but fill_null / old fill
+			}
+			inner.bytesField(6, colorBytes)
+			writer.bytesField(12, inner.bytes)
+			wrote = true
+		}
+		if !wrote {                                             // no para_properties yet — add one
+			var inner = ProtobufWriter(); inner.bytesField(6, colorBytes)
+			writer.bytesField(12, inner.bytes)
+		}
+		return writer.bytes
 	}
 
 	/// Returns a style payload with italic set in its char_properties (field 11).

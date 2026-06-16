@@ -282,7 +282,8 @@ final class PagesParser {
 				listLevel: listLevel,
 				listOrdered: listOrdered,
 				footnoteMarkers: currentFootnotes,
-				tables: currentTables
+				tables: currentTables,
+				isCodeBlock: style.isCodeBlock
 			))
 			current = String.UnicodeScalarView()
 			currentAttachments = []
@@ -647,28 +648,30 @@ final class PagesParser {
 	/// Finds the style active at a character index, then resolves its font size,
 	/// bold flag, and — for a faithful Markdown round-trip — an explicit heading
 	/// level read from the paragraph style's stable `style_identifier`.
-	private func resolvedStyle(atUTF16 index: Int, runs: [(index: Int, styleID: UInt64?)], store: IWAObjectStore) -> (fontSize: Double?, bold: Bool, headingLevel: Int?) {
+	private func resolvedStyle(atUTF16 index: Int, runs: [(index: Int, styleID: UInt64?)], store: IWAObjectStore) -> (fontSize: Double?, bold: Bool, headingLevel: Int?, isCodeBlock: Bool) {
 		var activeStyleID: UInt64?
 		for run in runs {
 			guard run.index <= index else { break }
 			if let styleID = run.styleID { activeStyleID = styleID }
 		}
 		guard let activeStyleID, let styleObject = store.object(activeStyleID) else {
-			return (nil, false, nil)
+			return (nil, false, nil, false)
 		}
 		let style = ProtobufMessage(styleObject.payload)
 		// The paragraph style's `super` (TSS.StyleArchive, field 1) carries the stable,
-		// non-localized `style_identifier` (field 2), e.g. "…-paragraphstyle-Heading 2".
-		let level = style.message(IWork.styleSuperField)
+		// non-localized `style_identifier` (field 2), e.g. "…-paragraphstyle-Heading 2"
+		// or our own "swifttext-code-block" for the preformatted style.
+		let identifier = style.message(IWork.styleSuperField)
 			.flatMap { $0.bytes(IWork.styleIdentifierField) }
 			.map { String(decoding: $0, as: UTF8.self) }
-			.flatMap(Self.headingLevel(forStyleIdentifier:))
+		let level = identifier.flatMap(Self.headingLevel(forStyleIdentifier:))
+		let isCodeBlock = identifier == PagesStyleIdentifier.codeBlock
 		guard let charProperties = style.message(IWork.charPropertiesField) else {
-			return (nil, false, level)
+			return (nil, false, level, isCodeBlock)
 		}
 		let bold = (charProperties.varint(IWork.boldField) ?? 0) != 0
 		let fontSize = charProperties.float(IWork.fontSizeField).map(Double.init)
-		return (fontSize, bold, level)
+		return (fontSize, bold, level, isCodeBlock)
 	}
 
 	/// Maps a paragraph style's `style_identifier` to a Markdown heading level so

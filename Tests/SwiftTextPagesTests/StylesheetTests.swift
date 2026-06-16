@@ -64,6 +64,34 @@ struct StylesheetTests {
         #expect(cp.bold == true)
     }
 
+    @Test("Code block is a dedicated monospace style with a background fill")
+    func codeBlockStyle() throws {
+        let styles = try generatedStyles("```\nlet x = 1\n```\n")
+        let code = try #require(styles[PagesStyleID.codeBlock])
+        let para = TSWP_ParagraphStyleArchive(ProtobufMessage(code.payload))
+
+        // Monospace face lives in the style (no per-run override needed).
+        #expect(para.charProperties?.fontName == "Menlo-Regular")
+        // A paragraph background fill (shading) — the "pre" look.
+        #expect(para.paraProperties?.fill != nil)
+        // Named so it's editable in Pages and recognizable on round-trip.
+        #expect(para.super?.styleIdentifier == "swifttext-code-block")
+    }
+
+    @Test("A fenced code block round-trips through .pages back to a fence")
+    func codeBlockRoundTrips() throws {
+        let md = "Intro.\n\n```\nfunc f() {\n    return 1\n}\n```\n\nOutro.\n"
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("swifttext-code-\(UUID().uuidString).pages")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try MarkdownToPages.convert(md, to: url)
+
+        let out = try PagesFile(url: url).markdown()
+        #expect(out.contains("```"))                 // recovered as a fence, not plain text
+        #expect(out.contains("func f() {"))
+        #expect(out.contains("    return 1"))        // indentation preserved
+    }
+
     @Test("Headings carry a real size hierarchy in their style objects")
     func headingSizesCascade() throws {
         let styles = try generatedStyles("# H1\n## H2\n### H3\n\nBody.\n")

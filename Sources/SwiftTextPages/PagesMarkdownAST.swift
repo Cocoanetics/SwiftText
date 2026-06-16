@@ -27,6 +27,20 @@ extension PagesDocument {
 				if let node = Self.tableMarkup(table) { blocks.append(node) }
 			}
 
+			// A maximal run of code-block paragraphs becomes one fenced code block,
+			// preserving each line's literal (un-marked-up) text.
+			if paragraph.isCodeBlock {
+				var end = index
+				var codeLines = [String]()
+				while end < paragraphs.count, paragraphs[end].isCodeBlock {
+					codeLines.append(paragraphs[end].codeText())
+					end += 1
+				}
+				blocks.append(CodeBlock(language: nil, codeLines.joined(separator: "\n") + "\n"))
+				index = end
+				continue
+			}
+
 			// A maximal run of consecutive list items becomes one (possibly nested) list.
 			if paragraph.listLevel != nil {
 				var end = index
