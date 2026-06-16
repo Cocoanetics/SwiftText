@@ -46,6 +46,11 @@ final class PagesParser {
 		static let italicField = 2
 		static let strikethroughField = 12
 		static let fontSizeField = 3
+		static let fontNameField = 5
+		/// Smart-field run table (`#11`): maps character ranges to hyperlink (2032)
+		/// objects, whose field 2 is the destination URL.
+		static let smartFieldTableField = 11
+		static let hyperlinkURLField = 2
 		/// `ListStyleArchive` — base style (field 1), whose parent reference
 		/// (field 3) supports inheritance, and the per-level marker type (field 11:
 		/// 0 = none, 2 = bullet, 3 = numbered).
@@ -251,11 +256,21 @@ final class PagesParser {
 		var activeBold = false
 		var activeItalic = false
 		var activeStrike = false
+		var activeCode = false
+		let linkSpans = self.linkRuns(storage, store: store)
 
 		func flush() {
 			let paragraphText = String(current)
 			let style = resolvedStyle(atUTF16: paragraphStartUTF16, runs: runs, store: store)
 			let (listLevel, listOrdered) = listMembership(atUTF16: paragraphStartUTF16, levels: levels, listStyles: listStyles, store: store)
+			// Clip the global hyperlink spans to this paragraph and rebase to paragraph-
+			// relative UTF-16 offsets.
+			let paragraphEnd = paragraphStartUTF16 + paragraphText.utf16.count
+			let paragraphLinks = linkSpans.compactMap { span -> PagesDocument.Paragraph.LinkRun? in
+				let lo = max(span.start, paragraphStartUTF16), hi = min(span.end, paragraphEnd)
+				guard lo < hi else { return nil }
+				return .init(start: lo - paragraphStartUTF16, end: hi - paragraphStartUTF16, url: span.url)
+			}
 			result.append(PagesDocument.Paragraph(
 				text: paragraphText,
 				fontSize: style.fontSize,
@@ -263,6 +278,7 @@ final class PagesParser {
 				headingLevel: style.headingLevel,
 				attachmentReferences: currentAttachments,
 				emphasis: currentEmphasis,
+				links: paragraphLinks,
 				listLevel: listLevel,
 				listOrdered: listOrdered,
 				footnoteMarkers: currentFootnotes,
@@ -280,6 +296,7 @@ final class PagesParser {
 				activeBold = charRuns[charRunIndex].bold
 				activeItalic = charRuns[charRunIndex].italic
 				activeStrike = charRuns[charRunIndex].strike
+				activeCode = charRuns[charRunIndex].code
 				charRunIndex += 1
 			}
 			// Footnote reference marks sit at a character index (no text character);
@@ -302,8 +319,9 @@ final class PagesParser {
 					if let grid = anchorTables[utf16Offset] { currentTables.append(grid) }
 				}
 				if currentEmphasis.isEmpty || currentEmphasis.last?.bold != activeBold
-					|| currentEmphasis.last?.italic != activeItalic || currentEmphasis.last?.strike != activeStrike {
-					currentEmphasis.append(.init(start: utf16Offset - paragraphStartUTF16, bold: activeBold, italic: activeItalic, strike: activeStrike))
+					|| currentEmphasis.last?.italic != activeItalic || currentEmphasis.last?.strike != activeStrike
+					|| currentEmphasis.last?.code != activeCode {
+					currentEmphasis.append(.init(start: utf16Offset - paragraphStartUTF16, bold: activeBold, italic: activeItalic, strike: activeStrike, code: activeCode))
 				}
 				current.append(scalar)
 				utf16Offset += width
@@ -668,15 +686,17 @@ final class PagesParser {
 	}
 
 	/// Reads the character-style run table, resolving each run's referenced
-	/// character style to its bold/italic/strikethrough flags.
-	private func characterRuns(_ storage: IWAObject, store: IWAObjectStore) -> [(index: Int, bold: Bool, italic: Bool, strike: Bool)] {
+	/// character style to its bold/italic/strikethrough flags and whether it is set
+	/// in a monospace font (which we surface as inline `code`).
+	private func characterRuns(_ storage: IWAObject, store: IWAObjectStore) -> [(index: Int, bold: Bool, italic: Bool, strike: Bool, code: Bool)] {
 		guard let table = ProtobufMessage(storage.payload).message(IWork.charStyleTableField) else { return [] }
-		var runs = [(index: Int, bold: Bool, italic: Bool, strike: Bool)]()
+		var runs = [(index: Int, bold: Bool, italic: Bool, strike: Bool, code: Bool)]()
 		for entry in table.messages(IWork.runEntryField) {
 			guard let index = entry.varint(IWork.runCharIndexField) else { continue }
 			var bold = false
 			var italic = false
 			var strike = false
+			var code = false
 			if let reference = entry.message(IWork.runStyleRefField),
 			   let styleID = reference.varint(IWork.referenceIdentifierField),
 			   let styleObject = store.object(styleID),
@@ -684,11 +704,48 @@ final class PagesParser {
 				bold = (charProperties.varint(IWork.boldField) ?? 0) != 0
 				italic = (charProperties.varint(IWork.italicField) ?? 0) != 0
 				strike = (charProperties.varint(IWork.strikethroughField) ?? 0) != 0
+				if let font = charProperties.bytes(IWork.fontNameField).map({ String(decoding: $0, as: UTF8.self) }) {
+					code = Self.isMonospaceFont(font)
+				}
 			}
-			runs.append((index: Int(index), bold: bold, italic: italic, strike: strike))
+			runs.append((index: Int(index), bold: bold, italic: italic, strike: strike, code: code))
 		}
 		runs.sort { $0.index < $1.index }
 		return runs
+	}
+
+	/// Whether a PostScript font name denotes a monospace family (so its run is
+	/// surfaced as inline code). Covers the writer's `Menlo-Regular` plus the common
+	/// monospace fonts a real document might use.
+	static func isMonospaceFont(_ font: String) -> Bool {
+		let lower = font.lowercased()
+		return ["menlo", "courier", "monaco", "consol", "mono", "andale", "pt mono", "ibm plex mono", "sfmono", "sf mono"].contains { lower.contains($0) }
+	}
+
+	/// Reads the smart-field run table (`#11`) into hyperlink spans over the global
+	/// text, resolving each range to its `TSWP` hyperlink object's destination URL.
+	/// A run with a reference opens a link; the next run (reference or end) closes it.
+	private func linkRuns(_ storage: IWAObject, store: IWAObjectStore) -> [(start: Int, end: Int, url: String)] {
+		guard let table = ProtobufMessage(storage.payload).message(IWork.smartFieldTableField) else { return [] }
+		var marks = [(index: Int, url: String?)]()
+		for entry in table.messages(IWork.runEntryField) {
+			guard let index = entry.varint(IWork.runCharIndexField) else { continue }
+			var url: String?
+			if let reference = entry.message(IWork.runStyleRefField),
+			   let objectID = reference.varint(IWork.referenceIdentifierField),
+			   let hyperlink = store.object(objectID),
+			   let bytes = ProtobufMessage(hyperlink.payload).bytes(IWork.hyperlinkURLField) {
+				url = String(decoding: bytes, as: UTF8.self)
+			}
+			marks.append((Int(index), url))
+		}
+		marks.sort { $0.index < $1.index }
+		var spans = [(start: Int, end: Int, url: String)]()
+		for (i, mark) in marks.enumerated() where mark.url != nil {
+			let end = i + 1 < marks.count ? marks[i + 1].index : mark.index
+			if end > mark.index { spans.append((mark.index, end, mark.url!)) }
+		}
+		return spans
 	}
 
 	/// Extracts a footnote storage's content as a single trimmed line (the leading

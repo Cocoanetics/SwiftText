@@ -75,6 +75,8 @@ public struct PagesDocument {
 		/// Character-emphasis spans over `text`, sorted by `start` (a paragraph-
 		/// relative UTF-16 offset); each applies until the next span.
 		public var emphasis: [EmphasisSpan]
+		/// Hyperlink ranges over `text`, rendered as `[text](url)` in Markdown.
+		public var links: [LinkRun]
 		/// The list nesting level (0-based) when this paragraph is a list item,
 		/// else `nil`.
 		public var listLevel: Int?
@@ -106,6 +108,7 @@ public struct PagesDocument {
 			headingLevel: Int? = nil,
 			attachmentReferences: [String?] = [],
 			emphasis: [EmphasisSpan] = [],
+			links: [LinkRun] = [],
 			listLevel: Int? = nil,
 			listOrdered: Bool = false,
 			footnoteMarkers: [FootnoteMarker] = [],
@@ -117,6 +120,7 @@ public struct PagesDocument {
 			self.headingLevel = headingLevel
 			self.attachmentReferences = attachmentReferences
 			self.emphasis = emphasis
+			self.links = links
 			self.listLevel = listLevel
 			self.listOrdered = listOrdered
 			self.footnoteMarkers = footnoteMarkers
@@ -141,12 +145,29 @@ public struct PagesDocument {
 			public var bold: Bool
 			public var italic: Bool
 			public var strike: Bool
+			public var code: Bool
 
-			public init(start: Int, bold: Bool, italic: Bool, strike: Bool = false) {
+			public init(start: Int, bold: Bool, italic: Bool, strike: Bool = false, code: Bool = false) {
 				self.start = start
 				self.bold = bold
 				self.italic = italic
 				self.strike = strike
+				self.code = code
+			}
+		}
+
+		/// A hyperlink covering a paragraph-relative UTF-16 range `[start, end)`,
+		/// rendered as `[text](url)`. Recovered from the storage's smart-field run
+		/// table (`#11`) and the referenced `TSWP` hyperlink objects (type 2032).
+		public struct LinkRun {
+			public var start: Int
+			public var end: Int
+			public var url: String
+
+			public init(start: Int, end: Int, url: String) {
+				self.start = start
+				self.end = end
+				self.url = url
 			}
 		}
 
@@ -160,6 +181,7 @@ public struct PagesDocument {
 			var runBold = false
 			var runItalic = false
 			var runStrike = false
+			var runCode = false
 			var anchorIndex = 0
 			var relativeOffset = 0
 			var spanIndex = 0
@@ -167,10 +189,18 @@ public struct PagesDocument {
 			var activeBold = false
 			var activeItalic = false
 			var activeStrike = false
+			var activeCode = false
+
+			// Hyperlink ranges, applied as `[text](url)` in Markdown. Tracked alongside
+			// emphasis: entering a link emits `[`, leaving it emits `](url)`.
+			let sortedLinks = applyingEmphasis ? links.sorted { $0.start < $1.start } : []
+			var linkIndex = 0
+			var activeLinkEnd: Int?
+			var activeLinkURL = ""
 
 			func flushRun() {
 				guard !runText.isEmpty else { return }
-				output += applyingEmphasis ? PagesDocument.markedUp(runText, bold: runBold, italic: runItalic, strike: runStrike) : runText
+				output += applyingEmphasis ? PagesDocument.markedUp(runText, bold: runBold, italic: runItalic, strike: runStrike, code: runCode) : runText
 				runText = ""
 			}
 
@@ -189,7 +219,24 @@ public struct PagesDocument {
 					activeBold = emphasis[spanIndex].bold
 					activeItalic = emphasis[spanIndex].italic
 					activeStrike = emphasis[spanIndex].strike
+					activeCode = emphasis[spanIndex].code
 					spanIndex += 1
+				}
+				// Close a finished link, then open a new one starting here.
+				if let end = activeLinkEnd, relativeOffset >= end {
+					flushRun()
+					output += "](\(activeLinkURL))"
+					activeLinkEnd = nil
+				}
+				while linkIndex < sortedLinks.count, sortedLinks[linkIndex].start <= relativeOffset {
+					let link = sortedLinks[linkIndex]
+					linkIndex += 1
+					if activeLinkEnd == nil, link.end > relativeOffset {
+						flushRun()
+						output += "["
+						activeLinkEnd = link.end
+						activeLinkURL = link.url
+					}
 				}
 				emitFootnotes(upTo: relativeOffset)
 				let width = scalar.value > 0xFFFF ? 2 : 1
@@ -205,11 +252,12 @@ public struct PagesDocument {
 					}
 					anchorIndex += 1
 				default:
-					if applyingEmphasis, activeBold != runBold || activeItalic != runItalic || activeStrike != runStrike {
+					if applyingEmphasis, activeBold != runBold || activeItalic != runItalic || activeStrike != runStrike || activeCode != runCode {
 						flushRun()
 						runBold = activeBold
 						runItalic = activeItalic
 						runStrike = activeStrike
+						runCode = activeCode
 					}
 					runText.unicodeScalars.append(scalar)
 				}
@@ -217,6 +265,8 @@ public struct PagesDocument {
 			}
 			emitFootnotes(upTo: relativeOffset)
 			flushRun()
+			// A link that runs to the end of the paragraph still needs its closer.
+			if activeLinkEnd != nil { output += "](\(activeLinkURL))" }
 			return output
 				.replacingOccurrences(of: "\t", with: "    ")
 				.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -232,8 +282,8 @@ public struct PagesDocument {
 	/// Wraps `text`'s non-whitespace core in the Markdown emphasis markers for the
 	/// given styling, keeping leading/trailing whitespace outside the markers.
 	/// Strikethrough (`~~`) wraps any bold/italic markers.
-	static func markedUp(_ text: String, bold: Bool, italic: Bool, strike: Bool) -> String {
-		guard bold || italic || strike else { return text }
+	static func markedUp(_ text: String, bold: Bool, italic: Bool, strike: Bool, code: Bool = false) -> String {
+		guard bold || italic || strike || code else { return text }
 		let scalars = Array(text.unicodeScalars)
 		var start = 0
 		while start < scalars.count, CharacterSet.whitespacesAndNewlines.contains(scalars[start]) {
@@ -245,6 +295,10 @@ public struct PagesDocument {
 		}
 		guard start < end else { return text }
 		var core = String(String.UnicodeScalarView(scalars[start..<end]))
+		// Inline code is literal in Markdown, so backticks go innermost; emphasis wraps it.
+		if code {
+			core = "`\(core)`"
+		}
 		if bold && italic {
 			core = "***\(core)***"
 		} else if bold {
