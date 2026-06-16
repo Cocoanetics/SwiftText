@@ -50,6 +50,35 @@ final class PagesParser {
 		static let listMarkerTypeField = 11
 		static let listBulletMarker: UInt64 = 2
 		static let listOrderedMarker: UInt64 = 3
+
+		// Native tables (`TST`). An attachment run-table entry can resolve to a
+		// drawable attachment whose chain reaches the table model and its cell store.
+		/// Drawable attachment (`#1` → `TableInfoArchive`).
+		static let drawableAttachmentType: UInt64 = 2003
+		/// `TableInfoArchive` (`#2` → `TableModelArchive`).
+		static let tableInfoType: UInt64 = 6000
+		static let tableInfoModelField = 2
+		/// `TableModelArchive`: `#6` rows, `#7` columns, `#4` base_data_store.
+		static let tableModelType: UInt64 = 6001
+		static let tableRowCountField = 6
+		static let tableColumnCountField = 7
+		static let tableDataStoreField = 4
+		/// `DataStore`: `#3` tiles (`TileStorage`), `#4` stringTable (cell `DataList`).
+		static let dataStoreTilesField = 3
+		static let dataStoreStringTableField = 4
+		/// `TileStorage.Tile.tile` (`#1` → `{ #2 → tile }`); `Tile.rowInfos` = `#5`,
+		/// each `TileRowInfo` with `#6` cell buffer and `#7` cell offsets.
+		static let tileStorageTileField = 1
+		static let tileStorageTileRefField = 2
+		static let tileRowInfosField = 5
+		static let tileCellBufferField = 6
+		static let tileCellOffsetsField = 7
+		/// `DataList` shared-string entries: repeated `#3 { #1 key, #3 string }`.
+		static let dataListEntryField = 3
+		static let dataListKeyField = 1
+		static let dataListStringField = 3
+		/// A string cell stores its `DataList` key as a little-endian `u32` at byte 12.
+		static let cellKeyByteOffset = 12
 	}
 
 	/// The kind of list marker a paragraph's list style defines at a given level.
@@ -169,6 +198,7 @@ final class PagesParser {
 		let levels = listLevels(storage)
 		let listStyles = listStyleRuns(storage)
 		let anchorNames = attachmentImageNames(in: storage, text: text, catalog: catalog)
+		let anchorTables = attachmentTableGrids(in: storage, text: text, store: store)
 		let footnoteRefs = footnoteStorageIDs.isEmpty
 			? []
 			: footnoteRuns(storage, footnoteStorageIDs: footnoteStorageIDs, store: store)
@@ -178,6 +208,7 @@ final class PagesParser {
 		// so offsets are tracked in UTF-16 units.
 		var current = String.UnicodeScalarView()
 		var currentAttachments = [String?]()
+		var currentTables = [[[String]]]()
 		var currentEmphasis = [PagesDocument.Paragraph.EmphasisSpan]()
 		var currentFootnotes = [PagesDocument.Paragraph.FootnoteMarker]()
 		var footnoteIndex = 0
@@ -203,10 +234,12 @@ final class PagesParser {
 				emphasis: currentEmphasis,
 				listLevel: listLevel,
 				listOrdered: listOrdered,
-				footnoteMarkers: currentFootnotes
+				footnoteMarkers: currentFootnotes,
+				tables: currentTables
 			))
 			current = String.UnicodeScalarView()
 			currentAttachments = []
+			currentTables = []
 			currentEmphasis = []
 			currentFootnotes = []
 		}
@@ -235,6 +268,7 @@ final class PagesParser {
 			} else {
 				if scalar == "\u{FFFC}" {
 					currentAttachments.append(anchorNames[utf16Offset])
+					if let grid = anchorTables[utf16Offset] { currentTables.append(grid) }
 				}
 				if currentEmphasis.isEmpty || currentEmphasis.last?.bold != activeBold
 					|| currentEmphasis.last?.italic != activeItalic || currentEmphasis.last?.strike != activeStrike {
@@ -287,6 +321,99 @@ final class PagesParser {
 			}
 		}
 		return names
+	}
+
+	/// Maps each inline-attachment anchor (`U+FFFC`, by UTF-16 offset) to the native
+	/// table grid it shows, when it anchors one. Anchors for images, text boxes, etc.
+	/// resolve to nothing. Scans every run-table-shaped field for anchor references
+	/// that resolve to a drawable attachment whose chain reaches a table model.
+	private func attachmentTableGrids(in storage: IWAObject, text: String, store: IWAObjectStore) -> [Int: [[String]]] {
+		var anchorOffsets = Set<Int>()
+		var offset = 0
+		for scalar in text.unicodeScalars {
+			if scalar == "\u{FFFC}" { anchorOffsets.insert(offset) }
+			offset += scalar.value > 0xFFFF ? 2 : 1
+		}
+		guard !anchorOffsets.isEmpty else { return [:] }
+
+		var grids = [Int: [[String]]]()
+		for field in ProtobufMessage(storage.payload).fields {
+			guard case .lengthDelimited(let bytes) = field.value else { continue }
+			for entry in ProtobufMessage(bytes).messages(IWork.runEntryField) {
+				guard let rawIndex = entry.varint(IWork.runCharIndexField) else { continue }
+				let index = Int(rawIndex)
+				guard anchorOffsets.contains(index), grids[index] == nil,
+				      let reference = entry.message(IWork.runStyleRefField),
+				      let objectID = reference.varint(IWork.referenceIdentifierField),
+				      let grid = tableGrid(forAttachment: objectID, store: store) else { continue }
+				grids[index] = grid
+			}
+		}
+		return grids
+	}
+
+	/// Follows a drawable attachment (`type 2003`) through its `TableInfoArchive`
+	/// (`6000`) to the `TableModelArchive` (`6001`) and reconstructs the cell grid
+	/// from the tile (cell → `DataList` key) and the cell-string list. Returns `nil`
+	/// when the object isn't a table attachment.
+	private func tableGrid(forAttachment attachmentID: UInt64, store: IWAObjectStore) -> [[String]]? {
+		guard let attachment = store.object(attachmentID), attachment.type == IWork.drawableAttachmentType,
+		      let infoID = ProtobufMessage(attachment.payload).message(IWork.referenceIdentifierField)?.varint(IWork.referenceIdentifierField),
+		      let info = store.object(infoID), info.type == IWork.tableInfoType,
+		      let modelID = ProtobufMessage(info.payload).message(IWork.tableInfoModelField)?.varint(IWork.referenceIdentifierField),
+		      let model = store.object(modelID), model.type == IWork.tableModelType else { return nil }
+
+		let modelMessage = ProtobufMessage(model.payload)
+		let rows = Int(modelMessage.varint(IWork.tableRowCountField) ?? 0)
+		let columns = Int(modelMessage.varint(IWork.tableColumnCountField) ?? 0)
+		guard rows > 0, columns > 0, let dataStore = modelMessage.message(IWork.tableDataStoreField) else { return nil }
+
+		// stringTable → cell-string DataList → key → string.
+		var stringsByKey = [UInt64: String]()
+		if let stringTableID = dataStore.message(IWork.dataStoreStringTableField)?.varint(IWork.referenceIdentifierField),
+		   let dataList = store.object(stringTableID) {
+			for entry in ProtobufMessage(dataList.payload).messages(IWork.dataListEntryField) {
+				if let key = entry.varint(IWork.dataListKeyField), let string = entry.bytes(IWork.dataListStringField) {
+					stringsByKey[key] = String(decoding: string, as: UTF8.self)
+				}
+			}
+		}
+
+		// tiles → the single tile holding all rows → per-row cell keys.
+		guard let tileID = dataStore.message(IWork.dataStoreTilesField)?
+				.message(IWork.tileStorageTileField)?
+				.message(IWork.tileStorageTileRefField)?
+				.varint(IWork.referenceIdentifierField),
+		      let tile = store.object(tileID) else { return nil }
+
+		var grid = Array(repeating: Array(repeating: "", count: columns), count: rows)
+		for rowInfo in ProtobufMessage(tile.payload).messages(IWork.tileRowInfosField) {
+			guard let rowIndex = rowInfo.varint(IWork.runCharIndexField).map(Int.init), rowIndex < rows,
+			      let buffer = rowInfo.bytes(IWork.tileCellBufferField),
+			      let offsets = rowInfo.bytes(IWork.tileCellOffsetsField) else { continue }
+			let cellStarts = cellOffsets(offsets)
+			for (column, start) in cellStarts.enumerated() where column < columns {
+				guard start + IWork.cellKeyByteOffset + 4 <= buffer.count else { continue }
+				let base = start + IWork.cellKeyByteOffset
+				let key = UInt64(buffer[base]) | UInt64(buffer[base + 1]) << 8 | UInt64(buffer[base + 2]) << 16 | UInt64(buffer[base + 3]) << 24
+				if let string = stringsByKey[key] { grid[rowIndex][column] = string }
+			}
+		}
+		return grid
+	}
+
+	/// Parses a tile row's `u16` cell-offset array (little-endian), terminated by the
+	/// `0xFFFF` sentinel — the byte offset of each cell into the cell buffer.
+	private func cellOffsets(_ bytes: [UInt8]) -> [Int] {
+		var offsets = [Int]()
+		var i = 0
+		while i + 1 < bytes.count {
+			let value = Int(bytes[i]) | Int(bytes[i + 1]) << 8
+			if value == 0xFFFF { break }
+			offsets.append(value)
+			i += 2
+		}
+		return offsets
 	}
 
 	/// Reads the paragraph-style run table: a sorted list of

@@ -33,9 +33,27 @@ public final class PagesWriter {
 
 	/// Writes a document whose body is the given paragraphs (each carrying its
 	/// paragraph style, list membership, and inline style runs).
-	func write(paragraphs: [BodyParagraph], to url: URL) throws {
+	func write(paragraphs inputParagraphs: [BodyParagraph], to url: URL) throws {
 		let identity = DocumentIdentity.fresh()
 		let registry = CharacterStyleRegistry()
+
+		// Native tables: build the object set for every table paragraph and inject it
+		// into the captured components (the grid lives in `Index/Tables/*`, the model
+		// in the calc engine, the anchor in the body's #9 run table).
+		let tables = inputParagraphs.compactMap(\.table)
+		let tableArtifacts = tables.isEmpty ? nil : try PagesTableBuilder.build(tables)
+
+		// Point each table paragraph's attachment at its (relocated) drawable-attachment
+		// id, in document order, so the body's #9 run table anchors the right table.
+		var paragraphs = inputParagraphs
+		if let tableArtifacts {
+			var tableIndex = 0
+			for index in paragraphs.indices where paragraphs[index].table != nil {
+				paragraphs[index].attachment = tableArtifacts.attachmentIDs[tableIndex]
+				tableIndex += 1
+			}
+		}
+
 		var zip = StoredZipWriter()
 		for entry in template.entries {
 			guard var data = template.data(for: entry.path) else {
@@ -46,6 +64,16 @@ public final class PagesWriter {
 				data = try buildDocument(from: data, paragraphs: paragraphs, registry: registry)
 			case "Index/DocumentStylesheet.iwa":
 				data = try applyingParagraphSpacing(to: data)
+			case "Index/Metadata.iwa" where tableArtifacts != nil:
+				// Tables add `Index/Tables/*` components; use the captured table
+				// document's PackageMetadata (its component layout matches the output).
+				// Document.iwa is processed earlier in this loop, so `registry` already
+				// reflects any synthesized objects by the time Metadata is written.
+				let synthesizedMax = registry.didSynthesize ? registry.maxIdentifier : 0
+				data = try tablePackageMetadata(
+					highWaterMark: max(synthesizedMax, tableArtifacts!.maxObjectID),
+					tableCount: tableArtifacts!.tableCount
+				)
 			case "Metadata/Properties.plist":
 				data = try rewritingProperties(data, identity: identity)
 			case "Metadata/DocumentIdentifier":
@@ -53,9 +81,37 @@ public final class PagesWriter {
 			default:
 				break
 			}
+			// Append any captured table records destined for this component.
+			if let append = tableArtifacts?.appendsByFile[entry.path] {
+				data = [UInt8](try IWAArchive.appendingRecordStream(append, to: Data(data)))
+			}
 			zip.add(path: entry.path, data: data)
 		}
+		// Add the new table component files (`Index/Tables/*`).
+		if let tableArtifacts {
+			for (path, fileData) in tableArtifacts.newFiles.sorted(by: { $0.key < $1.key }) {
+				zip.add(path: path, data: fileData)
+			}
+		}
 		try zip.finish().write(to: url, options: .atomic)
+	}
+
+	/// The captured table document's `PackageMetadata`, relocated to cover every
+	/// table in this document: the id high-water mark (`#1`) is raised, each extra
+	/// table's `Index/Tables/*` components are registered, and the cross-references
+	/// are cloned at the matching id offsets (see `PagesTableBuilder`).
+	private func tablePackageMetadata(highWaterMark: UInt64, tableCount: Int) throws -> [UInt8] {
+		guard let data = Data(base64Encoded: PagesTableTemplate.metadataBase64) else {
+			throw PagesWriteError.malformedTemplate("Index/Metadata.iwa")
+		}
+		guard let packageMetadata = try IWAArchive.objects(from: data).first(where: { $0.type == 11006 }) else {
+			return [UInt8](data)
+		}
+		let current = ProtobufMessage(packageMetadata.payload).varint(1) ?? 0
+		let updated = try IWAArchive.replacingPayload(in: data, objectID: packageMetadata.identifier) { payload in
+			PagesTableBuilder.relocateComponentMetadata(payload, tableCount: tableCount, highWaterMark: max(highWaterMark, current))
+		}
+		return [UInt8](updated)
 	}
 
 	// MARK: Document component

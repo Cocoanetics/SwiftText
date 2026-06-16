@@ -83,6 +83,9 @@ public struct PagesDocument {
 		/// Footnote reference markers within the paragraph, by paragraph-relative
 		/// UTF-16 offset, sorted. Each becomes `[^number]` in Markdown.
 		public var footnoteMarkers: [FootnoteMarker]
+		/// Native tables anchored in this paragraph, in anchor order. Each is a grid
+		/// of cell strings (row 0 = header row); rendered as a Markdown table.
+		public var tables: [[[String]]]
 
 		public init(
 			text: String,
@@ -93,7 +96,8 @@ public struct PagesDocument {
 			emphasis: [EmphasisSpan] = [],
 			listLevel: Int? = nil,
 			listOrdered: Bool = false,
-			footnoteMarkers: [FootnoteMarker] = []
+			footnoteMarkers: [FootnoteMarker] = [],
+			tables: [[[String]]] = []
 		) {
 			self.text = text
 			self.fontSize = fontSize
@@ -104,6 +108,7 @@ public struct PagesDocument {
 			self.listLevel = listLevel
 			self.listOrdered = listOrdered
 			self.footnoteMarkers = footnoteMarkers
+			self.tables = tables
 		}
 
 		/// A footnote reference at a paragraph-relative UTF-16 offset.
@@ -262,6 +267,12 @@ public struct PagesDocument {
 		var counters = [Int: Int]()
 
 		for paragraph in paragraphs {
+			// Native tables anchored in this paragraph render as Markdown table blocks.
+			for table in paragraph.tables where !table.isEmpty {
+				lines.append(Self.markdownTable(table))
+				isListItem.append(false)
+			}
+
 			let rendered = paragraph.renderedText(inliningImages: true, applyingEmphasis: true)
 			guard !rendered.isEmpty else { continue }
 
@@ -309,6 +320,25 @@ public struct PagesDocument {
 			output += (output.isEmpty ? "" : "\n\n") + definitions
 		}
 		return output
+	}
+
+	/// Renders a cell grid (row 0 = header) as a GitHub-flavored Markdown table.
+	static func markdownTable(_ grid: [[String]]) -> String {
+		let columns = grid.map(\.count).max() ?? 0
+		guard columns > 0 else { return "" }
+		func cell(_ value: String) -> String {
+			value.replacingOccurrences(of: "\n", with: " ")
+				.replacingOccurrences(of: "|", with: "\\|")
+				.trimmingCharacters(in: .whitespaces)
+		}
+		func row(_ cells: [String]) -> String {
+			let padded = (0..<columns).map { $0 < cells.count ? cell(cells[$0]) : "" }
+			return "| " + padded.joined(separator: " | ") + " |"
+		}
+		var lines = [row(grid[0])]
+		lines.append("| " + Array(repeating: "---", count: columns).joined(separator: " | ") + " |")
+		for bodyRow in grid.dropFirst() { lines.append(row(bodyRow)) }
+		return lines.joined(separator: "\n")
 	}
 
 	/// The most common font size across body text, weighted by paragraph length.

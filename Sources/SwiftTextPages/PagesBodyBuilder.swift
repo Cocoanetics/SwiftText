@@ -63,6 +63,13 @@ struct BodyParagraph {
 	var listLevel: Int = 0
 	/// Whether the paragraph is block-quoted (rendered indented + italic).
 	var blockQuote: Bool = false
+	/// For an attachment paragraph (a single `U+FFFC`), the drawable-attachment
+	/// object id (type 2003) the `#9` run table maps that character to — e.g. a
+	/// native table. `nil` for ordinary text paragraphs.
+	var attachment: UInt64?
+	/// The native table this attachment paragraph anchors, if any. The writer builds
+	/// its object set and injects it; the paragraph text is a single `U+FFFC`.
+	var table: PagesTable?
 	/// Inline style spans, as UTF-16 ranges within `text`.
 	var runs: [StyledRun] = []
 	/// Hyperlink spans, as UTF-16 ranges within `text` plus the destination URL.
@@ -252,6 +259,16 @@ enum PagesBodySerializer {
 			hyperlinkEntries = normalizedRunEntries(hyperlinkEntries)
 		}
 
+		// 3c. Attachment run table (#9): map each attachment paragraph's `U+FFFC`
+		// character to its drawable-attachment object id (e.g. a native table). One
+		// entry per attachment at its character index (no partition reset needed).
+		var attachmentEntries = [(index: Int, styleID: UInt64?)]()
+		for (index, paragraph) in paragraphs.enumerated() {
+			if let attachment = paragraph.attachment {
+				attachmentEntries.append((paragraphStarts[index], attachment))
+			}
+		}
+
 		// 4. Rebuild the storage payload: keep all template fields, override text + tables.
 		var provided: [Int: [UInt8]] = [
 			3: Array(fullText.utf8),
@@ -261,6 +278,9 @@ enum PagesBodySerializer {
 		]
 		if !characterEntries.isEmpty {
 			provided[8] = runTable(characterEntries)
+		}
+		if !attachmentEntries.isEmpty {
+			provided[9] = runTable(attachmentEntries)
 		}
 		if !hyperlinkEntries.isEmpty {
 			provided[11] = runTable(hyperlinkEntries)

@@ -198,6 +198,20 @@ enum IWAArchive {
 		return encode(stream: stream)
 	}
 
+	/// Re-emits a `.iwa` file with raw record-stream bytes appended.
+	///
+	/// `records` is already-framed record bytes (length-prefixed `ArchiveInfo` +
+	/// payloads, as produced by capturing verbatim objects) concatenated together;
+	/// they are appended to the decompressed stream and the whole thing re-framed.
+	/// Used to inject a captured object set (e.g. a native table) into an existing
+	/// component while preserving each object's full `ArchiveInfo` (object
+	/// references included), which ``appending(_:to:)`` would not.
+	static func appendingRecordStream(_ records: [UInt8], to data: Data) throws -> Data {
+		var stream = try decompress(data)
+		stream.append(contentsOf: records)
+		return encode(stream: stream)
+	}
+
 	/// De-chunks an `.iwa` file and concatenates the decompressed Snappy blocks.
 	/// The inverse of ``encode(stream:)``.
 	static func decompress(_ data: Data) throws -> [UInt8] {

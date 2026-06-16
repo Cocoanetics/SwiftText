@@ -225,9 +225,39 @@ private struct BlockVisitor: MarkupVisitor {
 	}
 
 	mutating func visitTable(_ table: Table) {
-		// Rendered as tab-separated rows (header bold). This preserves all cell
-		// content and inline styling; a native iWork table grid is a heavier,
-		// separate construct.
+		let headerCells = Array(table.head.cells)
+		let bodyRows: [[Table.Cell]] = table.body.rows.map { Array($0.cells) }
+		let columns = max(headerCells.count, bodyRows.map(\.count).max() ?? 0)
+
+		// Every table renders as a native iWork grid; an empty table degrades to text.
+		guard columns > 0 else {
+			appendTabSeparated(header: headerCells, body: bodyRows)
+			return
+		}
+
+		func cellText(_ cell: Table.Cell) -> String {
+			var collector = InlineCollector()
+			collector.collect(from: cell)
+			return collector.text
+		}
+		var cells = [String]()
+		for column in 0..<columns { cells.append(column < headerCells.count ? cellText(headerCells[column]) : "") }
+		for row in bodyRows {
+			for column in 0..<columns { cells.append(column < row.count ? cellText(row[column]) : "") }
+		}
+
+		let pagesTable = PagesTable(rows: 1 + bodyRows.count, columns: columns, cells: cells)
+		paragraphs.append(BodyParagraph(
+			text: "\u{FFFC}",
+			paragraphStyle: PagesStyleID.body,
+			attachment: PagesTableTemplate.attachmentID,
+			table: pagesTable
+		))
+	}
+
+	/// Tab-separated rendering (header bold) — the fallback for tables beyond the
+	/// first, preserving all cell content and inline styling.
+	private mutating func appendTabSeparated(header: [Table.Cell], body: [[Table.Cell]]) {
 		func appendRow(_ cells: [Table.Cell], header: Bool) {
 			var collector = InlineCollector(base: header ? InlineStyle(bold: true) : InlineStyle())
 			for (index, cell) in cells.enumerated() {
@@ -236,10 +266,8 @@ private struct BlockVisitor: MarkupVisitor {
 			}
 			paragraphs.append(BodyParagraph(text: collector.text, paragraphStyle: PagesStyleID.body, runs: collector.runs, links: collector.links))
 		}
-		appendRow(Array(table.head.cells), header: true)
-		for row in table.body.rows {
-			appendRow(Array(row.cells), header: false)
-		}
+		appendRow(header, header: true)
+		for row in body { appendRow(row, header: false) }
 	}
 
 	mutating func visitHTMLBlock(_ htmlBlock: HTMLBlock) {

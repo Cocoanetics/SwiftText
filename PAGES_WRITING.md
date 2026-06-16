@@ -49,7 +49,7 @@ Status as built (all validated opening + rendering in Pages 14.5; 214 tests gree
 | Horizontal rule | full-width box-drawing line | ◐ visual, not a native rule object |
 | Images | italic placeholder text (alt or `[image]`) | ✅ (matches DOCX exactly) |
 | Links | **clickable** hyperlink (TSWP type 2032 object + `#11` smart-field run table) + underline | ✅ |
-| Tables | tab-separated rows, bold header | ◐ content preserved; not a native TST table grid |
+| Tables | **native iWork (`TST`) grid** (header row styled), any number per document; reads back as a Markdown table | ✅ |
 | Inline HTML / HTML blocks | raw text / dropped | ✅ (matches DOCX) |
 
 **How it works.** `MarkdownToPages.convert(_:to:)` parses with swift-markdown, walks
@@ -61,73 +61,86 @@ regenerates `Metadata/` UUIDs, and re-zips (STORED). No bundled file — the tem
 is committed Swift data (`Generated/BlankPagesTemplate.swift`, from
 `Scripts/GeneratePagesTemplate.swift`).
 
-**Remaining below full DOCX parity** (larger, separable efforts):
-- **Native tables** — reproduce the iWork `TST` table model. Today's writer renders
-  table *content* as tab-separated text (nothing lost). Dissected graph for a 2×3
-  table (`Table.pages`): in `Document.iwa` a `TableInfoArchive` (type 6000, the body
-  attachment) → `TableModelArchive` (type 6001) → six ~8.3 KB style objects (6003) +
-  several 6008s; plus ~30 `Index/Tables/*.iwa` component files (`DataList-*`,
-  `HeaderStorageBucket-*`, `Tile-*`) holding the packed cell storage; the
-  CalculationEngine grows 8→43 objects; and every new component needs a
-  `ComponentInfo` in `PackageMetadata`. Approach: capture this table as a second
-  template fragment and clone+adapt (rows/cols/cell text). Large + crash-prone (a
-  malformed TST graph makes Pages refuse to open / crash), so it's a dedicated
-  effort — verify each stage opens in Pages before committing.
+**Native tables — IMPLEMENTED end-to-end, any number per document (2026-06-15).**
+`MarkdownToPages` emits a native iWork (`TST`) grid for every Markdown table, and
+`PagesParser` reads each back as a Markdown table (full round-trip). Production code:
+`PagesTableBuilder` (regenerates the dimension objects per R×C; relocates each table's
+object set by a fixed id offset for tables after the first),
+`Generated/PagesTableTemplate.swift` (the captured 77-object table delta, via
+`Scripts/GeneratePagesTableTemplate.swift`), `PagesWriter` (injection + `PackageMetadata`),
+the body serializer's `#9` attachment run table, and `PagesParser.tableGrid(forAttachment:)`.
 
-  **Cell-storage format (dissected, `Table.pages` = 4 cols × 5 rows):**
-  - **Cell text** is a shared-string list in `Tables/DataList.iwa` (`TST.TableDataList`,
-    type **6005**): `#1` list-id, `#2` count, repeated `#3 { #1 key, #2 1, #3 string }`
-    (the sample's are "H1".."H4","row1",…). Trivial to (re)generate.
-  - **Grid** is `Tables/Tile.iwa` (`TST.Tile`, type **6002**): `#4` = row count; one
-    repeated `#5` per row `{ #1 rowIndex, #2 colCount, #3/#4/#7 fixed column/offset
-    tables (510-byte, 0xFF-padded), #6 packed per-cell records referencing DataList
-    string keys as 4-byte LE ints }`. **Regenerating `#6` for arbitrary dimensions is
-    the hard part** — a packed binary, not protobuf.
-  - Most other objects (six ~8 KB `6003` table *styles*, `6008`s, `HeaderStorageBucket`s)
-    are static → clone verbatim. So the real work is: emit `DataList` strings + the
-    packed `Tile` `#6` for the Markdown rows/cols, set `TableModelArchive` (6001)
-    row/col counts, clone the rest, anchor `TableInfoArchive` (6000) in the body, and
-    register every `Tables/` component in `PackageMetadata`.
-  - **Cell record format (decoded precisely, 2026-06-15):** within a `Tile` row
-    (`#5`): `#3` = C × 12-byte per-column metadata (`04 00 00 00` + 8 zero bytes per
-    col); `#4` = uint16 offsets into `#3` (`0,12,24,…` + `0xFFFF` pad, 510 B); `#6` =
-    the cell records; `#7` = uint16 **byte-offsets of each cell into `#6`** (`0,28,56,…`
-    + `0xFFFF` pad) — so a text cell record is **28 bytes**. A 28-byte string cell:
-    `05 03 00 00 00 00 00 00 | <styleword> | <key u32 @ bytes 12–15> | <12 const bytes>`,
-    where the **`u32` at offset 12 is the DataList string key**, and `<styleword>` is
-    `48 10 02 00` for header cells / `08 10 02 00` for body cells. `DataList` (6005)
-    entry = `{ #1 key, #2 1, #3 string }`, with the list's `#2` = maxKey+1. So a
-    generator builds, per row: `#6` = C cloned 28-byte cells (key patched), `#7`/`#4`
-    = the offset tables for C, `#3` = C col-metas, `#2` = C; and `Tile.#4` = row count.
-  - **TableModelArchive (6001) — decoded.** Lives in `CalculationEngine-*.iwa` (not
-    `Document.iwa`). `#6` = **row count**, `#7` = **column count**, `#8` = table name
-    ("Table 1"), `#1` = a UUID. It also holds ~10 **dimension-dependent reference
-    lists** (e.g. `#18–21`, `#24–27`, `#65–68` are per-*column* object refs; `#60–64`
-    per-*row*) pointing at the ~26 `Tables/` DataLists (cell strings, row heights,
-    column widths, styles, formats). So changing R×C means regenerating not just the
-    cell DataList + Tile, but the model's row/col counts **and** these per-row/per-col
-    reference lists **and** the row-height/column-width DataLists — all consistent.
-    Reverse-engineering is now complete; what remains is purely the (sizable) build.
-  - **Body anchor (decoded):** the body `StorageArchive`'s text (`#3`) has a `U+FFFC`
-    char at the table position, and **field `#9` is the attachment run table** —
-    `{ #1 { #1 charIndex, #2 { #1 attachmentObjectId } } }` — mapping that offset to
-    the `type 2003` drawable attachment. Also: the table delta over the blank template
-    is small in `Document.iwa` (just the one `2003` object); everything else is the
-    `Tables/` components + CalculationEngine objects (a static table may open without
-    the calc objects — worth testing first). **PROVEN feasible (2026-06-15):** a real
-    table written through our Snappy+framing+STORED-zip — `Table.pages` re-emitted with
-    its `DataList` (6005) cell strings rewritten — opens in Pages and renders a native
-    grid with the new cell text (Fruit/Qty/… headers, Apple/Pear/… rows), no crash. So
-    cell *content* is fully controllable via the DataList; the remaining work is
-    arbitrary dimensions (regenerate the `Tile` `#6`) + injecting the table into the
-    blank template. The attachment chain continues:
-    `type 2003` drawable-attachment object (sample
-    id 1734389) whose `#1` → `TableInfoArchive` (6000) → `TableModelArchive` (6001) →
-    Tile/DataList cells. The table's object ids (1733xxx–1734xxx) sit above the blank
-    template's range (≤1732620), so injecting them needs no id remapping — but bump
-    `PackageMetadata.#1` (id high-water mark). The CalculationEngine gains ~35 table
-    objects to clone too. **Full graph is now reverse-engineered; what remains is the
-    (crash-prone) implementation + per-stage Pages verification.**
+**Multi-table relocation.** Each additional table reuses the captured object set shifted
+by `tableIndex * 4096` (kept < 2^21 so ids stay 3-byte varints → no payload-length
+changes). `PagesTableBuilder` shifts the object id, the `MessageInfo.object_references`
+(#5) / `FieldInfo` (#4), and every captured-id reference inside the payload (re-encoding a
+sub-message only when it truly contains a reference, so strings/raw fields are preserved).
+Its `Index/Tables/*` files get id-suffixed names. **`PackageMetadata` cross-references
+(`#6`/`#7`) are gating** (verified: stripping them breaks even a single-table doc), so
+`relocateComponentMetadata` clones each table-involving external reference at the matching
+offset and registers each relocated `Tables/*` component. The recipe below documents the
+format; it was proven first via throwaway scripts (`stageA.swift`, `stageB.swift`).
+
+**Injection model (no id remapping for one table).** `Table.pages` = `Empty.pages` +
+a table. Diffing object-id sets: the table is **77 delta objects, all ids 1732664–1734988,
+strictly above Empty's max (1732661)** — so injecting them into the blank template needs
+**zero re-id** for a single table (a 2nd table needs an id offset). The 77 deltas:
+36 in `CalculationEngine` (incl. the model + calc scaffold), ~30 in `Index/Tables/*`,
+1 in `Document.iwa` (the `2003` attachment), 1 in `DocumentStylesheet` (a cell para style
+2022), 1 in `Metadata.iwa` (an `11015`), 8 in `ViewState`. **Stage A proven:** injecting
+all 77 verbatim + swapping the body storage (`1732539`) + using `Table.pages`'s
+`Metadata.iwa` wholesale → a 5×4 native grid renders in an otherwise-blank doc, no crash.
+
+**Body anchor:** body `StorageArchive` `#3` text has a `U+FFFC` at the table position;
+field **`#9` is the attachment run table** `{ #1 { #1 charIndex, #2 { #1 attachmentId } } }`.
+Chain: `#9` → `2003` drawable-attachment (`#1` → `6000`) → `TableInfoArchive` 6000
+(`#2` → `6001`) → `TableModelArchive` 6001 → tiles/datalists.
+
+**THE dimension source = `base_column_row_uids` (`ColumnRowUIDMapArchive`,** sample id
+**1733217, model field `#46`).** Count of **`#1` = number of columns**, count of
+**`#4` = number of rows**. Each UID = `{ #1 uint64, #2 uint64 }`. `#2`/`#3` are column
+orderings, `#5`/`#6` row orderings (identity `0..n-1` is fine). **Empirically (probe3):
+editing only this object resizes the rendered grid; editing the model `#6`/`#7`, the tile,
+the header buckets, or the table frame — individually OR together — does NOT.** Pages reads
+cell *content* positionally from the tile but takes the grid *extent* from this UID map.
+For >4 cols / >5 rows the captured UIDs run out → generate fresh unique uint64 pairs (cells
+don't reference UIDs, so any unique values work).
+
+**Full R×C resize recipe (6 objects; all proven, opens clean, Stage B):**
+1. **`base_column_row_uids` (1733217)** — C col UIDs (`#1`) + R row UIDs (`#4`) + orderings
+   `#2`/`#3`=`0..C-1`, `#5`/`#6`=`0..R-1`. ← the extent driver.
+2. **`Tile` (6002, 1733209)** — top: `#1`maxColumn/`#2`maxRow/`#3`numCells = 0 (as Apple
+   ships), **`#4` numrows = R**, **`#6` storage_version = 5 (constant!)**, `#7`
+   last_saved_in_BNC = 1. One repeated **`#5` `TileRowInfo`** per row:
+   `#1` row index, **`#2` cell_count = C**, `#3` cell_storage_buffer_pre_bnc (C × 12-byte
+   col-meta `04 00 00 00`+8 zero), `#4` cell_offsets_pre_bnc (uint16 `0,12,…`+`0xFFFF`
+   pad to **510 B**), **`#5` storage_version = 5 (constant!)**, `#6` cell_storage_buffer
+   (the C cell records), `#7` cell_offsets (uint16 byte-offsets into `#6`, `0xFFFF` pad to
+   510 B). **Gotcha:** `Tile.#6` and `TileRowInfo.#5` are *storage_version* fields (=5),
+   NOT counts — setting them to R/C corrupts parsing.
+   **String cell record:** header-row = 28 B `05 03 00 00 00 00 00 00 | 48 10 02 00 |
+   <key u32 @ off 12> | 01 00 00 00 05 00 00 00 01 00 00 00`; body = 24 B with styleword
+   `08 10 02 00` and tail `05 00 00 00 01 00 00 00`. All-text Markdown cells → use these.
+3. **cell `DataList` (6005, 1733190 = `base_data_store.stringTable`)** — `#1` listid=1,
+   `#2` count=maxKey+1, repeated `#3 { #1 key, #2 1, #3 string }`. Keys = `r*C+c+1`,
+   row-major; the cell `u32@12` references the key.
+4. **`TableModelArchive` (6001, 1733271)** — `#6` number_of_rows=R, `#7`
+   number_of_columns=C. (Schema confirmed via numbers-parser `TSTArchives.proto`: `#18-21`
+   are body/header/footer *styles* not per-column; `#60-80` are category/label styles.)
+   `base_data_store` (`#4`, `TST.DataStore`): `#1` rowHeaders(HeaderStorage→row bucket),
+   `#2` columnHeaders(→col bucket), `#3` tiles(`TileStorage`→tile, `#2`=tile_size 256),
+   `#4` stringTable, `#9/#10` row/col `TableRBTree`, `#14` storage_version_pre_bnc=4
+   (**don't touch — not a count**).
+5. **header buckets (`HeaderStorageBucket` 6006)** — row bucket (1733229): **R** `Header`s
+   `{ #1 idx, #2 f32 height(22.73), #3 0, #4 C }`; col bucket (1733266): **C** `Header`s
+   `{ #1 idx, #2 f32 width(120.386), #3 0, #4 R }`.
+6. **frame (`TableInfoArchive` 6000, 1733236)** — `#1` GeometryArchive `#2` size = `{ w =
+   C×120.386, h = R×22.73 }` (else the grid is clipped/over-extended visually).
+
+Most `Tables/` DataLists are **empty placeholders** (count=1, 0 entries) — clone verbatim.
+For Markdown set `number_of_header_rows`=1, `number_of_header_columns`=0 (else col 0 renders
+as a bold row-header). `PackageMetadata`: use the captured `Metadata.iwa` (component layout
+matches after injection) or add a `ComponentInfo` per new `Tables/` file + bump `#1`.
 - ~~Clickable hyperlinks~~ — **done**: each link emits a `TSWP` hyperlink object
   (type 2032: `#1`={smart-field UUID}, `#2`=URL) referenced from a `#11` smart-field
   run table over the link's character range (byte-pattern-identical to a Pages-authored link).
