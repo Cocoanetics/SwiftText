@@ -6,15 +6,18 @@ import Foundation
 /// a single raw Snappy block: a varint-encoded uncompressed length followed by a
 /// sequence of literal/copy elements.
 ///
-/// `decompress` reads that format; `compress` produces it. The compressor is a
-/// faithful port of **Snappy 1.1.9's `CompressFragment`** — the exact version Apple's
-/// iWork ships — so its output is byte-identical to Apple's, not merely a valid
-/// alternative encoding. (Established by compiling the reference Snappy at every release
-/// tag and finding 1.1.9/1.1.10 reproduce real `.pages` blocks exactly, then matching
-/// this port against the 1.1.9 binary byte-for-byte.) The decisive details: the fixed
-/// `>> (32 - 14)` hash shift masked to the table size, the `CalculateTableSize`
-/// downsizing, the `skip += bytes_between` search heuristic, and the 64/60/remainder
-/// copy chunking.
+/// `decompress` reads that format; `compress` produces it. The compressor is a faithful
+/// port of Snappy's `CompressFragment` using the **multiply-shift hash** — `((bytes *
+/// 0x1e35a7bd) >> (32 - 14)) & mask` — so its output is byte-identical to what Apple's
+/// iWork ships, not merely a valid alternative encoding. This hash is shared by Snappy
+/// **1.1.9 and 1.1.10's scalar path** (1.1.10 refactored it but the net table index is
+/// identical: `(>>17) & 2·(ts−1)` over a uint16 stride == `(>>18) & (ts−1)`). Established
+/// empirically: compiling the reference Snappy at every release tag, only 1.1.9/1.1.10
+/// reproduce real `.pages` blocks, and this port is byte-identical to the 1.1.9 binary.
+/// Note: 1.1.10 *also* added an optional hardware **CRC32 hash**; Apple does **not** use
+/// it (a CRC32-built 1.1.10 mismatches every real block), so the multiply-shift hash here
+/// is the correct — not merely older — choice. Other decisive details: `CalculateTableSize`
+/// downsizing, the `skip += bytes_between` search heuristic, the 64/60/remainder chunking.
 enum Snappy {
 	enum Error: Swift.Error {
 		case truncated
