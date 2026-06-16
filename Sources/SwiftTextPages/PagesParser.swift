@@ -31,8 +31,9 @@ final class PagesParser {
 		/// Within a run entry: the character index and the style reference.
 		static let runCharIndexField = 1
 		static let runStyleRefField = 2
-		/// Within a para-data entry: the list indent level.
-		static let listLevelField = 3
+		/// Within a para-data entry: the list nesting depth. Pages stores it in field 2
+		/// ("first") — it's what drives the per-level indent lookup in the list style.
+		static let listLevelField = 2
 		/// `TSP.Reference.identifier`.
 		static let referenceIdentifierField = 1
 		/// Char/paragraph `…StyleArchive.char_properties`.

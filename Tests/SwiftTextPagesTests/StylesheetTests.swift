@@ -92,6 +92,30 @@ struct StylesheetTests {
         #expect(out.contains("    return 1"))        // indentation preserved
     }
 
+    @Test("Nested list items carry their depth in para-data #2 and round-trip indented")
+    func nestedListIndents() throws {
+        let md = "- One\n- Two\n  - Nested\n- Three\n"
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("swifttext-list-\(UUID().uuidString).pages")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try MarkdownToPages.convert(md, to: url)
+
+        // The nesting depth must live in para-data field 2 ("first") — that's where Pages
+        // reads it to apply the list style's per-level indent. Field 3 stays 0.
+        let entries = try PagesContainer.entries(at: url, prefix: "Index/", suffix: ".iwa")
+        var store = IWAObjectStore()
+        for e in entries { (try? IWAArchive.objects(from: e.data))?.forEach { store.add($0) } }
+        let body = try #require(store.objects(ofType: 2001)
+            .filter { ProtobufMessage($0.payload).bytes(3) != nil }
+            .max { (ProtobufMessage($0.payload).bytes(3)?.count ?? 0) < (ProtobufMessage($1.payload).bytes(3)?.count ?? 0) })
+        let paraData = try #require(ProtobufMessage(body.payload).message(6))
+        #expect(paraData.messages(1).contains { $0.varint(2) == 1 })             // nested item: depth 1 in #2
+        #expect(paraData.messages(1).allSatisfy { ($0.varint(3) ?? 0) == 0 })    // #3 always 0
+
+        // And the nesting survives the round-trip back to Markdown.
+        #expect(try PagesFile(url: url).markdown().contains("  - Nested"))
+    }
+
     @Test("Headings carry a real size hierarchy in their style objects")
     func headingSizesCascade() throws {
         let styles = try generatedStyles("# H1\n## H2\n### H3\n\nBody.\n")

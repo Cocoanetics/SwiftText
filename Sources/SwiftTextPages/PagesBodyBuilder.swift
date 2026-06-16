@@ -629,15 +629,19 @@ enum PagesBodySerializer {
 		return table.bytes
 	}
 
-	/// The para-data table: repeated entries `{ #1: charIndex, #2: 0, #3: listLevel }`,
-	/// matching the shape the reader reads (field 3 = list indent level).
+	/// The para-data table: repeated entries `{ #1: charIndex, #2: listLevel, #3: 0 }`.
+	/// The list *nesting depth* lives in field 2 ("first") — that's the field Pages reads
+	/// to look up the per-level indent in the list style (confirmed by indenting a list
+	/// item in Pages and diffing: the touched paragraph got `#2 = 1`, and Pages applied
+	/// the Bullet style's `indents[1]`). Writing it in field 3, as we used to, left every
+	/// item at depth 0 → all levels rendered flush. Field 3 ("second") stays 0.
 	private static func paragraphDataTable(_ entries: [(index: Int, level: Int)]) -> [UInt8] {
 		var table = ProtobufWriter()
 		for entry in entries {
 			var entryWriter = ProtobufWriter()
 			entryWriter.varintField(1, UInt64(entry.index))
-			entryWriter.varintField(2, 0)
-			entryWriter.varintField(3, UInt64(entry.level))
+			entryWriter.varintField(2, UInt64(entry.level))
+			entryWriter.varintField(3, 0)
 			table.messageField(1, entryWriter.bytes)
 		}
 		return table.bytes
