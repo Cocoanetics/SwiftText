@@ -169,8 +169,10 @@ struct RenderPDFTests {
 			#expect(item.marker == "•")
 			let fragments = try #require(item.lines.first?.fragments)
 			#expect(fragments.first?.text == "•")
-			// The marker sits to the left of the item's text.
-			#expect((fragments.count > 1 ? fragments[1].x : .infinity) > (fragments.first?.x ?? 0))
+			#expect(fragments.count > 1)
+			// The marker sits to the left of the item's text, on the same baseline.
+			#expect(fragments[1].x > fragments[0].x)
+			#expect(fragments[0].baseline == fragments[1].baseline)
 		}
 
 		let ordered = try await layoutTree("<ol><li>one</li><li>two</li><li>three</li></ol>", contentWidth: 400)
@@ -245,12 +247,18 @@ struct RenderPDFTests {
 		let html = """
 		<html><body style="font-family: sans-serif; color: #222">
 		<h1 style="color:#1a3b5c">SwiftText Render</h1>
-		<p>A cross-platform HTML/CSS &rarr; PDF engine — a Swift port of WeasyPrint, \
+		<p>A cross-platform HTML/CSS — PDF engine, a Swift port of WeasyPrint, \
 		with no WebKit. This paragraph is long enough to wrap across multiple lines, \
 		demonstrating greedy line breaking using Helvetica metrics.</p>
-		<p>It renders <b>bold</b>, <i>italic</i>, and <span style="color:#c0392b">colored</span> \
-		inline text, and the full cascade resolves styles from a user-agent stylesheet, \
-		author rules, and inline declarations.</p>
+		<p>It renders <b>bold</b>, <i>italic</i>, <span style="color:#c0392b">colored</span>, \
+		<del>struck-through</del> and <a href="https://github.com/Cocoanetics/SwiftText">linked</a> \
+		inline text, all from the full CSS cascade.</p>
+		<h3 style="color:#1a3b5c">Features so far</h3>
+		<ul>
+		<li>Block &amp; inline layout, line breaking, justified text</li>
+		<li>Pagination, margins (with collapsing), padding, borders</li>
+		<li>Lists, links, embedded OpenType fonts</li>
+		</ul>
 		<div style="background-color:#eef2f7; border: 2px solid #1a3b5c; padding: 14px">
 		<h3 style="margin-top:0; color:#1a3b5c">The box model</h3>
 		<p style="margin-bottom:0">Backgrounds, borders, padding and margins are handled \

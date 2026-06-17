@@ -85,7 +85,7 @@ public final class LayoutEngine {
 			let gap = font.width(of: " ", size: box.style.fontSize)
 			let fragment = TextFragment(text: marker, style: box.style,
 			                            x: contentX - markerWidth - gap, y: line.y,
-			                            width: markerWidth, baseline: line.baseline)
+			                            width: markerWidth, baseline: line.y + line.baseline)
 			line.fragments.insert(fragment, at: 0)
 		}
 
