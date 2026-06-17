@@ -75,13 +75,15 @@ public final class DocxWriter {
 		public var text: String
 		public var bold: Bool
 		public var italic: Bool
+		public var strike: Bool
 		public var code: Bool
 		public var link: String?
 
-		public init(text: String, bold: Bool = false, italic: Bool = false, code: Bool = false, link: String? = nil) {
+		public init(text: String, bold: Bool = false, italic: Bool = false, strike: Bool = false, code: Bool = false, link: String? = nil) {
 			self.text = text
 			self.bold = bold
 			self.italic = italic
+			self.strike = strike
 			self.code = code
 			self.link = link
 		}
@@ -542,12 +544,11 @@ public final class DocxWriter {
 			xml += "<w:tcW w:w=\"\(colWidth)\" w:type=\"dxa\"/>\n"
 			xml += "<w:shd w:val=\"clear\" w:color=\"auto\" w:fill=\"DCDCDC\"/>\n"  // Header background
 			xml += "</w:tcPr>\n"
-			// Cell paragraph with bold text
+			// Header cells force bold, but should still preserve inline styles
+			// such as strikethrough from the source runs.
 			let align = alignmentXML(for: ci)
 			xml += "<w:p><w:pPr>\(align)</w:pPr>"
-			for run in cellRuns {
-				xml += "<w:r><w:rPr><w:b/><w:bCs/></w:rPr><w:t xml:space=\"preserve\">\(xmlEscape(run.text))</w:t></w:r>"
-			}
+			xml += renderRuns(cellRuns, forceBold: true)
 			xml += "</w:p>\n"
 			xml += "</w:tc>\n"
 		}
@@ -580,19 +581,21 @@ public final class DocxWriter {
 
 	// MARK: - Run Rendering
 
-	private func renderRuns(_ runs: [Run]) -> String {
+	private func renderRuns(_ runs: [Run], forceBold: Bool = false) -> String {
 		var xml = ""
 		for run in runs {
 			if let link = run.link {
 				let rId = nextHyperlinkId(url: link)
 				var rPr = "<w:rStyle w:val=\"Hyperlink\"/>"
-				if run.bold { rPr += "<w:b/><w:bCs/>" }
+				if run.bold || forceBold { rPr += "<w:b/><w:bCs/>" }
 				if run.italic { rPr += "<w:i/><w:iCs/>" }
+				if run.strike { rPr += "<w:strike/>" }
 				xml += "<w:hyperlink r:id=\"\(rId)\"><w:r><w:rPr>\(rPr)</w:rPr><w:t xml:space=\"preserve\">\(xmlEscape(run.text))</w:t></w:r></w:hyperlink>"
 			} else {
 				var rPr = ""
-				if run.bold { rPr += "<w:b/><w:bCs/>" }
+				if run.bold || forceBold { rPr += "<w:b/><w:bCs/>" }
 				if run.italic { rPr += "<w:i/><w:iCs/>" }
+				if run.strike { rPr += "<w:strike/>" }
 				if run.code {
 					rPr += "<w:rFonts w:ascii=\"Courier New\" w:hAnsi=\"Courier New\" w:cs=\"Courier New\"/>"
 					rPr += "<w:sz w:val=\"21\"/><w:szCs w:val=\"21\"/>"

@@ -53,7 +53,7 @@ struct DocxWriterTests {
 		let markdown = """
 		# Hello World
 
-		This is **bold** and *italic* text with `code`.
+		This is **bold** and *italic* text with ~~strike~~ and `code`.
 
 		- Item A
 		- Item B
@@ -88,9 +88,34 @@ struct DocxWriterTests {
 		#expect(xml.contains("Heading1"))
 		#expect(xml.contains("<w:b/>"))
 		#expect(xml.contains("<w:i/>"))
+		#expect(xml.contains("<w:strike/>"))
 		#expect(xml.contains("Courier New"))
 		#expect(xml.contains("print(&quot;hi&quot;)"))
 		#expect(xml.contains("rLink1"))
+	}
+
+	@Test("Markdown table headers preserve strikethrough")
+	func markdownTableHeaderStrikethrough() throws {
+		let markdown = """
+		| ~~Old~~ | Fresh |
+		| --- | --- |
+		| value | next |
+		"""
+
+		let url = FileManager.default.temporaryDirectory
+			.appendingPathComponent("md-table-header-strike-\(UUID().uuidString).docx")
+		defer { try? FileManager.default.removeItem(at: url) }
+
+		try MarkdownToDocx.convert(markdown, to: url)
+
+		let archive = try #require(Archive(url: url, accessMode: .read))
+		var documentData = Data()
+		let entry = try #require(archive["word/document.xml"])
+		_ = try archive.extract(entry) { documentData.append($0) }
+		let xml = String(data: documentData, encoding: .utf8)!
+
+		#expect(xml.contains("Old"))
+		#expect(xml.contains("<w:strike/>"))
 	}
 
 	@Test("Inline parser handles mixed formatting")
@@ -125,6 +150,17 @@ struct DocxWriterTests {
 		#expect(runs[1].text == "important")
 		#expect(runs[1].bold == true)
 		#expect(runs[1].italic == true)
+	}
+
+	@Test("Inline parser handles strikethrough and nested emphasis")
+	func inlineParserStrikethrough() {
+		let runs = MarkdownToDocx.parseInline("A ~~gone~~ and ~~**loud**~~")
+		#expect(runs.count == 4)
+		#expect(runs[1].text == "gone")
+		#expect(runs[1].strike == true)
+		#expect(runs[3].text == "loud")
+		#expect(runs[3].strike == true)
+		#expect(runs[3].bold == true)
 	}
 
 	@Test("Block parser handles nested blockquotes")
