@@ -65,7 +65,33 @@ public final class StyleResolver {
 		for (name, value) in winners where name != "font-size" && name != "color" {
 			applyLonghand(name, value, to: &style, parent: parent, rootFontSize: rootFontSize)
 		}
+		// Logical inline padding/margin map to physical edges only now, against the
+		// element's final `direction` (block flow is horizontal, so the inline axis
+		// is left↔right): inline-start is left in LTR, right in RTL.
+		applyLogicalInline(winners, to: &style, rootFontSize: rootFontSize)
 		return style
+	}
+
+	/// Resolve `padding/margin-inline-start/-end` to physical left/right edges.
+	private func applyLogicalInline(_ winners: [String: [ComponentValue]], to style: inout ComputedStyle, rootFontSize: Double) {
+		let rtl = style.direction == .rtl
+		let startEdge = rtl ? "right" : "left"
+		let endEdge = rtl ? "left" : "right"
+		func length(_ value: [ComponentValue]) -> Length? {
+			parseLength(value, fontSize: style.fontSize, rootFontSize: rootFontSize)
+		}
+		if let value = winners["padding-inline-start"], let l = length(value), l != .auto {
+			setEdge(&style.padding, "padding-\(startEdge)", l)
+		}
+		if let value = winners["padding-inline-end"], let l = length(value), l != .auto {
+			setEdge(&style.padding, "padding-\(endEdge)", l)
+		}
+		if let value = winners["margin-inline-start"], let l = length(value) {
+			setEdge(&style.margin, "margin-\(startEdge)", l)
+		}
+		if let value = winners["margin-inline-end"], let l = length(value) {
+			setEdge(&style.margin, "margin-\(endEdge)", l)
+		}
 	}
 
 	// MARK: - Cascade

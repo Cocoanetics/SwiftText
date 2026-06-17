@@ -98,14 +98,17 @@ public final class LayoutEngine {
 			contentHeight = (cursorY - contentTop) + previousMarginBottom
 		}
 
-		// Place a list-item marker to the left of the first line, in the padding
-		// reserved by the list's UA padding-left.
+		// Place a list-item marker just outside the content box, on the side the
+		// writing direction starts from: left for LTR, right for RTL.
 		if let marker = box.marker, let line = firstLineBox(in: box) {
 			let font = fonts.font(for: box.style)
 			let markerWidth = font.width(of: marker, size: box.style.fontSize)
 			let gap = font.width(of: " ", size: box.style.fontSize)
+			let markerX = box.style.direction == .rtl
+				? contentX + contentWidth + gap        // right of the content box
+				: contentX - markerWidth - gap          // left of the content box
 			let fragment = TextFragment(text: marker, style: box.style,
-			                            x: contentX - markerWidth - gap, y: line.y,
+			                            x: markerX, y: line.y,
 			                            width: markerWidth, baseline: line.y + line.baseline)
 			line.fragments.insert(fragment, at: 0)
 		}
@@ -428,8 +431,16 @@ public final class LayoutEngine {
 					lineTop += height
 				}
 				pendingSpace = nil
-			case .word(let word, let style, let href):
+			case .word(let rawWord, let style, let href):
 				let font = fonts.font(for: style)
+				// Arabic letters select presentation forms from their neighbours.
+				// Shape in logical order (one glyph per scalar) so the later bidi
+				// pass can reverse the run for visual order. Only embedded fonts
+				// carry the presentation-form glyphs.
+				var word = rawWord
+				if case .embedded(let embedded) = font, ArabicShaper.needsShaping(rawWord) {
+					word = ArabicShaper.shape(rawWord, hasForm: { embedded.hasGlyph(for: $0) })
+				}
 				// letter-spacing adds after every character of the word.
 				let wordWidth = font.width(of: word, size: style.fontSize)
 					+ style.letterSpacing * Double(word.unicodeScalars.count)

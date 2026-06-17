@@ -362,6 +362,37 @@ struct RenderPDFTests {
 
 		let plain = try await layoutTree("<ul style=\"list-style-type: none\"><li>x</li></ul>", contentWidth: 400)
 		#expect(collectBlocks(in: plain) { $0.element?.localName == "li" }.first?.marker == nil)
+
+		// arabic-indic: decimal counters rendered with Arabic-Indic digits ٠١٢…
+		let arabic = try await layoutTree("<ol style=\"list-style-type: arabic-indic\"><li>x</li><li>y</li><li>z</li></ol>", contentWidth: 400)
+		#expect(collectBlocks(in: arabic) { $0.element?.localName == "li" }.map { $0.marker } == ["\u{0661}.", "\u{0662}.", "\u{0663}."])
+	}
+
+	@Test("RTL list markers sit to the right of the item, in the inline-start padding")
+	func rtlListMarkers() async throws {
+		// LTR: padding-inline-start is the left, marker to the left of the text.
+		let ltr = try await layoutTree("<ol><li>x</li></ol>", contentWidth: 400)
+		let ltrItems = collectBlocks(in: ltr) { $0.element?.localName == "li" }
+		let ltrItem = try #require(ltrItems.first)
+		let ltrFragments = try #require(ltrItem.lines.first?.fragments)
+		#expect(ltrFragments.first?.text == "1.")                                   // marker first
+		#expect((ltrFragments.first?.x ?? 0) < (ltrFragments.dropFirst().first?.x ?? 0)) // marker on the left
+
+		// RTL: padding-inline-start is the right, marker to the right of the text.
+		let rtl = try await layoutTree("<ol dir=\"rtl\" style=\"list-style-type: arabic-indic\"><li>\u{0623}</li></ol>", contentWidth: 400)
+		let rtlItems = collectBlocks(in: rtl) { $0.element?.localName == "li" }
+		let rtlItem = try #require(rtlItems.first)
+		let rtlFragments = try #require(rtlItem.lines.first?.fragments)
+		let marker = try #require(rtlFragments.first)
+		#expect(marker.text == "\u{0661}.")                                          // ١.
+		let maxTextX = rtlFragments.dropFirst().map { $0.x }.max() ?? 0
+		#expect(marker.x > maxTextX)                                                 // marker on the right
+		// The marker lives in the list's inline-start (right, for RTL) padding —
+		// outside the item box but contained within the <ol>'s border box.
+		let lists = collectBlocks(in: rtl) { $0.element?.localName == "ol" }
+		let list = try #require(lists.first)
+		#expect(marker.x > rtlItem.x + rtlItem.width - 0.5)                          // beyond the item's right edge
+		#expect(marker.x + marker.width <= list.x + list.width + 0.5)               // within the list padding
 	}
 
 	@Test("text-indent indents only the first line")

@@ -35,8 +35,8 @@ h4 { font-weight: bold; margin-top: 1.33em; margin-bottom: 1.33em }
 h5 { font-size: .83em; font-weight: bold; margin-top: 1.67em; margin-bottom: 1.67em }
 h6 { font-size: .67em; font-weight: bold; margin-top: 2.33em; margin-bottom: 2.33em }
 blockquote, figure { margin-left: 40px; margin-right: 40px }
-dd { margin-left: 40px }
-dir, menu, ol, ul { padding-left: 40px }
+dd { margin-inline-start: 40px }
+dir, menu, ol, ul { padding-inline-start: 40px }
 hr { margin-top: .5em; margin-bottom: .5em; border-width: 1px; border-style: inset }
 
 b, strong, th { font-weight: bold }

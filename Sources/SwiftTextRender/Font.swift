@@ -99,6 +99,9 @@ public struct EmbeddedFont {
 	public func descent(size: Double) -> Double { -Double(otf.descent) * size / unitsPerEm }
 	public func glyphID(for scalar: Unicode.Scalar) -> Int { otf.glyphID(for: scalar) ?? 0 }
 	public func advanceWidth(glyph: Int) -> Int { otf.advanceWidth(glyph: glyph) }
+	/// Whether the font's cmap maps `scalar` to a real glyph (used by the Arabic
+	/// shaper to skip presentation forms the font doesn't carry).
+	public func hasGlyph(for scalar: Unicode.Scalar) -> Bool { otf.glyphID(for: scalar) != nil }
 }
 
 /// Selects fonts for computed styles. Registered fonts (by family name) embed;

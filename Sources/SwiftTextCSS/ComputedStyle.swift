@@ -104,11 +104,13 @@ public enum ListStyleType: String, Equatable, Sendable {
 	case upperAlpha = "upper-alpha"
 	case lowerRoman = "lower-roman"
 	case upperRoman = "upper-roman"
+	/// Arabic-Indic digits (٠١٢…), as used by `list-style-type: arabic-indic`.
+	case arabicIndic = "arabic-indic"
 
 	/// Whether the marker is an ordinal counter rather than a bullet.
 	public var isOrdered: Bool {
 		switch self {
-		case .decimal, .lowerAlpha, .upperAlpha, .lowerRoman, .upperRoman: return true
+		case .decimal, .lowerAlpha, .upperAlpha, .lowerRoman, .upperRoman, .arabicIndic: return true
 		default: return false
 		}
 	}

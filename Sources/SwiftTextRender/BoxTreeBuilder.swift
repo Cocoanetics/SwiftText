@@ -74,8 +74,24 @@ public enum BoxTreeBuilder {
 		case .upperAlpha: return alphabetic(number, uppercase: true)
 		case .lowerRoman: return roman(number).lowercased()
 		case .upperRoman: return roman(number)
+		case .arabicIndic: return arabicIndic(number)
 		default: return "\(number)" // decimal
 		}
+	}
+
+	/// Render a non-negative integer with Arabic-Indic digits (U+0660…U+0669).
+	private static func arabicIndic(_ number: Int) -> String {
+		guard number >= 0 else { return "\(number)" }
+		let zero = UnicodeScalar(0x0660)!.value
+		var result = ""
+		for character in "\(number)" {
+			if let digit = character.wholeNumberValue {
+				result.append(String(UnicodeScalar(zero + UInt32(digit))!))
+			} else {
+				result.append(character)
+			}
+		}
+		return result
 	}
 
 	/// Bijective base-26: 1→a, 26→z, 27→aa …
