@@ -127,10 +127,25 @@ struct MarkdownAttributedStringRendererTests {
 			== [.paragraph, .listItem(ordinal: 1), .unorderedList, .listItem(ordinal: 1), .unorderedList])
 	}
 
-	@Test func taskListItemsRender() {
+	@Test func taskListCheckboxState() {
 		let attributed = render("- [x] done\n- [ ] todo")
-		#expect(firstRun(attributed) { $0.contains("done") } != nil)
-		#expect(firstRun(attributed) { $0.contains("todo") } != nil)
+		let done = firstRun(attributed) { $0.contains("done") }
+		let todo = firstRun(attributed) { $0.contains("todo") }
+		#expect(done?[SwiftTextMarkdownAttributes.Checkbox.self] == .checked)
+		#expect(todo?[SwiftTextMarkdownAttributes.Checkbox.self] == .unchecked)
+		#expect(kinds(done).contains(.unorderedList))
+	}
+
+	@Test func plainListItemHasNoCheckbox() {
+		let attributed = render("- plain")
+		#expect(firstRun(attributed) { $0 == "plain" }?[SwiftTextMarkdownAttributes.Checkbox.self] == nil)
+	}
+
+	@Test func nestedListCheckboxDoesNotLeak() {
+		// A checked parent must not stamp its checkbox onto a plain nested item.
+		let attributed = render("- [x] parent\n  - child")
+		#expect(firstRun(attributed) { $0 == "parent" }?[SwiftTextMarkdownAttributes.Checkbox.self] == .checked)
+		#expect(firstRun(attributed) { $0 == "child" }?[SwiftTextMarkdownAttributes.Checkbox.self] == nil)
 	}
 
 	// MARK: Blockquote, code, rule
@@ -229,6 +244,21 @@ struct MarkdownAttributedStringRendererTests {
 		let attributed = render("Claim[^missing].")
 		#expect(attributed.runs.allSatisfy { $0[SwiftTextMarkdownAttributes.FootnoteReference.self] == nil })
 		#expect(wholeString(attributed).contains("[^missing]"))
+	}
+
+	@Test func nestedFootnoteDefinitionResolves() {
+		// `[^b]` is referenced only inside `[^a]`'s body — its definition must
+		// still be emitted (not orphaned) and its reference numbered.
+		let attributed = render("Main[^a]\n\n[^a]: see [^b]\n\n[^b]: other")
+		let definitionNumbers = Set(attributed.runs.compactMap {
+			$0[SwiftTextMarkdownAttributes.FootnoteDefinition.self]
+		})
+		#expect(definitionNumbers == [1, 2])
+		let referenceNumbers = Set(attributed.runs.compactMap {
+			$0[SwiftTextMarkdownAttributes.FootnoteReference.self]
+		})
+		#expect(referenceNumbers.contains(2))
+		#expect(wholeString(attributed).contains("other"))
 	}
 
 	@Test func footnoteAndBodyIdentitiesDoNotCollide() {

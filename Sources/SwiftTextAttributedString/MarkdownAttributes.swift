@@ -42,6 +42,14 @@ public enum MarkdownAlert: String, Codable, Sendable, Hashable, CaseIterable {
 	}
 }
 
+/// A GFM task-list item's checkbox state, carried via
+/// ``SwiftTextMarkdownAttributes/Checkbox``. Foundation's `PresentationIntent`
+/// has no checkbox concept, so checked/unchecked would otherwise be lost.
+public enum MarkdownCheckbox: String, Codable, Sendable, Hashable {
+	case checked
+	case unchecked
+}
+
 // MARK: - Portable block / inline models
 
 /// A platform-independent description of a run's block context — the same shape
@@ -165,6 +173,12 @@ public enum SwiftTextMarkdownAttributes {
 		public static let name = "SwiftText.alert"
 	}
 
+	/// The checkbox state of a GFM task-list item.
+	public enum Checkbox: AttributedStringKey {
+		public typealias Value = MarkdownCheckbox
+		public static let name = "SwiftText.checkbox"
+	}
+
 	/// The source URL/path of an image (Foundation keeps only the alt text).
 	public enum ImageSource: AttributedStringKey {
 		public typealias Value = String
@@ -184,6 +198,7 @@ extension AttributeScopes {
 		public let footnoteReference: SwiftTextMarkdownAttributes.FootnoteReference
 		public let footnoteDefinition: SwiftTextMarkdownAttributes.FootnoteDefinition
 		public let alert: SwiftTextMarkdownAttributes.Alert
+		public let checkbox: SwiftTextMarkdownAttributes.Checkbox
 		public let imageSource: SwiftTextMarkdownAttributes.ImageSource
 		public let foundation: FoundationAttributes
 	}

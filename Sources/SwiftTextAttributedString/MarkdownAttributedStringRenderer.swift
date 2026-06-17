@@ -52,25 +52,9 @@ public enum MarkdownAttributedStringRenderer {
 
 		// Body first so footnote numbers are assigned in source order.
 		builder.emitBlocks(Document(parsing: cleaned, options: []).children, EmitContext())
-
-		// Then definitions, in the SAME builder so block identities stay globally
-		// unique. Re-scan until a pass renders nothing new, so a definition
-		// referenced only from another definition still resolves.
-		var renderedIDs = Set<String>()
-		var renderedNew = true
-		var pending: [(number: Int, body: String)] = []
-		while renderedNew {
-			renderedNew = false
-			for definition in definitions where !renderedIDs.contains(definition.id) {
-				guard let number = resolver.number(forID: definition.id) else { continue }
-				pending.append((number, definition.body))
-				renderedIDs.insert(definition.id)
-				renderedNew = true
-			}
-		}
-		for entry in pending.sorted(by: { $0.number < $1.number }) {
-			builder.emitFootnoteDefinition(entry.body, number: entry.number)
-		}
+		// Then the trailing definitions block (resolves references nested in
+		// definition bodies too).
+		builder.emitFootnoteDefinitions(definitions)
 
 		return builder.result
 	}
@@ -108,6 +92,7 @@ private struct EmitContext {
 	var ancestors: [MarkdownBlock.Component] = []
 	var alert: MarkdownAlert?
 	var footnoteDefinition: Int?
+	var checkbox: MarkdownCheckbox?
 
 	/// Returns a context with `component` pushed as the new innermost ancestor.
 	func nested(_ component: MarkdownBlock.Component) -> EmitContext {
@@ -215,10 +200,19 @@ private final class Builder {
 	// MARK: Lists
 
 	private func emitList(_ list: ListItemContainer, ordered: Bool, _ context: EmitContext) {
-		let listContext = context.nested(component(ordered ? .orderedList : .unorderedList))
+		// A list's items define their own checkbox state — don't let a parent
+		// task item's checkbox leak into a nested list.
+		var base = context
+		base.checkbox = nil
+		let listContext = base.nested(component(ordered ? .orderedList : .unorderedList))
 		var ordinal = ordered ? orderedListStart(list) : 1
 		for case let item as ListItem in list.children {
-			let itemContext = listContext.nested(component(.listItem(ordinal: ordinal)))
+			var itemContext = listContext.nested(component(.listItem(ordinal: ordinal)))
+			switch item.checkbox {
+			case .checked: itemContext.checkbox = .checked
+			case .unchecked: itemContext.checkbox = .unchecked
+			case .none: break
+			}
 			emitBlocks(item.children, itemContext)
 			ordinal += 1
 		}
@@ -257,7 +251,44 @@ private final class Builder {
 
 	// MARK: Footnote definitions
 
-	func emitFootnoteDefinition(_ body: String, number: Int) {
+	/// Emits the trailing footnote-definitions block. Each referenced definition
+	/// is rendered **during** the scan, so a reference nested inside a definition
+	/// body is recorded and its own definition picked up by a later pass (a
+	/// definition queued without walking its body would orphan such references).
+	/// Fragments are built in isolation — keeping block identities globally
+	/// unique via the shared counter — then appended in footnote-number order.
+	func emitFootnoteDefinitions(_ definitions: [MarkdownFootnoteParser.Definition]) {
+		guard let resolver else { return }
+		var fragmentsByNumber: [Int: AttributedString] = [:]
+		var renderedIDs = Set<String>()
+		var renderedNew = true
+		while renderedNew {
+			renderedNew = false
+			for definition in definitions where !renderedIDs.contains(definition.id) {
+				guard let number = resolver.number(forID: definition.id) else { continue }
+				fragmentsByNumber[number] = footnoteDefinitionFragment(definition.body, number: number)
+				renderedIDs.insert(definition.id)
+				renderedNew = true
+			}
+		}
+		for (_, fragment) in fragmentsByNumber.sorted(by: { $0.key < $1.key }) {
+			result.append(fragment)
+		}
+	}
+
+	/// Renders one definition body into an isolated fragment so it can be
+	/// reordered, while still advancing the shared identity counter and recording
+	/// any references nested in the body via the resolver.
+	private func footnoteDefinitionFragment(_ body: String, number: Int) -> AttributedString {
+		let saved = result
+		result = AttributedString()
+		emitFootnoteDefinition(body, number: number)
+		let fragment = result
+		result = saved
+		return fragment
+	}
+
+	private func emitFootnoteDefinition(_ body: String, number: Int) {
 		var context = EmitContext()
 		context.footnoteDefinition = number
 		let blocks = Array(Document(parsing: body, options: []).children)
@@ -380,6 +411,7 @@ private final class Builder {
 		if let definition = context.footnoteDefinition {
 			container[SwiftTextMarkdownAttributes.FootnoteDefinition.self] = definition
 		}
+		if let checkbox = context.checkbox { container[SwiftTextMarkdownAttributes.Checkbox.self] = checkbox }
 		if let footnoteReference { container[SwiftTextMarkdownAttributes.FootnoteReference.self] = footnoteReference }
 		if let imageSource { container[SwiftTextMarkdownAttributes.ImageSource.self] = imageSource }
 
