@@ -188,6 +188,18 @@ struct RenderPDFTests {
 		#expect(abs(gap - 16) < 0.5)
 	}
 
+	@Test("Tables lay cells out in a grid")
+	func tableGrid() async throws {
+		let html = "<table><tr><td>A</td><td>B</td></tr><tr><td>C</td><td>D</td></tr></table>"
+		let root = try await layoutTree(html, contentWidth: 400)
+		let cells = collectBlocks(in: root) { $0.element?.localName == "td" }
+		#expect(cells.count == 4) // A, B, C, D in document order
+		#expect(cells[1].x > cells[0].x)   // B is right of A
+		#expect(cells[2].y > cells[0].y)   // C is below A
+		#expect(cells[0].y == cells[1].y)  // A and B share a row
+		#expect(cells[0].x == cells[2].x)  // A and C share a column
+	}
+
 	@Test("Box model: padding and border widen the border box")
 	func boxModel() async throws {
 		let css = ["div { width: 100px; padding: 10px; border: 5px solid black }"]

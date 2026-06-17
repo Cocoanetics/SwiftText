@@ -77,7 +77,9 @@ public final class LayoutEngine {
 		let contentTop = box.y + border.top + paddingTop
 
 		var contentHeight: Double
-		if box.establishesInlineContext {
+		if box.style.display == .table {
+			contentHeight = layoutTable(box, contentWidth: contentWidth, contentX: contentX, contentTop: contentTop)
+		} else if box.establishesInlineContext {
 			contentHeight = layoutInline(box, contentWidth: contentWidth, contentX: contentX, contentTop: contentTop)
 		} else {
 			// Stack block children, collapsing adjacent sibling vertical margins.
@@ -126,6 +128,64 @@ public final class LayoutEngine {
 			if let line = firstLineBox(in: child) { return line }
 		}
 		return nil
+	}
+
+	// MARK: - Table layout
+
+	/// Lay out a `display: table` box as a simple equal-column grid. Each cell is
+	/// laid out as a block in its column; the row height is the tallest cell.
+	/// Column/row spans and content-based column sizing are not modeled yet.
+	private func layoutTable(_ table: BlockBox, contentWidth: Double, contentX: Double, contentTop: Double) -> Double {
+		let rows = collectTableRows(table)
+		let columnCount = rows.map(\.cells.count).max() ?? 0
+		guard columnCount > 0 else { return 0 }
+
+		let spacing = 2.0 // border-spacing (UA default)
+		let columnWidth = max(0, (contentWidth - Double(columnCount + 1) * spacing) / Double(columnCount))
+
+		var y = contentTop + spacing
+		for row in rows {
+			let rowTop = y
+			var x = contentX + spacing
+			var rowHeight = 0.0
+			for cell in row.cells {
+				let height = layoutBlock(cell, containingWidth: columnWidth, marginX: x, borderBoxTop: rowTop)
+				rowHeight = max(rowHeight, height)
+				x += columnWidth + spacing
+			}
+			// Stretch every cell to the row height so backgrounds/borders fill it.
+			for cell in row.cells { cell.height = rowHeight }
+			row.box.x = contentX
+			row.box.y = rowTop
+			row.box.width = contentWidth
+			row.box.height = rowHeight
+			y = rowTop + rowHeight + spacing
+		}
+		return y - contentTop
+	}
+
+	/// Collect table rows (and their cells), descending through row groups.
+	private func collectTableRows(_ table: BlockBox) -> [(box: BlockBox, cells: [BlockBox])] {
+		var rows: [(box: BlockBox, cells: [BlockBox])] = []
+		func walk(_ box: BlockBox) {
+			for child in box.children {
+				guard let block = child as? BlockBox else { continue }
+				switch block.style.display {
+				case .tableRow:
+					let cells = block.children.compactMap { child -> BlockBox? in
+						guard let cell = child as? BlockBox, cell.style.display == .tableCell else { return nil }
+						return cell
+					}
+					rows.append((block, cells))
+				case .tableRowGroup, .tableHeaderGroup, .tableFooterGroup:
+					walk(block)
+				default:
+					walk(block)
+				}
+			}
+		}
+		walk(table)
+		return rows
 	}
 
 	// MARK: - Inline layout
