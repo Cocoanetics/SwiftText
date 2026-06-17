@@ -97,7 +97,7 @@ public final class LayoutEngine {
 		var pendingSpace: ComputedStyle? = nil
 		var lineTop = contentTop
 
-		func finishLine() {
+		func finishLine(isLast: Bool) {
 			guard !fragments.isEmpty else { pendingSpace = nil; return }
 			let lineHeight = fragments.map { $0.style.resolvedLineHeight() }.max() ?? 0
 			let ascent = fragments.map { fonts.font(for: $0.style).ascent(size: $0.style.fontSize) }.max() ?? 0
@@ -105,15 +105,27 @@ public final class LayoutEngine {
 			// Center the text box within the line height (half-leading).
 			let baselineFromTop = ascent + (lineHeight - ascent - descent) / 2
 
+			// Horizontal alignment within the content width.
+			let extra = max(0, contentWidth - penX)
+			let gaps = fragments.count - 1
+			var offset = 0.0
+			var perGap = 0.0
+			switch box.style.textAlign {
+			case .center: offset = extra / 2
+			case .right, .end: offset = extra
+			case .justify: if !isLast, gaps > 0 { perGap = extra / Double(gaps) }
+			default: break // start / left
+			}
+
 			let line = LineBox()
 			line.x = contentX
 			line.y = lineTop
-			line.width = penX
+			line.width = penX + perGap * Double(gaps)
 			line.height = lineHeight
 			line.baseline = baselineFromTop
-			line.fragments = fragments.map { fragment in
+			line.fragments = fragments.enumerated().map { index, fragment in
 				var positioned = fragment
-				positioned.x += contentX
+				positioned.x += contentX + offset + perGap * Double(index)
 				positioned.y = lineTop
 				positioned.baseline = lineTop + baselineFromTop
 				return positioned
@@ -137,7 +149,7 @@ public final class LayoutEngine {
 
 				let wraps = style.whiteSpace.wraps
 				if wraps && !fragments.isEmpty && penX + spaceWidth + wordWidth > contentWidth {
-					finishLine()
+					finishLine(isLast: false)
 				} else if !fragments.isEmpty, let space = pendingSpace {
 					penX += fonts.font(for: space).width(of: " ", size: space.fontSize)
 					pendingSpace = nil
@@ -148,7 +160,7 @@ public final class LayoutEngine {
 				penX += wordWidth
 			}
 		}
-		finishLine()
+		finishLine(isLast: true)
 
 		box.lines = lines
 		return lineTop - contentTop

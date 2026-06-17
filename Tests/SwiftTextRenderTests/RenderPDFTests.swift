@@ -84,6 +84,36 @@ struct RenderPDFTests {
 		#expect(div.width == 130)
 	}
 
+	@Test("text-align: center shifts the line inward")
+	func textAlignCenter() async throws {
+		let left = try await layoutTree("<p>hi there</p>", contentWidth: 400)
+		let center = try await layoutTree("<p style=\"text-align:center\">hi there</p>", contentWidth: 400)
+		let leftX = try #require(firstBlock(in: left) { $0.element?.localName == "p" }).lines.first?.fragments.first?.x
+		let centerX = try #require(firstBlock(in: center) { $0.element?.localName == "p" }).lines.first?.fragments.first?.x
+		#expect(try #require(centerX) > (try #require(leftX)) + 50)
+	}
+
+	private func firstStyled(_ element: StyledElement, tag: String) -> StyledElement? {
+		if element.localName == tag { return element }
+		for child in element.elementChildren {
+			if let found = firstStyled(child, tag: tag) { return found }
+		}
+		return nil
+	}
+
+	@Test("Embedded <style> rules are extracted and applied")
+	func appliesStyleElement() async throws {
+		let html = "<style>p { color: red }</style><p>x</p>"
+		let sheets = HTMLRenderer.extractStyleSheets(html: html)
+		#expect(sheets.count == 1)
+
+		let builder = try await DomBuilder(html: Data(html.utf8), baseURL: nil)
+		let root = try #require(builder.root)
+		let styled = StyledElement.build(domElement: root, resolver: StyleResolver(authorStyleSheets: sheets))
+		let paragraph = try #require(firstStyled(styled, tag: "p"))
+		#expect(paragraph.computedStyle.color == RGBA(1, 0, 0, 1))
+	}
+
 	// MARK: - Sample artifact
 
 	@Test("Generates a sample PDF artifact")
