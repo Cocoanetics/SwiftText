@@ -132,6 +132,12 @@ let packageProducts: [Product] = [
 		name: "SwiftTextPDFWriter",
 		targets: ["SwiftTextPDFWriter"]
 	),
+	// Pure-Swift OpenType/TrueType reader (font metrics + embeddable bytes),
+	// the replacement for fontconfig/HarfBuzz. Foundation-only, always available.
+	.library(
+		name: "SwiftTextOpenType",
+		targets: ["SwiftTextOpenType"]
+	),
 ] + htmlProducts + macOSProducts
 
 let swiftTextDependencies: [Target.Dependency] = [
@@ -213,6 +219,15 @@ let packageTargets: [Target] = [
 		name: "SwiftTextPDFWriterTests",
 		dependencies: ["SwiftTextPDFWriter"],
 		path: "Tests/SwiftTextPDFWriterTests"
+	),
+	.target(
+		name: "SwiftTextOpenType",
+		path: "Sources/SwiftTextOpenType"
+	),
+	.testTarget(
+		name: "SwiftTextOpenTypeTests",
+		dependencies: ["SwiftTextOpenType"],
+		path: "Tests/SwiftTextOpenTypeTests"
 	),
 ] + htmlTargets + macOSTargets
 
