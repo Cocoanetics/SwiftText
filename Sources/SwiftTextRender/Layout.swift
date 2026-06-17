@@ -132,36 +132,90 @@ public final class LayoutEngine {
 
 	// MARK: - Table layout
 
-	/// Lay out a `display: table` box as a simple equal-column grid. Each cell is
-	/// laid out as a block in its column; the row height is the tallest cell.
-	/// Column/row spans and content-based column sizing are not modeled yet.
+	private struct CellPlacement {
+		let cell: BlockBox
+		let row: Int
+		let column: Int
+		let colspan: Int
+		let rowspan: Int
+	}
+
+	/// Lay out a `display: table` box as an equal-column grid, honoring colspan
+	/// and rowspan. Content-based column sizing is not modeled (columns are
+	/// equal width).
 	private func layoutTable(_ table: BlockBox, contentWidth: Double, contentX: Double, contentTop: Double) -> Double {
 		let rows = collectTableRows(table)
-		let columnCount = rows.map(\.cells.count).max() ?? 0
-		guard columnCount > 0 else { return 0 }
-
+		guard !rows.isEmpty else { return 0 }
 		let spacing = 2.0 // border-spacing (UA default)
-		let columnWidth = max(0, (contentWidth - Double(columnCount + 1) * spacing) / Double(columnCount))
 
-		var y = contentTop + spacing
-		for row in rows {
-			let rowTop = y
-			var x = contentX + spacing
-			var rowHeight = 0.0
+		// Place cells into a grid, marking spanned slots as occupied.
+		var placements: [CellPlacement] = []
+		var occupied = Set<Int>()
+		func slot(_ row: Int, _ column: Int) -> Int { row * 4096 + column }
+		for (rowIndex, row) in rows.enumerated() {
+			var column = 0
 			for cell in row.cells {
-				let height = layoutBlock(cell, containingWidth: columnWidth, marginX: x, borderBoxTop: rowTop)
-				rowHeight = max(rowHeight, height)
-				x += columnWidth + spacing
+				while occupied.contains(slot(rowIndex, column)) { column += 1 }
+				let colspan = spanAttribute(cell, "colspan")
+				let rowspan = spanAttribute(cell, "rowspan")
+				placements.append(CellPlacement(cell: cell, row: rowIndex, column: column, colspan: colspan, rowspan: rowspan))
+				for r in rowIndex ..< rowIndex + rowspan {
+					for c in column ..< column + colspan { occupied.insert(slot(r, c)) }
+				}
+				column += colspan
 			}
-			// Stretch every cell to the row height so backgrounds/borders fill it.
-			for cell in row.cells { cell.height = rowHeight }
+		}
+
+		let columnCount = placements.map { $0.column + $0.colspan }.max() ?? 0
+		guard columnCount > 0 else { return 0 }
+		let columnWidth = max(0, (contentWidth - Double(columnCount + 1) * spacing) / Double(columnCount))
+		func columnX(_ column: Int) -> Double { contentX + spacing + Double(column) * (columnWidth + spacing) }
+		func spanWidth(_ colspan: Int) -> Double { Double(colspan) * columnWidth + Double(colspan - 1) * spacing }
+
+		// Pass 1: measure each cell's height at its column width.
+		var measured: [ObjectIdentifier: Double] = [:]
+		for placement in placements {
+			let height = layoutBlock(placement.cell, containingWidth: spanWidth(placement.colspan),
+			                         marginX: columnX(placement.column), borderBoxTop: contentTop)
+			measured[ObjectIdentifier(placement.cell)] = height
+		}
+
+		// Row heights come from cells confined to a single row.
+		var rowHeights = [Double](repeating: 0, count: rows.count)
+		for placement in placements where placement.rowspan == 1 {
+			rowHeights[placement.row] = max(rowHeights[placement.row], measured[ObjectIdentifier(placement.cell)] ?? 0)
+		}
+		var rowTops = [Double](repeating: 0, count: rows.count)
+		var y = contentTop + spacing
+		for index in rows.indices {
+			rowTops[index] = y
+			y += rowHeights[index] + spacing
+		}
+
+		// Pass 2: re-lay out each cell at its final position, then stretch height.
+		for placement in placements {
+			_ = layoutBlock(placement.cell, containingWidth: spanWidth(placement.colspan),
+			                marginX: columnX(placement.column), borderBoxTop: rowTops[placement.row])
+			let lastRow = min(placement.row + placement.rowspan - 1, rows.count - 1)
+			var height = 0.0
+			for r in placement.row ... lastRow { height += rowHeights[r] }
+			height += Double(lastRow - placement.row) * spacing
+			placement.cell.height = max(height, measured[ObjectIdentifier(placement.cell)] ?? 0)
+		}
+
+		for (rowIndex, row) in rows.enumerated() {
 			row.box.x = contentX
-			row.box.y = rowTop
+			row.box.y = rowTops[rowIndex]
 			row.box.width = contentWidth
-			row.box.height = rowHeight
-			y = rowTop + rowHeight + spacing
+			row.box.height = rowHeights[rowIndex]
 		}
 		return y - contentTop
+	}
+
+	private func spanAttribute(_ cell: BlockBox, _ name: String) -> Int {
+		guard let value = cell.element?.attributeValue(name),
+		      let number = Int(value.trimmingCharacters(in: .whitespaces)) else { return 1 }
+		return max(1, number)
 	}
 
 	/// Collect table rows (and their cells), descending through row groups.

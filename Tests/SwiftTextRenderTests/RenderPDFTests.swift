@@ -200,6 +200,28 @@ struct RenderPDFTests {
 		#expect(cells[0].x == cells[2].x)  // A and C share a column
 	}
 
+	@Test("Table cells honor colspan")
+	func tableColspan() async throws {
+		let html = "<table><tr><td colspan=2>Wide</td></tr><tr><td>A</td><td>B</td></tr></table>"
+		let root = try await layoutTree(html, contentWidth: 400)
+		let cells = collectBlocks(in: root) { $0.element?.localName == "td" } // Wide, A, B
+		#expect(cells.count == 3)
+		#expect(cells[0].width > cells[1].width * 1.5) // spans ~2 columns
+		#expect(abs(cells[0].x - cells[1].x) < 0.01)     // starts at column 0
+		#expect(cells[2].x > cells[1].x)                 // B right of A
+	}
+
+	@Test("Table cells honor rowspan")
+	func tableRowspan() async throws {
+		let html = "<table><tr><td rowspan=2>Tall</td><td>A</td></tr><tr><td>B</td></tr></table>"
+		let root = try await layoutTree(html, contentWidth: 400)
+		let cells = collectBlocks(in: root) { $0.element?.localName == "td" } // Tall, A, B
+		#expect(cells.count == 3)
+		#expect(abs(cells[2].x - cells[1].x) < 0.01) // B shares A's column
+		#expect(cells[2].y > cells[1].y)              // B is below A
+		#expect(cells[0].height >= cells[1].height + cells[2].height) // Tall spans both rows
+	}
+
 	@Test("Box model: padding and border widen the border box")
 	func boxModel() async throws {
 		let css = ["div { width: 100px; padding: 10px; border: 5px solid black }"]
