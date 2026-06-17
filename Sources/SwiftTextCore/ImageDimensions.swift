@@ -1,18 +1,17 @@
 import Foundation
 
-/// Dependency-free pixel-dimension reader for the raster formats the DOCX writer
-/// embeds (PNG and JPEG). Parses the header only — no image decoding, no platform
-/// imaging frameworks.
+/// Dependency-free pixel-dimension reader for the raster formats the document
+/// writers embed (PNG and JPEG). Parses the header only — no image decoding, no
+/// platform imaging frameworks.
 ///
-/// This mirrors `PagesImageBuilder.dimensions(of:)` in `SwiftTextPages`; the two are
-/// kept as parallel copies so neither format writer depends on the other (DOCX must
-/// not pull in the PAGES-trait-gated module). If a third writer needs it, promote it
-/// to a shared module instead of adding a third copy.
-enum DocxImageDimensions {
+/// Shared by the DOCX and Pages writers (both size an embedded image from its
+/// natural pixel dimensions); it lives here so there is a single implementation to
+/// maintain rather than parallel copies per format.
+public enum ImageDimensions {
 
 	/// Pixel dimensions of a PNG or JPEG, by parsing the header. Returns `nil` for
-	/// anything else (the caller falls back to an alt-text placeholder).
-	static func dimensions(of data: [UInt8]) -> (width: Int, height: Int)? {
+	/// anything else (callers fall back to an alt-text placeholder).
+	public static func dimensions(of data: [UInt8]) -> (width: Int, height: Int)? {
 		// PNG: 8-byte signature, then IHDR (width/height big-endian at offset 16).
 		if data.count >= 24, data[0] == 0x89, data[1] == 0x50, data[2] == 0x4E, data[3] == 0x47 {
 			let w = Int(data[16]) << 24 | Int(data[17]) << 16 | Int(data[18]) << 8 | Int(data[19])

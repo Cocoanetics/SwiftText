@@ -168,10 +168,10 @@ struct PagesImageTests {
 		#expect(try PagesFile(url: out).markdown().contains("the alt text"))
 	}
 
-	@Test("PNG dimensions are parsed from the header; SHA-1 matches RFC 3174")
-	func dimensionsAndDigest() {
-		#expect(PagesImageBuilder.dimensions(of: [UInt8](PagesImageTests.onePixelPNG))?.width == 1)
-		#expect(PagesImageBuilder.dimensions(of: [UInt8](PagesImageTests.onePixelPNG))?.height == 1)
+	@Test("SHA-1 digest matches RFC 3174")
+	func sha1Digest() {
+		// Image dimension parsing now lives in SwiftTextCore.ImageDimensions (tested in
+		// SwiftTextCoreTests). SHA-1 stays here — it's used only by the Pages writer.
 		// SHA1("abc") = a9993e364706816aba3e25717850c26c9cd0d89d
 		let digest = SHA1.hash(Array("abc".utf8)).map { String(format: "%02x", $0) }.joined()
 		#expect(digest == "a9993e364706816aba3e25717850c26c9cd0d89d")

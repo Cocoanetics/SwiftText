@@ -1,4 +1,5 @@
 import Foundation
+import SwiftTextCore
 import ZIPFoundation
 
 /// Page configuration for DOCX output.
@@ -386,7 +387,7 @@ public final class DocxWriter {
 		guard let baseURL,
 			  let resolved = resolvedImageURL(source, baseURL: baseURL),
 			  let data = try? Data(contentsOf: resolved), !data.isEmpty,
-			  let (pixelWidth, pixelHeight) = DocxImageDimensions.dimensions(of: [UInt8](data)),
+			  let (pixelWidth, pixelHeight) = ImageDimensions.dimensions(of: [UInt8](data)),
 			  let format = imageFormat(path: resolved, data: data) else {
 			return imagePlaceholderParagraph(alt: alt, quoteDepth: quoteDepth)
 		}
