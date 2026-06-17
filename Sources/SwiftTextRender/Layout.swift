@@ -350,6 +350,21 @@ public final class LayoutEngine {
 	private func collectInline(_ box: Box, into tokens: inout [InlineToken], href: String?) {
 		if let text = box as? TextBox {
 			let style = text.style
+			if style.whiteSpace == .pre {
+				// Preserve spaces verbatim; only newlines break the line. (pre does
+				// not wrap, so each segment between newlines is one fragment.)
+				var segment = ""
+				for character in text.text {
+					if character == "\n" {
+						if !segment.isEmpty { tokens.append(.word(segment, style, href: href)); segment = "" }
+						tokens.append(.forcedBreak(style))
+					} else if character != "\r" {
+						segment.append(character)
+					}
+				}
+				if !segment.isEmpty { tokens.append(.word(segment, style, href: href)) }
+				return
+			}
 			let content = style.whiteSpace.collapsesWhitespace ? collapseWhitespace(text.text) : text.text
 			var word = ""
 			func flushWord() {

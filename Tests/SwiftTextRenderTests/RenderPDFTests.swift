@@ -276,6 +276,19 @@ struct RenderPDFTests {
 		#expect(pre.lines.count == 3)
 	}
 
+	@Test("<pre> preserves runs of spaces")
+	func prePreservesSpaces() async throws {
+		let preRoot = try await layoutTree("<pre>a     b</pre>", contentWidth: 600)
+		let pre = try #require(firstBlock(in: preRoot) { $0.element?.localName == "pre" })
+		// The whole "a     b" (with its five spaces) is one preserved fragment.
+		let fragment = try #require(pre.lines.first?.fragments.first)
+		#expect(fragment.text == "a     b")
+		// It is much wider than the collapsed "a b" would be.
+		let collapsedRoot = try await layoutTree("<pre>a b</pre>", contentWidth: 600)
+		let collapsed = try #require(firstBlock(in: collapsedRoot) { $0.element?.localName == "pre" })
+		#expect(fragment.width > (collapsed.lines.first?.fragments.first?.width ?? 0) * 1.5)
+	}
+
 	@Test("Links become PDF Link annotations")
 	func linkAnnotations() async throws {
 		let html = "<p>See <a href=\"https://example.com/\">our site</a> for more.</p>"
