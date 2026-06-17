@@ -87,6 +87,74 @@ Features:
 > `index.xml` format are supported. The rare gzipped legacy variant
 > (`index.xml.gz`) is reported with a clear error rather than mis-parsed.
 
+### SwiftTextAttributedString
+
+Renders Markdown into a Foundation **`AttributedString`** that works on **every
+platform** — macOS, iOS, Linux and Windows. Built on swift-markdown (the same
+AST as the HTML/DOCX/Pages paths), it covers the full GFM superset the package
+supports.
+
+Foundation's `PresentationIntent` / `InlinePresentationIntent` live in Apple's
+SDK Foundation and are *absent* from cross-platform swift-foundation, so the
+renderer carries all block/inline structure in portable custom attributes that
+compile and run everywhere, and **additionally** sets the native intents on
+Apple platforms so the result interoperates with SwiftUI / TextKit:
+
+| Information | Portable attribute (all platforms) | Native (Apple, additional) |
+| --- | --- | --- |
+| Block hierarchy | `SwiftTextMarkdownAttributes.Block` (`MarkdownBlock`) | `presentationIntent` |
+| Inline traits | `SwiftTextMarkdownAttributes.InlineStyle` (`MarkdownInlineStyle`) | `inlinePresentationIntent` |
+| Links | `.link` (Foundation, cross-platform) | — |
+
+`MarkdownBlock` mirrors `PresentationIntent` exactly (a chain of components,
+innermost first, each with a kind + a document-unique identity assigned by a
+shared pre-order counter). Blocks are delimited by distinct identities, not
+literal newlines — just as Foundation does.
+
+Supported features:
+
+- Headings (ATX + setext), emphasis, strong, strikethrough, inline code
+- Links, autolinks, and images (alt text + source via `ImageSource`)
+- Ordered / unordered / nested / task lists (with correct ordinals + start index)
+- Fenced + indented code blocks (with language hint), tables with per-column
+  alignment, blockquotes, thematic breaks, soft/hard breaks, inline + block HTML
+- `[^id]` footnotes and GitHub `[!NOTE]` / DocC `Note:` alerts — which
+  Foundation's intents can't express — via the custom scope
+  (`FootnoteReference`, `FootnoteDefinition`, `Alert`)
+- Smart-punctuation reversal by default (pass `.preserveSmartPunctuation` to keep
+  cmark's curly quotes/dashes)
+
+Requires macOS 12 / iOS 15 / tvOS 15 / watchOS 8 (where `AttributedString` is
+available), or any Linux/Windows toolchain bundling swift-foundation.
+
+```swift
+import SwiftTextAttributedString
+
+let attributed = MarkdownAttributedStringRenderer.convert("""
+# Title
+
+A paragraph with **bold**, a [link](https://example.com) and a footnote.[^1]
+
+[^1]: The footnote body.
+""")
+// Or: AttributedString(swiftTextMarkdown: "…")
+
+// Portable — works on every platform:
+for run in attributed.runs {
+    if run[SwiftTextMarkdownAttributes.InlineStyle.self]?.contains(.stronglyEmphasized) == true {
+        print("bold:", String(attributed.characters[run.range]))
+    }
+    if let block = run[SwiftTextMarkdownAttributes.Block.self] {
+        print("block:", block.components.map(\.kind))
+    }
+}
+
+#if canImport(Darwin)
+// On Apple, the native intents are set too (e.g. for SwiftUI Text):
+let firstIsHeader = attributed.runs.first?.presentationIntent != nil
+#endif
+```
+
 ## Installation
 
 Add SwiftText to your Swift package dependencies:

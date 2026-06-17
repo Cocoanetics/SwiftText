@@ -13,3 +13,6 @@
 #if PAGES
 @_exported import SwiftTextPages
 #endif
+
+// Platform-agnostic Markdown → AttributedText, always available.
+@_exported import SwiftTextAttributedString
