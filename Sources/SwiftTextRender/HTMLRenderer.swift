@@ -66,7 +66,7 @@ public enum HTMLRenderer {
 
 		// Author stylesheets: the document's own <style> elements first, then any
 		// sheets supplied by the caller (which therefore win on equal specificity).
-		let documentSheets = extractStyleSheets(html: html)
+		let documentSheets = root.styleSheets()
 		let resolver = StyleResolver(authorStyleSheets: documentSheets + css)
 
 		// @page rules in the document override the page geometry.
@@ -320,27 +320,6 @@ public enum HTMLRenderer {
 		} else {
 			for child in block.children { collectBreaks(child, into: &ys) }
 		}
-	}
-
-	/// Collect the CSS text of every `<style>` element, in document order.
-	///
-	/// Extracted from the raw HTML because SwiftTextHTML's parser delivers
-	/// `<style>` content as a CDATA event that the DOM builder discards.
-	/// (`<link rel="stylesheet">` fetching is not done yet.)
-	static func extractStyleSheets(html: String) -> [String] {
-		let pattern = "<style[^>]*>([\\s\\S]*?)</style>"
-		guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
-			return []
-		}
-		let text = html as NSString
-		var sheets: [String] = []
-		for match in regex.matches(in: html, range: NSRange(location: 0, length: text.length)) where match.numberOfRanges > 1 {
-			let css = text.substring(with: match.range(at: 1))
-			if !css.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-				sheets.append(css)
-			}
-		}
-		return sheets
 	}
 
 }

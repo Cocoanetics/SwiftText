@@ -476,11 +476,12 @@ struct RenderPDFTests {
 	@Test("Embedded <style> rules are extracted and applied")
 	func appliesStyleElement() async throws {
 		let html = "<style>p { color: red }</style><p>x</p>"
-		let sheets = HTMLRenderer.extractStyleSheets(html: html)
-		#expect(sheets.count == 1)
-
 		let builder = try await DomBuilder(html: Data(html.utf8), baseURL: nil)
 		let root = try #require(builder.root)
+		// Stylesheets come straight from the DOM tree, not a second parse.
+		let sheets = root.styleSheets()
+		#expect(sheets.count == 1)
+
 		let styled = StyledElement.build(domElement: root, resolver: StyleResolver(authorStyleSheets: sheets))
 		let paragraph = try #require(firstStyled(styled, tag: "p"))
 		#expect(paragraph.computedStyle.color == RGBA(1, 0, 0, 1))

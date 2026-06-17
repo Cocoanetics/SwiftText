@@ -97,6 +97,33 @@ public class DOMElement: DOMNode, @unchecked Sendable
 		return result
 	}
 
+	/// The CSS of every `<style>` element in this subtree, in document order —
+	/// one entry per element. Mirrors the DOM's `styleSheets`: the source is
+	/// already in the tree (as `DOMRawText`), so this needs no HTML re-parse.
+	public func styleSheets() -> [String]
+	{
+		var sheets: [String] = []
+		collectStyleSheets(into: &sheets)
+		return sheets
+	}
+
+	private func collectStyleSheets(into sheets: inout [String])
+	{
+		if name.lowercased() == "style"
+		{
+			let css = children.compactMap { ($0 as? DOMRawText)?.content }.joined()
+			if !css.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+			{
+				sheets.append(css)
+			}
+		}
+
+		for case let child as DOMElement in children
+		{
+			child.collectStyleSheets(into: &sheets)
+		}
+	}
+
 	// MARK: - Plain-text table helpers
 
 	private func collectTableRows() -> [DOMElement] {
