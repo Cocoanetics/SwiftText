@@ -10,7 +10,18 @@ import ArgumentParser
 import Foundation
 import SwiftTextHTML
 import SwiftTextDOCX
+import SwiftTextRender
 import WebKit
+
+// MARK: - Render engine
+
+/// Which engine renders the PDF.
+enum RenderEngine: String, ExpressibleByArgument, CaseIterable {
+	/// WebKit + NSPrintOperation (macOS only, full CSS).
+	case webkit
+	/// The cross-platform SwiftTextRender engine (no WebKit).
+	case swift
+}
 
 // MARK: - Paper size
 
@@ -58,6 +69,9 @@ struct PDF: AsyncParsableCommand {
 
 	@Flag(name: .long, help: "Use landscape orientation (default: portrait).")
 	var landscape: Bool = false
+
+	@Option(name: .long, help: "Rendering engine: webkit (default, full CSS) or swift (cross-platform, no WebKit).")
+	var engine: RenderEngine = .webkit
 
 	// MARK: - Run
 
@@ -168,6 +182,11 @@ struct PDF: AsyncParsableCommand {
 	@MainActor
 	@available(macOS 12.0, *)
 	private func render(_ source: HTMLSource, to outputURL: URL) async throws {
+		if engine == .swift {
+			let (html, baseURL) = try htmlString(from: source)
+			try await renderSwift(html: html, baseURL: baseURL, to: outputURL)
+			return
+		}
 		var tempFileToCleanup: URL? = nil
 		defer {
 			if let temp = tempFileToCleanup {
@@ -198,6 +217,10 @@ struct PDF: AsyncParsableCommand {
 	@MainActor
 	@available(macOS 12.0, *)
 	private func renderHTML(_ html: String, sourceURL: URL?, to outputURL: URL) async throws {
+		if engine == .swift {
+			try await renderSwift(html: html, baseURL: sourceURL, to: outputURL)
+			return
+		}
 		let browser = WebKitBrowser(htmlString: html, baseURL: sourceURL)
 		browser.frameSize = pageSize()
 		browser.preserveFrameHeight = true
@@ -210,12 +233,38 @@ struct PDF: AsyncParsableCommand {
 	@MainActor
 	@available(macOS 12.0, *)
 	private func renderURL(_ url: URL, to outputURL: URL) async throws {
+		if engine == .swift {
+			throw ValidationError("--engine swift cannot load http(s) URLs; save the page to an .html file first.")
+		}
 		let browser = WebKitBrowser(url: url)
 		browser.frameSize = pageSize()
 		browser.preserveFrameHeight = true
 		await browser.waitForLoadCompletion()
 		let pdfData = try await browser.exportPaginatedPDFData(paperSize: pageSize())
 		try writeData(pdfData, to: outputURL)
+	}
+
+	/// Renders HTML to a PDF file using the cross-platform SwiftTextRender engine.
+	@available(macOS 12.0, *)
+	private func renderSwift(html: String, baseURL: URL?, to outputURL: URL) async throws {
+		let size = paper.pointSize
+		let widthPoints = landscape ? size.height : size.width
+		let heightPoints = landscape ? size.width : size.height
+		var options = RenderOptions()
+		options.pageWidthPx = Double(widthPoints) / 0.75 // points → CSS pixels
+		options.pageHeightPx = Double(heightPoints) / 0.75
+		let data = try await HTMLRenderer.renderPDF(html: html, options: options)
+		try writeData(data, to: outputURL)
+	}
+
+	private func htmlString(from source: HTMLSource) throws -> (html: String, baseURL: URL?) {
+		switch source {
+		case .string(let html, let baseURL):
+			return (html, baseURL)
+		case .file(let fileURL, _):
+			let html = try String(contentsOf: fileURL, encoding: .utf8)
+			return (html, fileURL.deletingLastPathComponent())
+		}
 	}
 
 	/// Returns the page size in points, respecting orientation.

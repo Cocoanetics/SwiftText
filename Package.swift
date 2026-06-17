@@ -32,6 +32,7 @@ let macOSTargets: [Target] = [
 			"SwiftTextPDF",
 			"SwiftTextDOCX",
 			"SwiftTextPages",
+			"SwiftTextRender",
 			.product(name: "ArgumentParser", package: "swift-argument-parser", condition: .when(traits: ["CLI"])),
 		],
 		path: "Sources/SwiftTextCLI",
