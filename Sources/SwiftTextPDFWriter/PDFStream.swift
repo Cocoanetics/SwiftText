@@ -157,6 +157,12 @@ public final class PDFStream: PDFObject {
 		token.append(contentsOf: " Tj".utf8)
 		emit(token)
 	}
+	/// Show a pre-encoded byte string (e.g. WinAnsi bytes) with `Tj`.
+	public func showRawString(_ bytes: Data) {
+		var token = PDFString.literal(from: bytes)
+		token.append(contentsOf: " Tj".utf8)
+		emit(token)
+	}
 	/// Show pre-built positioned glyph runs (`TJ`). `text` is the already
 	/// serialized contents of the TJ array (strings interleaved with numeric
 	/// adjustments).

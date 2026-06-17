@@ -71,6 +71,10 @@ public final class StyledElement: SelectorElement {
 	public static func build(domElement: DOMElement, resolver: StyleResolver) -> StyledElement {
 		let root = StyledElement(domElement: domElement, parent: nil, elementIndex: 0)
 		root.computedStyle = resolver.style(for: root, inheriting: .initial, rootFontSize: ComputedStyle.initial.fontSize)
+		// The root element establishes the initial containing block and is always
+		// a block container. (SwiftTextHTML wraps documents in a synthetic
+		// "document" element with no UA rule, which would otherwise be inline.)
+		root.computedStyle.display = .block
 		let rootFontSize = root.computedStyle.fontSize
 		root.buildChildren(resolver: resolver, rootFontSize: rootFontSize)
 		return root
