@@ -149,6 +149,10 @@ public final class PDFStream: PDFObject {
 	}
 	/// Set the text rise (`Ts`).
 	public func setTextRise(_ rise: Double) { emit("\(formatPDFReal(rise)) Ts") }
+	/// Set character spacing — extra space after each glyph (`Tc`).
+	public func setCharacterSpacing(_ spacing: Double) { emit("\(formatPDFReal(spacing)) Tc") }
+	/// Set word spacing — extra space after each space character (`Tw`).
+	public func setWordSpacing(_ spacing: Double) { emit("\(formatPDFReal(spacing)) Tw") }
 	/// Set the text rendering mode (`Tr`).
 	public func setTextRendering(_ mode: Int) { emit("\(mode) Tr") }
 	/// Show a single literal string (`Tj`).

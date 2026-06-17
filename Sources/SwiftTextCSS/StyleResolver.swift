@@ -278,6 +278,22 @@ private func applyLonghand(_ name: String, _ value: [ComponentValue], to style: 
 		}
 		style.underline = underline
 		style.lineThrough = lineThrough
+	case "letter-spacing":
+		if let token = significant(value).first {
+			if case .ident(let ident) = token.token, ident.asciiLowercased == "normal" {
+				style.letterSpacing = 0
+			} else if let length = parseLength([token], fontSize: fontSize, rootFontSize: rootFontSize), case .px(let pixels) = length {
+				style.letterSpacing = pixels
+			}
+		}
+	case "word-spacing":
+		if let token = significant(value).first {
+			if case .ident(let ident) = token.token, ident.asciiLowercased == "normal" {
+				style.wordSpacing = 0
+			} else if let length = parseLength([token], fontSize: fontSize, rootFontSize: rootFontSize), case .px(let pixels) = length {
+				style.wordSpacing = pixels
+			}
+		}
 	case "width":
 		if let length = parseLength(value, fontSize: fontSize, rootFontSize: rootFontSize) { style.width = length }
 	case "height":
@@ -321,6 +337,7 @@ private let inheritedProperties: Set<String> = [
 	"color", "font-family", "font-size", "font-style", "font-weight",
 	"line-height", "text-align", "white-space",
 	"text-decoration", "text-decoration-line",
+	"letter-spacing", "word-spacing",
 ]
 
 private func applyGlobal(_ name: String, _ keyword: String, to style: inout ComputedStyle, parent: ComputedStyle) {
@@ -349,6 +366,8 @@ private func copyLonghand(_ name: String, from source: ComputedStyle, into style
 	case "text-decoration", "text-decoration-line":
 		style.underline = source.underline
 		style.lineThrough = source.lineThrough
+	case "letter-spacing": style.letterSpacing = source.letterSpacing
+	case "word-spacing": style.wordSpacing = source.wordSpacing
 	case "width": style.width = source.width
 	case "height": style.height = source.height
 	case "margin-top", "margin-right", "margin-bottom", "margin-left": setEdge(&style.margin, name, edgeValue(source.margin, name))

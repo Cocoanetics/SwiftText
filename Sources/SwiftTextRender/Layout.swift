@@ -325,14 +325,20 @@ public final class LayoutEngine {
 				pendingSpace = nil
 			case .word(let word, let style, let href):
 				let font = fonts.font(for: style)
+				// letter-spacing adds after every character of the word.
 				let wordWidth = font.width(of: word, size: style.fontSize)
-				let spaceWidth = pendingSpace.map { fonts.font(for: $0).width(of: " ", size: $0.fontSize) } ?? 0
+					+ style.letterSpacing * Double(word.unicodeScalars.count)
+				func gap(_ spaceStyle: ComputedStyle) -> Double {
+					// word-spacing adds to each inter-word space.
+					fonts.font(for: spaceStyle).width(of: " ", size: spaceStyle.fontSize) + spaceStyle.wordSpacing
+				}
+				let spaceWidth = pendingSpace.map(gap) ?? 0
 
 				let wraps = style.whiteSpace.wraps
 				if wraps && !fragments.isEmpty && penX + spaceWidth + wordWidth > contentWidth {
 					finishLine(isLast: false)
 				} else if !fragments.isEmpty, let space = pendingSpace {
-					penX += fonts.font(for: space).width(of: " ", size: space.fontSize)
+					penX += gap(space)
 					pendingSpace = nil
 				}
 

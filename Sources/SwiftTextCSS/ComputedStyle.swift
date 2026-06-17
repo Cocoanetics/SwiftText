@@ -126,6 +126,10 @@ public struct ComputedStyle: Equatable, Sendable {
 	public var underline: Bool
 	/// Whether text has a line through it (`text-decoration: line-through`).
 	public var lineThrough: Bool
+	/// Extra space between characters in pixels (`letter-spacing`).
+	public var letterSpacing: Double
+	/// Extra space added to each space character in pixels (`word-spacing`).
+	public var wordSpacing: Double
 
 	// Non-inherited properties.
 	public var display: Display
@@ -160,6 +164,8 @@ public struct ComputedStyle: Equatable, Sendable {
 		whiteSpace: .normal,
 		underline: false,
 		lineThrough: false,
+		letterSpacing: 0,
+		wordSpacing: 0,
 		display: .inline,
 		backgroundColor: nil,
 		margin: Edges(.px(0)),
@@ -186,6 +192,8 @@ public struct ComputedStyle: Equatable, Sendable {
 		// visually spans descendants; propagating it approximates that.
 		style.underline = parent.underline
 		style.lineThrough = parent.lineThrough
+		style.letterSpacing = parent.letterSpacing
+		style.wordSpacing = parent.wordSpacing
 		// Initial border color is `currentColor`, i.e. the (inherited) color.
 		style.borderColor = Edges(parent.color)
 		return style

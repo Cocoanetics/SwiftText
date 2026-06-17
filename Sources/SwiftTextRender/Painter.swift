@@ -161,9 +161,11 @@ public final class Painter {
 		let resource = builder.resourceName(for: font)
 		let color = fragment.style.color
 
+		let letterSpacing = fragment.style.letterSpacing
 		stream.beginText()
 		stream.setColorRGB(color.red, color.green, color.blue)
 		stream.setFontSize(resource, fragment.style.fontSize)
+		if letterSpacing != 0 { stream.setCharacterSpacing(letterSpacing) }
 		stream.moveTextTo(fragment.x, geometry.pageHeightPx - pageY(fragment.baseline))
 		switch font {
 		case .standard:
@@ -172,6 +174,7 @@ public final class Painter {
 			stream.showHexString(encodeGlyphs(fragment.text, font: embedded, fontKey: font.key))
 		}
 		stream.endText()
+		if letterSpacing != 0 { stream.setCharacterSpacing(0) } // reset for following text
 
 		if fragment.style.underline || fragment.style.lineThrough {
 			paintDecorations(fragment, font: font)

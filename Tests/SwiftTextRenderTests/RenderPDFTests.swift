@@ -305,6 +305,20 @@ struct RenderPDFTests {
 		#endif
 	}
 
+	@Test("letter-spacing widens text and emits Tc")
+	func letterSpacing() async throws {
+		let plain = try await layoutTree("<p>hello</p>", contentWidth: 600)
+		let spaced = try await layoutTree("<p style=\"letter-spacing:5px\">hello</p>", contentWidth: 600)
+		let plainBlock = try #require(firstBlock(in: plain) { $0.element?.localName == "p" })
+		let spacedBlock = try #require(firstBlock(in: spaced) { $0.element?.localName == "p" })
+		let plainWidth = try #require(plainBlock.lines.first?.fragments.first?.width)
+		let spacedWidth = try #require(spacedBlock.lines.first?.fragments.first?.width)
+		#expect(abs((spacedWidth - plainWidth) - 25) < 0.5) // "hello" is 5 chars × 5px
+
+		let data = try await HTMLRenderer.renderPDF(html: "<p style=\"letter-spacing:2px\">hi</p>")
+		#expect(data.range(of: Data(" Tc".utf8)) != nil)
+	}
+
 	@Test("text-align: center shifts the line inward")
 	func textAlignCenter() async throws {
 		let left = try await layoutTree("<p>hi there</p>", contentWidth: 400)
