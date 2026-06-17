@@ -40,6 +40,7 @@ public final class Painter {
 
 	private var fontResourceNames: [String: String] = [:]
 	private var fontOrder: [String] = []
+	private var linkAnnotations: [PDFDictionary] = []
 
 	public init(geometry: PageGeometry, fonts: FontBook) {
 		self.geometry = geometry
@@ -138,7 +139,36 @@ public final class Painter {
 		stream.moveTextTo(fragment.x, geometry.pageHeightPx - pageY(fragment.baseline))
 		stream.showRawString(encodeWinAnsi(fragment.text))
 		stream.endText()
+
+		if let href = fragment.href {
+			addLinkAnnotation(for: fragment, font: font, href: href)
+		}
 	}
+
+	/// A `/Link` annotation covering a fragment, if it falls on this page slice.
+	private func addLinkAnnotation(for fragment: TextFragment, font: Font, href: String) {
+		guard fragment.baseline >= geometry.columnTop,
+		      fragment.baseline <= geometry.columnTop + geometry.sliceHeightPx else { return }
+		let ascent = font.ascent(size: fragment.style.fontSize)
+		let descent = font.descent(size: fragment.style.fontSize)
+		let topPageY = pageY(fragment.baseline) - ascent
+		let bottomPageY = pageY(fragment.baseline) + descent
+		// Annotation rectangles are in default (unscaled, y-up) user space.
+		let x0 = fragment.x * pxToPt
+		let x1 = (fragment.x + fragment.width) * pxToPt
+		let yTop = (geometry.pageHeightPx - topPageY) * pxToPt
+		let yBottom = (geometry.pageHeightPx - bottomPageY) * pxToPt
+		linkAnnotations.append(PDFDictionary([
+			("Type", "/Annot"),
+			("Subtype", "/Link"),
+			("Rect", PDFArray([x0, yBottom, x1, yTop])),
+			("Border", PDFArray([0, 0, 0])),
+			("A", PDFDictionary([("S", "/URI"), ("URI", PDFString(href))])),
+		]))
+	}
+
+	/// The link annotations collected while painting this page.
+	public func annotations() -> [PDFDictionary] { linkAnnotations }
 
 	private func encodeWinAnsi(_ text: String) -> Data {
 		// The font declares WinAnsiEncoding (Windows CP1252), which — unlike

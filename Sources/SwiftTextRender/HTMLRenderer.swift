@@ -82,6 +82,15 @@ public enum HTMLRenderer {
 				("Contents", painter.stream.reference),
 				("Resources", painter.resources()),
 			])
+			let annotations = painter.annotations()
+			if !annotations.isEmpty {
+				var references: [PDFValue] = []
+				for annotation in annotations {
+					pdf.addObject(annotation)
+					references.append(annotation.reference)
+				}
+				page["Annots"] = PDFArray(references)
+			}
 			pdf.addPage(page)
 		}
 		return pdf.write()

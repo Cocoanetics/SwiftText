@@ -131,6 +131,22 @@ struct RenderPDFTests {
 		#expect(numberedItems.map { $0.marker } == ["1.", "2.", "3."])
 	}
 
+	@Test("Links become PDF Link annotations")
+	func linkAnnotations() async throws {
+		let html = "<p>See <a href=\"https://example.com/\">our site</a> for more.</p>"
+		let data = try await HTMLRenderer.renderPDF(html: html)
+		let text = String(decoding: data, as: UTF8.self)
+		#expect(text.contains("/Subtype /Link"))
+		#expect(text.contains("example.com"))
+
+		#if canImport(PDFKit)
+		let document = try #require(PDFDocument(data: data))
+		let page = try #require(document.page(at: 0))
+		let urls = page.annotations.compactMap { ($0.action as? PDFActionURL)?.url?.absoluteString }
+		#expect(urls.contains { $0.contains("example.com") })
+		#endif
+	}
+
 	@Test("text-align: center shifts the line inward")
 	func textAlignCenter() async throws {
 		let left = try await layoutTree("<p>hi there</p>", contentWidth: 400)

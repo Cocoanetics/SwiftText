@@ -102,15 +102,18 @@ public struct TextFragment {
 	public var x: Double
 	public var y: Double
 	public var width: Double
-	/// Distance from the fragment's top to its baseline.
+	/// The line baseline this fragment sits on (absolute, y-down).
 	public var baseline: Double
+	/// The destination URL if this fragment is inside a link.
+	public var href: String?
 
-	public init(text: String, style: ComputedStyle, x: Double, y: Double, width: Double, baseline: Double) {
+	public init(text: String, style: ComputedStyle, x: Double, y: Double, width: Double, baseline: Double, href: String? = nil) {
 		self.text = text
 		self.style = style
 		self.x = x
 		self.y = y
 		self.width = width
 		self.baseline = baseline
+		self.href = href
 	}
 }

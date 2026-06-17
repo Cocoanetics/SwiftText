@@ -102,7 +102,7 @@ public final class LayoutEngine {
 	// MARK: - Inline layout
 
 	private enum InlineToken {
-		case word(String, ComputedStyle)
+		case word(String, ComputedStyle, href: String?)
 		case space(ComputedStyle)
 	}
 
@@ -110,7 +110,7 @@ public final class LayoutEngine {
 	private func layoutInline(_ box: BlockBox, contentWidth: Double, contentX: Double, contentTop: Double) -> Double {
 		var tokens: [InlineToken] = []
 		for child in box.children {
-			collectInline(child, into: &tokens)
+			collectInline(child, into: &tokens, href: nil)
 		}
 
 		var lines: [LineBox] = []
@@ -164,7 +164,7 @@ public final class LayoutEngine {
 			switch token {
 			case .space(let style):
 				if !fragments.isEmpty { pendingSpace = style }
-			case .word(let word, let style):
+			case .word(let word, let style, let href):
 				let font = fonts.font(for: style)
 				let wordWidth = font.width(of: word, size: style.fontSize)
 				let spaceWidth = pendingSpace.map { fonts.font(for: $0).width(of: " ", size: $0.fontSize) } ?? 0
@@ -177,7 +177,7 @@ public final class LayoutEngine {
 					pendingSpace = nil
 				}
 
-				let fragment = TextFragment(text: word, style: style, x: penX, y: 0, width: wordWidth, baseline: 0)
+				let fragment = TextFragment(text: word, style: style, x: penX, y: 0, width: wordWidth, baseline: 0, href: href)
 				fragments.append(fragment)
 				penX += wordWidth
 			}
@@ -188,22 +188,29 @@ public final class LayoutEngine {
 		return lineTop - contentTop
 	}
 
-	private func collectInline(_ box: Box, into tokens: inout [InlineToken]) {
+	private func collectInline(_ box: Box, into tokens: inout [InlineToken], href: String?) {
 		if let text = box as? TextBox {
 			let style = text.style
 			let content = style.whiteSpace.collapsesWhitespace ? collapseWhitespace(text.text) : text.text
 			var word = ""
 			for character in content {
 				if character == " " || character == "\t" || character == "\n" {
-					if !word.isEmpty { tokens.append(.word(word, style)); word = "" }
+					if !word.isEmpty { tokens.append(.word(word, style, href: href)); word = "" }
 					tokens.append(.space(style))
 				} else {
 					word.append(character)
 				}
 			}
-			if !word.isEmpty { tokens.append(.word(word, style)) }
+			if !word.isEmpty { tokens.append(.word(word, style, href: href)) }
 		} else if let inline = box as? InlineBox {
-			for child in inline.children { collectInline(child, into: &tokens) }
+			// An <a href> establishes a link for its descendant text.
+			let childHref: String?
+			if inline.element?.localName == "a", let linkURL = inline.element?.attributeValue("href") {
+				childHref = linkURL
+			} else {
+				childHref = href
+			}
+			for child in inline.children { collectInline(child, into: &tokens, href: childHref) }
 		}
 	}
 
