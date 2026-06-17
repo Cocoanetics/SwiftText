@@ -135,6 +135,15 @@ struct RenderPDFTests {
 	}
 	#endif
 
+	@Test("The default serif family resolves to Times-Roman")
+	func serifIsTimes() {
+		guard case .standard(let font) = FontBook().font(for: ComputedStyle.initial) else {
+			Issue.record("expected a standard font")
+			return
+		}
+		#expect(font.baseFontName == "Times-Roman") // CSS default font-family is serif
+	}
+
 	@Test("Bold text uses wider Helvetica-Bold metrics")
 	func boldMetrics() {
 		let fonts = FontBook()
