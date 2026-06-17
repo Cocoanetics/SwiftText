@@ -102,6 +102,35 @@ struct RenderPDFTests {
 		#expect(div.width == 130)
 	}
 
+	private func collectBlocks(in box: BlockBox, where predicate: (BlockBox) -> Bool) -> [BlockBox] {
+		var result: [BlockBox] = []
+		if predicate(box) { result.append(box) }
+		for child in box.children {
+			if let block = child as? BlockBox {
+				result.append(contentsOf: collectBlocks(in: block, where: predicate))
+			}
+		}
+		return result
+	}
+
+	@Test("Unordered and ordered list markers")
+	func listMarkers() async throws {
+		let unordered = try await layoutTree("<ul><li>apple</li><li>pear</li></ul>", contentWidth: 400)
+		let bulletItems = collectBlocks(in: unordered) { $0.element?.localName == "li" }
+		#expect(bulletItems.count == 2)
+		for item in bulletItems {
+			#expect(item.marker == "•")
+			let fragments = try #require(item.lines.first?.fragments)
+			#expect(fragments.first?.text == "•")
+			// The marker sits to the left of the item's text.
+			#expect((fragments.count > 1 ? fragments[1].x : .infinity) > (fragments.first?.x ?? 0))
+		}
+
+		let ordered = try await layoutTree("<ol><li>one</li><li>two</li><li>three</li></ol>", contentWidth: 400)
+		let numberedItems = collectBlocks(in: ordered) { $0.element?.localName == "li" }
+		#expect(numberedItems.map { $0.marker } == ["1.", "2.", "3."])
+	}
+
 	@Test("text-align: center shifts the line inward")
 	func textAlignCenter() async throws {
 		let left = try await layoutTree("<p>hi there</p>", contentWidth: 400)

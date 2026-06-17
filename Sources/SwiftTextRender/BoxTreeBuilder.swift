@@ -24,10 +24,28 @@ public enum BoxTreeBuilder {
 		default:
 			let block = BlockBox(style: style)
 			block.children = normalizeBlockChildren(childBoxes, parentStyle: style)
+			if style.display == .listItem {
+				block.marker = markerText(for: element)
+			}
 			box = block
 		}
 		box.element = element
 		return box
+	}
+
+	/// The marker string for a list item: an ordinal "N." inside an `<ol>`, a
+	/// bullet otherwise.
+	private static func markerText(for element: StyledElement) -> String {
+		guard let parent = element.parent else { return "•" }
+		if parent.localName == "ol" {
+			var ordinal = 0
+			for sibling in parent.elementChildren {
+				if sibling.localName == "li" { ordinal += 1 }
+				if sibling === element { break }
+			}
+			return "\(ordinal)."
+		}
+		return "•"
 	}
 
 	private static func buildChildBoxes(of element: StyledElement) -> [Box] {

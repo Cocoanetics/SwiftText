@@ -47,6 +47,8 @@ public final class BlockBox: Box {
 	/// Line boxes produced by inline layout, when this box establishes an inline
 	/// formatting context.
 	public var lines: [LineBox] = []
+	/// For `display: list-item` boxes, the marker text (e.g. "•" or "3.").
+	public var marker: String?
 
 	init(style: ComputedStyle, isAnonymous: Bool = false) {
 		self.isAnonymous = isAnonymous

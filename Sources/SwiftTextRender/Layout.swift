@@ -67,6 +67,18 @@ public final class LayoutEngine {
 			contentHeight = cursorY - contentTop
 		}
 
+		// Place a list-item marker to the left of the first line, in the padding
+		// reserved by the list's UA padding-left.
+		if let marker = box.marker, let line = firstLineBox(in: box) {
+			let font = fonts.font(for: box.style)
+			let markerWidth = font.width(of: marker, size: box.style.fontSize)
+			let gap = font.width(of: " ", size: box.style.fontSize)
+			let fragment = TextFragment(text: marker, style: box.style,
+			                            x: contentX - markerWidth - gap, y: line.y,
+			                            width: markerWidth, baseline: line.baseline)
+			line.fragments.insert(fragment, at: 0)
+		}
+
 		// Only explicit pixel heights are honored; percentages need a resolved
 		// containing height and are treated as auto for now.
 		if case .px(let fixed) = style.height {
@@ -75,6 +87,16 @@ public final class LayoutEngine {
 
 		box.height = contentHeight + paddingTop + paddingBottom + border.top + border.bottom
 		return marginTop + box.height + marginBottom
+	}
+
+	/// The first line box found in a subtree, if any.
+	private func firstLineBox(in box: Box) -> LineBox? {
+		guard let block = box as? BlockBox else { return nil }
+		if let first = block.lines.first { return first }
+		for child in block.children {
+			if let line = firstLineBox(in: child) { return line }
+		}
+		return nil
 	}
 
 	// MARK: - Inline layout
