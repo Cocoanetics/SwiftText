@@ -68,9 +68,12 @@ public final class StyledElement: SelectorElement {
 	// MARK: - Building
 
 	/// Build a styled tree from a DOM root, resolving styles top-down.
-	public static func build(domElement: DOMElement, resolver: StyleResolver) -> StyledElement {
+	public static func build(domElement: DOMElement, resolver: StyleResolver, baseDirection: Direction = .ltr) -> StyledElement {
 		let root = StyledElement(domElement: domElement, parent: nil, elementIndex: 0)
-		root.computedStyle = resolver.style(for: root, inheriting: .initial, rootFontSize: ComputedStyle.initial.fontSize)
+		// The document inherits the base direction (overridable by dir/CSS).
+		var rootParent = ComputedStyle.initial
+		rootParent.direction = baseDirection
+		root.computedStyle = resolver.style(for: root, inheriting: rootParent, rootFontSize: ComputedStyle.initial.fontSize)
 		// The root element establishes the initial containing block and is always
 		// a block container. (SwiftTextHTML wraps documents in a synthetic
 		// "document" element with no UA rule, which would otherwise be inline.)

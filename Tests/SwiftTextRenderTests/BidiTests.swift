@@ -42,6 +42,13 @@ struct BidiTests {
 		#expect(order("\u{05D0}25\u{05D1}", .rightToLeft) == [3, 1, 2, 0])
 	}
 
+	@Test("First strong direction (for dir=auto)")
+	func firstStrong() {
+		#expect(Bidi.firstStrongDirection(of: "  \u{05E9}\u{05DC}\u{05D5}\u{05DD}".unicodeScalars) == .rightToLeft)
+		#expect(Bidi.firstStrongDirection(of: "123 Hello".unicodeScalars) == .leftToRight) // digits skipped
+		#expect(Bidi.firstStrongDirection(of: "123 .,".unicodeScalars) == nil)
+	}
+
 	@Test("RTL scalar detection")
 	func rtlDetection() {
 		#expect(Bidi.isRTLScalar("\u{05D0}"))      // Hebrew alef

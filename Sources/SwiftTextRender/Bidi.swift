@@ -73,6 +73,18 @@ public enum Bidi {
 		default: return false
 		}
 	}
+
+	/// The direction of the first strong (L or R/AL) character, for `dir=auto`.
+	public static func firstStrongDirection<S: Sequence>(of scalars: S) -> BidiDirection? where S.Element == Unicode.Scalar {
+		for scalar in scalars {
+			switch bidiClass(scalar) {
+			case .l: return .leftToRight
+			case .r, .al: return .rightToLeft
+			default: continue
+			}
+		}
+		return nil
+	}
 }
 
 // MARK: - Resolution (W, N, I rules)

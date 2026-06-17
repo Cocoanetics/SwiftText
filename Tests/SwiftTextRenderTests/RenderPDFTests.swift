@@ -398,6 +398,21 @@ struct RenderPDFTests {
 		#expect(fragments[1].x + fragments[1].width > p.x + p.width - 5)
 	}
 
+	@Test("Base direction propagates to content without a dir attribute")
+	func baseDirectionPropagates() async throws {
+		// No dir attribute anywhere; the document base direction makes it RTL —
+		// this is what auto-detection gives a Hebrew Markdown file.
+		let builder = try await DomBuilder(html: Data("<p>\u{05D0}\u{05D1} \u{05D2}\u{05D3}</p>".utf8), baseURL: nil)
+		let root = try #require(builder.root)
+		let styled = StyledElement.build(domElement: root, resolver: StyleResolver(), baseDirection: .rtl)
+		let rootBox = try #require(BoxTreeBuilder.build(from: styled) as? BlockBox)
+		LayoutEngine(fonts: FontBook()).layout(root: rootBox, contentWidth: 300, originX: 0, originY: 0)
+		let p = try #require(firstBlock(in: rootBox) { $0.element?.localName == "p" })
+		let fragments = try #require(p.lines.first?.fragments)
+		#expect(fragments[0].text == "\u{05D3}\u{05D2}") // reordered + reversed, despite no dir attr
+		#expect(fragments[0].x < fragments[1].x)
+	}
+
 	@Test("A Hebrew run inside an LTR paragraph flips but stays after the Latin")
 	func hebrewInLTRParagraph() async throws {
 		let html = "<p>Hello \u{05D0}\u{05D1}\u{05D2}</p>" // "Hello אבג"

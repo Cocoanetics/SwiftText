@@ -13,6 +13,14 @@ import SwiftTextHTML
 import SwiftTextCSS
 import SwiftTextPDFWriter
 
+/// How the document's base writing direction is chosen.
+public enum BaseDirection: Sendable {
+	/// Detect from the first strong directional character (CSS `dir=auto`).
+	case auto
+	case leftToRight
+	case rightToLeft
+}
+
 public struct RenderOptions {
 	/// Page width in CSS pixels (default ≈ US Letter, 816px = 8.5in @96dpi).
 	public var pageWidthPx: Double
@@ -22,11 +30,15 @@ public struct RenderOptions {
 	public var pageHeightPx: Double?
 	/// Page margin in CSS pixels applied on all sides.
 	public var pageMarginPx: Double
+	/// The document base direction. `.auto` (default) detects RTL from content,
+	/// which is what makes Markdown (no `dir` markup) render RTL automatically.
+	public var baseDirection: BaseDirection
 
-	public init(pageWidthPx: Double = 816, pageHeightPx: Double? = 1056, pageMarginPx: Double = 32) {
+	public init(pageWidthPx: Double = 816, pageHeightPx: Double? = 1056, pageMarginPx: Double = 32, baseDirection: BaseDirection = .auto) {
 		self.pageWidthPx = pageWidthPx
 		self.pageHeightPx = pageHeightPx
 		self.pageMarginPx = pageMarginPx
+		self.baseDirection = baseDirection
 	}
 }
 
@@ -60,7 +72,16 @@ public enum HTMLRenderer {
 		// @page rules in the document override the page geometry.
 		var options = options
 		applyAtPageRules(documentSheets + css, to: &options)
-		let styled = StyledElement.build(domElement: root, resolver: resolver)
+
+		// Resolve the base direction (auto-detect from content for Markdown etc.).
+		let baseDirection: Direction
+		switch options.baseDirection {
+		case .leftToRight: baseDirection = .ltr
+		case .rightToLeft: baseDirection = .rtl
+		case .auto: baseDirection = Bidi.firstStrongDirection(of: root.text().unicodeScalars) == .rightToLeft ? .rtl : .ltr
+		}
+
+		let styled = StyledElement.build(domElement: root, resolver: resolver, baseDirection: baseDirection)
 		guard let rootBox = BoxTreeBuilder.build(from: styled) as? BlockBox else { throw RenderError.noRootBox }
 
 		let engine = LayoutEngine(fonts: fonts)
