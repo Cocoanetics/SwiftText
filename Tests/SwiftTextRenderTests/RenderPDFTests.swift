@@ -142,6 +142,20 @@ struct RenderPDFTests {
 		#expect(numberedItems.map { $0.marker } == ["1.", "2.", "3."])
 	}
 
+	@Test("<br> forces a line break")
+	func forcedLineBreak() async throws {
+		let root = try await layoutTree("<p>first line<br>second line</p>", contentWidth: 600)
+		let paragraph = try #require(firstBlock(in: root) { $0.element?.localName == "p" })
+		#expect(paragraph.lines.count == 2)
+	}
+
+	@Test("<pre> preserves newlines")
+	func preNewlines() async throws {
+		let root = try await layoutTree("<pre>line one\nline two\nline three</pre>", contentWidth: 600)
+		let pre = try #require(firstBlock(in: root) { $0.element?.localName == "pre" })
+		#expect(pre.lines.count == 3)
+	}
+
 	@Test("Links become PDF Link annotations")
 	func linkAnnotations() async throws {
 		let html = "<p>See <a href=\"https://example.com/\">our site</a> for more.</p>"

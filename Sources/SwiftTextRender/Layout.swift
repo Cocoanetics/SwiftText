@@ -114,6 +114,7 @@ public final class LayoutEngine {
 	private enum InlineToken {
 		case word(String, ComputedStyle, href: String?)
 		case space(ComputedStyle)
+		case forcedBreak(ComputedStyle)
 	}
 
 	/// Lay out the inline content of `box` into lines. Returns the content height.
@@ -174,6 +175,21 @@ public final class LayoutEngine {
 			switch token {
 			case .space(let style):
 				if !fragments.isEmpty { pendingSpace = style }
+			case .forcedBreak(let style):
+				if !fragments.isEmpty {
+					finishLine(isLast: false)
+				} else {
+					// A break with nothing on the line still consumes a line's height.
+					let height = style.resolvedLineHeight()
+					let blank = LineBox()
+					blank.x = contentX
+					blank.y = lineTop
+					blank.height = height
+					blank.baseline = height
+					lines.append(blank)
+					lineTop += height
+				}
+				pendingSpace = nil
 			case .word(let word, let style, let href):
 				let font = fonts.font(for: style)
 				let wordWidth = font.width(of: word, size: style.fontSize)
@@ -203,16 +219,28 @@ public final class LayoutEngine {
 			let style = text.style
 			let content = style.whiteSpace.collapsesWhitespace ? collapseWhitespace(text.text) : text.text
 			var word = ""
+			func flushWord() {
+				if !word.isEmpty { tokens.append(.word(word, style, href: href)); word = "" }
+			}
 			for character in content {
-				if character == " " || character == "\t" || character == "\n" {
-					if !word.isEmpty { tokens.append(.word(word, style, href: href)); word = "" }
+				if character == "\n" && !style.whiteSpace.collapsesWhitespace {
+					// Preserved newline (white-space: pre/pre-wrap/pre-line).
+					flushWord()
+					tokens.append(.forcedBreak(style))
+				} else if character == " " || character == "\t" || character == "\n" {
+					flushWord()
 					tokens.append(.space(style))
 				} else {
 					word.append(character)
 				}
 			}
-			if !word.isEmpty { tokens.append(.word(word, style, href: href)) }
+			flushWord()
 		} else if let inline = box as? InlineBox {
+			// A <br> forces a line break.
+			if inline.element?.localName == "br" {
+				tokens.append(.forcedBreak(inline.style))
+				return
+			}
 			// An <a href> establishes a link for its descendant text.
 			let childHref: String?
 			if inline.element?.localName == "a", let linkURL = inline.element?.attributeValue("href") {
