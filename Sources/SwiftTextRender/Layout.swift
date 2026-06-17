@@ -289,11 +289,80 @@ public final class LayoutEngine {
 			collectInline(child, into: &tokens, href: nil)
 		}
 
+		// Resolve bidi levels over the whole inline content (per paragraph) so each
+		// line can be reordered into visual order. Pure-LTR content skips this.
+		var bidiScalars: [Unicode.Scalar] = []
+		var tokenScalarStart: [Int] = []
+		for token in tokens {
+			tokenScalarStart.append(bidiScalars.count)
+			switch token {
+			case .word(let word, _, _): bidiScalars.append(contentsOf: word.unicodeScalars)
+			case .space: bidiScalars.append(" ")
+			case .forcedBreak: bidiScalars.append("\n")
+			}
+		}
+		let baseDirection: BidiDirection = box.style.direction == .rtl ? .rightToLeft : .leftToRight
+		let bidiLevels = Bidi.levels(for: bidiScalars, baseDirection: baseDirection)
+		let hasRTL = baseDirection == .rightToLeft || bidiLevels.contains { $0 % 2 == 1 }
+		func wordLevel(_ tokenIndex: Int) -> UInt8 {
+			guard !bidiLevels.isEmpty else { return baseDirection.baseLevel }
+			return bidiLevels[min(tokenScalarStart[tokenIndex], bidiLevels.count - 1)]
+		}
+
 		var lines: [LineBox] = []
 		var fragments: [TextFragment] = []
 		var penX = box.style.textIndent // first line indentation (reset to 0 after)
 		var pendingSpace: ComputedStyle? = nil
 		var lineTop = contentTop
+
+		func spaceWidth(_ style: ComputedStyle) -> Double {
+			fonts.font(for: style).width(of: " ", size: style.fontSize) + style.wordSpacing
+		}
+
+		// Place a line's fragments in bidi visual order: reorder by level, reverse
+		// RTL runs, and resolve start/end alignment against the base direction.
+		func placeBidiLine(_ line: LineBox, _ logical: [TextFragment], baselineFromTop: Double, isFirstLine: Bool) {
+			let levels = logical.map { $0.bidiLevel }
+			let visual = Bidi.visualOrder(levels: levels)
+			var ordered: [TextFragment] = []
+			ordered.reserveCapacity(visual.count)
+			for index in visual {
+				var fragment = logical[index]
+				if levels[index] % 2 == 1 {
+					fragment.text = String(String.UnicodeScalarView(fragment.text.unicodeScalars.reversed()))
+				}
+				ordered.append(fragment)
+			}
+
+			var total = 0.0
+			for (k, fragment) in ordered.enumerated() {
+				if k > 0 { total += spaceWidth(ordered[k - 1].style) }
+				total += fragment.width
+			}
+			let extra = max(0, contentWidth - total)
+			let rtl = box.style.direction == .rtl
+			let indent = isFirstLine ? box.style.textIndent : 0
+			var x: Double
+			switch box.style.textAlign {
+			case .center: x = extra / 2
+			case .left: x = indent
+			case .right: x = extra - indent
+			case .start: x = rtl ? extra - indent : indent
+			case .end: x = rtl ? indent : extra - indent
+			case .justify: x = rtl ? extra - indent : indent // RTL justify → start for now
+			}
+
+			line.width = total
+			for (k, fragment) in ordered.enumerated() {
+				if k > 0 { x += spaceWidth(ordered[k - 1].style) }
+				var positioned = fragment
+				positioned.x = contentX + x
+				positioned.y = lineTop
+				positioned.baseline = lineTop + baselineFromTop
+				line.fragments.append(positioned)
+				x += fragment.width
+			}
+		}
 
 		func finishLine(isLast: Bool) {
 			guard !fragments.isEmpty else { pendingSpace = nil; return }
@@ -303,30 +372,34 @@ public final class LayoutEngine {
 			// Center the text box within the line height (half-leading).
 			let baselineFromTop = ascent + (lineHeight - ascent - descent) / 2
 
-			// Horizontal alignment within the content width.
-			let extra = max(0, contentWidth - penX)
-			let gaps = fragments.count - 1
-			var offset = 0.0
-			var perGap = 0.0
-			switch box.style.textAlign {
-			case .center: offset = extra / 2
-			case .right, .end: offset = extra
-			case .justify: if !isLast, gaps > 0 { perGap = extra / Double(gaps) }
-			default: break // start / left
-			}
-
 			let line = LineBox()
 			line.x = contentX
 			line.y = lineTop
-			line.width = penX + perGap * Double(gaps)
 			line.height = lineHeight
 			line.baseline = baselineFromTop
-			line.fragments = fragments.enumerated().map { index, fragment in
-				var positioned = fragment
-				positioned.x += contentX + offset + perGap * Double(index)
-				positioned.y = lineTop
-				positioned.baseline = lineTop + baselineFromTop
-				return positioned
+
+			if hasRTL {
+				placeBidiLine(line, fragments, baselineFromTop: baselineFromTop, isFirstLine: lines.isEmpty)
+			} else {
+				// LTR fast path (unchanged): align and place in logical order.
+				let extra = max(0, contentWidth - penX)
+				let gaps = fragments.count - 1
+				var offset = 0.0
+				var perGap = 0.0
+				switch box.style.textAlign {
+				case .center: offset = extra / 2
+				case .right, .end: offset = extra
+				case .justify: if !isLast, gaps > 0 { perGap = extra / Double(gaps) }
+				default: break // start / left
+				}
+				line.width = penX + perGap * Double(gaps)
+				line.fragments = fragments.enumerated().map { index, fragment in
+					var positioned = fragment
+					positioned.x += contentX + offset + perGap * Double(index)
+					positioned.y = lineTop
+					positioned.baseline = lineTop + baselineFromTop
+					return positioned
+				}
 			}
 			lines.append(line)
 
@@ -336,7 +409,7 @@ public final class LayoutEngine {
 			pendingSpace = nil
 		}
 
-		for token in tokens {
+		for (tokenIndex, token) in tokens.enumerated() {
 			switch token {
 			case .space(let style):
 				if !fragments.isEmpty { pendingSpace = style }
@@ -374,7 +447,7 @@ public final class LayoutEngine {
 					pendingSpace = nil
 				}
 
-				let fragment = TextFragment(text: word, style: style, x: penX, y: 0, width: wordWidth, baseline: 0, href: href)
+				let fragment = TextFragment(text: word, style: style, x: penX, y: 0, width: wordWidth, baseline: 0, href: href, bidiLevel: wordLevel(tokenIndex))
 				fragments.append(fragment)
 				penX += wordWidth
 			}

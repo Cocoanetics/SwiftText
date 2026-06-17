@@ -383,6 +383,33 @@ struct RenderPDFTests {
 		#expect(abs(indentedSecond - plainSecond) < 0.5)
 	}
 
+	@Test("An RTL (Hebrew) paragraph is reordered and right-aligned")
+	func rtlParagraph() async throws {
+		// "אב גד" with dir=rtl → visually: גד(=דג) on the left, אב(=בא) on the right.
+		let html = "<p dir=\"rtl\">\u{05D0}\u{05D1} \u{05D2}\u{05D3}</p>"
+		let root = try await layoutTree(html, contentWidth: 300)
+		let p = try #require(firstBlock(in: root) { $0.element?.localName == "p" })
+		let fragments = try #require(p.lines.first?.fragments)
+		#expect(fragments.count == 2)
+		#expect(fragments[0].text == "\u{05D3}\u{05D2}") // second word, reversed
+		#expect(fragments[1].text == "\u{05D1}\u{05D0}") // first word, reversed
+		#expect(fragments[0].x < fragments[1].x)          // visual left-to-right
+		// Right-aligned: the line's right edge meets the content's right edge.
+		#expect(fragments[1].x + fragments[1].width > p.x + p.width - 5)
+	}
+
+	@Test("A Hebrew run inside an LTR paragraph flips but stays after the Latin")
+	func hebrewInLTRParagraph() async throws {
+		let html = "<p>Hello \u{05D0}\u{05D1}\u{05D2}</p>" // "Hello אבג"
+		let root = try await layoutTree(html, contentWidth: 400)
+		let p = try #require(firstBlock(in: root) { $0.element?.localName == "p" })
+		let fragments = try #require(p.lines.first?.fragments)
+		#expect(fragments.count == 2)
+		#expect(fragments[0].text == "Hello")
+		#expect(fragments[1].text == "\u{05D2}\u{05D1}\u{05D0}") // אבג reversed → גבא
+		#expect(fragments[1].x > fragments[0].x)               // Hebrew after Latin (LTR base)
+	}
+
 	@Test("text-align: center shifts the line inward")
 	func textAlignCenter() async throws {
 		let left = try await layoutTree("<p>hi there</p>", contentWidth: 400)

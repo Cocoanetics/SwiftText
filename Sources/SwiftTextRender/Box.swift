@@ -99,7 +99,7 @@ public final class LineBox {
 
 /// A shaped run of text positioned on a line.
 public struct TextFragment {
-	public let text: String
+	public var text: String
 	public let style: ComputedStyle
 	public var x: Double
 	public var y: Double
@@ -108,8 +108,10 @@ public struct TextFragment {
 	public var baseline: Double
 	/// The destination URL if this fragment is inside a link.
 	public var href: String?
+	/// The resolved bidi embedding level (odd = right-to-left).
+	public var bidiLevel: UInt8
 
-	public init(text: String, style: ComputedStyle, x: Double, y: Double, width: Double, baseline: Double, href: String? = nil) {
+	public init(text: String, style: ComputedStyle, x: Double, y: Double, width: Double, baseline: Double, href: String? = nil, bidiLevel: UInt8 = 0) {
 		self.text = text
 		self.style = style
 		self.x = x
@@ -117,5 +119,6 @@ public struct TextFragment {
 		self.width = width
 		self.baseline = baseline
 		self.href = href
+		self.bidiLevel = bidiLevel
 	}
 }
