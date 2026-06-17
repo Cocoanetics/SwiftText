@@ -1,5 +1,15 @@
 import Foundation
 
+/// A stylesheet reference found in the DOM, in document order.
+public enum StyleSheetSource: Sendable, Equatable
+{
+	/// CSS from an inline `<style>` element.
+	case inline(String)
+	/// The `href` of a `<link rel="stylesheet">`, unresolved — resolve it
+	/// against the document base URL before fetching.
+	case link(href: String)
+}
+
 public class DOMElement: DOMNode, @unchecked Sendable
 {
 	// MARK: - Public Properties
@@ -95,6 +105,58 @@ public class DOMElement: DOMNode, @unchecked Sendable
 		}
 
 		return result
+	}
+
+	/// Every stylesheet reference in this subtree, in document order: inline
+	/// `<style>` blocks and `<link rel="stylesheet">` hrefs. Order is preserved
+	/// so the cascade is honoured when the two interleave.
+	public func styleSheetSources() -> [StyleSheetSource]
+	{
+		var sources: [StyleSheetSource] = []
+		collectStyleSheetSources(into: &sources)
+		return sources
+	}
+
+	/// The CSS of every inline `<style>` element in this subtree, in document
+	/// order. Mirrors the DOM's `styleSheets`: the source is already in the tree
+	/// (as `DOMRawText`), so this needs no HTML re-parse. External `<link>`
+	/// sheets are not fetched here — see `HTMLDocument.resolvedStyleSheets()`.
+	public func styleSheets() -> [String]
+	{
+		styleSheetSources().compactMap { source in
+			if case .inline(let css) = source { return css }
+			return nil
+		}
+	}
+
+	private func collectStyleSheetSources(into sources: inout [StyleSheetSource])
+	{
+		switch name.lowercased()
+		{
+		case "style":
+			let css = children.compactMap { ($0 as? DOMRawText)?.content }.joined()
+			if !css.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+			{
+				sources.append(.inline(css))
+			}
+
+		case "link":
+			if let rel = (attributes["rel"] as? String)?.lowercased(),
+			   rel.split(whereSeparator: \.isWhitespace).contains("stylesheet"),
+			   let href = attributes["href"] as? String,
+			   !href.isEmpty
+			{
+				sources.append(.link(href: href))
+			}
+
+		default:
+			break
+		}
+
+		for case let child as DOMElement in children
+		{
+			child.collectStyleSheetSources(into: &sources)
+		}
 	}
 
 	// MARK: - Plain-text table helpers

@@ -32,6 +32,7 @@ let macOSTargets: [Target] = [
 			"SwiftTextPDF",
 			"SwiftTextDOCX",
 			"SwiftTextPages",
+			"SwiftTextRender",
 			.product(name: "ArgumentParser", package: "swift-argument-parser", condition: .when(traits: ["CLI"])),
 		],
 		path: "Sources/SwiftTextCLI",
@@ -142,6 +143,31 @@ let packageProducts: [Product] = [
 		name: "SwiftTextPages",
 		targets: ["SwiftTextPages"]
 	),
+	// Cross-platform HTML/CSS → PDF rendering engine (a port of WeasyPrint).
+	// SwiftTextPDFWriter is the Foundation-only PDF output substrate (a port of
+	// pydyf); it is always available because it has no external dependencies.
+	.library(
+		name: "SwiftTextPDFWriter",
+		targets: ["SwiftTextPDFWriter"]
+	),
+	// Pure-Swift OpenType/TrueType reader (font metrics + embeddable bytes),
+	// the replacement for fontconfig/HarfBuzz. Foundation-only, always available.
+	.library(
+		name: "SwiftTextOpenType",
+		targets: ["SwiftTextOpenType"]
+	),
+	// CSS Syntax Level 3 tokenizer + parser (a port of tinycss2).
+	// Foundation-only, always available.
+	.library(
+		name: "SwiftTextCSS",
+		targets: ["SwiftTextCSS"]
+	),
+	// The cross-platform HTML/CSS → PDF rendering engine itself: box tree,
+	// layout, and drawing over the CSS/OpenType/PDF-writer foundations.
+	.library(
+		name: "SwiftTextRender",
+		targets: ["SwiftTextRender"]
+	),
 ] + htmlProducts + macOSProducts
 
 let swiftTextDependencies: [Target.Dependency] = [
@@ -215,6 +241,51 @@ let packageTargets: [Target] = [
 		name: "SwiftTextCoreTests",
 		dependencies: ["SwiftTextCore"],
 		path: "Tests/SwiftTextCoreTests"
+	),
+	// Cross-platform HTML/CSS → PDF rendering engine (a port of WeasyPrint).
+	.target(
+		name: "SwiftTextPDFWriter",
+		path: "Sources/SwiftTextPDFWriter"
+	),
+	.testTarget(
+		name: "SwiftTextPDFWriterTests",
+		dependencies: ["SwiftTextPDFWriter"],
+		path: "Tests/SwiftTextPDFWriterTests"
+	),
+	.target(
+		name: "SwiftTextOpenType",
+		path: "Sources/SwiftTextOpenType"
+	),
+	.testTarget(
+		name: "SwiftTextOpenTypeTests",
+		dependencies: ["SwiftTextOpenType"],
+		path: "Tests/SwiftTextOpenTypeTests"
+	),
+	.target(
+		name: "SwiftTextCSS",
+		path: "Sources/SwiftTextCSS"
+	),
+	.testTarget(
+		name: "SwiftTextCSSTests",
+		dependencies: ["SwiftTextCSS"],
+		path: "Tests/SwiftTextCSSTests"
+	),
+	// The rendering engine. Depends on SwiftTextHTML (the libxml2-backed DOM,
+	// like SwiftTextCLI) plus the cross-platform CSS/OpenType/PDF foundations.
+	.target(
+		name: "SwiftTextRender",
+		dependencies: [
+			"SwiftTextHTML",
+			"SwiftTextCSS",
+			"SwiftTextOpenType",
+			"SwiftTextPDFWriter",
+		],
+		path: "Sources/SwiftTextRender"
+	),
+	.testTarget(
+		name: "SwiftTextRenderTests",
+		dependencies: ["SwiftTextRender", "SwiftTextHTML", "SwiftTextCSS"],
+		path: "Tests/SwiftTextRenderTests"
 	),
 ] + htmlTargets + macOSTargets
 
