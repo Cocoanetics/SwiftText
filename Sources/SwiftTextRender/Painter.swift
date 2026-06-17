@@ -71,7 +71,9 @@ public final class Painter {
 		if let block = box as? BlockBox {
 			paintBackground(block)
 			paintBorders(block)
-			if block.establishesInlineContext {
+			if let image = block.image {
+				paintImage(block, image: image)
+			} else if block.establishesInlineContext {
 				for line in block.lines {
 					for fragment in line.fragments {
 						paintText(fragment)
@@ -122,6 +124,32 @@ public final class Painter {
 		}
 		if border.right > 0 {
 			fillEdge(box.x + box.width - border.right, bottomY, border.right, box.height, style.borderColor.right)
+		}
+		stream.popState()
+	}
+
+	// MARK: - Images
+
+	private func paintImage(_ box: BlockBox, image: DecodedImage) {
+		let border = box.usedBorder
+		let x = box.x + border.left
+		let topColumn = box.y + border.top
+		let width = box.width - border.left - border.right
+		let height = box.height - border.top - border.bottom
+		guard width > 0, height > 0 else { return }
+		let yUpBottom = geometry.pageHeightPx - pageY(topColumn) - height
+
+		stream.pushState()
+		if let imageStream = image.pdfStream {
+			// The image is mapped onto the unit square by the CTM.
+			let name = builder.imageResourceName(for: imageStream)
+			stream.setMatrix(width, 0, 0, height, x, yUpBottom)
+			stream.drawXObject(name)
+		} else {
+			// Placeholder box for formats not embeddable yet.
+			stream.setColorRGB(0.9, 0.9, 0.9)
+			stream.rectangle(x, yUpBottom, width, height)
+			stream.fill()
 		}
 		stream.popState()
 	}

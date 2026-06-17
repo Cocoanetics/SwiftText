@@ -49,6 +49,8 @@ public final class BlockBox: Box {
 	public var lines: [LineBox] = []
 	/// For `display: list-item` boxes, the marker text (e.g. "•" or "3.").
 	public var marker: String?
+	/// For replaced `<img>` boxes, the decoded image to draw.
+	public var image: DecodedImage?
 
 	init(style: ComputedStyle, isAnonymous: Bool = false) {
 		self.isAnonymous = isAnonymous

@@ -54,6 +54,25 @@ public final class LayoutEngine {
 		box.y = borderBoxTop
 		box.width = borderBoxWidth
 
+		// Replaced image: size from intrinsic dimensions, honoring CSS width/height
+		// and preserving aspect ratio when only one is given.
+		if let image = box.image {
+			let intrinsicWidth = max(1.0, Double(image.width))
+			let intrinsicHeight = max(1.0, Double(image.height))
+			let cssHeight: Double? = { if case .px(let value) = style.height { return value }; return nil }()
+			let usedWidth: Double
+			let usedHeight: Double
+			switch (explicitWidth, cssHeight) {
+			case let (width?, height?): usedWidth = width; usedHeight = height
+			case let (width?, nil): usedWidth = width; usedHeight = intrinsicHeight * (width / intrinsicWidth)
+			case let (nil, height?): usedHeight = height; usedWidth = intrinsicWidth * (height / intrinsicHeight)
+			case (nil, nil): usedWidth = intrinsicWidth; usedHeight = intrinsicHeight
+			}
+			box.width = usedWidth + paddingLeft + paddingRight + border.left + border.right
+			box.height = usedHeight + paddingTop + paddingBottom + border.top + border.bottom
+			return box.height
+		}
+
 		let contentX = box.x + border.left + paddingLeft
 		let contentTop = box.y + border.top + paddingTop
 

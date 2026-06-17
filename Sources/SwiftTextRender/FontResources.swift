@@ -15,16 +15,29 @@ public final class FontResourceBuilder {
 	/// The shared `/Resources` dictionary referenced by every page.
 	private let resourcesDict: PDFDictionary
 	private let fontSubdictionary = PDFDictionary()
+	private let xobjectSubdictionary = PDFDictionary()
 
 	private var resourceNames: [String: String] = [:]          // font key → /F#
 	private var standardFonts: [String: StandardFont] = [:]
 	private var embeddedFonts: [String: EmbeddedFont] = [:]
 	private var usedGlyphs: [String: [Int: Unicode.Scalar]] = [:] // key → glyph → a scalar
+	private var imageNames: [ObjectIdentifier: String] = [:]   // image stream → /Im#
 
 	init(pdf: PDF) {
 		self.pdf = pdf
-		resourcesDict = PDFDictionary([("Font", fontSubdictionary)])
+		resourcesDict = PDFDictionary([("Font", fontSubdictionary), ("XObject", xobjectSubdictionary)])
 		pdf.addObject(resourcesDict)
+	}
+
+	/// The resource name for an image XObject, embedding it on first use.
+	func imageResourceName(for stream: PDFStream) -> String {
+		let identity = ObjectIdentifier(stream)
+		if let name = imageNames[identity] { return name }
+		let name = "Im\(imageNames.count + 1)"
+		imageNames[identity] = name
+		if stream.number == nil { pdf.addObject(stream) }
+		xobjectSubdictionary[name] = stream.reference
+		return name
 	}
 
 	/// A reference to the shared `/Resources` dictionary.

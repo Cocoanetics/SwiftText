@@ -15,6 +15,17 @@ public enum BoxTreeBuilder {
 		let style = element.computedStyle
 		if style.display == .none { return nil }
 
+		// Replaced <img>: a leaf block carrying the decoded image. (Only data:
+		// URIs are resolved for now; other sources produce no box.)
+		if element.localName == "img" {
+			guard let src = element.attributeValue("src"), src.hasPrefix("data:"),
+			      let image = ImageDecoder.decode(dataURI: src) else { return nil }
+			let box = BlockBox(style: style)
+			box.image = image
+			box.element = element
+			return box
+		}
+
 		let childBoxes = buildChildBoxes(of: element)
 
 		let box: Box

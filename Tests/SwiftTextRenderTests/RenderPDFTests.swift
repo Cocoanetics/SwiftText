@@ -10,6 +10,9 @@ import SwiftTextCSS
 #if canImport(PDFKit)
 import PDFKit
 #endif
+#if canImport(AppKit)
+import AppKit
+#endif
 
 @Suite("HTML to PDF")
 struct RenderPDFTests {
@@ -83,6 +86,51 @@ struct RenderPDFTests {
 		#expect(document.pageCount >= 1)
 		// ToUnicode lets the text be extracted even though it's encoded as glyphs.
 		#expect((document.string ?? "").contains("Hello"))
+		#endif
+	}
+	#endif
+
+	// A 1×1 PNG (data URI).
+	private let onePixelPNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+
+	@Test("Decodes image dimensions from a data URI")
+	func decodesImageDimensions() {
+		let image = ImageDecoder.decode(dataURI: onePixelPNG)
+		#expect(image?.width == 1)
+		#expect(image?.height == 1)
+	}
+
+	@Test("An <img> becomes a replaced box sized by CSS")
+	func imageBoxSizing() async throws {
+		let root = try await layoutTree("<img src=\"\(onePixelPNG)\" style=\"width:50px;height:30px\">", contentWidth: 400)
+		let img = try #require(firstBlock(in: root) { $0.element?.localName == "img" })
+		#expect(img.image != nil)
+		#expect(img.width == 50)
+		#expect(img.height == 30)
+	}
+
+	#if canImport(AppKit)
+	@Test("A JPEG <img> embeds as a DCTDecode image XObject")
+	func embedsJPEGImage() async throws {
+		let size = NSSize(width: 8, height: 8)
+		let image = NSImage(size: size)
+		image.lockFocus()
+		NSColor.systemBlue.setFill()
+		NSRect(origin: .zero, size: size).fill()
+		image.unlockFocus()
+		let tiff = try #require(image.tiffRepresentation)
+		let bitmap = try #require(NSBitmapImageRep(data: tiff))
+		let jpeg = try #require(bitmap.representation(using: .jpeg, properties: [:]))
+		let uri = "data:image/jpeg;base64," + jpeg.base64EncodedString()
+
+		let pdf = try await HTMLRenderer.renderPDF(html: "<img src=\"\(uri)\">")
+		func contains(_ marker: String) -> Bool { pdf.range(of: Data(marker.utf8)) != nil }
+		#expect(contains("/Subtype /Image"))
+		#expect(contains("/DCTDecode"))
+		#expect(contains("/XObject"))
+
+		#if canImport(PDFKit)
+		#expect(try #require(PDFDocument(data: pdf)).pageCount >= 1)
 		#endif
 	}
 	#endif
