@@ -49,7 +49,7 @@ Status as built (all validated opening + rendering in Pages 14.5; 214 tests gree
 | Horizontal rule | full-width box-drawing line | ◐ visual, not a native rule object |
 | Images | italic placeholder text (alt or `[image]`) | ✅ (matches DOCX exactly) |
 | Links | **clickable** hyperlink (TSWP type 2032 object + `#11` smart-field run table) + underline | ✅ |
-| Tables | tab-separated rows, bold header | ◐ content preserved; not a native TST table grid |
+| Tables | **native iWork (`TST`) grid** (header row styled, **per-column alignment** from `:--`/`:-:`/`--:`, **in-cell `**bold**`/`*italic*`/`~~strike~~`** that composes with alignment), any number per document; reads back as a Markdown table | ✅ |
 | Inline HTML / HTML blocks | raw text / dropped | ✅ (matches DOCX) |
 
 **How it works.** `MarkdownToPages.convert(_:to:)` parses with swift-markdown, walks
@@ -61,53 +61,86 @@ regenerates `Metadata/` UUIDs, and re-zips (STORED). No bundled file — the tem
 is committed Swift data (`Generated/BlankPagesTemplate.swift`, from
 `Scripts/GeneratePagesTemplate.swift`).
 
-**Remaining below full DOCX parity** (larger, separable efforts):
-- **Native tables** — reproduce the iWork `TST` table model. Today's writer renders
-  table *content* as tab-separated text (nothing lost). Dissected graph for a 2×3
-  table (`Table.pages`): in `Document.iwa` a `TableInfoArchive` (type 6000, the body
-  attachment) → `TableModelArchive` (type 6001) → six ~8.3 KB style objects (6003) +
-  several 6008s; plus ~30 `Index/Tables/*.iwa` component files (`DataList-*`,
-  `HeaderStorageBucket-*`, `Tile-*`) holding the packed cell storage; the
-  CalculationEngine grows 8→43 objects; and every new component needs a
-  `ComponentInfo` in `PackageMetadata`. Approach: capture this table as a second
-  template fragment and clone+adapt (rows/cols/cell text). Large + crash-prone (a
-  malformed TST graph makes Pages refuse to open / crash), so it's a dedicated
-  effort — verify each stage opens in Pages before committing.
+**Native tables — IMPLEMENTED end-to-end, any number per document (2026-06-15).**
+`MarkdownToPages` emits a native iWork (`TST`) grid for every Markdown table, and
+`PagesParser` reads each back as a Markdown table (full round-trip). Production code:
+`PagesTableBuilder` (regenerates the dimension objects per R×C; relocates each table's
+object set by a fixed id offset for tables after the first),
+`Generated/PagesTableTemplate.swift` (the captured 77-object table delta, via
+`Scripts/GeneratePagesTableTemplate.swift`), `PagesWriter` (injection + `PackageMetadata`),
+the body serializer's `#9` attachment run table, and `PagesParser.tableGrid(forAttachment:)`.
 
-  **Cell-storage format (dissected, `Table.pages` = 4 cols × 5 rows):**
-  - **Cell text** is a shared-string list in `Tables/DataList.iwa` (`TST.TableDataList`,
-    type **6005**): `#1` list-id, `#2` count, repeated `#3 { #1 key, #2 1, #3 string }`
-    (the sample's are "H1".."H4","row1",…). Trivial to (re)generate.
-  - **Grid** is `Tables/Tile.iwa` (`TST.Tile`, type **6002**): `#4` = row count; one
-    repeated `#5` per row `{ #1 rowIndex, #2 colCount, #3/#4/#7 fixed column/offset
-    tables (510-byte, 0xFF-padded), #6 packed per-cell records referencing DataList
-    string keys as 4-byte LE ints }`. **Regenerating `#6` for arbitrary dimensions is
-    the hard part** — a packed binary, not protobuf.
-  - Most other objects (six ~8 KB `6003` table *styles*, `6008`s, `HeaderStorageBucket`s)
-    are static → clone verbatim. So the real work is: emit `DataList` strings + the
-    packed `Tile` `#6` for the Markdown rows/cols, set `TableModelArchive` (6001)
-    row/col counts, clone the rest, anchor `TableInfoArchive` (6000) in the body, and
-    register every `Tables/` component in `PackageMetadata`.
-  - **Body anchor (decoded):** the body `StorageArchive`'s text (`#3`) has a `U+FFFC`
-    char at the table position, and **field `#9` is the attachment run table** —
-    `{ #1 { #1 charIndex, #2 { #1 attachmentObjectId } } }` — mapping that offset to
-    the `type 2003` drawable attachment. Also: the table delta over the blank template
-    is small in `Document.iwa` (just the one `2003` object); everything else is the
-    `Tables/` components + CalculationEngine objects (a static table may open without
-    the calc objects — worth testing first). **PROVEN feasible (2026-06-15):** a real
-    table written through our Snappy+framing+STORED-zip — `Table.pages` re-emitted with
-    its `DataList` (6005) cell strings rewritten — opens in Pages and renders a native
-    grid with the new cell text (Fruit/Qty/… headers, Apple/Pear/… rows), no crash. So
-    cell *content* is fully controllable via the DataList; the remaining work is
-    arbitrary dimensions (regenerate the `Tile` `#6`) + injecting the table into the
-    blank template. The attachment chain continues:
-    `type 2003` drawable-attachment object (sample
-    id 1734389) whose `#1` → `TableInfoArchive` (6000) → `TableModelArchive` (6001) →
-    Tile/DataList cells. The table's object ids (1733xxx–1734xxx) sit above the blank
-    template's range (≤1732620), so injecting them needs no id remapping — but bump
-    `PackageMetadata.#1` (id high-water mark). The CalculationEngine gains ~35 table
-    objects to clone too. **Full graph is now reverse-engineered; what remains is the
-    (crash-prone) implementation + per-stage Pages verification.**
+**Multi-table relocation.** Each additional table reuses the captured object set shifted
+by `tableIndex * 4096` (kept < 2^21 so ids stay 3-byte varints → no payload-length
+changes). `PagesTableBuilder` shifts the object id, the `MessageInfo.object_references`
+(#5) / `FieldInfo` (#4), and every captured-id reference inside the payload (re-encoding a
+sub-message only when it truly contains a reference, so strings/raw fields are preserved).
+Its `Index/Tables/*` files get id-suffixed names. **`PackageMetadata` cross-references
+(`#6`/`#7`) are gating** (verified: stripping them breaks even a single-table doc), so
+`relocateComponentMetadata` clones each table-involving external reference at the matching
+offset and registers each relocated `Tables/*` component. The recipe below documents the
+format; it was proven first via throwaway scripts (`stageA.swift`, `stageB.swift`).
+
+**Injection model (no id remapping for one table).** `Table.pages` = `Empty.pages` +
+a table. Diffing object-id sets: the table is **77 delta objects, all ids 1732664–1734988,
+strictly above Empty's max (1732661)** — so injecting them into the blank template needs
+**zero re-id** for a single table (a 2nd table needs an id offset). The 77 deltas:
+36 in `CalculationEngine` (incl. the model + calc scaffold), ~30 in `Index/Tables/*`,
+1 in `Document.iwa` (the `2003` attachment), 1 in `DocumentStylesheet` (a cell para style
+2022), 1 in `Metadata.iwa` (an `11015`), 8 in `ViewState`. **Stage A proven:** injecting
+all 77 verbatim + swapping the body storage (`1732539`) + using `Table.pages`'s
+`Metadata.iwa` wholesale → a 5×4 native grid renders in an otherwise-blank doc, no crash.
+
+**Body anchor:** body `StorageArchive` `#3` text has a `U+FFFC` at the table position;
+field **`#9` is the attachment run table** `{ #1 { #1 charIndex, #2 { #1 attachmentId } } }`.
+Chain: `#9` → `2003` drawable-attachment (`#1` → `6000`) → `TableInfoArchive` 6000
+(`#2` → `6001`) → `TableModelArchive` 6001 → tiles/datalists.
+
+**THE dimension source = `base_column_row_uids` (`ColumnRowUIDMapArchive`,** sample id
+**1733217, model field `#46`).** Count of **`#1` = number of columns**, count of
+**`#4` = number of rows**. Each UID = `{ #1 uint64, #2 uint64 }`. `#2`/`#3` are column
+orderings, `#5`/`#6` row orderings (identity `0..n-1` is fine). **Empirically (probe3):
+editing only this object resizes the rendered grid; editing the model `#6`/`#7`, the tile,
+the header buckets, or the table frame — individually OR together — does NOT.** Pages reads
+cell *content* positionally from the tile but takes the grid *extent* from this UID map.
+For >4 cols / >5 rows the captured UIDs run out → generate fresh unique uint64 pairs (cells
+don't reference UIDs, so any unique values work).
+
+**Full R×C resize recipe (6 objects; all proven, opens clean, Stage B):**
+1. **`base_column_row_uids` (1733217)** — C col UIDs (`#1`) + R row UIDs (`#4`) + orderings
+   `#2`/`#3`=`0..C-1`, `#5`/`#6`=`0..R-1`. ← the extent driver.
+2. **`Tile` (6002, 1733209)** — top: `#1`maxColumn/`#2`maxRow/`#3`numCells = 0 (as Apple
+   ships), **`#4` numrows = R**, **`#6` storage_version = 5 (constant!)**, `#7`
+   last_saved_in_BNC = 1. One repeated **`#5` `TileRowInfo`** per row:
+   `#1` row index, **`#2` cell_count = C**, `#3` cell_storage_buffer_pre_bnc (C × 12-byte
+   col-meta `04 00 00 00`+8 zero), `#4` cell_offsets_pre_bnc (uint16 `0,12,…`+`0xFFFF`
+   pad to **510 B**), **`#5` storage_version = 5 (constant!)**, `#6` cell_storage_buffer
+   (the C cell records), `#7` cell_offsets (uint16 byte-offsets into `#6`, `0xFFFF` pad to
+   510 B). **Gotcha:** `Tile.#6` and `TileRowInfo.#5` are *storage_version* fields (=5),
+   NOT counts — setting them to R/C corrupts parsing.
+   **String cell record:** header-row = 28 B `05 03 00 00 00 00 00 00 | 48 10 02 00 |
+   <key u32 @ off 12> | 01 00 00 00 05 00 00 00 01 00 00 00`; body = 24 B with styleword
+   `08 10 02 00` and tail `05 00 00 00 01 00 00 00`. All-text Markdown cells → use these.
+3. **cell `DataList` (6005, 1733190 = `base_data_store.stringTable`)** — `#1` listid=1,
+   `#2` count=maxKey+1, repeated `#3 { #1 key, #2 1, #3 string }`. Keys = `r*C+c+1`,
+   row-major; the cell `u32@12` references the key.
+4. **`TableModelArchive` (6001, 1733271)** — `#6` number_of_rows=R, `#7`
+   number_of_columns=C. (Schema confirmed via numbers-parser `TSTArchives.proto`: `#18-21`
+   are body/header/footer *styles* not per-column; `#60-80` are category/label styles.)
+   `base_data_store` (`#4`, `TST.DataStore`): `#1` rowHeaders(HeaderStorage→row bucket),
+   `#2` columnHeaders(→col bucket), `#3` tiles(`TileStorage`→tile, `#2`=tile_size 256),
+   `#4` stringTable, `#9/#10` row/col `TableRBTree`, `#14` storage_version_pre_bnc=4
+   (**don't touch — not a count**).
+5. **header buckets (`HeaderStorageBucket` 6006)** — row bucket (1733229): **R** `Header`s
+   `{ #1 idx, #2 f32 height(22.73), #3 0, #4 C }`; col bucket (1733266): **C** `Header`s
+   `{ #1 idx, #2 f32 width(120.386), #3 0, #4 R }`.
+6. **frame (`TableInfoArchive` 6000, 1733236)** — `#1` GeometryArchive `#2` size = `{ w =
+   C×120.386, h = R×22.73 }` (else the grid is clipped/over-extended visually).
+
+Most `Tables/` DataLists are **empty placeholders** (count=1, 0 entries) — clone verbatim.
+For Markdown set `number_of_header_rows`=1, `number_of_header_columns`=0 (else col 0 renders
+as a bold row-header). `PackageMetadata`: use the captured `Metadata.iwa` (component layout
+matches after injection) or add a `ComponentInfo` per new `Tables/` file + bump `#1`.
 - ~~Clickable hyperlinks~~ — **done**: each link emits a `TSWP` hyperlink object
   (type 2032: `#1`={smart-field UUID}, `#2`=URL) referenced from a `#11` smart-field
   run table over the link's character range (byte-pattern-identical to a Pages-authored link).
@@ -380,9 +413,10 @@ stylesheet, ideally collapsed into a single component.
    `Snappy.compress` **per ≤64 KiB uncompressed slice**, one `0x00`+3-byte-LE chunk
    each, no stream-id/CRC; `MessageInfo` with `#5` object_references. Pure & unit-testable.
 2. **Round-trip harness**: read a corpus `.iwa` → re-serialize via the new writer →
-   assert the object graph survives `IWAArchive.objects` (object-for-object; exact
-   bytes may differ since our Snappy match choices differ from Apple's). Then that
-   Pages opens a re-zipped, otherwise-unchanged document. Validates the writer first.
+   assert the object graph survives `IWAArchive.objects` (object-for-object). Re-emitted
+   bytes are in fact **byte-identical** to Apple's: `Snappy.compress` is a faithful port
+   of Snappy 1.1.9 (the version iWork ships — see the byte-parity section below), so a
+   re-zipped, otherwise-unchanged document reproduces the original to the byte.
 3. **Template-mutation MVP**: bundle a blank `.pages`; edit the body storage `#3`
    text + run tables; re-serialize only `Document.iwa`; re-zip (STORED) carrying
    `Metadata/`+previews; confirm Pages opens and shows the new text.
@@ -434,3 +468,225 @@ Still genuinely open (only matters for Strategy B / from-scratch):
 > **Dumping `TP.*` type numbers (only if going from scratch):** attach `lldb` to
 > Pages.app and `po [TSPRegistry sharedRegistry]`; `numbers-parser`'s
 > `protos/generate_mapping.py` reformats that output. Not needed for template-mutation.
+
+---
+
+## Cell-level table settings (decoded via edit-and-diff, 2026-06-16)
+
+Observed by editing a generated table in Pages, saving, and diffing the IWA.
+
+**Table-level toggles (implemented):** title = `TableModelArchive.table_name_enabled` #22
++ `DrawableArchive.title_hidden` #12; caption = `DrawableArchive.caption_hidden` #13.
+Style-driven (inherited from the theme `table-0-tableStyle` 6003 → `table_properties`
+#11, `TST.TableStylePropertiesArchive`): `banded_rows` #1, `auto_resize` #22, gridline
+visibility `v/h_strokes_visible` #33/#34 + separators #35–#37, `table_border_visible`
+#38, stroke styles #46–#61. Header/footer counts = model #9/#10/#11. Row/col sizes =
+`HeaderStorageBucket.Header.size` #2.
+
+**Cell text alignment — IMPLEMENTED (2026-06-16); five interlocking pieces, all
+validated by Pages.** Horizontal alignment is NOT in the cell style
+(`CellStylePropertiesArchive` has only `vertical_alignment` #8, `text_wrap` #3, fill,
+strokes, padding). Instead:
+- Each tile cell record's word **W1** (bytes 16–19, right after the 4-byte string key) is
+  a **key into `DataStore.styleTable`** (the `DataList` whose list-id is 4; sample id
+  1733212), NOT a direct enum.
+- styleTable entry = `{ #1 key, #2 refcount, #4 { #1 styleRef } }` → a `TSWP`
+  paragraph style (type 2022). The style's `para_properties` (#12) `#1` field is the
+  alignment override.
+- Pages creates a distinct style per (alignment × header/body), because the **parent**
+  base differs by bold: `1731526` "Table Style 1" (bold, header) vs `1731527`
+  "Table Style 2" (regular, body); both parents have `#12 #1 = 4` (natural).
+- `#12 #1` override values: **right = 1, center = 2**. Left columns use no override —
+  their body cells are left *unstyled* (24-byte cell, SW `0x08`, no W1), so they fall
+  back to the default left. (This is the left-vs-center resolution: left isn't a `#12`
+  value, it's the absence of a style key.)
+- **Two more references must be registered or Pages silently drops the styling / reports
+  the doc "damaged":** (a) each synth style's `MessageInfo #5` object_references must
+  list its parent; (b) the styleTable's `MessageInfo #5` must list all the synth style
+  ids; (c) the styleTable component's `PackageMetadata ComponentInfo #6` must add
+  `{component = DocumentStylesheet, object = styleId}` per synth style.
+- Done in `PagesTableBuilder.styling(for:)` / `styleRecord` / `relocateComponentMetadata`,
+  `PagesWriter.tablePackageMetadata`, and `PagesParser.tableGrid(forAttachment:)` (reads
+  the style key → style `#12` to recover the alignment marker). Works for any number of
+  tables (synth style ids are allocated per table id offset).
+
+**In-cell bold/italic — IMPLEMENTED (2026-06-16); validated by Pages.** A cell with any
+inline `**bold**`/`*italic*`/`~~strike~~`/`` `code` `` stops being a plain string and
+becomes a rich-text cell:
+- The cell's text leaves the `stringTable` `DataList` and moves into a **`TSWP`
+  `StorageArchive` (type 2001)** — same shape as the body storage: `#3` text (no markup)
+  + `#8` char-style run table → synthesized char styles (type 2021, parented to the
+  None char style `1731539`, e.g. bold `#11 #1 = 1`, italic `#11 #2 = 1`).
+- `DataStore` `#17` = `rich_text_table` → a `DataList` (list-id 8). Entry =
+  `{ #1 key, #2 1, #9 { #1 ref } }` (note `#9`, vs `#4` styleTable / `#3` strings). The
+  ref is **not** the storage directly but a **type-6218 wrapper** (`#1 { #1 storageRef }`,
+  `#3` = a captured-verbatim "whole range" descriptor); the wrapper points at the 2001.
+- The tile cell record flips from `05 03` to **`05 09`**, its flags word from `08/48` to
+  **`10 10 02 00`** (the `0x10` "has rich id" bit), and the `u32` at byte 12 becomes the
+  **rich_text_table key** instead of the string key.
+- Cross-refs: the storage's `MessageInfo #5` lists `[paraStyle, listNone, charStyleIDs]`
+  (**not** the stylesheet root); the wrapper's `#5` lists `[storageID]`; the
+  rich_text_table component's `ComponentInfo #6` cross-references every char/para style
+  the storages reach (all in `DocumentStylesheet` 1732613) or Pages reports "damaged".
+- **Alignment composes with formatting:** a rich cell has no styleTable key to hang a
+  paragraph style on, so it takes the column's alignment through its **own** storage
+  paragraph style (`#5` run table → the synthesized alignment style for center/right).
+  The reader recovers a rich cell's alignment from that same `#5 → #12 #1`.
+- **Gotcha (cost a real "renders regular" bug):** a char-run "back to unstyled" entry at
+  index == text length is one past the last character; Pages discards the *entire* run
+  table when one is present, so a fully-styled cell (or a body ending in a styled run)
+  loses all formatting. A run extends to the next entry / the text end, so entries at or
+  beyond the text length are filtered out in both the cell and body builders.
+- Reader: a `05 09` cell → rich_text_table key → 6218 wrapper → storage → `#8` run table
+  → inline markup (reusing the body's emphasis machinery), plus `#5 → #12 #1` alignment.
+
+## Typed wire models — the programmatic read/write foundation (2026-06-16)
+
+Hand-decoding each setting by edit-and-diff is superseded by **generated typed models**.
+`Scripts/GenerateIWAModels.swift` (in-house proto2→Swift generator) reads the iWork
+schemas (from psobot/keynote-parser, MIT — **not vendored here**; see
+[IWA-PROTOBUF-SCHEMAS.md](IWA-PROTOBUF-SCHEMAS.md)) and emits
+`Sources/SwiftTextPages/Generated/IWA/`: **483** message
+structs backed by SwiftText's own `ProtobufReader`/`ProtobufWriter` (no swift-protobuf
+dep), plus `IWATypeRegistry` mapping **211** IWA type numbers → models.
+
+Each model decodes from a `ProtobufMessage`, re-encodes via `ProtobufWriter`, honors
+`[packed]`, and preserves un-modeled fields (`unknownFields`) for lossless round-trips.
+**Validated: 3004/3004 modeled objects across six real `.pages` round-trip byte-identical
+(canonical compare).** So every documented setting is now typed and named — e.g.
+`TST_CellStylePropertiesArchive { cellFill, verticalAlignment, textWrap, padding,
+{top,right,bottom,left}Stroke }`, `TSD_FillArchive { color, gradient, image }`,
+`TSD_StrokeArchive { color, width, cap, join, … }`, `TSP_Color { model, r,g,b,a, … }`.
+
+### Cell-styling layers (decoded via the models)
+
+A cell's appearance comes from **three** layers, not one:
+1. **Table-style preset** — `TableStyleArchive` (6003) / `DefaultCellStylesContainerArchive`
+   (6302) hold the `CellStyleArchive` (6004) objects that paint header / body /
+   alternating-row fills by *region*. In `CustomTable.pages` these are the ~60 fills
+   (e.g. header `rgba(0,0.64,1,1)`); they are **not** per-cell overrides.
+2. **Per-cell paragraph override** — `DataStore.styletable` (#5, a `TableDataList`) maps a
+   cell's tile-record style key → a **`ParagraphStyleArchive` (2022)** (`#12 #1` = text
+   alignment). Confirmed: matches the committed column-alignment implementation.
+3. **Per-cell cell-style override** — a manually-filled single cell references a
+   `CellStyleArchive` (6004) carrying `cellProperties` (fill/stroke/v-align/wrap).
+
+To build a setting in code: construct the relevant generated archive and `.encoded()` it,
+then wire it into the object graph via the appropriate layer above. Regenerate models by
+fetching the upstream schemas (see [IWA-PROTOBUF-SCHEMAS.md](IWA-PROTOBUF-SCHEMAS.md)) into a
+local dir and running
+`swift Scripts/GenerateIWAModels.swift <protos-dir> Sources/SwiftTextPages/Generated/IWA`.
+
+### Per-cell appearance — IMPLEMENTED via the comprehensive model (2026-06-16)
+
+`PagesTable` carries a programmatic styling layer: `cellAppearances` (fill / vertical
+alignment / text wrap / per-edge borders), `columnWidths` / `rowHeights`, and
+`headerRows` / `headerColumns` / `footerRows`. The builder synthesizes each distinct
+appearance into a `TST.CellStyleArchive` (6004) via the generated wire models
+(`cellStyleArchive(_:parent:)`): `super.parent` → a base cell style (1731720),
+`cell_properties` = fill (`TSD.FillArchive` → `TSP.Color` model 1 RGBA) / strokes
+(`TSD.StrokeArchive`) / `vertical_alignment` (#8) / `text_wrap` (#3). It lives in
+`DocumentStylesheet`, joins the style table, and is cross-referenced like the alignment
+styles.
+
+**The decisive detail (cost a "fill doesn't render" bug): the cell's tile record flag.**
+A per-cell *paragraph* style (alignment, 2022) is keyed via SW byte `0x48` (the `0x40`
+bit). A per-cell **cell** style (appearance, 6004) is keyed via SW byte **`0x28`** (the
+`0x20` bit) — same 28-byte layout, same offset-16 key slot, different flag. A 6004
+referenced through the `0x40` paragraph key is silently ignored; it must be `0x20`.
+(RE'd by filling a string cell in Pages and diffing: `05 03 … 28 10 02 00 <strKey>
+<styleKey> …`.)
+
+Header/footer counts patch `TableModelArchive` #9/#10/#11; widths/heights fill the
+`HeaderStorageBucket` `#2` f32 sizes. **Pages-validated rendering: fill, vertical
+alignment, column widths.** Per-cell borders are emitted as solid `TSD.StrokeArchive`s
+and round-trip, but Pages renders cell borders from the table's stroke layer rather than
+per-cell `cell_properties` strokes — still to wire.
+
+---
+
+## Cold synthesis framework — the typed object graph (2026-06-16)
+
+Everything above either patches bytes of a captured archive or splices pre-built object
+sets into it. The **cold synthesis framework** replaces that with a typed, editable model
+of the whole document — read a package in, manipulate it as objects, write a valid package
+back out, with the record framing and `PackageMetadata` *recomputed from the model* rather
+than copied. It is the foundation a document builder stands on, and it is app-agnostic: the
+shared `TS*` object layer is byte-identical across Pages, Numbers and Keynote, so the same
+machinery round-trips all three (validated: Pages ~570 objects, a Numbers doc 335/335
+records byte-identical, a Keynote deck 1309/1309 — zero dangling references in each).
+
+### The layers
+
+- **`IWAPackage`** (package I/O) — parses each `Index/*.iwa` into framing-preserving
+  `IWARecord`s (an `ArchiveInfo` id `#1` plus a *repeated* `MessageInfo` `#2`, so one record
+  can hold several object parts) and keeps everything else (`Metadata/`, previews) raw.
+  `write(to:)` re-frames and STORED-zips. A `Part` is either *preserved* (re-emits Apple's
+  `MessageInfo` verbatim, only recomputing the `#3` length) or *synthesized* (emits `#1`
+  type, `#3` length, `#5` packed `object_references`).
+
+- **`IWAReferenceScanner`** (the reference engine) — schema-less recovery of an object's
+  cross-references. Every link is a `TSP.Reference`/`DataReference`, i.e. a sub-message
+  whose `identifier` is at `#1` and whose only other fields are the two deprecated scalars
+  (`#2`/`#3`). The scanner walks the payload's message tree and records any *reference-shaped*
+  sub-message whose `#1` names a known object. Restricting to known ids (which live in a
+  high, sparse range) is what makes it exact, not heuristic. **Validated against Apple's
+  stored `object_references` across the blank template: it never misses a real reference**
+  (it is a complete superset — Apple additionally omits some style/stylesheet back-pointers
+  it resolves through the stylesheet, which is safe to include since the targets exist, and
+  which Pages accepts).
+
+- **`IWAObjectGraph`** (the editable model) — components + records, an id allocator
+  (one past the high-water mark), reachability (`reachable(from:)`, the mark phase of a GC),
+  `referencedIDs(of:)`, `addObject`/`replacePayload` taking typed-model bytes, and
+  `syncPackageMetadata()` which raises `last_object_identifier` to cover every synthesized
+  id. `read(_:)`/`package()` convert to and from `IWAPackage`; synthesized records get their
+  `#5` recomputed on export, unchanged records keep Apple's framing (so an untouched
+  document round-trips byte-for-byte).
+
+- **`PagesSynthesizer`** (the Pages app layer) — sources the bundled blank document as a
+  *theme + scaffold* (exactly as a Pages theme would supply the stylesheet), rebuilds the
+  body text storage and any synthesized character-style (2021) / hyperlink (2032) objects
+  through the graph, syncs metadata, applies a fresh document identity, and writes. A
+  `NumbersSynthesizer`/`KeynoteSynthesizer` would wrap the same `IWAObjectGraph`, supplying
+  the `TN`/`KN` root and theme — the engine doesn't change.
+
+### Validated in Pages
+
+A graph-synthesized document opens cleanly in Pages.app (no repair dialog), which proves
+Pages accepts the computed superset `object_references`. Both the *replace* path (plain
+body text) and the *add* path (a formatted body that synthesizes a combined bold-italic
+character style and a hyperlink object, placed via `addObject` with computed `#5`) render
+correctly — heading style, bold, italic, bold-italic and link all intact.
+
+The distinction from `PagesWriter` (which surgically edits archive bytes): the synthesizer
+holds the whole document as an inspectable typed graph, so references and metadata are
+derived generically instead of hand-patched per feature — the property that lets the same
+core extend to Numbers and Keynote.
+
+---
+
+## Byte-parity round-trip + Snappy 1.1.9 (2026-06-16)
+
+Reading a `.pages` and writing it back reproduces the file **byte-for-byte**, for both
+package layouts:
+- **Flat zip** (`IWAPackage.read(zip:)` → `write(to:)`) — every Downloads document.
+- **Directory bundle** (`read(directoryPackageAt:)` → `writeDirectoryPackage(to:)`) —
+  nested `Index.zip` + loose `Metadata/`/previews, all reproduced exactly.
+
+Three layers had to be exact: (1) **ZIP container** — `StoredZipWriter.Metadata` + `ZipReader`
+preserve per-entry DOS timestamp, version-made-by (`0x3e`), and the 16-byte Zip64-style
+*local* extra field Apple puts on non-`Index/` entries; (2) **verbatim IWA** — unchanged
+components re-emit their original compressed bytes; (3) **Snappy** — see below.
+
+**Apple's iWork ships Snappy 1.1.9.** Established empirically: compiling the reference
+Snappy at every release tag (1.1.3–1.2.2) and compressing real `.pages` blocks, only
+**1.1.9/1.1.10** reproduce Apple's output on every block; older tags miss small/large
+blocks and 1.2.0+ changed the inner loop. `Snappy.compress` is now a faithful port of
+1.1.9's `CompressFragment`, **byte-identical to the reference 1.1.9 binary** on every
+Apple-authored block — so even *recompressed* (modified/synthesized) content matches
+Apple, not just verbatim round-trips. The decisive detail was the hash:
+`((bytes * 0x1e35a7bd) >> (32 - 14)) & mask` (fixed shift, then masked to the table) — a
+table-relative shift looked equivalent for the full 16384 table but took different bits
+for the downsized tables small blocks use. Reference checkout:
+`/Users/oliver/Developer/Others/snappy`.

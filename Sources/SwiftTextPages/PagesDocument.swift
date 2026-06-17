@@ -1,4 +1,5 @@
 import Foundation
+import Markdown
 
 /// A parsed Pages document reduced to its ordered body paragraphs.
 ///
@@ -75,6 +76,8 @@ public struct PagesDocument {
 		/// Character-emphasis spans over `text`, sorted by `start` (a paragraph-
 		/// relative UTF-16 offset); each applies until the next span.
 		public var emphasis: [EmphasisSpan]
+		/// Hyperlink ranges over `text`, rendered as `[text](url)` in Markdown.
+		public var links: [LinkRun]
 		/// The list nesting level (0-based) when this paragraph is a list item,
 		/// else `nil`.
 		public var listLevel: Int?
@@ -83,6 +86,24 @@ public struct PagesDocument {
 		/// Footnote reference markers within the paragraph, by paragraph-relative
 		/// UTF-16 offset, sorted. Each becomes `[^number]` in Markdown.
 		public var footnoteMarkers: [FootnoteMarker]
+		/// Native tables anchored in this paragraph, in anchor order; rendered as
+		/// Markdown tables.
+		public var tables: [Table]
+		/// Whether this paragraph belongs to a preformatted code block (the "Code
+		/// Block" style). Consecutive code-block paragraphs render as one fenced block.
+		public var isCodeBlock: Bool
+
+		/// A native table reconstructed from the iWork grid: cell strings (row 0 =
+		/// header) plus per-column horizontal alignment.
+		public struct Table {
+			public enum ColumnAlignment: Sendable { case left, center, right }
+			public var cells: [[String]]
+			public var columnAlignments: [ColumnAlignment]
+			public init(cells: [[String]], columnAlignments: [ColumnAlignment] = []) {
+				self.cells = cells
+				self.columnAlignments = columnAlignments
+			}
+		}
 
 		public init(
 			text: String,
@@ -91,9 +112,12 @@ public struct PagesDocument {
 			headingLevel: Int? = nil,
 			attachmentReferences: [String?] = [],
 			emphasis: [EmphasisSpan] = [],
+			links: [LinkRun] = [],
 			listLevel: Int? = nil,
 			listOrdered: Bool = false,
-			footnoteMarkers: [FootnoteMarker] = []
+			footnoteMarkers: [FootnoteMarker] = [],
+			tables: [Table] = [],
+			isCodeBlock: Bool = false
 		) {
 			self.text = text
 			self.fontSize = fontSize
@@ -101,9 +125,12 @@ public struct PagesDocument {
 			self.headingLevel = headingLevel
 			self.attachmentReferences = attachmentReferences
 			self.emphasis = emphasis
+			self.links = links
 			self.listLevel = listLevel
 			self.listOrdered = listOrdered
 			self.footnoteMarkers = footnoteMarkers
+			self.tables = tables
+			self.isCodeBlock = isCodeBlock
 		}
 
 		/// A footnote reference at a paragraph-relative UTF-16 offset.
@@ -124,12 +151,29 @@ public struct PagesDocument {
 			public var bold: Bool
 			public var italic: Bool
 			public var strike: Bool
+			public var code: Bool
 
-			public init(start: Int, bold: Bool, italic: Bool, strike: Bool = false) {
+			public init(start: Int, bold: Bool, italic: Bool, strike: Bool = false, code: Bool = false) {
 				self.start = start
 				self.bold = bold
 				self.italic = italic
 				self.strike = strike
+				self.code = code
+			}
+		}
+
+		/// A hyperlink covering a paragraph-relative UTF-16 range `[start, end)`,
+		/// rendered as `[text](url)`. Recovered from the storage's smart-field run
+		/// table (`#11`) and the referenced `TSWP` hyperlink objects (type 2032).
+		public struct LinkRun {
+			public var start: Int
+			public var end: Int
+			public var url: String
+
+			public init(start: Int, end: Int, url: String) {
+				self.start = start
+				self.end = end
+				self.url = url
 			}
 		}
 
@@ -143,6 +187,7 @@ public struct PagesDocument {
 			var runBold = false
 			var runItalic = false
 			var runStrike = false
+			var runCode = false
 			var anchorIndex = 0
 			var relativeOffset = 0
 			var spanIndex = 0
@@ -150,10 +195,18 @@ public struct PagesDocument {
 			var activeBold = false
 			var activeItalic = false
 			var activeStrike = false
+			var activeCode = false
+
+			// Hyperlink ranges, applied as `[text](url)` in Markdown. Tracked alongside
+			// emphasis: entering a link emits `[`, leaving it emits `](url)`.
+			let sortedLinks = applyingEmphasis ? links.sorted { $0.start < $1.start } : []
+			var linkIndex = 0
+			var activeLinkEnd: Int?
+			var activeLinkURL = ""
 
 			func flushRun() {
 				guard !runText.isEmpty else { return }
-				output += applyingEmphasis ? PagesDocument.markedUp(runText, bold: runBold, italic: runItalic, strike: runStrike) : runText
+				output += applyingEmphasis ? PagesDocument.markedUp(runText, bold: runBold, italic: runItalic, strike: runStrike, code: runCode) : runText
 				runText = ""
 			}
 
@@ -172,7 +225,24 @@ public struct PagesDocument {
 					activeBold = emphasis[spanIndex].bold
 					activeItalic = emphasis[spanIndex].italic
 					activeStrike = emphasis[spanIndex].strike
+					activeCode = emphasis[spanIndex].code
 					spanIndex += 1
+				}
+				// Close a finished link, then open a new one starting here.
+				if let end = activeLinkEnd, relativeOffset >= end {
+					flushRun()
+					output += "](\(activeLinkURL))"
+					activeLinkEnd = nil
+				}
+				while linkIndex < sortedLinks.count, sortedLinks[linkIndex].start <= relativeOffset {
+					let link = sortedLinks[linkIndex]
+					linkIndex += 1
+					if activeLinkEnd == nil, link.end > relativeOffset {
+						flushRun()
+						output += "["
+						activeLinkEnd = link.end
+						activeLinkURL = link.url
+					}
 				}
 				emitFootnotes(upTo: relativeOffset)
 				let width = scalar.value > 0xFFFF ? 2 : 1
@@ -180,6 +250,10 @@ public struct PagesDocument {
 				case "\u{2028}":
 					flushRun()
 					output += "\n"
+				case "\u{000E}":
+					// Footnote reference character — the `[^n]` marker is emitted separately
+					// (see emitFootnotes), so drop the placeholder char itself.
+					break
 				case "\u{FFFC}":
 					flushRun()
 					if inliningImages, anchorIndex < attachmentReferences.count,
@@ -188,11 +262,12 @@ public struct PagesDocument {
 					}
 					anchorIndex += 1
 				default:
-					if applyingEmphasis, activeBold != runBold || activeItalic != runItalic || activeStrike != runStrike {
+					if applyingEmphasis, activeBold != runBold || activeItalic != runItalic || activeStrike != runStrike || activeCode != runCode {
 						flushRun()
 						runBold = activeBold
 						runItalic = activeItalic
 						runStrike = activeStrike
+						runCode = activeCode
 					}
 					runText.unicodeScalars.append(scalar)
 				}
@@ -200,6 +275,8 @@ public struct PagesDocument {
 			}
 			emitFootnotes(upTo: relativeOffset)
 			flushRun()
+			// A link that runs to the end of the paragraph still needs its closer.
+			if activeLinkEnd != nil { output += "](\(activeLinkURL))" }
 			return output
 				.replacingOccurrences(of: "\t", with: "    ")
 				.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -210,13 +287,20 @@ public struct PagesDocument {
 		public func normalizedText() -> String {
 			renderedText(inliningImages: false, applyingEmphasis: false)
 		}
+
+		/// The literal text for a fenced code block: soft line breaks (U+2028) become
+		/// newlines, but indentation is preserved — unlike `normalizedText()`, which
+		/// trims surrounding whitespace (fatal for code).
+		public func codeText() -> String {
+			String(String.UnicodeScalarView(text.unicodeScalars.map { $0 == "\u{2028}" ? "\n" : $0 }))
+		}
 	}
 
 	/// Wraps `text`'s non-whitespace core in the Markdown emphasis markers for the
 	/// given styling, keeping leading/trailing whitespace outside the markers.
 	/// Strikethrough (`~~`) wraps any bold/italic markers.
-	static func markedUp(_ text: String, bold: Bool, italic: Bool, strike: Bool) -> String {
-		guard bold || italic || strike else { return text }
+	static func markedUp(_ text: String, bold: Bool, italic: Bool, strike: Bool, code: Bool = false) -> String {
+		guard bold || italic || strike || code else { return text }
 		let scalars = Array(text.unicodeScalars)
 		var start = 0
 		while start < scalars.count, CharacterSet.whitespacesAndNewlines.contains(scalars[start]) {
@@ -228,6 +312,10 @@ public struct PagesDocument {
 		}
 		guard start < end else { return text }
 		var core = String(String.UnicodeScalarView(scalars[start..<end]))
+		// Inline code is literal in Markdown, so backticks go innermost; emphasis wraps it.
+		if code {
+			core = "`\(core)`"
+		}
 		if bold && italic {
 			core = "***\(core)***"
 		} else if bold {
@@ -253,17 +341,46 @@ public struct PagesDocument {
 		plainTextParagraphs().joined(separator: "\n\n")
 	}
 
-	/// Returns the document as Markdown: inline bold/italic, headings inferred
-	/// from font size, bullet/numbered lists, and inline image links.
+	/// Returns the document as Markdown.
+	///
+	/// The decoded structure is also available as a swift-markdown AST via
+	/// `markdownDocument()` (the inverse of `MarkdownToPages`, which walks an AST to
+	/// generate Pages) — use that to compose with the HTML/DOCX renderers or any other
+	/// AST consumer. This convenience serializer is kept hand-rolled rather than going
+	/// through `MarkupFormatter` because cmark emits non-standard single-tilde
+	/// strikethrough (`~x~`) and width-padded table cells; this keeps `~~`/`*`/`` ` ``
+	/// and clean GFM tables.
 	public func markdown() -> String {
 		let bodySize = dominantBodyFontSize()
 		var lines = [String]()
 		var isListItem = [Bool]()
 		var counters = [Int: Int]()
 
-		for paragraph in paragraphs {
+		var index = 0
+		while index < paragraphs.count {
+			let paragraph = paragraphs[index]
+			// Native tables anchored in this paragraph render as Markdown table blocks.
+			for table in paragraph.tables where !table.cells.isEmpty {
+				lines.append(Self.markdownTable(table))
+				isListItem.append(false)
+			}
+
+			// A run of code-block paragraphs becomes one fenced block; use the raw
+			// (un-marked-up) text so indentation and literal characters survive.
+			if paragraph.isCodeBlock {
+				var codeLines = [String]()
+				while index < paragraphs.count, paragraphs[index].isCodeBlock {
+					codeLines.append(paragraphs[index].codeText())
+					index += 1
+				}
+				counters.removeAll()
+				lines.append("```\n" + codeLines.joined(separator: "\n") + "\n```")
+				isListItem.append(false)
+				continue
+			}
+
 			let rendered = paragraph.renderedText(inliningImages: true, applyingEmphasis: true)
-			guard !rendered.isEmpty else { continue }
+			guard !rendered.isEmpty else { index += 1; continue }
 
 			if let level = paragraph.listLevel {
 				let indent = String(repeating: "  ", count: max(level, 0))
@@ -288,6 +405,7 @@ public struct PagesDocument {
 				}
 				isListItem.append(false)
 			}
+			index += 1
 		}
 
 		// Consecutive list items are kept tight (single newline); everything else
@@ -311,9 +429,37 @@ public struct PagesDocument {
 		return output
 	}
 
+	/// Renders a table (row 0 = header) as a GitHub-flavored Markdown table, with the
+	/// delimiter row encoding each column's alignment (`:--`, `:-:`, `--:`).
+	static func markdownTable(_ table: Paragraph.Table) -> String {
+		let grid = table.cells
+		let columns = grid.map(\.count).max() ?? 0
+		guard columns > 0 else { return "" }
+		func cell(_ value: String) -> String {
+			value.replacingOccurrences(of: "\n", with: " ")
+				.replacingOccurrences(of: "|", with: "\\|")
+				.trimmingCharacters(in: .whitespaces)
+		}
+		func row(_ cells: [String]) -> String {
+			let padded = (0..<columns).map { $0 < cells.count ? cell(cells[$0]) : "" }
+			return "| " + padded.joined(separator: " | ") + " |"
+		}
+		func delimiter(_ column: Int) -> String {
+			switch column < table.columnAlignments.count ? table.columnAlignments[column] : .left {
+			case .left: return "---"
+			case .center: return ":-:"
+			case .right: return "--:"
+			}
+		}
+		var lines = [row(grid[0])]
+		lines.append("| " + (0..<columns).map(delimiter).joined(separator: " | ") + " |")
+		for bodyRow in grid.dropFirst() { lines.append(row(bodyRow)) }
+		return lines.joined(separator: "\n")
+	}
+
 	/// The most common font size across body text, weighted by paragraph length.
 	/// This is the baseline that headings are measured against.
-	private func dominantBodyFontSize() -> Double? {
+	func dominantBodyFontSize() -> Double? {
 		var weights = [Double: Int]()
 		for paragraph in paragraphs {
 			guard let size = paragraph.fontSize else { continue }
@@ -330,13 +476,17 @@ public struct PagesDocument {
 	/// emphasized-but-long body paragraphs from being promoted. An explicit level
 	/// (from a legacy style name) is honored directly; otherwise the level is
 	/// derived from how much larger than the body the paragraph is set.
-	private func headingLevel(for paragraph: PagesDocument.Paragraph, text: String, bodySize: Double?) -> Int? {
-		guard !text.isEmpty, text.count <= 200, !text.contains("\n") else {
-			return nil
+	func headingLevel(for paragraph: PagesDocument.Paragraph, text: String, bodySize: Double?) -> Int? {
+		// An explicit level read from the paragraph's style is authoritative — honor it
+		// regardless of length (a styled heading is a heading even if it's long).
+		if let explicit = paragraph.headingLevel, !text.isEmpty {
+			return max(1, min(explicit, 6))
 		}
 
-		if let explicit = paragraph.headingLevel {
-			return max(1, min(explicit, 6))
+		// Otherwise fall back to typography: a heading must be short and single-line so
+		// emphasized-but-long body paragraphs aren't promoted.
+		guard !text.isEmpty, text.count <= 200, !text.contains("\n") else {
+			return nil
 		}
 
 		guard

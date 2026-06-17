@@ -10,18 +10,20 @@ import ArgumentParser
 import Foundation
 import SwiftTextDOCX
 import SwiftTextHTML
+import SwiftTextPages
 
 enum RenderOutputFormat: String, ExpressibleByArgument, CaseIterable {
 	case html
 	case pdf
 	case docx
+	case pages
 }
 
 @available(macOS 10.15, macCatalyst 13, iOS 13, tvOS 13, watchOS 6, *)
 struct Render: AsyncParsableCommand {
 	static let configuration = CommandConfiguration(
 		commandName: "render",
-		abstract: "Render a Markdown file to HTML, PDF, or DOCX. Output format is inferred from -o extension or set via --format."
+		abstract: "Render a Markdown file to HTML, PDF, DOCX, or Pages. Output format is inferred from -o extension or set via --format."
 	)
 
 	@Argument(help: "Path to a .md/.markdown file. Omit when using --stdin.")
@@ -33,7 +35,7 @@ struct Render: AsyncParsableCommand {
 	@Option(name: .shortAndLong, help: "Output path (.html or .pdf). If omitted, defaults to input filename with the chosen extension (or output.html when using --stdin).")
 	var output: String?
 
-	@Option(name: .long, help: "Override output format (html|pdf|docx). If omitted, inferred from output extension; defaults to html.")
+	@Option(name: .long, help: "Override output format (html|pdf|docx|pages). If omitted, inferred from output extension; defaults to html.")
 	var format: RenderOutputFormat?
 
 	@Option(name: .long, help: "Paper size for PDF/HTML print CSS: a4, letter (default: a4).")
@@ -41,6 +43,9 @@ struct Render: AsyncParsableCommand {
 
 	@Flag(name: .long, help: "Use landscape orientation (default: portrait).")
 	var landscape: Bool = false
+
+	@Flag(name: .long, help: "For Pages output, write a directory-package bundle instead of a single file.")
+	var package: Bool = false
 
 	func run() async throws {
 		guard #available(macOS 12.0, *) else {
@@ -83,6 +88,9 @@ struct Render: AsyncParsableCommand {
 		case .docx:
 			try MarkdownToDocx.convert(markdownText, to: outputURL, pageSetup: docxPageSetup())
 			print(outputURL.path)
+		case .pages:
+			try MarkdownToPages.convert(markdownText, to: outputURL, packaging: package ? .package : .singleFile, baseURL: baseURL)
+			print(outputURL.path)
 		}
 	}
 
@@ -95,7 +103,8 @@ struct Render: AsyncParsableCommand {
 			if ext == "pdf" { return .pdf }
 			if ext == "html" || ext == "htm" { return .html }
 			if ext == "docx" { return .docx }
-			throw ValidationError("Cannot infer format from output extension '.\(ext)'. Use --format html|pdf|docx.")
+			if ext == "pages" { return .pages }
+			throw ValidationError("Cannot infer format from output extension '.\(ext)'. Use --format html|pdf|docx|pages.")
 		}
 		return .html
 	}
@@ -123,6 +132,7 @@ struct Render: AsyncParsableCommand {
 		case .html: return "html"
 		case .pdf: return "pdf"
 		case .docx: return "docx"
+		case .pages: return "pages"
 		}
 	}
 

@@ -9,10 +9,37 @@ import SwiftTextMarkdown
 /// try MarkdownToPages.convert(markdownString, to: outputURL)
 /// ```
 public enum MarkdownToPages {
+	/// The two on-disk forms Pages can save (Advanced ▸ Change File Type):
+	/// a single flat zip, or a directory bundle (`Index.zip` + loose `Metadata/`/previews).
+	public enum Packaging: Sendable {
+		case singleFile
+		case package
+	}
+
 	/// Converts Markdown text to a `.pages` file at the given URL.
-	public static func convert(_ markdown: String, to url: URL) throws {
+	///
+	/// `packaging` selects the single-file (flat zip, the default) or directory-package
+	/// form. The package form is produced by writing the flat document and re-emitting it
+	/// through ``IWAPackage`` (`Index/*` into a nested `Index.zip`, everything else loose),
+	/// so both forms share the same content.
+	/// - Parameter baseURL: the directory Markdown image paths are resolved against
+	///   (typically the source `.md` file's folder). When `nil`, images fall back to
+	///   alt-text placeholders.
+	public static func convert(_ markdown: String, to url: URL, packaging: Packaging = .singleFile, baseURL: URL? = nil) throws {
 		let paragraphs = MarkdownPagesBuilder.paragraphs(from: markdown)
-		try PagesWriter().write(paragraphs: paragraphs, to: url)
+		switch packaging {
+		case .singleFile:
+			try PagesWriter().write(paragraphs: paragraphs, baseURL: baseURL, to: url)
+		case .package:
+			let temp = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("\(UUID().uuidString).pages")
+			defer { try? FileManager.default.removeItem(at: temp) }
+			try PagesWriter().write(paragraphs: paragraphs, baseURL: baseURL, to: temp)
+			guard let pkg = IWAPackage.read(zip: [UInt8](try Data(contentsOf: temp))) else {
+				throw PagesWriteError.malformedTemplate("flat package")
+			}
+			try? FileManager.default.removeItem(at: url)
+			try pkg.writeDirectoryPackage(to: url)
+		}
 	}
 
 	/// Parses Markdown into the body paragraphs the writer renders.
@@ -27,10 +54,42 @@ public enum MarkdownToPages {
 /// styled via run tables.
 enum MarkdownPagesBuilder {
 	static func paragraphs(from markdown: String) -> [BodyParagraph] {
-		let document = Document(parsing: markdown, options: [])
+		// Footnote definitions (`[^id]: …`) aren't parsed by swift-markdown — extract them
+		// (and strip them from the source) so `[^id]` references can become real footnotes.
+		let (cleaned, definitions) = extractFootnoteDefinitions(markdown)
+		let document = Document(parsing: cleaned, options: [])
 		var visitor = BlockVisitor()
+		visitor.footnoteDefinitions = definitions
 		visitor.visit(document)
 		return visitor.paragraphs
+	}
+
+	/// Pulls `[^id]: text` definition blocks out of the Markdown source (with 4-space- or
+	/// tab-indented continuation lines), returning the cleaned source and `id → text`.
+	static func extractFootnoteDefinitions(_ markdown: String) -> (cleaned: String, definitions: [String: String]) {
+		var definitions = [String: String]()
+		var keptLines = [Substring]()
+		let lines = markdown.split(separator: "\n", omittingEmptySubsequences: false)
+		var index = 0
+		while index < lines.count {
+			let line = lines[index]
+			if line.first == "[", let colon = line.range(of: "]:"), line.hasPrefix("[^") {
+				let id = String(line[line.index(line.startIndex, offsetBy: 2)..<colon.lowerBound])
+				var text = String(line[colon.upperBound...]).trimmingCharacters(in: .whitespaces)
+				// Gather indented continuation lines.
+				var next = index + 1
+				while next < lines.count, lines[next].hasPrefix("    ") || lines[next].hasPrefix("\t") {
+					text += " " + lines[next].trimmingCharacters(in: .whitespaces)
+					next += 1
+				}
+				if !id.isEmpty { definitions[id] = text }
+				index = next
+				continue
+			}
+			keptLines.append(line)
+			index += 1
+		}
+		return (keptLines.joined(separator: "\n"), definitions)
 	}
 }
 
@@ -42,10 +101,14 @@ private struct InlineCollector {
 	private(set) var text = ""
 	private(set) var runs: [BodyParagraph.StyledRun] = []
 	private(set) var links: [BodyParagraph.LinkSpan] = []
+	private(set) var footnoteRefs: [BodyParagraph.FootnoteRef] = []
 	private var style: InlineStyle
+	/// `[^id]: …` definitions; a `[^id]` reference to a defined id becomes a footnote.
+	private let footnoteDefinitions: [String: String]
 
-	init(base: InlineStyle = InlineStyle()) {
+	init(base: InlineStyle = InlineStyle(), footnoteDefinitions: [String: String] = [:]) {
 		self.style = base
+		self.footnoteDefinitions = footnoteDefinitions
 	}
 
 	mutating func collect(from container: Markup) {
@@ -60,7 +123,7 @@ private struct InlineCollector {
 	private mutating func visit(_ markup: Markup) {
 		switch markup {
 		case let text as Text:
-			append(reverseSmartPunct(text.string), style: style)
+			appendText(reverseSmartPunct(text.string))
 		case let emphasis as Emphasis:
 			withStyle({ $0.italic = true }) { $0.collect(from: emphasis) }
 		case let strong as Strong:
@@ -106,6 +169,30 @@ private struct InlineCollector {
 		}
 	}
 
+	/// Appends text, turning each `[^id]` whose id has a definition into a footnote: a
+	/// `U+000E` reference character (the writer styles it + anchors the note). swift-markdown
+	/// doesn't parse footnote syntax, so the `[^id]` survives in the `Text` node verbatim.
+	private mutating func appendText(_ string: String) {
+		guard !footnoteDefinitions.isEmpty, string.contains("[^") else { append(string, style: style); return }
+		var rest = Substring(string)
+		while let open = rest.range(of: "[^") {
+			append(String(rest[rest.startIndex..<open.lowerBound]), style: style)
+			let afterOpen = rest[open.upperBound...]
+			if let close = afterOpen.firstIndex(of: "]") {
+				let id = String(afterOpen[afterOpen.startIndex..<close])
+				if let definition = footnoteDefinitions[id] {
+					footnoteRefs.append(.init(offset: text.utf16.count, text: definition))
+					text += "\u{0E}"                              // footnote reference character
+					rest = afterOpen[afterOpen.index(after: close)...]
+					continue
+				}
+			}
+			append("[^", style: style)                          // not a footnote — emit literally
+			rest = afterOpen
+		}
+		append(String(rest), style: style)
+	}
+
 	private mutating func withStyle(_ apply: (inout InlineStyle) -> Void, _ body: (inout InlineCollector) -> Void) {
 		let saved = style
 		apply(&style)
@@ -120,6 +207,7 @@ private struct BlockVisitor: MarkupVisitor {
 	typealias Result = Void
 
 	var paragraphs: [BodyParagraph] = []
+	var footnoteDefinitions: [String: String] = [:]
 	private var listDepth = 0
 	private var blockQuoteDepth = 0
 
@@ -132,39 +220,54 @@ private struct BlockVisitor: MarkupVisitor {
 	}
 
 	mutating func visitParagraph(_ paragraph: Paragraph) {
-		var collector = InlineCollector()
+		// A paragraph that is solely an image becomes an inline-image attachment
+		// (a single U+FFFC the writer embeds + anchors). Images mixed with text still
+		// fall back to alt-text placeholders (see InlineCollector).
+		let children = Array(paragraph.children)
+		if children.count == 1, let image = children.first as? Image,
+		   let source = image.source, !source.isEmpty {
+			paragraphs.append(BodyParagraph(
+				text: "\u{FFFC}",
+				paragraphStyle: PagesStyleID.body,
+				image: BodyParagraph.ImageRef(source: source, alt: reverseSmartPunct(swiftMarkdownPlainText(of: image)))
+			))
+			return
+		}
+		var collector = InlineCollector(footnoteDefinitions: footnoteDefinitions)
 		collector.collect(from: paragraph)
-		paragraphs.append(BodyParagraph(
+		var bodyParagraph = BodyParagraph(
 			text: collector.text,
 			paragraphStyle: PagesStyleID.body,
 			blockQuote: blockQuoteDepth > 0,
 			runs: collector.runs,
 			links: collector.links
-		))
+		)
+		bodyParagraph.footnoteRefs = collector.footnoteRefs
+		paragraphs.append(bodyParagraph)
 	}
 
 	mutating func visitHeading(_ heading: Heading) {
-		var collector = InlineCollector()
+		var collector = InlineCollector(footnoteDefinitions: footnoteDefinitions)
 		collector.collect(from: heading)
-		paragraphs.append(BodyParagraph(
+		var bodyParagraph = BodyParagraph(
 			text: collector.text,
 			paragraphStyle: Self.headingStyle(level: heading.level),
 			runs: collector.runs,
 			links: collector.links
-		))
+		)
+		bodyParagraph.footnoteRefs = collector.footnoteRefs
+		paragraphs.append(bodyParagraph)
 	}
 
 	mutating func visitCodeBlock(_ codeBlock: CodeBlock) {
 		var code = codeBlock.code
 		if code.hasSuffix("\n") { code.removeLast() }
-		// One paragraph per line, the whole line in a monospace run.
-		for line in code.split(separator: "\n", omittingEmptySubsequences: false) {
-			let text = String(line)
-			let runs = text.isEmpty
-				? []
-				: [BodyParagraph.StyledRun(start: 0, length: text.utf16.count, style: InlineStyle(code: true))]
-			paragraphs.append(BodyParagraph(text: text, paragraphStyle: PagesStyleID.body, runs: runs))
-		}
+		// The whole block is ONE paragraph in the dedicated "Code Block" style, its lines
+		// joined by soft line breaks (U+2028) rather than paragraph breaks. That keeps the
+		// lines tight while the style's space-before/after becomes a margin around the
+		// block (not a gap between every line). Monospace + code color live in the style.
+		let lines = code.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+		paragraphs.append(BodyParagraph(text: lines.joined(separator: "\u{2028}"), paragraphStyle: PagesStyleID.codeBlock))
 	}
 
 	mutating func visitBlockQuote(_ blockQuote: BlockQuote) {
@@ -225,9 +328,51 @@ private struct BlockVisitor: MarkupVisitor {
 	}
 
 	mutating func visitTable(_ table: Table) {
-		// Rendered as tab-separated rows (header bold). This preserves all cell
-		// content and inline styling; a native iWork table grid is a heavier,
-		// separate construct.
+		let headerCells = Array(table.head.cells)
+		let bodyRows: [[Table.Cell]] = table.body.rows.map { Array($0.cells) }
+		let columns = max(headerCells.count, bodyRows.map(\.count).max() ?? 0)
+
+		// Every table renders as a native iWork grid; an empty table degrades to text.
+		guard columns > 0 else {
+			appendTabSeparated(header: headerCells, body: bodyRows)
+			return
+		}
+
+		func cellContent(_ cell: Table.Cell?) -> (text: String, runs: [BodyParagraph.StyledRun]) {
+			guard let cell else { return ("", []) }
+			var collector = InlineCollector()
+			collector.collect(from: cell)
+			return (collector.text, collector.runs)
+		}
+		var cells = [String]()
+		var cellRuns = [[BodyParagraph.StyledRun]]()
+		func append(_ cell: Table.Cell?) { let c = cellContent(cell); cells.append(c.text); cellRuns.append(c.runs) }
+		for column in 0..<columns { append(column < headerCells.count ? headerCells[column] : nil) }
+		for row in bodyRows {
+			for column in 0..<columns { append(column < row.count ? row[column] : nil) }
+		}
+
+		let alignments: [PagesColumnAlignment] = (0..<columns).map { column in
+			switch column < table.columnAlignments.count ? table.columnAlignments[column] : nil {
+			case .center: return .center
+			case .right: return .right
+			default: return .left   // .left and unspecified both render left
+			}
+		}
+		var pagesTable = PagesTable(rows: 1 + bodyRows.count, columns: columns, cells: cells)
+		pagesTable.cellRuns = cellRuns
+		pagesTable.alignments = alignments
+		paragraphs.append(BodyParagraph(
+			text: "\u{FFFC}",
+			paragraphStyle: PagesStyleID.body,
+			attachment: PagesTableTemplate.attachmentID,
+			table: pagesTable
+		))
+	}
+
+	/// Tab-separated rendering (header bold) — the fallback for tables beyond the
+	/// first, preserving all cell content and inline styling.
+	private mutating func appendTabSeparated(header: [Table.Cell], body: [[Table.Cell]]) {
 		func appendRow(_ cells: [Table.Cell], header: Bool) {
 			var collector = InlineCollector(base: header ? InlineStyle(bold: true) : InlineStyle())
 			for (index, cell) in cells.enumerated() {
@@ -236,22 +381,23 @@ private struct BlockVisitor: MarkupVisitor {
 			}
 			paragraphs.append(BodyParagraph(text: collector.text, paragraphStyle: PagesStyleID.body, runs: collector.runs, links: collector.links))
 		}
-		appendRow(Array(table.head.cells), header: true)
-		for row in table.body.rows {
-			appendRow(Array(row.cells), header: false)
-		}
+		appendRow(header, header: true)
+		for row in body { appendRow(row, header: false) }
 	}
 
 	mutating func visitHTMLBlock(_ htmlBlock: HTMLBlock) {
 		// Not representable; the DOCX writer drops these too.
 	}
 
-	/// Maps a Markdown heading level to a template paragraph style.
+	/// Maps a Markdown heading level to a template paragraph style. The blank theme
+	/// ships Heading 1–4; deeper levels (rare) reuse Heading 4. The reader recovers the
+	/// level from each style's stable `style_identifier`, so `#`…`####` round-trip exactly.
 	private static func headingStyle(level: Int) -> UInt64 {
 		switch level {
 		case 1: return PagesStyleID.heading1
 		case 2: return PagesStyleID.heading2
-		default: return PagesStyleID.heading3
+		case 3: return PagesStyleID.heading3
+		default: return PagesStyleID.heading4
 		}
 	}
 }
