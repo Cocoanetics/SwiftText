@@ -294,6 +294,18 @@ private func applyLonghand(_ name: String, _ value: [ComponentValue], to style: 
 				style.wordSpacing = pixels
 			}
 		}
+	case "list-style-type":
+		if let token = significant(value).first, case .ident(let ident) = token.token,
+		   let type = parseListStyleType(ident.asciiLowercased) {
+			style.listStyleType = type
+		}
+	case "list-style":
+		// Shorthand: take whichever value names a list-style-type.
+		for token in significant(value) {
+			if case .ident(let ident) = token.token, let type = parseListStyleType(ident.asciiLowercased) {
+				style.listStyleType = type
+			}
+		}
 	case "width":
 		if let length = parseLength(value, fontSize: fontSize, rootFontSize: rootFontSize) { style.width = length }
 	case "height":
@@ -338,7 +350,17 @@ private let inheritedProperties: Set<String> = [
 	"line-height", "text-align", "white-space",
 	"text-decoration", "text-decoration-line",
 	"letter-spacing", "word-spacing",
+	"list-style-type", "list-style",
 ]
+
+/// Map a CSS `list-style-type` keyword (including latin aliases) to the enum.
+private func parseListStyleType(_ name: String) -> ListStyleType? {
+	switch name {
+	case "lower-latin": return .lowerAlpha
+	case "upper-latin": return .upperAlpha
+	default: return ListStyleType(rawValue: name)
+	}
+}
 
 private func applyGlobal(_ name: String, _ keyword: String, to style: inout ComputedStyle, parent: ComputedStyle) {
 	let inherits = inheritedProperties.contains(name)
@@ -368,6 +390,7 @@ private func copyLonghand(_ name: String, from source: ComputedStyle, into style
 		style.lineThrough = source.lineThrough
 	case "letter-spacing": style.letterSpacing = source.letterSpacing
 	case "word-spacing": style.wordSpacing = source.wordSpacing
+	case "list-style-type", "list-style": style.listStyleType = source.listStyleType
 	case "width": style.width = source.width
 	case "height": style.height = source.height
 	case "margin-top", "margin-right", "margin-bottom", "margin-left": setEdge(&style.margin, name, edgeValue(source.margin, name))

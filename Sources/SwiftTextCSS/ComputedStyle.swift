@@ -86,6 +86,23 @@ public enum WhiteSpace: Equatable, Sendable {
 	}
 }
 
+public enum ListStyleType: String, Equatable, Sendable {
+	case disc, circle, square, none
+	case decimal
+	case lowerAlpha = "lower-alpha"
+	case upperAlpha = "upper-alpha"
+	case lowerRoman = "lower-roman"
+	case upperRoman = "upper-roman"
+
+	/// Whether the marker is an ordinal counter rather than a bullet.
+	public var isOrdered: Bool {
+		switch self {
+		case .decimal, .lowerAlpha, .upperAlpha, .lowerRoman, .upperRoman: return true
+		default: return false
+		}
+	}
+}
+
 public enum BorderStyle: String, Equatable, Sendable {
 	case none, hidden, solid, dashed, dotted, double, groove, ridge, inset, outset
 
@@ -130,6 +147,8 @@ public struct ComputedStyle: Equatable, Sendable {
 	public var letterSpacing: Double
 	/// Extra space added to each space character in pixels (`word-spacing`).
 	public var wordSpacing: Double
+	/// The list marker style (`list-style-type`).
+	public var listStyleType: ListStyleType
 
 	// Non-inherited properties.
 	public var display: Display
@@ -166,6 +185,7 @@ public struct ComputedStyle: Equatable, Sendable {
 		lineThrough: false,
 		letterSpacing: 0,
 		wordSpacing: 0,
+		listStyleType: .disc,
 		display: .inline,
 		backgroundColor: nil,
 		margin: Edges(.px(0)),
@@ -194,6 +214,7 @@ public struct ComputedStyle: Equatable, Sendable {
 		style.lineThrough = parent.lineThrough
 		style.letterSpacing = parent.letterSpacing
 		style.wordSpacing = parent.wordSpacing
+		style.listStyleType = parent.listStyleType
 		// Initial border color is `currentColor`, i.e. the (inherited) color.
 		style.borderColor = Edges(parent.color)
 		return style

@@ -36,7 +36,8 @@ public enum BoxTreeBuilder {
 			let block = BlockBox(style: style)
 			block.children = normalizeBlockChildren(childBoxes, parentStyle: style)
 			if style.display == .listItem {
-				block.marker = markerText(for: element)
+				let marker = markerText(for: element)
+				if !marker.isEmpty { block.marker = marker }
 			}
 			box = block
 		}
@@ -44,19 +45,65 @@ public enum BoxTreeBuilder {
 		return box
 	}
 
-	/// The marker string for a list item: an ordinal "N." inside an `<ol>`, a
-	/// bullet otherwise.
+	/// The marker string for a list item, per its `list-style-type`.
 	private static func markerText(for element: StyledElement) -> String {
-		guard let parent = element.parent else { return "•" }
-		if parent.localName == "ol" {
-			var ordinal = 0
-			for sibling in parent.elementChildren {
-				if sibling.localName == "li" { ordinal += 1 }
-				if sibling === element { break }
-			}
-			return "\(ordinal)."
+		switch element.computedStyle.listStyleType {
+		case .none: return ""
+		case .disc: return "•"
+		case .circle: return "◦"
+		case .square: return "▪"
+		case let ordered:
+			return formatOrdinal(listOrdinal(of: element), as: ordered) + "."
 		}
-		return "•"
+	}
+
+	/// This item's 1-based position among its `<li>` siblings.
+	private static func listOrdinal(of element: StyledElement) -> Int {
+		guard let parent = element.parent else { return 1 }
+		var ordinal = 0
+		for sibling in parent.elementChildren {
+			if sibling.localName == "li" { ordinal += 1 }
+			if sibling === element { break }
+		}
+		return ordinal
+	}
+
+	private static func formatOrdinal(_ number: Int, as type: ListStyleType) -> String {
+		switch type {
+		case .lowerAlpha: return alphabetic(number, uppercase: false)
+		case .upperAlpha: return alphabetic(number, uppercase: true)
+		case .lowerRoman: return roman(number).lowercased()
+		case .upperRoman: return roman(number)
+		default: return "\(number)" // decimal
+		}
+	}
+
+	/// Bijective base-26: 1→a, 26→z, 27→aa …
+	private static func alphabetic(_ number: Int, uppercase: Bool) -> String {
+		guard number > 0 else { return "\(number)" }
+		var value = number
+		var result = ""
+		let base = (uppercase ? "A" : "a").unicodeScalars.first!.value
+		while value > 0 {
+			value -= 1
+			result = String(UnicodeScalar(base + UInt32(value % 26))!) + result
+			value /= 26
+		}
+		return result
+	}
+
+	private static func roman(_ number: Int) -> String {
+		guard number > 0, number < 4000 else { return "\(number)" }
+		let table: [(Int, String)] = [
+			(1000, "M"), (900, "CM"), (500, "D"), (400, "CD"), (100, "C"), (90, "XC"),
+			(50, "L"), (40, "XL"), (10, "X"), (9, "IX"), (5, "V"), (4, "IV"), (1, "I"),
+		]
+		var value = number
+		var result = ""
+		for (amount, numeral) in table {
+			while value >= amount { result += numeral; value -= amount }
+		}
+		return result
 	}
 
 	private static func buildChildBoxes(of element: StyledElement) -> [Box] {

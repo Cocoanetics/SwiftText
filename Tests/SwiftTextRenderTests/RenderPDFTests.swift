@@ -319,6 +319,21 @@ struct RenderPDFTests {
 		#expect(data.range(of: Data(" Tc".utf8)) != nil)
 	}
 
+	@Test("list-style-type: alpha, roman, square and none")
+	func listStyleTypes() async throws {
+		let alpha = try await layoutTree("<ol style=\"list-style-type: lower-alpha\"><li>x</li><li>y</li><li>z</li></ol>", contentWidth: 400)
+		#expect(collectBlocks(in: alpha) { $0.element?.localName == "li" }.map { $0.marker } == ["a.", "b.", "c."])
+
+		let roman = try await layoutTree("<ol style=\"list-style-type: upper-roman\"><li>a</li><li>b</li><li>c</li><li>d</li></ol>", contentWidth: 400)
+		#expect(collectBlocks(in: roman) { $0.element?.localName == "li" }.map { $0.marker } == ["I.", "II.", "III.", "IV."])
+
+		let square = try await layoutTree("<ul style=\"list-style-type: square\"><li>x</li></ul>", contentWidth: 400)
+		#expect(collectBlocks(in: square) { $0.element?.localName == "li" }.first?.marker == "▪")
+
+		let plain = try await layoutTree("<ul style=\"list-style-type: none\"><li>x</li></ul>", contentWidth: 400)
+		#expect(collectBlocks(in: plain) { $0.element?.localName == "li" }.first?.marker == nil)
+	}
+
 	@Test("text-align: center shifts the line inward")
 	func textAlignCenter() async throws {
 		let left = try await layoutTree("<p>hi there</p>", contentWidth: 400)

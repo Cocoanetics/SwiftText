@@ -13,6 +13,8 @@ h6, header, hgroup, hr, legend, listing, main, menu, nav, ol, p, plaintext, \
 pre, section, summary, ul, xmp { display: block }
 
 li { display: list-item }
+ul, menu, dir { list-style-type: disc }
+ol { list-style-type: decimal }
 table { display: table; border-spacing: 2px }
 caption { display: table-caption }
 thead { display: table-header-group }
