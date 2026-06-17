@@ -42,15 +42,110 @@ public enum MarkdownAlert: String, Codable, Sendable, Hashable, CaseIterable {
 	}
 }
 
-/// Custom `AttributedString` attribute keys for Markdown semantics that
-/// Foundation's `PresentationIntent` / `InlinePresentationIntent` can't express.
+// MARK: - Portable block / inline models
+
+/// A platform-independent description of a run's block context — the same shape
+/// as Foundation's `PresentationIntent` (a chain of components, innermost
+/// first, each with a kind and a document-unique identity), but available on
+/// every platform.
+///
+/// Foundation's presentation intents live in Apple's SDK Foundation overlay and
+/// are absent from cross-platform swift-foundation, so the renderer always
+/// carries this value (via ``SwiftTextMarkdownAttributes/Block``) and, on Apple
+/// platforms, *additionally* sets the native `presentationIntent` derived from
+/// it. Reading ``Block`` therefore works identically everywhere.
+public struct MarkdownBlock: Codable, Hashable, Sendable {
+	/// The intent chain, innermost (leaf) first — mirrors
+	/// `PresentationIntent.components`.
+	public var components: [Component]
+
+	public init(components: [Component]) {
+		self.components = components
+	}
+
+	/// The leaf (innermost) kind, e.g. `.paragraph` for a list item's text.
+	public var leafKind: Kind? { components.first?.kind }
+
+	/// One level of the block hierarchy.
+	public struct Component: Codable, Hashable, Sendable {
+		public var kind: Kind
+		/// Document-unique identity; sibling blocks share their parent's identity.
+		public var identity: Int
+
+		public init(_ kind: Kind, identity: Int) {
+			self.kind = kind
+			self.identity = identity
+		}
+	}
+
+	/// The kind of a block — one case per `PresentationIntent.Kind`.
+	public enum Kind: Codable, Hashable, Sendable {
+		case paragraph
+		case header(level: Int)
+		case orderedList
+		case unorderedList
+		case listItem(ordinal: Int)
+		case codeBlock(languageHint: String?)
+		case blockQuote
+		case thematicBreak
+		case table(columns: [ColumnAlignment])
+		case tableHeaderRow
+		case tableRow(rowIndex: Int)
+		case tableCell(columnIndex: Int)
+	}
+
+	/// Table column alignment — one case per `PresentationIntent.TableColumn.Alignment`.
+	public enum ColumnAlignment: Codable, Hashable, Sendable {
+		case left
+		case center
+		case right
+	}
+}
+
+/// A platform-independent set of inline traits — the same bits as Foundation's
+/// `InlinePresentationIntent`, but available on every platform. Carried via
+/// ``SwiftTextMarkdownAttributes/InlineStyle``; the native
+/// `inlinePresentationIntent` is set alongside it on Apple platforms.
+public struct MarkdownInlineStyle: OptionSet, Codable, Hashable, Sendable {
+	public let rawValue: Int
+	public init(rawValue: Int) { self.rawValue = rawValue }
+
+	public static let emphasized = MarkdownInlineStyle(rawValue: 1 << 0)
+	public static let stronglyEmphasized = MarkdownInlineStyle(rawValue: 1 << 1)
+	public static let code = MarkdownInlineStyle(rawValue: 1 << 2)
+	public static let strikethrough = MarkdownInlineStyle(rawValue: 1 << 3)
+	public static let softBreak = MarkdownInlineStyle(rawValue: 1 << 4)
+	public static let lineBreak = MarkdownInlineStyle(rawValue: 1 << 5)
+	public static let inlineHTML = MarkdownInlineStyle(rawValue: 1 << 6)
+	public static let blockHTML = MarkdownInlineStyle(rawValue: 1 << 7)
+}
+
+// MARK: - AttributedString keys
+
+/// Custom `AttributedString` attribute keys for Markdown semantics.
+///
+/// ``Block`` and ``InlineStyle`` carry block/inline structure on every platform
+/// (Foundation's presentation intents are Apple-only). ``FootnoteReference``,
+/// ``FootnoteDefinition``, ``Alert`` and ``ImageSource`` carry features that
+/// Foundation's intents can't express at all.
 ///
 /// They are grouped into ``AttributeScopes/SwiftTextMarkdownAttributeScope`` so
-/// they participate in dynamic-member lookup (`run.footnoteReference`,
-/// `run.alert`, …) alongside the Foundation attributes the renderer also sets
-/// (`.link`, `.inlinePresentationIntent`, `.presentationIntent`).
+/// they participate in dynamic-member lookup (`run.alert`, …) alongside the
+/// Foundation `.link` attribute the renderer also sets.
 @available(macOS 12, iOS 15, tvOS 15, watchOS 8, *)
 public enum SwiftTextMarkdownAttributes {
+
+	/// The block context (``MarkdownBlock``) — present on every platform.
+	public enum Block: AttributedStringKey {
+		public typealias Value = MarkdownBlock
+		public static let name = "SwiftText.block"
+	}
+
+	/// The inline traits (``MarkdownInlineStyle``) — present on every platform.
+	public enum InlineStyle: AttributedStringKey {
+		public typealias Value = MarkdownInlineStyle
+		public static let name = "SwiftText.inlineStyle"
+	}
 
 	/// The footnote number carried by a `[^id]` reference run.
 	public enum FootnoteReference: AttributedStringKey {
@@ -81,8 +176,11 @@ public enum SwiftTextMarkdownAttributes {
 extension AttributeScopes {
 
 	/// The SwiftText Markdown attribute scope: the custom keys above plus the
-	/// Foundation scope (so `.link`, presentation intents, etc. resolve too).
+	/// Foundation scope (so `.link`, and — on Apple — the native presentation
+	/// intents, resolve too).
 	public struct SwiftTextMarkdownAttributeScope: AttributeScope {
+		public let block: SwiftTextMarkdownAttributes.Block
+		public let inlineStyle: SwiftTextMarkdownAttributes.InlineStyle
 		public let footnoteReference: SwiftTextMarkdownAttributes.FootnoteReference
 		public let footnoteDefinition: SwiftTextMarkdownAttributes.FootnoteDefinition
 		public let alert: SwiftTextMarkdownAttributes.Alert
@@ -98,7 +196,7 @@ extension AttributeScopes {
 
 @available(macOS 12, iOS 15, tvOS 15, watchOS 8, *)
 extension AttributeDynamicLookup {
-	/// Enables `run.footnoteReference`, `run.alert`, etc. for the SwiftText scope.
+	/// Enables `run.block`, `run.alert`, etc. for the SwiftText scope.
 	public subscript<T: AttributedStringKey>(
 		dynamicMember keyPath: KeyPath<AttributeScopes.SwiftTextMarkdownAttributeScope, T>
 	) -> T {

@@ -4,16 +4,24 @@ import SwiftTextMarkdown
 
 /// Markdown → Foundation `AttributedString` renderer built on swift-markdown's AST.
 ///
-/// The output matches the structure Foundation's own `AttributedString(markdown:)`
-/// produces — block hierarchy in `presentationIntent` (with a shared, pre-order
-/// identity counter and **no** literal newlines between blocks), inline styling
-/// in `inlinePresentationIntent`, and links in `.link` — so the result renders
-/// and round-trips like any Foundation attributed string.
+/// The output mirrors the structure Foundation's own `AttributedString(markdown:)`
+/// produces — block hierarchy, inline styling, links — but works on **every**
+/// platform Foundation ships on, including Linux and Windows.
+///
+/// Foundation's `PresentationIntent` / `InlinePresentationIntent` live in Apple's
+/// SDK Foundation and are absent from cross-platform swift-foundation, so the
+/// renderer always carries the structure in portable custom attributes
+/// (``MarkdownBlock`` via ``SwiftTextMarkdownAttributes/Block`` and
+/// ``MarkdownInlineStyle`` via ``SwiftTextMarkdownAttributes/InlineStyle``) and,
+/// **additionally on Apple platforms**, sets the native `presentationIntent` /
+/// `inlinePresentationIntent` derived from the same data so the result
+/// interoperates with SwiftUI / TextKit. Blocks are delimited by distinct
+/// intent identities (a shared pre-order counter), with no literal newlines
+/// between them — exactly as Foundation does.
 ///
 /// Unlike Foundation's built-in parser, it uses swift-markdown (the same AST as
 /// the package's HTML/DOCX/Pages paths), so it covers the full GFM superset:
-/// tables with alignment, strikethrough, task lists, and — via a custom
-/// ``SwiftTextMarkdownAttributes`` scope that Foundation's intents can't express
+/// tables with alignment, strikethrough, task lists, and — via the custom scope
 /// — `[^id]` footnotes, GitHub/DocC alerts, and image sources.
 @available(macOS 12, iOS 15, tvOS 15, watchOS 8, *)
 public enum MarkdownAttributedStringRenderer {
@@ -45,9 +53,9 @@ public enum MarkdownAttributedStringRenderer {
 		// Body first so footnote numbers are assigned in source order.
 		builder.emitBlocks(Document(parsing: cleaned, options: []).children, EmitContext())
 
-		// Then definitions, in the SAME builder so presentation-intent identities
-		// stay globally unique. Re-scan until a pass renders nothing new, so a
-		// definition referenced only from another definition still resolves.
+		// Then definitions, in the SAME builder so block identities stay globally
+		// unique. Re-scan until a pass renders nothing new, so a definition
+		// referenced only from another definition still resolves.
 		var renderedIDs = Set<String>()
 		var renderedNew = true
 		var pending: [(number: Int, body: String)] = []
@@ -81,8 +89,8 @@ public enum MarkdownAttributedStringRenderer {
 @available(macOS 12, iOS 15, tvOS 15, watchOS 8, *)
 extension AttributedString {
 	/// Builds an attributed string from Markdown using SwiftText's renderer
-	/// (full GFM + footnotes + alerts), as opposed to Foundation's built-in
-	/// `init(markdown:)`.
+	/// (full GFM + footnotes + alerts, all-platform), as opposed to Foundation's
+	/// built-in `init(markdown:)`.
 	public init(
 		swiftTextMarkdown markdown: String,
 		options: MarkdownAttributedStringRenderer.Options = []
@@ -93,24 +101,25 @@ extension AttributedString {
 
 // MARK: - Emit context
 
-/// State threaded down the block tree: the enclosing block intent (the parent
-/// for the next leaf), and the alert / footnote-definition tags applied to runs.
-@available(macOS 12, iOS 15, tvOS 15, watchOS 8, *)
+/// State threaded down the block tree: the enclosing block components (the
+/// ancestor chain for the next leaf, innermost first), and the alert /
+/// footnote-definition tags applied to runs.
 private struct EmitContext {
-	var parent: PresentationIntent?
+	var ancestors: [MarkdownBlock.Component] = []
 	var alert: MarkdownAlert?
 	var footnoteDefinition: Int?
 
-	func childOf(_ intent: PresentationIntent) -> EmitContext {
+	/// Returns a context with `component` pushed as the new innermost ancestor.
+	func nested(_ component: MarkdownBlock.Component) -> EmitContext {
 		var copy = self
-		copy.parent = intent
+		copy.ancestors.insert(component, at: 0)
 		return copy
 	}
 }
 
 /// The inline styling accumulated while descending inline nodes.
-private struct InlineStyle {
-	var intent: InlinePresentationIntent = []
+private struct InlineStyleAccumulator {
+	var style: MarkdownInlineStyle = []
 	var link: URL?
 }
 
@@ -134,15 +143,9 @@ private final class Builder {
 
 	/// Identities are assigned in pre-order DFS (parent before children, in
 	/// document order) — the same scheme Foundation's Markdown parser uses.
-	private func nextID() -> Int {
+	private func component(_ kind: MarkdownBlock.Kind) -> MarkdownBlock.Component {
 		defer { nextIdentity += 1 }
-		return nextIdentity
-	}
-
-	private func intent(
-		_ kind: PresentationIntent.Kind, parent: PresentationIntent?
-	) -> PresentationIntent {
-		PresentationIntent(kind, identity: nextID(), parent: parent)
+		return MarkdownBlock.Component(kind, identity: nextIdentity)
 	}
 
 	// MARK: Block emission
@@ -154,22 +157,18 @@ private final class Builder {
 	private func emitBlock(_ markup: Markup, _ context: EmitContext) {
 		switch markup {
 		case let paragraph as Paragraph:
-			let leaf = intent(.paragraph, parent: context.parent)
-			emitInlines(paragraph.children, leaf: leaf, context)
+			emitInlines(paragraph.children, block: leaf(.paragraph, context), context)
 		case let heading as Heading:
 			let level = max(1, min(heading.level, 6))
-			let leaf = intent(.header(level: level), parent: context.parent)
-			emitInlines(heading.children, leaf: leaf, context)
+			emitInlines(heading.children, block: leaf(.header(level: level), context), context)
 		case let codeBlock as CodeBlock:
 			// Foundation keeps the code's trailing newline; mirror that.
-			let leaf = intent(.codeBlock(languageHint: codeBlock.language), parent: context.parent)
-			append(codeBlock.code, intent: [], leaf: leaf, context)
+			append(codeBlock.code, block: leaf(.codeBlock(languageHint: codeBlock.language), context), style: [], context)
 		case is ThematicBreak:
-			let leaf = intent(.thematicBreak, parent: context.parent)
-			append(thematicBreakText, intent: [], leaf: leaf, context)
+			append(thematicBreakText, block: leaf(.thematicBreak, context), style: [], context)
 		case let htmlBlock as HTMLBlock:
-			// Foundation gives HTML blocks no presentation intent + `.blockHTML`.
-			append(htmlBlock.rawHTML, intent: .blockHTML, leaf: nil, context)
+			// Foundation gives HTML blocks no block intent + a `.blockHTML` trait.
+			append(htmlBlock.rawHTML, block: nil, style: .blockHTML, context)
 		case let blockQuote as BlockQuote:
 			emitBlockQuote(blockQuote, context)
 		case let unordered as UnorderedList:
@@ -183,21 +182,26 @@ private final class Builder {
 		}
 	}
 
+	/// Builds the full leaf component chain (leaf first) for a leaf block.
+	private func leaf(_ kind: MarkdownBlock.Kind, _ context: EmitContext) -> [MarkdownBlock.Component] {
+		[component(kind)] + context.ancestors
+	}
+
 	// MARK: Blockquotes & alerts
 
 	private func emitBlockQuote(_ blockQuote: BlockQuote, _ context: EmitContext) {
-		let quoteIntent = intent(.blockQuote, parent: context.parent)
+		let quoteComponent = component(.blockQuote)
+		let quoteContext = context.nested(quoteComponent)
 
 		if let detected = detectAlert(in: blockQuote) {
-			var alertContext = context.childOf(quoteIntent)
+			var alertContext = quoteContext
 			alertContext.alert = detected.kind
 			let children = Array(blockQuote.children)
 			for (index, child) in children.enumerated() {
 				if index == 0, let paragraph = child as? Paragraph {
 					let inlines = strippedAlertMarker(in: paragraph, terminator: detected.terminator)
 					guard !inlines.isEmpty else { continue }
-					let leaf = intent(.paragraph, parent: quoteIntent)
-					emitInlines(inlines, leaf: leaf, alertContext)
+					emitInlines(inlines, block: [component(.paragraph)] + alertContext.ancestors, alertContext)
 				} else {
 					emitBlock(child, alertContext)
 				}
@@ -205,17 +209,17 @@ private final class Builder {
 			return
 		}
 
-		emitBlocks(blockQuote.children, context.childOf(quoteIntent))
+		emitBlocks(blockQuote.children, quoteContext)
 	}
 
 	// MARK: Lists
 
 	private func emitList(_ list: ListItemContainer, ordered: Bool, _ context: EmitContext) {
-		let listIntent = intent(ordered ? .orderedList : .unorderedList, parent: context.parent)
+		let listContext = context.nested(component(ordered ? .orderedList : .unorderedList))
 		var ordinal = ordered ? orderedListStart(list) : 1
 		for case let item as ListItem in list.children {
-			let itemIntent = intent(.listItem(ordinal: ordinal), parent: listIntent)
-			emitBlocks(item.children, context.childOf(itemIntent))
+			let itemContext = listContext.nested(component(.listItem(ordinal: ordinal)))
+			emitBlocks(item.children, itemContext)
 			ordinal += 1
 		}
 	}
@@ -227,27 +231,25 @@ private final class Builder {
 	// MARK: Tables
 
 	private func emitTable(_ table: Table, _ context: EmitContext) {
-		let columns = table.columnAlignments.map { alignment -> PresentationIntent.TableColumn in
+		let columns = table.columnAlignments.map { alignment -> MarkdownBlock.ColumnAlignment in
 			switch alignment {
-			case .center: return PresentationIntent.TableColumn(alignment: .center)
-			case .right: return PresentationIntent.TableColumn(alignment: .right)
-			case .left, .none: return PresentationIntent.TableColumn(alignment: .left)
+			case .center: return .center
+			case .right: return .right
+			case .left, .none: return .left
 			}
 		}
-		let tableIntent = intent(.table(columns: columns), parent: context.parent)
+		let tableContext = context.nested(component(.table(columns: columns)))
 
-		let headerRow = intent(.tableHeaderRow, parent: tableIntent)
+		let headerContext = tableContext.nested(component(.tableHeaderRow))
 		for (column, cell) in table.head.cells.enumerated() {
-			let cellIntent = intent(.tableCell(columnIndex: column), parent: headerRow)
-			emitInlines(cell.children, leaf: cellIntent, context)
+			emitInlines(cell.children, block: [component(.tableCell(columnIndex: column))] + headerContext.ancestors, headerContext)
 		}
 
 		var rowIndex = 1
 		for row in table.body.rows {
-			let rowIntent = intent(.tableRow(rowIndex: rowIndex), parent: tableIntent)
+			let rowContext = tableContext.nested(component(.tableRow(rowIndex: rowIndex)))
 			for (column, cell) in row.cells.enumerated() {
-				let cellIntent = intent(.tableCell(columnIndex: column), parent: rowIntent)
-				emitInlines(cell.children, leaf: cellIntent, context)
+				emitInlines(cell.children, block: [component(.tableCell(columnIndex: column))] + rowContext.ancestors, rowContext)
 			}
 			rowIndex += 1
 		}
@@ -261,99 +263,97 @@ private final class Builder {
 		let blocks = Array(Document(parsing: body, options: []).children)
 
 		guard !blocks.isEmpty else {
-			let leaf = intent(.paragraph, parent: nil)
-			appendFootnoteLabel(number, leaf: leaf, context)
+			append("\(number). ", block: leaf(.paragraph, context), style: .stronglyEmphasized, context)
 			return
 		}
 
 		for (index, block) in blocks.enumerated() {
 			if index == 0, let paragraph = block as? Paragraph {
-				let leaf = intent(.paragraph, parent: nil)
-				appendFootnoteLabel(number, leaf: leaf, context)
-				emitInlines(paragraph.children, leaf: leaf, context)
+				let leafBlock = leaf(.paragraph, context)
+				append("\(number). ", block: leafBlock, style: .stronglyEmphasized, context)
+				emitInlines(paragraph.children, block: leafBlock, context)
 			} else {
 				emitBlock(block, context)
 			}
 		}
 	}
 
-	private func appendFootnoteLabel(_ number: Int, leaf: PresentationIntent, _ context: EmitContext) {
-		append("\(number). ", intent: .stronglyEmphasized, leaf: leaf, context)
-	}
-
 	// MARK: Inline emission
 
-	private func emitInlines(_ inlines: some Sequence<Markup>, leaf: PresentationIntent?, _ context: EmitContext) {
+	private func emitInlines(
+		_ inlines: some Sequence<Markup>, block: [MarkdownBlock.Component]?, _ context: EmitContext
+	) {
 		for inline in inlines {
-			emitInline(inline, InlineStyle(), leaf: leaf, context)
+			emitInline(inline, InlineStyleAccumulator(), block: block, context)
 		}
 	}
 
 	private func emitInline(
-		_ markup: Markup, _ style: InlineStyle, leaf: PresentationIntent?, _ context: EmitContext
+		_ markup: Markup, _ accumulator: InlineStyleAccumulator,
+		block: [MarkdownBlock.Component]?, _ context: EmitContext
 	) {
 		switch markup {
 		case let text as Text:
-			emitText(text.string, style, leaf: leaf, context)
+			emitText(text.string, accumulator, block: block, context)
 		case let emphasis as Emphasis:
-			descend(emphasis, inserting: .emphasized, style, leaf: leaf, context)
+			descend(emphasis, inserting: .emphasized, accumulator, block: block, context)
 		case let strong as Strong:
-			descend(strong, inserting: .stronglyEmphasized, style, leaf: leaf, context)
+			descend(strong, inserting: .stronglyEmphasized, accumulator, block: block, context)
 		case let strikethrough as Strikethrough:
-			descend(strikethrough, inserting: .strikethrough, style, leaf: leaf, context)
+			descend(strikethrough, inserting: .strikethrough, accumulator, block: block, context)
 		case let inlineCode as InlineCode:
-			var intent = style.intent
-			intent.insert(.code)
-			append(inlineCode.code, intent: intent, link: style.link, leaf: leaf, context)
+			var style = accumulator.style
+			style.insert(.code)
+			append(inlineCode.code, block: block, style: style, link: accumulator.link, context)
 		case let link as Link:
-			var nested = style
-			nested.link = (link.destination).flatMap(URL.init(string:)) ?? style.link
-			for child in link.children { emitInline(child, nested, leaf: leaf, context) }
+			var nested = accumulator
+			nested.link = (link.destination).flatMap(URL.init(string:)) ?? accumulator.link
+			for child in link.children { emitInline(child, nested, block: block, context) }
 		case let image as Image:
 			let alt = reverseSmart(swiftMarkdownPlainText(of: image))
-			append(alt, intent: style.intent, link: style.link, leaf: leaf, context, imageSource: image.source)
+			append(alt, block: block, style: accumulator.style, link: accumulator.link, context, imageSource: image.source)
 		case let inlineHTML as InlineHTML:
-			var intent = style.intent
-			intent.insert(.inlineHTML)
-			append(inlineHTML.rawHTML, intent: intent, link: style.link, leaf: leaf, context)
+			var style = accumulator.style
+			style.insert(.inlineHTML)
+			append(inlineHTML.rawHTML, block: block, style: style, link: accumulator.link, context)
 		case is SoftBreak:
-			var intent = style.intent
-			intent.insert(.softBreak)
-			append(" ", intent: intent, link: style.link, leaf: leaf, context)
+			var style = accumulator.style
+			style.insert(.softBreak)
+			append(" ", block: block, style: style, link: accumulator.link, context)
 		case is LineBreak:
-			var intent = style.intent
-			intent.insert(.lineBreak)
-			append("\n", intent: intent, link: style.link, leaf: leaf, context)
+			var style = accumulator.style
+			style.insert(.lineBreak)
+			append("\n", block: block, style: style, link: accumulator.link, context)
 		default:
-			for child in markup.children { emitInline(child, style, leaf: leaf, context) }
+			for child in markup.children { emitInline(child, accumulator, block: block, context) }
 		}
 	}
 
 	private func descend(
-		_ markup: Markup,
-		inserting trait: InlinePresentationIntent,
-		_ style: InlineStyle,
-		leaf: PresentationIntent?,
-		_ context: EmitContext
+		_ markup: Markup, inserting trait: MarkdownInlineStyle,
+		_ accumulator: InlineStyleAccumulator, block: [MarkdownBlock.Component]?, _ context: EmitContext
 	) {
-		var nested = style
-		nested.intent.insert(trait)
-		for child in markup.children { emitInline(child, nested, leaf: leaf, context) }
+		var nested = accumulator
+		nested.style.insert(trait)
+		for child in markup.children { emitInline(child, nested, block: block, context) }
 	}
 
 	/// Emits a `Text` node, splitting `[^id]` references (when a resolver is
 	/// active) into footnote-reference runs tagged with their number.
-	private func emitText(_ string: String, _ style: InlineStyle, leaf: PresentationIntent?, _ context: EmitContext) {
+	private func emitText(
+		_ string: String, _ accumulator: InlineStyleAccumulator,
+		block: [MarkdownBlock.Component]?, _ context: EmitContext
+	) {
 		guard let resolver else {
-			append(reverseSmart(string), intent: style.intent, link: style.link, leaf: leaf, context)
+			append(reverseSmart(string), block: block, style: accumulator.style, link: accumulator.link, context)
 			return
 		}
 		for segment in resolver.resolve(string) {
 			switch segment {
 			case .text(let value):
-				append(reverseSmart(value), intent: style.intent, link: style.link, leaf: leaf, context)
+				append(reverseSmart(value), block: block, style: accumulator.style, link: accumulator.link, context)
 			case .reference(let number):
-				append("\(number)", intent: style.intent, link: style.link, leaf: leaf, context, footnoteReference: number)
+				append("\(number)", block: block, style: accumulator.style, link: accumulator.link, context, footnoteReference: number)
 			}
 		}
 	}
@@ -362,24 +362,33 @@ private final class Builder {
 
 	private func append(
 		_ text: String,
-		intent: InlinePresentationIntent,
+		block: [MarkdownBlock.Component]?,
+		style: MarkdownInlineStyle,
 		link: URL? = nil,
-		leaf: PresentationIntent?,
 		_ context: EmitContext,
 		footnoteReference: Int? = nil,
 		imageSource: String? = nil
 	) {
 		guard !text.isEmpty else { return }
 		var container = AttributeContainer()
-		if !intent.isEmpty { container.inlinePresentationIntent = intent }
+
+		// Portable custom attributes — set on every platform.
+		if let block { container[SwiftTextMarkdownAttributes.Block.self] = MarkdownBlock(components: block) }
+		if !style.isEmpty { container[SwiftTextMarkdownAttributes.InlineStyle.self] = style }
 		if let link { container.link = link }
-		if let leaf { container.presentationIntent = leaf }
 		if let alert = context.alert { container[SwiftTextMarkdownAttributes.Alert.self] = alert }
 		if let definition = context.footnoteDefinition {
 			container[SwiftTextMarkdownAttributes.FootnoteDefinition.self] = definition
 		}
 		if let footnoteReference { container[SwiftTextMarkdownAttributes.FootnoteReference.self] = footnoteReference }
 		if let imageSource { container[SwiftTextMarkdownAttributes.ImageSource.self] = imageSource }
+
+		// Native Foundation intents — Apple platforms only (absent on Linux/Windows).
+		#if canImport(Darwin)
+		if let block { container.presentationIntent = Builder.nativePresentationIntent(block) }
+		if let native = Builder.nativeInlinePresentationIntent(style) { container.inlinePresentationIntent = native }
+		#endif
+
 		result.append(AttributedString(text, attributes: container))
 	}
 
@@ -438,6 +447,64 @@ private final class Builder {
 		return inlines
 	}
 }
+
+// MARK: - Native intent bridging (Apple platforms only)
+
+#if canImport(Darwin)
+@available(macOS 12, iOS 15, tvOS 15, watchOS 8, *)
+extension Builder {
+
+	/// Rebuilds a native `PresentationIntent` from the portable component chain
+	/// (innermost first → built outermost first via the parent chain).
+	static func nativePresentationIntent(_ components: [MarkdownBlock.Component]) -> PresentationIntent {
+		var parent: PresentationIntent?
+		for component in components.reversed() {
+			parent = PresentationIntent(nativeKind(component.kind), identity: component.identity, parent: parent)
+		}
+		// `components` is always non-empty for a leaf block.
+		return parent ?? PresentationIntent(.paragraph, identity: 0, parent: nil)
+	}
+
+	private static func nativeKind(_ kind: MarkdownBlock.Kind) -> PresentationIntent.Kind {
+		switch kind {
+		case .paragraph: return .paragraph
+		case .header(let level): return .header(level: level)
+		case .orderedList: return .orderedList
+		case .unorderedList: return .unorderedList
+		case .listItem(let ordinal): return .listItem(ordinal: ordinal)
+		case .codeBlock(let hint): return .codeBlock(languageHint: hint)
+		case .blockQuote: return .blockQuote
+		case .thematicBreak: return .thematicBreak
+		case .table(let columns):
+			return .table(columns: columns.map { PresentationIntent.TableColumn(alignment: nativeAlignment($0)) })
+		case .tableHeaderRow: return .tableHeaderRow
+		case .tableRow(let rowIndex): return .tableRow(rowIndex: rowIndex)
+		case .tableCell(let columnIndex): return .tableCell(columnIndex: columnIndex)
+		}
+	}
+
+	private static func nativeAlignment(_ alignment: MarkdownBlock.ColumnAlignment) -> PresentationIntent.TableColumn.Alignment {
+		switch alignment {
+		case .left: return .left
+		case .center: return .center
+		case .right: return .right
+		}
+	}
+
+	static func nativeInlinePresentationIntent(_ style: MarkdownInlineStyle) -> InlinePresentationIntent? {
+		var result: InlinePresentationIntent = []
+		if style.contains(.emphasized) { result.insert(.emphasized) }
+		if style.contains(.stronglyEmphasized) { result.insert(.stronglyEmphasized) }
+		if style.contains(.code) { result.insert(.code) }
+		if style.contains(.strikethrough) { result.insert(.strikethrough) }
+		if style.contains(.softBreak) { result.insert(.softBreak) }
+		if style.contains(.lineBreak) { result.insert(.lineBreak) }
+		if style.contains(.inlineHTML) { result.insert(.inlineHTML) }
+		if style.contains(.blockHTML) { result.insert(.blockHTML) }
+		return result.isEmpty ? nil : result
+	}
+}
+#endif
 
 // MARK: - Smart punctuation reversal (shared policy with the HTML renderer)
 
