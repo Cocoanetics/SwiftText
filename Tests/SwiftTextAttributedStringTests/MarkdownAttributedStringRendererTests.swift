@@ -1,3 +1,11 @@
+// `AttributedString` needs iOS 15 / tvOS 15 / watchOS 8, but the package deploys
+// those platforms lower (13/13/6) for its other modules, and swift-testing's
+// @Suite/@Test macros reject an `@available` annotation. So compile these tests
+// only where the deployment target already has `AttributedString`: macOS (.v12)
+// and non-Apple platforms (swift-foundation, unconditional). The renderer logic
+// is platform-independent, so macOS + Linux coverage exercises every path.
+#if os(macOS) || !canImport(Darwin)
+
 import Testing
 import Foundation
 import Markdown
@@ -292,3 +300,5 @@ struct MarkdownAttributedStringRendererTests {
 		#expect(attributed.runs.allSatisfy { $0[SwiftTextMarkdownAttributes.FootnoteReference.self] == nil })
 	}
 }
+
+#endif

@@ -1,4 +1,9 @@
-#if canImport(Darwin)
+// Native intents exist on every Apple platform (iOS 15+, etc.), but among the
+// package's deployment targets only macOS (.v12) clears `AttributedString`'s
+// floor, and swift-testing rejects an `@available` annotation — so this Apple-
+// only suite compiles on macOS. The bridge code itself is identical across Apple
+// platforms, so macOS coverage validates it everywhere.
+#if os(macOS)
 
 import Testing
 import Foundation
