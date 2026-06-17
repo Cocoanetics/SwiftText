@@ -222,6 +222,18 @@ struct RenderPDFTests {
 		#expect(cells[0].height >= cells[1].height + cells[2].height) // Tall spans both rows
 	}
 
+	@Test("Table cell vertical-align: bottom pushes content down")
+	func cellVerticalAlign() async throws {
+		let html = "<table><tr><td style=\"height:100px\">tall</td><td style=\"vertical-align: bottom\">low</td></tr></table>"
+		let root = try await layoutTree(html, contentWidth: 400)
+		let cells = collectBlocks(in: root) { $0.element?.localName == "td" }
+		#expect(cells.count == 2)
+		let low = cells[1]
+		#expect(abs(cells[0].height - low.height) < 0.5) // both fill the row
+		let baseline = try #require(low.lines.first?.fragments.first?.baseline)
+		#expect(baseline > low.y + low.height / 2) // content sits in the lower half
+	}
+
 	@Test("Box model: padding and border widen the border box")
 	func boxModel() async throws {
 		let css = ["div { width: 100px; padding: 10px; border: 5px solid black }"]

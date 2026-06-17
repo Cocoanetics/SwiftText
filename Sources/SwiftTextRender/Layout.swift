@@ -192,15 +192,29 @@ public final class LayoutEngine {
 			y += rowHeights[index] + spacing
 		}
 
-		// Pass 2: re-lay out each cell at its final position, then stretch height.
+		// Pass 2: re-lay out each cell at its final position, stretch to its row(s),
+		// and apply vertical-align by shifting the cell's content.
 		for placement in placements {
 			_ = layoutBlock(placement.cell, containingWidth: spanWidth(placement.colspan),
 			                marginX: columnX(placement.column), borderBoxTop: rowTops[placement.row])
+			let naturalHeight = placement.cell.height
 			let lastRow = min(placement.row + placement.rowspan - 1, rows.count - 1)
-			var height = 0.0
-			for r in placement.row ... lastRow { height += rowHeights[r] }
-			height += Double(lastRow - placement.row) * spacing
-			placement.cell.height = max(height, measured[ObjectIdentifier(placement.cell)] ?? 0)
+			var stretched = 0.0
+			for r in placement.row ... lastRow { stretched += rowHeights[r] }
+			stretched += Double(lastRow - placement.row) * spacing
+			stretched = max(stretched, naturalHeight)
+			placement.cell.height = stretched
+
+			let extra = stretched - naturalHeight
+			if extra > 0.5 {
+				let factor: Double
+				switch placement.cell.style.verticalAlign {
+				case .middle: factor = 0.5
+				case .bottom, .textBottom: factor = 1.0
+				default: factor = 0 // top / baseline
+				}
+				if factor > 0 { shiftBoxContent(placement.cell, by: extra * factor) }
+			}
 		}
 
 		for (rowIndex, row) in rows.enumerated() {
@@ -210,6 +224,24 @@ public final class LayoutEngine {
 			row.box.height = rowHeights[rowIndex]
 		}
 		return y - contentTop
+	}
+
+	/// Shift a box's laid-out content (lines and child boxes) down by `dy`.
+	private func shiftBoxContent(_ box: BlockBox, by dy: Double) {
+		if box.establishesInlineContext {
+			for line in box.lines {
+				line.y += dy
+				for index in line.fragments.indices {
+					line.fragments[index].y += dy
+					line.fragments[index].baseline += dy
+				}
+			}
+		} else {
+			for child in box.children {
+				child.y += dy
+				if let childBlock = child as? BlockBox { shiftBoxContent(childBlock, by: dy) }
+			}
+		}
 	}
 
 	private func spanAttribute(_ cell: BlockBox, _ name: String) -> Int {

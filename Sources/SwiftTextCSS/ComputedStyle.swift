@@ -66,6 +66,12 @@ public enum TextAlign: String, Equatable, Sendable {
 	case start, end, left, right, center, justify
 }
 
+public enum VerticalAlign: String, Equatable, Sendable {
+	case baseline, top, middle, bottom, sub
+	case textTop = "text-top"
+	case textBottom = "text-bottom"
+}
+
 public enum WhiteSpace: Equatable, Sendable {
 	case normal, pre, nowrap, preWrap, preLine
 
@@ -154,6 +160,8 @@ public struct ComputedStyle: Equatable, Sendable {
 
 	// Non-inherited properties.
 	public var display: Display
+	/// Vertical alignment (applied to table cells; `super` is omitted).
+	public var verticalAlign: VerticalAlign
 	public var backgroundColor: RGBA?
 	public var margin: Edges<Length>
 	public var padding: Edges<Length>
@@ -190,6 +198,7 @@ public struct ComputedStyle: Equatable, Sendable {
 		listStyleType: .disc,
 		textIndent: 0,
 		display: .inline,
+		verticalAlign: .baseline,
 		backgroundColor: nil,
 		margin: Edges(.px(0)),
 		padding: Edges(.px(0)),

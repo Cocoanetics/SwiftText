@@ -310,6 +310,11 @@ private func applyLonghand(_ name: String, _ value: [ComponentValue], to style: 
 		if let length = parseLength(value, fontSize: fontSize, rootFontSize: rootFontSize), case .px(let pixels) = length {
 			style.textIndent = pixels
 		}
+	case "vertical-align":
+		if let token = significant(value).first, case .ident(let ident) = token.token,
+		   let align = VerticalAlign(rawValue: ident.asciiLowercased) {
+			style.verticalAlign = align
+		}
 	case "width":
 		if let length = parseLength(value, fontSize: fontSize, rootFontSize: rootFontSize) { style.width = length }
 	case "height":
@@ -397,6 +402,7 @@ private func copyLonghand(_ name: String, from source: ComputedStyle, into style
 	case "word-spacing": style.wordSpacing = source.wordSpacing
 	case "list-style-type", "list-style": style.listStyleType = source.listStyleType
 	case "text-indent": style.textIndent = source.textIndent
+	case "vertical-align": style.verticalAlign = source.verticalAlign
 	case "width": style.width = source.width
 	case "height": style.height = source.height
 	case "margin-top", "margin-right", "margin-bottom", "margin-left": setEdge(&style.margin, name, edgeValue(source.margin, name))
