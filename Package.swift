@@ -138,6 +138,12 @@ let packageProducts: [Product] = [
 		name: "SwiftTextOpenType",
 		targets: ["SwiftTextOpenType"]
 	),
+	// CSS Syntax Level 3 tokenizer + parser (a port of tinycss2).
+	// Foundation-only, always available.
+	.library(
+		name: "SwiftTextCSS",
+		targets: ["SwiftTextCSS"]
+	),
 ] + htmlProducts + macOSProducts
 
 let swiftTextDependencies: [Target.Dependency] = [
@@ -228,6 +234,15 @@ let packageTargets: [Target] = [
 		name: "SwiftTextOpenTypeTests",
 		dependencies: ["SwiftTextOpenType"],
 		path: "Tests/SwiftTextOpenTypeTests"
+	),
+	.target(
+		name: "SwiftTextCSS",
+		path: "Sources/SwiftTextCSS"
+	),
+	.testTarget(
+		name: "SwiftTextCSSTests",
+		dependencies: ["SwiftTextCSS"],
+		path: "Tests/SwiftTextCSSTests"
 	),
 ] + htmlTargets + macOSTargets
 
