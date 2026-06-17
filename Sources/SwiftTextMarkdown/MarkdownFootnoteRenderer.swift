@@ -23,6 +23,10 @@ import Markdown
 /// substituted — orphan references render as literal text. Numbers are
 /// assigned in source-order of first appearance (matching most GFM-style
 /// renderers).
+///
+/// The definition scanner and source-order numbering live in
+/// ``MarkdownFootnoteParser`` so the Markdown → DOCX writer can reuse them to
+/// emit native Word footnotes.
 public enum MarkdownFootnoteRenderer {
 
 	/// Converts Markdown to an HTML fragment, expanding `[^id]` footnote
@@ -30,7 +34,7 @@ public enum MarkdownFootnoteRenderer {
 	public static func convert(
 		_ markdown: String, options: SwiftMarkdownHTMLRenderer.Options = []
 	) -> String {
-		let (cleaned, definitions) = extractDefinitions(from: markdown)
+		let (cleaned, definitions) = extractFootnoteDefinitions(from: markdown)
 
 		// Fast path: no definitions at all -> nothing to rewrite, render directly.
 		if definitions.isEmpty {
@@ -82,224 +86,6 @@ public enum MarkdownFootnoteRenderer {
 	}
 }
 
-// MARK: - Definition extraction
-
-private struct FootnoteDefinition {
-	let id: String
-	let body: String
-}
-
-/// Scans source markdown for `[^id]: …` definition blocks. Returns the source
-/// with those blocks removed, plus the captured definitions in source order.
-///
-/// A definition spans the marker line plus any subsequent lines that are either
-/// blank or indented by at least 4 spaces / one tab (the standard GFM rule).
-/// Indentation is stripped from continuation lines so the captured body is plain
-/// Markdown.
-private func extractDefinitions(from source: String) -> (cleaned: String, definitions: [FootnoteDefinition]) {
-	let normalized = source
-		.replacingOccurrences(of: "\r\n", with: "\n")
-		.replacingOccurrences(of: "\r", with: "\n")
-	let lines = normalized.components(separatedBy: "\n")
-
-	var keptLines: [String] = []
-	keptLines.reserveCapacity(lines.count)
-
-	var definitions: [FootnoteDefinition] = []
-	var seenIDs = Set<String>()
-
-	var i = 0
-	while i < lines.count {
-		let line = lines[i]
-
-		guard let start = parseDefinitionStart(line) else {
-			keptLines.append(line)
-			i += 1
-			continue
-		}
-
-		// Collect body lines: the inline content after `]:`, plus any
-		// indented/blank continuation lines.
-		var bodyLines: [String] = []
-		if !start.firstLineContent.isEmpty {
-			bodyLines.append(start.firstLineContent)
-		}
-
-		var j = i + 1
-		while j < lines.count {
-			let next = lines[j]
-			if next.trimmingCharacters(in: .whitespaces).isEmpty {
-				// Look ahead: if the next non-blank line is also indented, the
-				// blank line is part of the definition (paragraph break inside);
-				// otherwise it terminates the definition.
-				var lookahead = j + 1
-				while lookahead < lines.count && lines[lookahead].trimmingCharacters(in: .whitespaces).isEmpty {
-					lookahead += 1
-				}
-				if lookahead < lines.count, stripContinuationIndent(lines[lookahead]) != nil {
-					bodyLines.append("")
-					j += 1
-					continue
-				}
-				break
-			}
-			if let stripped = stripContinuationIndent(next) {
-				bodyLines.append(stripped)
-				j += 1
-				continue
-			}
-			break
-		}
-
-		// Skip duplicate definitions — first wins.
-		if !seenIDs.contains(start.id) {
-			definitions.append(FootnoteDefinition(id: start.id, body: bodyLines.joined(separator: "\n")))
-			seenIDs.insert(start.id)
-		}
-
-		i = j
-	}
-
-	return (keptLines.joined(separator: "\n"), definitions)
-}
-
-private func parseDefinitionStart(_ line: String) -> (id: String, firstLineContent: String)? {
-	guard line.hasPrefix("[^"),
-	      let closingBracket = line.firstIndex(of: "]") else { return nil }
-	let identifierStart = line.index(line.startIndex, offsetBy: 2)
-	guard identifierStart < closingBracket else { return nil }
-	let colonIndex = line.index(after: closingBracket)
-	guard colonIndex < line.endIndex, line[colonIndex] == ":" else { return nil }
-
-	let id = String(line[identifierStart..<closingBracket]).trimmingCharacters(in: .whitespaces)
-	guard !id.isEmpty else { return nil }
-
-	let contentStart = line.index(after: colonIndex)
-	let content = contentStart < line.endIndex
-		? String(line[contentStart...]).trimmingCharacters(in: .whitespaces)
-		: ""
-	return (id, content)
-}
-
-private func stripContinuationIndent(_ line: String) -> String? {
-	if line.hasPrefix("\t") {
-		return String(line.dropFirst())
-	}
-	if line.hasPrefix("    ") {
-		return String(line.dropFirst(4))
-	}
-	return nil
-}
-
-// MARK: - Sentinels
-
-// Private Use Area characters — CommonMark-inert, not touched by the renderer's
-// HTML escape (which only rewrites `& < > "`), and vanishingly unlikely to
-// appear in user content.
-private let sentinelOpen: Character = "\u{E000}"
-private let sentinelClose: Character = "\u{E001}"
-
-private func referenceSentinel(number: Int) -> String {
-	"\(sentinelOpen)fnref:\(number)\(sentinelClose)"
-}
-
-// MARK: - State
-
-private final class FootnoteState {
-	private let validIDs: Set<String>
-	private var numberByID: [String: Int] = [:]
-	private var nextNumber = 1
-	private var totalReferenceCountByNumber: [Int: Int] = [:]
-	private var emittedReferenceCountByNumber: [Int: Int] = [:]
-
-	init(definitionIDs: [String]) {
-		self.validIDs = Set(definitionIDs)
-	}
-
-	/// Assigns and returns the number for `id` on first reference. Returns
-	/// `nil` if no matching definition was extracted — the rewriter then leaves
-	/// the `[^id]` substring as literal text.
-	func recordReference(forID id: String) -> Int? {
-		guard validIDs.contains(id) else { return nil }
-		let number: Int
-		if let existing = numberByID[id] {
-			number = existing
-		} else {
-			number = nextNumber
-			numberByID[id] = number
-			nextNumber += 1
-		}
-		totalReferenceCountByNumber[number, default: 0] += 1
-		return number
-	}
-
-	/// Looks up an already-assigned number without recording a new reference.
-	/// Used after rewriting to fetch numbers for the definitions block.
-	func number(forID id: String) -> Int? {
-		numberByID[id]
-	}
-
-	/// Returns the next per-occurrence anchor id for a reference. The first
-	/// reference to footnote `N` gets `ref-N`; subsequent references get
-	/// `ref-N-2`, `ref-N-3`, … so each anchor in the HTML is unique.
-	func nextReferenceAnchorID(forNumber number: Int) -> String {
-		let occurrence = (emittedReferenceCountByNumber[number] ?? 0) + 1
-		emittedReferenceCountByNumber[number] = occurrence
-		return occurrence == 1 ? "ref-\(number)" : "ref-\(number)-\(occurrence)"
-	}
-}
-
-// MARK: - AST rewriter
-
-private struct FootnoteReferenceRewriter: MarkupRewriter {
-	let state: FootnoteState
-
-	mutating func visitText(_ text: Text) -> Markup? {
-		let original = text.string
-		guard original.contains("[^") else { return text }
-		let rewritten = replaceReferences(in: original)
-		guard rewritten != original else { return text }
-		return Text(rewritten)
-	}
-
-	private func replaceReferences(in input: String) -> String {
-		// We scan manually rather than with NSRegularExpression so we can keep
-		// the bounds rules simple: `[^` opens, the next `]` closes, the id is
-		// non-empty and contains no whitespace or `]`. This matches the
-		// hand-rolled parser's behavior closely enough for parity.
-		var result = ""
-		result.reserveCapacity(input.count)
-
-		var index = input.startIndex
-		while index < input.endIndex {
-			guard let openRange = input.range(of: "[^", range: index..<input.endIndex) else {
-				result.append(contentsOf: input[index...])
-				break
-			}
-			result.append(contentsOf: input[index..<openRange.lowerBound])
-
-			let idStart = openRange.upperBound
-			guard let closeIndex = input[idStart...].firstIndex(of: "]") else {
-				result.append(contentsOf: input[openRange.lowerBound...])
-				break
-			}
-			let id = String(input[idStart..<closeIndex])
-			let consumedEnd = input.index(after: closeIndex)
-
-			let isValidShape = !id.isEmpty && !id.contains(where: { $0.isWhitespace })
-			if isValidShape, let number = state.recordReference(forID: id) {
-				result.append(referenceSentinel(number: number))
-			} else {
-				// No matching definition (or malformed id) — leave literal text.
-				result.append(contentsOf: input[openRange.lowerBound..<consumedEnd])
-			}
-			index = consumedEnd
-		}
-
-		return result
-	}
-}
-
 // MARK: - Sentinel expansion
 
 /// Replaces every sentinel in `html` with a `<sup><a …>[N]</a></sup>` anchor.
@@ -307,21 +93,21 @@ private struct FootnoteReferenceRewriter: MarkupRewriter {
 /// appear in the rendered HTML), which lets the definitions block link back to
 /// the first occurrence cleanly.
 private func expandSentinels(in html: String, state: FootnoteState) -> String {
-	guard html.contains(sentinelOpen) else { return html }
+	guard html.contains(footnoteSentinelOpen) else { return html }
 
 	var result = ""
 	result.reserveCapacity(html.count)
 
 	var index = html.startIndex
 	while index < html.endIndex {
-		guard let openIndex = html[index...].firstIndex(of: sentinelOpen) else {
+		guard let openIndex = html[index...].firstIndex(of: footnoteSentinelOpen) else {
 			result.append(contentsOf: html[index...])
 			break
 		}
 		result.append(contentsOf: html[index..<openIndex])
 
 		let payloadStart = html.index(after: openIndex)
-		guard let closeIndex = html[payloadStart...].firstIndex(of: sentinelClose) else {
+		guard let closeIndex = html[payloadStart...].firstIndex(of: footnoteSentinelClose) else {
 			// Malformed — emit the rest verbatim and stop.
 			result.append(contentsOf: html[openIndex...])
 			break

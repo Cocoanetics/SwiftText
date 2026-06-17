@@ -17,9 +17,10 @@ public enum MarkdownToDocx {
 	///     (typically the source `.md` file's folder). When `nil`, images fall back to
 	///     alt-text placeholders.
 	public static func convert(_ markdown: String, to url: URL, pageSetup: DocxPageSetup = .a4, baseURL: URL? = nil) throws {
-		let blocks = parseBlocks(markdown)
+		let build = MarkdownDocxBuilder.build(from: markdown)
 		let writer = DocxWriter()
-		writer.blocks = blocks
+		writer.blocks = build.blocks
+		writer.footnotes = build.footnotes
 		writer.pageSetup = pageSetup
 		writer.baseURL = baseURL
 		try writer.write(to: url)
