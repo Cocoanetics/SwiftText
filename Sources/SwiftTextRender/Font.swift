@@ -51,6 +51,14 @@ public enum Font {
 		case .embedded(let font): return "emb:" + font.postScriptName
 		}
 	}
+
+	/// Whether this font can render `scalar` (drives font fallback selection).
+	func covers(_ scalar: Unicode.Scalar) -> Bool {
+		switch self {
+		case .standard(let font): return font.covers(scalar)
+		case .embedded(let font): return font.hasGlyph(for: scalar)
+		}
+	}
 }
 
 /// A base-14 font (no embedding) with standard Adobe metrics in 1000-unit em.
@@ -75,6 +83,12 @@ public struct StandardFont: Equatable {
 
 	public func ascent(size: Double) -> Double { ascentUnits * size / unitsPerEm }
 	public func descent(size: Double) -> Double { -descentUnits * size / unitsPerEm }
+
+	/// Base-14 fonts use WinAnsiEncoding (CP1252); treat anything CP1252 can
+	/// encode as covered (ASCII, Latin-1, smart quotes, dashes, bullet…).
+	func covers(_ scalar: Unicode.Scalar) -> Bool {
+		String(scalar).data(using: .windowsCP1252) != nil
+	}
 }
 
 /// A TrueType/OpenType font embedded into the PDF.
@@ -108,6 +122,13 @@ public struct EmbeddedFont {
 /// everything else falls back to base-14.
 public final class FontBook {
 	private var registered: [String: EmbeddedFont] = [:]
+	/// Registered fonts in registration order (fallback search order).
+	private var registrationOrder: [EmbeddedFont] = []
+	/// Loaded system fallback faces, by file path (nil = tried and unusable).
+	private var systemFallbackCache: [String: EmbeddedFont?] = [:]
+	/// Whether to fall back to bundled system fonts for glyphs no registered or
+	/// base-14 font can render. Disable for hermetic/deterministic rendering.
+	public var systemFallbackEnabled = true
 
 	public init() {}
 
@@ -118,6 +139,7 @@ public final class FontBook {
 		let otf = try OpenTypeFont(data: data, fontIndex: fontIndex)
 		let font = EmbeddedFont(otf: otf, postScriptName: Self.postScriptName(from: family))
 		registered[family.lowercased()] = font
+		registrationOrder.append(font)
 		return font
 	}
 
@@ -133,6 +155,111 @@ public final class FontBook {
 		case .monospace: return .standard(.courier(bold: bold, italic: italic))
 		case .serif: return .standard(.times(bold: bold, italic: italic))
 		case .sansSerif: return .standard(.helvetica(bold: bold, italic: italic))
+		}
+	}
+
+	// MARK: - Font fallback
+
+	/// Split `text` into maximal runs that share one font, picking a fallback
+	/// face per character when the primary font lacks the glyph. Each run is a
+	/// `(text, font)` pair in logical order.
+	public func resolveRuns(_ text: String, style: ComputedStyle) -> [(text: String, font: Font)] {
+		let primary = font(for: style)
+		var runs: [(text: String, font: Font)] = []
+		var currentText = String.UnicodeScalarView()
+		var currentFont: Font? = nil
+		for scalar in text.unicodeScalars {
+			let resolved = coveringFont(for: scalar, primary: primary, style: style)
+			if let current = currentFont, current.key == resolved.key {
+				currentText.append(scalar)
+			} else {
+				if let current = currentFont, !currentText.isEmpty {
+					runs.append((String(currentText), current))
+				}
+				currentText = String.UnicodeScalarView([scalar])
+				currentFont = resolved
+			}
+		}
+		if let current = currentFont, !currentText.isEmpty {
+			runs.append((String(currentText), current))
+		}
+		return runs
+	}
+
+	/// The best font to render `scalar`: the primary, else another registered
+	/// face, else base-14 (for CP1252 text), else a system fallback, else the
+	/// primary (drawing `.notdef`, which is unavoidable if nothing covers it).
+	public func coveringFont(for scalar: Unicode.Scalar, primary: Font, style: ComputedStyle) -> Font {
+		if primary.covers(scalar) { return primary }
+		for embedded in registrationOrder where embedded.postScriptName != primaryName(primary) {
+			if embedded.hasGlyph(for: scalar) { return .embedded(embedded) }
+		}
+		let bold = style.fontWeight >= 600
+		let italic = style.fontStyle != .normal
+		let base14 = StandardFont.helvetica(bold: bold, italic: italic)
+		if base14.covers(scalar) { return .standard(base14) }
+		if systemFallbackEnabled, let system = systemFallback(for: scalar) { return .embedded(system) }
+		return primary
+	}
+
+	private func primaryName(_ font: Font) -> String? {
+		if case .embedded(let embedded) = font { return embedded.postScriptName }
+		return nil
+	}
+
+	/// Lazily load and cache the first bundled system font that renders `scalar`.
+	private func systemFallback(for scalar: Unicode.Scalar) -> EmbeddedFont? {
+		for path in Self.systemCandidates(for: scalar) {
+			if let cached = systemFallbackCache[path] {
+				if let face = cached, face.hasGlyph(for: scalar) { return face }
+				continue
+			}
+			guard FileManager.default.fileExists(atPath: path),
+			      let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+			      let otf = try? OpenTypeFont(data: data, fontIndex: 0) else {
+				systemFallbackCache[path] = .some(nil)
+				continue
+			}
+			let name = Self.postScriptName(from: "Fallback" + ((path as NSString).lastPathComponent as String))
+			let face = EmbeddedFont(otf: otf, postScriptName: name)
+			systemFallbackCache[path] = .some(face)
+			if face.hasGlyph(for: scalar) { return face }
+		}
+		return nil
+	}
+
+	/// Candidate system font files for the script of `scalar` (best-effort;
+	/// missing paths are skipped). macOS and common Linux locations.
+	private static func systemCandidates(for scalar: Unicode.Scalar) -> [String] {
+		switch scalar.value {
+		case 0x0600...0x06FF, 0x0750...0x077F, 0x08A0...0x08FF, 0xFB50...0xFDFF, 0xFE70...0xFEFF:
+			return [ // Arabic
+				"/System/Library/Fonts/Supplemental/GeezaPro.ttc",
+				"/System/Library/Fonts/Supplemental/Damascus.ttc",
+				"/System/Library/Fonts/Supplemental/AlBayan.ttc",
+				"/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf",
+				"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+			]
+		case 0x0590...0x05FF, 0xFB1D...0xFB4F:
+			return [ // Hebrew
+				"/System/Library/Fonts/Supplemental/Arial Hebrew.ttc",
+				"/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+				"/usr/share/fonts/truetype/noto/NotoSansHebrew-Regular.ttf",
+				"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+			]
+		case 0x3040...0x30FF, 0x3400...0x9FFF, 0xAC00...0xD7AF, 0xF900...0xFAFF:
+			return [ // CJK / Kana / Hangul
+				"/System/Library/Fonts/PingFang.ttc",
+				"/System/Library/Fonts/Hiragino Sans GB.ttc",
+				"/System/Library/Fonts/Supplemental/Songti.ttc",
+				"/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+			]
+		default:
+			return [ // Broad Unicode coverage as a last resort
+				"/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+				"/Library/Fonts/Arial Unicode.ttf",
+				"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+			]
 		}
 	}
 

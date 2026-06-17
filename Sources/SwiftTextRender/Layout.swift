@@ -432,18 +432,25 @@ public final class LayoutEngine {
 				}
 				pendingSpace = nil
 			case .word(let rawWord, let style, let href):
-				let font = fonts.font(for: style)
-				// Arabic letters select presentation forms from their neighbours.
-				// Shape in logical order (one glyph per scalar) so the later bidi
-				// pass can reverse the run for visual order. Only embedded fonts
-				// carry the presentation-form glyphs.
-				var word = rawWord
-				if case .embedded(let embedded) = font, ArabicShaper.needsShaping(rawWord) {
-					word = ArabicShaper.shape(rawWord, hasForm: { embedded.hasGlyph(for: $0) })
+				// Split the word into runs that share one font (font fallback), then
+				// shape each Arabic run into presentation forms. Shaping stays in
+				// logical order (one glyph per scalar) so the later bidi pass can
+				// reverse the run for visual order; only embedded fonts carry the
+				// presentation-form glyphs.
+				struct Piece { let text: String; let font: Font; let width: Double }
+				var pieces: [Piece] = []
+				var wordWidth = 0.0
+				for run in fonts.resolveRuns(rawWord, style: style) {
+					var text = run.text
+					if case .embedded(let embedded) = run.font, ArabicShaper.needsShaping(text) {
+						text = ArabicShaper.shape(text, hasForm: { embedded.hasGlyph(for: $0) })
+					}
+					// letter-spacing adds after every character of the run.
+					let width = run.font.width(of: text, size: style.fontSize)
+						+ style.letterSpacing * Double(text.unicodeScalars.count)
+					pieces.append(Piece(text: text, font: run.font, width: width))
+					wordWidth += width
 				}
-				// letter-spacing adds after every character of the word.
-				let wordWidth = font.width(of: word, size: style.fontSize)
-					+ style.letterSpacing * Double(word.unicodeScalars.count)
 				func gap(_ spaceStyle: ComputedStyle) -> Double {
 					// word-spacing adds to each inter-word space.
 					fonts.font(for: spaceStyle).width(of: " ", size: spaceStyle.fontSize) + spaceStyle.wordSpacing
@@ -458,9 +465,16 @@ public final class LayoutEngine {
 					pendingSpace = nil
 				}
 
-				let fragment = TextFragment(text: word, style: style, x: penX, y: 0, width: wordWidth, baseline: 0, href: href, bidiLevel: wordLevel(tokenIndex))
-				fragments.append(fragment)
-				penX += wordWidth
+				// One fragment per font-run; all share the word's bidi level so the
+				// reorder treats the word's runs as a unit.
+				let level = wordLevel(tokenIndex)
+				for piece in pieces {
+					let fragment = TextFragment(text: piece.text, style: style, x: penX, y: 0,
+					                            width: piece.width, baseline: 0, href: href,
+					                            bidiLevel: level, font: piece.font)
+					fragments.append(fragment)
+					penX += piece.width
+				}
 			}
 		}
 		finishLine(isLast: true)

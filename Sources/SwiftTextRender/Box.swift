@@ -110,8 +110,11 @@ public struct TextFragment {
 	public var href: String?
 	/// The resolved bidi embedding level (odd = right-to-left).
 	public var bidiLevel: UInt8
+	/// The font this run is drawn with. When nil, the painter resolves it from
+	/// `style`; font fallback sets it so a fallback face survives to drawing.
+	public var font: Font?
 
-	public init(text: String, style: ComputedStyle, x: Double, y: Double, width: Double, baseline: Double, href: String? = nil, bidiLevel: UInt8 = 0) {
+	public init(text: String, style: ComputedStyle, x: Double, y: Double, width: Double, baseline: Double, href: String? = nil, bidiLevel: UInt8 = 0, font: Font? = nil) {
 		self.text = text
 		self.style = style
 		self.x = x
@@ -120,5 +123,6 @@ public struct TextFragment {
 		self.baseline = baseline
 		self.href = href
 		self.bidiLevel = bidiLevel
+		self.font = font
 	}
 }

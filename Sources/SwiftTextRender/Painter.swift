@@ -157,7 +157,8 @@ public final class Painter {
 	// MARK: - Text
 
 	private func paintText(_ fragment: TextFragment) {
-		let font = fonts.font(for: fragment.style)
+		// Use the run's resolved font (set by fallback); else resolve from style.
+		let font = fragment.font ?? fonts.font(for: fragment.style)
 		let resource = builder.resourceName(for: font)
 		let color = fragment.style.color
 
