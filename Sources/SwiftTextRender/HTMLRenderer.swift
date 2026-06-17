@@ -56,6 +56,10 @@ public enum HTMLRenderer {
 		// sheets supplied by the caller (which therefore win on equal specificity).
 		let documentSheets = extractStyleSheets(html: html)
 		let resolver = StyleResolver(authorStyleSheets: documentSheets + css)
+
+		// @page rules in the document override the page geometry.
+		var options = options
+		applyAtPageRules(documentSheets + css, to: &options)
 		let styled = StyledElement.build(domElement: root, resolver: resolver)
 		guard let rootBox = BoxTreeBuilder.build(from: styled) as? BlockBox else { throw RenderError.noRootBox }
 
@@ -101,6 +105,71 @@ public enum HTMLRenderer {
 		fontBuilder.finalize()
 		addOutline(to: pdf, root: rootBox, slices: slices, pages: pageObjects, pageHeightPx: pageHeightPx, margin: margin)
 		return pdf.write()
+	}
+
+	// MARK: - @page rules
+
+	/// Known named page sizes, in CSS pixels (portrait).
+	private static let pageSizesPx: [String: (width: Double, height: Double)] = {
+		let mm = 96.0 / 25.4, inch = 96.0
+		return [
+			"a3": (297 * mm, 420 * mm),
+			"a4": (210 * mm, 297 * mm),
+			"a5": (148 * mm, 210 * mm),
+			"b5": (176 * mm, 250 * mm),
+			"letter": (8.5 * inch, 11 * inch),
+			"legal": (8.5 * inch, 14 * inch),
+		]
+	}()
+
+	/// Apply `@page { size; margin }` declarations to the render options.
+	private static func applyAtPageRules(_ sheets: [String], to options: inout RenderOptions) {
+		for sheet in sheets {
+			for node in parseStylesheet(sheet, skipComments: true, skipWhitespace: true) {
+				guard case .atRule(let rule) = node, rule.lowerAtKeyword == "page", let content = rule.content else { continue }
+				for declaration in parseDeclarations(content) {
+					switch declaration.lowerName {
+					case "size": applyPageSize(declaration.value, to: &options)
+					case "margin": applyPageMargin(declaration.value, to: &options)
+					default: break
+					}
+				}
+			}
+		}
+	}
+
+	private static func applyPageSize(_ value: [ComponentValue], to options: inout RenderOptions) {
+		var landscape = false
+		var named: (width: Double, height: Double)? = nil
+		var lengths: [Double] = []
+		for token in value where !token.isWhitespaceOrComment {
+			if case .ident(let ident) = token.token {
+				let lower = ident.lowercased()
+				if lower == "landscape" { landscape = true }
+				else if lower == "portrait" { continue }
+				else if let size = pageSizesPx[lower] { named = size }
+			} else if let length = parseLength([token], fontSize: 16, rootFontSize: 16), case .px(let pixels) = length {
+				lengths.append(pixels)
+			}
+		}
+
+		if let named {
+			options.pageWidthPx = landscape ? named.height : named.width
+			options.pageHeightPx = landscape ? named.width : named.height
+		} else if lengths.count >= 2 {
+			options.pageWidthPx = lengths[0]
+			options.pageHeightPx = lengths[1]
+		} else if lengths.count == 1 {
+			options.pageWidthPx = lengths[0]
+			options.pageHeightPx = lengths[0]
+		}
+	}
+
+	private static func applyPageMargin(_ value: [ComponentValue], to options: inout RenderOptions) {
+		// A single uniform margin is supported; the first value is used.
+		guard let token = value.first(where: { !$0.isWhitespaceOrComment }),
+		      let length = parseLength([token], fontSize: 16, rootFontSize: 16), case .px(let pixels) = length else { return }
+		options.pageMarginPx = pixels
 	}
 
 	// MARK: - Bookmarks / outline

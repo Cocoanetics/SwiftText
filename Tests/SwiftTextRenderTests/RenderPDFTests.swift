@@ -322,6 +322,27 @@ struct RenderPDFTests {
 		#endif
 	}
 
+	@Test("@page size sets the page geometry")
+	func atPageSize() async throws {
+		let data = try await HTMLRenderer.renderPDF(html: "<style>@page { size: A4; margin: 0 }</style><p>x</p>")
+		#if canImport(PDFKit)
+		let document = try #require(PDFDocument(data: data))
+		let bounds = try #require(document.page(at: 0)).bounds(for: .mediaBox)
+		#expect(abs(bounds.width - 595.28) < 1.0)  // A4 width in points
+		#expect(abs(bounds.height - 841.89) < 1.0) // A4 height in points
+		#endif
+	}
+
+	@Test("@page landscape swaps width and height")
+	func atPageLandscape() async throws {
+		let data = try await HTMLRenderer.renderPDF(html: "<style>@page { size: A4 landscape }</style><p>x</p>")
+		#if canImport(PDFKit)
+		let document = try #require(PDFDocument(data: data))
+		let bounds = try #require(document.page(at: 0)).bounds(for: .mediaBox)
+		#expect(bounds.width > bounds.height)
+		#endif
+	}
+
 	// MARK: - Sample artifact
 
 	@Test("Generates a sample PDF artifact")
