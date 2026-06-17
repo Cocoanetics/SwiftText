@@ -87,6 +87,55 @@ Features:
 > `index.xml` format are supported. The rare gzipped legacy variant
 > (`index.xml.gz`) is reported with a clear error rather than mis-parsed.
 
+### SwiftTextAttributedString
+
+Renders Markdown into a **platform-independent attributed text** value type.
+Built on swift-markdown (same AST as the HTML/DOCX/Pages paths), it depends on
+nothing but the standard library, so it behaves identically on macOS, iOS,
+Linux and Windows.
+
+`AttributedText` is a flat list of styled runs that carry both inline character
+attributes (bold, italic, strikethrough, code, links, super-/subscript) and the
+block context of their paragraph (heading level, list nesting + markers,
+blockquote depth, code blocks, tables, alerts). It covers the full GFM superset
+the package supports:
+
+- Headings (ATX + setext), emphasis, strong, strikethrough, inline code
+- Links, autolinks, and images (carried as attachments with alt-text fallback)
+- Ordered / unordered / nested / task lists, with computed markers
+- Fenced + indented code blocks (with language)
+- Tables with per-column alignment (cells are themselves `AttributedText`)
+- Blockquotes, GitHub `[!NOTE]` and DocC `Note:` alerts, thematic breaks
+- `[^id]` footnotes — references become superscript runs and a definitions
+  block is appended (same parser as the HTML renderer and DOCX writer)
+- Raw HTML (emitted as literal text), with smart-punctuation reversal by default
+
+```swift
+import SwiftTextAttributedString
+
+let attributed = MarkdownAttributedTextRenderer.convert("""
+# Title
+
+A paragraph with **bold**, *italic*, a [link](https://example.com) and a
+footnote.[^1]
+
+- [x] done
+- [ ] todo
+
+[^1]: The footnote body.
+""")
+
+// Inspect the portable model on any platform:
+for run in attributed.runs where run.attributes.bold {
+    print("bold:", run.text)
+}
+
+// On Apple platforms, bridge to NSAttributedString with a configurable stylesheet:
+#if canImport(UIKit) || canImport(AppKit)
+let styled = attributed.nsAttributedString(stylesheet: .default)
+#endif
+```
+
 ## Installation
 
 Add SwiftText to your Swift package dependencies:

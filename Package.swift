@@ -64,9 +64,13 @@ let ocrTestDeps: [Target.Dependency] = []
 // cross-platform — Linux needs libxml2-dev/pkg-config, vcpkg on Windows).
 // SwiftTextMarkdown is platform-agnostic (built on swift-cmark), so it ships
 // alongside SwiftTextHTML rather than being gated by it.
+// SwiftTextAttributedString (Markdown → portable AttributedText) is likewise
+// platform-agnostic and always available — its NSAttributedString bridge is
+// gated internally by `#if canImport(UIKit)/AppKit`.
 let htmlProducts: [Product] = [
 	.library(name: "SwiftTextHTML", targets: ["SwiftTextHTML"]),
 	.library(name: "SwiftTextMarkdown", targets: ["SwiftTextMarkdown"]),
+	.library(name: "SwiftTextAttributedString", targets: ["SwiftTextAttributedString"]),
 ]
 let htmlTargets: [Target] = [
 	.target(
@@ -92,6 +96,14 @@ let htmlTargets: [Target] = [
 		],
 		path: "Sources/SwiftTextMarkdown"
 	),
+	.target(
+		name: "SwiftTextAttributedString",
+		dependencies: [
+			"SwiftTextMarkdown",
+			.product(name: "Markdown", package: "swift-markdown"),
+		],
+		path: "Sources/SwiftTextAttributedString"
+	),
 	.testTarget(
 		name: "SwiftTextHTMLTests",
 		dependencies: ["SwiftTextHTML", "SwiftTextMarkdown", "SwiftTextCore"],
@@ -101,6 +113,11 @@ let htmlTargets: [Target] = [
 		name: "SwiftTextMarkdownTests",
 		dependencies: ["SwiftTextMarkdown"],
 		path: "Tests/SwiftTextMarkdownTests"
+	),
+	.testTarget(
+		name: "SwiftTextAttributedStringTests",
+		dependencies: ["SwiftTextAttributedString"],
+		path: "Tests/SwiftTextAttributedStringTests"
 	),
 ]
 
@@ -130,6 +147,8 @@ let packageProducts: [Product] = [
 let swiftTextDependencies: [Target.Dependency] = [
 	.target(name: "SwiftTextDOCX", condition: .when(traits: ["DOCX"])),
 	.target(name: "SwiftTextPages", condition: .when(traits: ["PAGES"])),
+	// Platform-agnostic and dependency-light, so always linked (not trait-gated).
+	"SwiftTextAttributedString",
 ] + swiftTextHTMLDeps + swiftTextExtraDeps
 
 let packageTargets: [Target] = [
