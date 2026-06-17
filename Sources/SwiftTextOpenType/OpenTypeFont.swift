@@ -40,6 +40,10 @@ public struct OpenTypeFont {
 	public let italicAngle: Double
 	/// Whether the font is monospaced (from `post`).
 	public let isFixedPitch: Bool
+	/// Whether the glyph outlines are CFF (PostScript), i.e. a `CFF `/`CFF2`
+	/// table, rather than TrueType `glyf`. This decides the PDF embedding form
+	/// (FontFile3/CIDFontType0 vs FontFile2/CIDFontType2).
+	public let hasCFFOutlines: Bool
 
 	private let fonts: FontBytes
 	private let hmtxOffset: Int
@@ -90,6 +94,9 @@ public struct OpenTypeFont {
 			guard let table = tables[tag] else { throw OpenTypeError.missingTable(tag) }
 			return table.offset
 		}
+
+		// CFF outlines (`OTTO` fonts) embed differently from TrueType `glyf`.
+		hasCFFOutlines = tables["CFF "] != nil || tables["CFF2"] != nil
 
 		// head: units per em, bounding box, mac style.
 		let head = try require("head")

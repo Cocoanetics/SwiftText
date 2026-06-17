@@ -227,10 +227,13 @@ private func expandBorder(name: String, value: [ComponentValue]) -> [(name: Stri
 
 	var result: [(name: String, value: [ComponentValue])] = []
 	for side in sides {
-		// A border shorthand resets all three; default width to medium, style to none.
+		// A border shorthand resets all three longhands, even when a subvalue is
+		// omitted: width → medium, style → none, color → currentColor. Emitting
+		// the omitted color is essential so a prior `border-color` winner does not
+		// survive (e.g. `border-color: red; border: 1px solid` is the element color).
 		result.append(("border-\(side)-width", width.map { [$0] } ?? [keyword("medium")]))
 		result.append(("border-\(side)-style", style.map { [$0] } ?? [keyword("none")]))
-		if let color { result.append(("border-\(side)-color", [color])) }
+		result.append(("border-\(side)-color", color.map { [$0] } ?? [keyword("currentcolor")]))
 	}
 	return result
 }

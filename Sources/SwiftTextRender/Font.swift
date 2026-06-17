@@ -107,6 +107,8 @@ public struct EmbeddedFont {
 	var descentUnits: Int { otf.descent }
 	var boundingBox: (xMin: Int, yMin: Int, xMax: Int, yMax: Int) { otf.boundingBox }
 	var data: Data { otf.data }
+	/// Whether the outlines are CFF (decides the PDF embedding form).
+	var hasCFFOutlines: Bool { otf.hasCFFOutlines }
 
 	public func width(of string: String, size: Double) -> Double { otf.width(of: string, size: size) }
 	public func ascent(size: Double) -> Double { Double(otf.ascent) * size / unitsPerEm }

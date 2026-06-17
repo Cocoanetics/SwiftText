@@ -83,8 +83,16 @@ public final class FontResourceBuilder {
 		let scale = 1000.0 / font.unitsPerEm
 		let name = font.postScriptName
 
+		// TrueType (`glyf`) outlines embed as FontFile2 + CIDFontType2; CFF
+		// (PostScript) outlines as FontFile3 (Subtype OpenType) + CIDFontType0.
+		// Encoding a FontFile2 stream that is actually CFF produces invalid text.
+		let cff = font.hasCFFOutlines
 		let fontFile = PDFStream(stream: [font.data])
-		fontFile.setExtra("Length1", font.data.count)
+		if cff {
+			fontFile.setExtra("Subtype", PDFName("OpenType"))
+		} else {
+			fontFile.setExtra("Length1", font.data.count)
+		}
 		pdf.addObject(fontFile)
 
 		let bbox = font.boundingBox
@@ -103,7 +111,7 @@ public final class FontResourceBuilder {
 			("Descent", Int((Double(font.descentUnits) * scale).rounded())),
 			("CapHeight", Int((Double(font.ascentUnits) * scale).rounded())),
 			("StemV", 80),
-			("FontFile2", fontFile.reference),
+			(cff ? "FontFile3" : "FontFile2", fontFile.reference),
 		])
 		pdf.addObject(descriptor)
 
@@ -114,9 +122,11 @@ public final class FontResourceBuilder {
 			widths.elements.append(PDFArray([width]))
 		}
 
-		let cidFont = PDFDictionary([
+		// CIDFontType0 (CFF) addresses glyphs by GID via Identity-H, so no
+		// CIDToGIDMap; CIDFontType2 (TrueType) needs the Identity map.
+		var cidEntries: [(String, PDFValue)] = [
 			("Type", "/Font"),
-			("Subtype", "/CIDFontType2"),
+			("Subtype", cff ? "/CIDFontType0" : "/CIDFontType2"),
 			("BaseFont", "/\(name)"),
 			("CIDSystemInfo", PDFDictionary([
 				("Registry", PDFString("Adobe")),
@@ -124,10 +134,13 @@ public final class FontResourceBuilder {
 				("Supplement", 0),
 			])),
 			("FontDescriptor", descriptor.reference),
-			("CIDToGIDMap", "/Identity"),
 			("DW", 1000),
 			("W", widths),
-		])
+		]
+		if !cff {
+			cidEntries.insert(("CIDToGIDMap", "/Identity"), at: 5)
+		}
+		let cidFont = PDFDictionary(cidEntries)
 		pdf.addObject(cidFont)
 
 		let toUnicode = buildToUnicode(glyphs: glyphs)

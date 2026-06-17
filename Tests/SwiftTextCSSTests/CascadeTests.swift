@@ -69,6 +69,18 @@ struct CascadeTests {
 		#expect(style(Element("b"), resolver: resolver).fontWeight == 700)
 	}
 
+	@Test("A border shorthand resets the color longhand to currentColor")
+	func borderShorthandResetsColor() {
+		let resolver = StyleResolver()
+		// `border` omits a color, so it resets border-*-color to currentColor,
+		// overriding the earlier `border-color: red`. currentColor is the text color.
+		let element = Element("p", ["style": "color: blue; border-color: red; border: 2px solid"])
+		let resolved = style(element, resolver: resolver)
+		#expect(resolved.borderColor.top == RGBA(0, 0, 1, 1)) // blue (currentColor), not red
+		#expect(resolved.borderWidth.top == 2)
+		#expect(resolved.borderStyle.top == .solid)
+	}
+
 	@Test("Author rules override the UA, and em margins follow the new size")
 	func authorOverride() {
 		let resolver = StyleResolver(authorStyleSheets: ["p { color: red; font-size: 20px }"])

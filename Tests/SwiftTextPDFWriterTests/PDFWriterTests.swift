@@ -134,6 +134,19 @@ struct PDFWriterTests {
 		#expect(String(decoding: slice, as: UTF8.self) == "xref")
 	}
 
+	@Test("write() is idempotent — serializing twice yields identical bytes")
+	func idempotentWrite() {
+		let pdf = makeHelloPDF()
+		let first = pdf.write()
+		let second = pdf.write()
+		// Offsets must not accumulate across writes: the two outputs are equal,
+		// and startxref in the second still points exactly at its "xref" keyword.
+		#expect(first == second)
+		let xref = pdf.xrefPosition
+		let slice = second[xref ..< min(xref + 4, second.count)]
+		#expect(String(decoding: slice, as: UTF8.self) == "xref")
+	}
+
 	@Test("Page count is tracked")
 	func pageCount() {
 		let pdf = makeHelloPDF()

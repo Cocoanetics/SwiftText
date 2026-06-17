@@ -93,6 +93,10 @@ public final class PDF {
 	@discardableResult
 	public func write(version: String = "1.7", identifier: Data? = nil) -> Data {
 		var output = Data()
+		// Reset position state so re-serializing the same document (a second
+		// write()/write(to:)) records correct offsets rather than accumulating.
+		currentPosition = 0
+		xrefPosition = 0
 
 		func writeLine(_ content: Data) {
 			currentPosition += content.count + 1

@@ -88,6 +88,43 @@ struct RenderPDFTests {
 		#expect((document.string ?? "").contains("Hello"))
 		#endif
 	}
+
+	@Test("A CFF OpenType font embeds as FontFile3 / CIDFontType0 (not FontFile2)")
+	func embedsCFFFont() async throws {
+		// Noto script fonts are CFF (`OTTO`); each is paired with a glyph from its
+		// own script so the run uses the registered font (these fonts cover their
+		// script, not Latin).
+		let cases: [(path: String, sample: String)] = [
+			("/System/Library/Fonts/Supplemental/NotoSansCanadianAboriginal-Regular.otf", "\u{1401}"),
+			("/System/Library/Fonts/Supplemental/NotoSansTifinagh-Regular.otf", "\u{2D30}"),
+			("/System/Library/Fonts/Supplemental/NotoSansJavanese-Regular.otf", "\u{A984}"),
+		]
+		guard let testCase = cases.first(where: { FileManager.default.fileExists(atPath: $0.path) }) else {
+			return // No CFF system font; skip.
+		}
+		let data = try Data(contentsOf: URL(fileURLWithPath: testCase.path))
+		let fonts = FontBook()
+		fonts.systemFallbackEnabled = false // the registered CFF font must be the one used
+		let embedded = try fonts.register(data: data, family: "CFFFont")
+		guard embedded.hasCFFOutlines,
+		      embedded.hasGlyph(for: testCase.sample.unicodeScalars.first!) else { return }
+
+		let pdf = try await HTMLRenderer.renderPDF(
+			html: "<p style=\"font-family: CFFFont\">\(testCase.sample)</p>",
+			fonts: fonts)
+
+		func contains(_ marker: String) -> Bool { pdf.range(of: Data(marker.utf8)) != nil }
+		#expect(pdf.starts(with: Data("%PDF".utf8)))
+		#expect(contains("/Subtype /Type0"))
+		#expect(contains("/CIDFontType0"))   // CFF descendant, not CIDFontType2
+		#expect(contains("/FontFile3"))      // CFF program, not FontFile2
+		#expect(contains("/OpenType"))       // FontFile3 subtype
+		#expect(!contains("/FontFile2"))     // would mean a TrueType program — wrong for CFF
+
+		#if canImport(PDFKit)
+		#expect(try #require(PDFDocument(data: pdf)).pageCount >= 1)
+		#endif
+	}
 	#endif
 
 	// A 1×1 PNG (data URI).
