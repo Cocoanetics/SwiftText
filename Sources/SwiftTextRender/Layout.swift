@@ -23,19 +23,20 @@ public final class LayoutEngine {
 	/// `(originX, originY)`. Returns the total margin-box height consumed.
 	@discardableResult
 	public func layout(root: BlockBox, contentWidth: Double, originX: Double, originY: Double) -> Double {
-		layoutBlock(root, containingWidth: contentWidth, marginX: originX, marginY: originY)
+		let marginTop = root.style.margin.top.resolved(percentageBasis: contentWidth) ?? 0
+		let marginBottom = root.style.margin.bottom.resolved(percentageBasis: contentWidth) ?? 0
+		let height = layoutBlock(root, containingWidth: contentWidth, marginX: originX, borderBoxTop: originY + marginTop)
+		return marginTop + height + marginBottom
 	}
 
-	/// Lay out a block whose margin box starts at `(marginX, marginY)`. Sets the
-	/// box's border-box geometry and returns its margin-box height.
-	private func layoutBlock(_ box: BlockBox, containingWidth: Double, marginX: Double, marginY: Double) -> Double {
+	/// Lay out a block whose border box top is at `borderBoxTop`. The caller owns
+	/// this box's vertical margins (so adjacent siblings can collapse). Sets the
+	/// box's border-box geometry and returns its border-box height.
+	private func layoutBlock(_ box: BlockBox, containingWidth: Double, marginX: Double, borderBoxTop: Double) -> Double {
 		let style = box.style
 		let basis = containingWidth
 
 		let marginLeft = style.margin.left.resolved(percentageBasis: basis) ?? 0
-		let marginRight = style.margin.right.resolved(percentageBasis: basis) ?? 0
-		let marginTop = style.margin.top.resolved(percentageBasis: basis) ?? 0
-		let marginBottom = style.margin.bottom.resolved(percentageBasis: basis) ?? 0
 
 		let border = box.usedBorder
 		let paddingLeft = style.padding.left.resolved(percentageBasis: basis) ?? 0
@@ -43,13 +44,14 @@ public final class LayoutEngine {
 		let paddingTop = style.padding.top.resolved(percentageBasis: basis) ?? 0
 		let paddingBottom = style.padding.bottom.resolved(percentageBasis: basis) ?? 0
 
+		let marginRight = style.margin.right.resolved(percentageBasis: basis) ?? 0
 		let horizontalExtras = marginLeft + marginRight + border.left + border.right + paddingLeft + paddingRight
 		let explicitWidth = style.width.resolved(percentageBasis: basis)
 		let contentWidth = max(0, explicitWidth ?? (containingWidth - horizontalExtras))
 		let borderBoxWidth = contentWidth + paddingLeft + paddingRight + border.left + border.right
 
 		box.x = marginX + marginLeft
-		box.y = marginY + marginTop
+		box.y = borderBoxTop
 		box.width = borderBoxWidth
 
 		let contentX = box.x + border.left + paddingLeft
@@ -59,12 +61,20 @@ public final class LayoutEngine {
 		if box.establishesInlineContext {
 			contentHeight = layoutInline(box, contentWidth: contentWidth, contentX: contentX, contentTop: contentTop)
 		} else {
+			// Stack block children, collapsing adjacent sibling vertical margins.
 			var cursorY = contentTop
+			var previousMarginBottom = 0.0
+			var started = false
 			for child in box.children {
 				guard let childBlock = child as? BlockBox else { continue }
-				cursorY += layoutBlock(childBlock, containingWidth: contentWidth, marginX: contentX, marginY: cursorY)
+				let childMarginTop = childBlock.style.margin.top.resolved(percentageBasis: contentWidth) ?? 0
+				let childMarginBottom = childBlock.style.margin.bottom.resolved(percentageBasis: contentWidth) ?? 0
+				cursorY += started ? max(previousMarginBottom, childMarginTop) : childMarginTop
+				cursorY += layoutBlock(childBlock, containingWidth: contentWidth, marginX: contentX, borderBoxTop: cursorY)
+				previousMarginBottom = childMarginBottom
+				started = true
 			}
-			contentHeight = cursorY - contentTop
+			contentHeight = (cursorY - contentTop) + previousMarginBottom
 		}
 
 		// Place a list-item marker to the left of the first line, in the padding
@@ -86,7 +96,7 @@ public final class LayoutEngine {
 		}
 
 		box.height = contentHeight + paddingTop + paddingBottom + border.top + border.bottom
-		return marginTop + box.height + marginBottom
+		return box.height
 	}
 
 	/// The first line box found in a subtree, if any.

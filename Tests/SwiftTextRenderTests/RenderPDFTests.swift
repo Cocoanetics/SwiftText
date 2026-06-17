@@ -93,6 +93,17 @@ struct RenderPDFTests {
 		#expect(paragraphs[1].y >= paragraphs[0].y + paragraphs[0].height)
 	}
 
+	@Test("Adjacent vertical margins collapse")
+	func collapsesAdjacentMargins() async throws {
+		let root = try await layoutTree("<body><p>a</p><p>b</p></body>", contentWidth: 400)
+		let paragraphs = collectBlocks(in: root) { $0.element?.localName == "p" }
+		#expect(paragraphs.count == 2)
+		// Each <p> has 1em (16px) top and bottom margins; between siblings they
+		// collapse to a single 16px gap rather than summing to 32px.
+		let gap = paragraphs[1].y - (paragraphs[0].y + paragraphs[0].height)
+		#expect(abs(gap - 16) < 0.5)
+	}
+
 	@Test("Box model: padding and border widen the border box")
 	func boxModel() async throws {
 		let css = ["div { width: 100px; padding: 10px; border: 5px solid black }"]
