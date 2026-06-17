@@ -89,31 +89,40 @@ Features:
 
 ### SwiftTextAttributedString
 
-Renders Markdown into a **platform-independent attributed text** value type.
-Built on swift-markdown (same AST as the HTML/DOCX/Pages paths), it depends on
-nothing but the standard library, so it behaves identically on macOS, iOS,
-Linux and Windows.
+Renders Markdown into a Foundation **`AttributedString`** (the value type from
+[swift-foundation](https://github.com/swiftlang/swift-foundation), so it works
+on every platform Foundation ships on). The output matches the structure
+Foundation's own `AttributedString(markdown:)` produces — block hierarchy in
+`presentationIntent`, inline styling in `inlinePresentationIntent`, links in
+`.link` — so it renders and round-trips like any Foundation attributed string.
 
-`AttributedText` is a flat list of styled runs that carry both inline character
-attributes (bold, italic, strikethrough, code, links, super-/subscript) and the
-block context of their paragraph (heading level, list nesting + markers,
-blockquote depth, code blocks, tables, alerts). It covers the full GFM superset
-the package supports:
+Unlike Foundation's built-in parser, it's built on swift-markdown (the same AST
+as the HTML/DOCX/Pages paths), so it covers the full GFM superset the package
+supports:
 
 - Headings (ATX + setext), emphasis, strong, strikethrough, inline code
-- Links, autolinks, and images (carried as attachments with alt-text fallback)
-- Ordered / unordered / nested / task lists, with computed markers
-- Fenced + indented code blocks (with language)
-- Tables with per-column alignment (cells are themselves `AttributedText`)
-- Blockquotes, GitHub `[!NOTE]` and DocC `Note:` alerts, thematic breaks
-- `[^id]` footnotes — references become superscript runs and a definitions
-  block is appended (same parser as the HTML renderer and DOCX writer)
-- Raw HTML (emitted as literal text), with smart-punctuation reversal by default
+- Links, autolinks, and images (alt text + source via a custom attribute)
+- Ordered / unordered / nested / task lists (`orderedList` / `unorderedList` /
+  `listItem` intents, with correct ordinals and start index)
+- Fenced + indented code blocks (`codeBlock` intent with language hint)
+- Tables with per-column alignment (`table` / `tableHeaderRow` / `tableRow` /
+  `tableCell` intents)
+- Blockquotes, thematic breaks, soft/hard breaks, inline and block HTML
+- `[^id]` footnotes and GitHub `[!NOTE]` / DocC `Note:` alerts — which
+  Foundation's intents can't express — carried via a custom `AttributeScope`
+  (`SwiftTextMarkdownAttributes`): `footnoteReference`, `footnoteDefinition`,
+  `alert`, `imageSource`
+- Smart-punctuation reversal by default (pass `.preserveSmartPunctuation` to keep
+  cmark's curly quotes/dashes)
+
+Requires macOS 12 / iOS 15 / tvOS 15 / watchOS 8 (where `AttributedString` and
+`PresentationIntent` are available), or any Linux/Windows toolchain bundling
+swift-foundation.
 
 ```swift
 import SwiftTextAttributedString
 
-let attributed = MarkdownAttributedTextRenderer.convert("""
+let attributed = MarkdownAttributedStringRenderer.convert("""
 # Title
 
 A paragraph with **bold**, *italic*, a [link](https://example.com) and a
@@ -124,16 +133,16 @@ footnote.[^1]
 
 [^1]: The footnote body.
 """)
+// Or: AttributedString(swiftTextMarkdown: "…")
 
-// Inspect the portable model on any platform:
-for run in attributed.runs where run.attributes.bold {
-    print("bold:", run.text)
+for run in attributed.runs {
+    if run.inlinePresentationIntent?.contains(.stronglyEmphasized) == true {
+        print("bold:", String(attributed.characters[run.range]))
+    }
+    if let number = run[SwiftTextMarkdownAttributes.FootnoteReference.self] {
+        print("footnote ref:", number)
+    }
 }
-
-// On Apple platforms, bridge to NSAttributedString with a configurable stylesheet:
-#if canImport(UIKit) || canImport(AppKit)
-let styled = attributed.nsAttributedString(stylesheet: .default)
-#endif
 ```
 
 ## Installation
