@@ -38,13 +38,13 @@ public final class Painter {
 	private let geometry: PageGeometry
 	private let fonts: FontBook
 
-	private var fontResourceNames: [String: String] = [:]
-	private var fontOrder: [String] = []
+	private let builder: FontResourceBuilder
 	private var linkAnnotations: [PDFDictionary] = []
 
-	public init(geometry: PageGeometry, fonts: FontBook) {
+	public init(geometry: PageGeometry, fonts: FontBook, builder: FontResourceBuilder) {
 		self.geometry = geometry
 		self.fonts = fonts
+		self.builder = builder
 		// Map CSS px (y-down) to PDF pt (y-up) for the whole page.
 		stream.setMatrix(pxToPt, 0, 0, pxToPt, 0, 0)
 		// Clip to this page's content slice so other pages don't bleed in.
@@ -130,19 +130,37 @@ public final class Painter {
 
 	private func paintText(_ fragment: TextFragment) {
 		let font = fonts.font(for: fragment.style)
-		let resource = resourceName(for: font.baseFontName)
+		let resource = builder.resourceName(for: font)
 		let color = fragment.style.color
 
 		stream.beginText()
 		stream.setColorRGB(color.red, color.green, color.blue)
 		stream.setFontSize(resource, fragment.style.fontSize)
 		stream.moveTextTo(fragment.x, geometry.pageHeightPx - pageY(fragment.baseline))
-		stream.showRawString(encodeWinAnsi(fragment.text))
+		switch font {
+		case .standard:
+			stream.showRawString(encodeWinAnsi(fragment.text))
+		case .embedded(let embedded):
+			stream.showHexString(encodeGlyphs(fragment.text, font: embedded, fontKey: font.key))
+		}
 		stream.endText()
 
 		if let href = fragment.href {
 			addLinkAnnotation(for: fragment, font: font, href: href)
 		}
+	}
+
+	/// Encode text as 2-byte glyph identifiers (Identity-H) and record the glyphs
+	/// so the embedded font's width array and ToUnicode map can be built.
+	private func encodeGlyphs(_ text: String, font: EmbeddedFont, fontKey: String) -> Data {
+		var bytes = Data()
+		for scalar in text.unicodeScalars {
+			let glyph = font.glyphID(for: scalar)
+			builder.recordGlyph(glyph, scalar: scalar, fontKey: fontKey)
+			bytes.append(UInt8((glyph >> 8) & 0xFF))
+			bytes.append(UInt8(glyph & 0xFF))
+		}
+		return bytes
 	}
 
 	/// A `/Link` annotation covering a fragment, if it falls on this page slice.
@@ -174,30 +192,5 @@ public final class Painter {
 		// The font declares WinAnsiEncoding (Windows CP1252), which — unlike
 		// ISO Latin-1 — includes the em/en dashes, smart quotes and bullet.
 		text.data(using: .windowsCP1252, allowLossyConversion: true) ?? Data()
-	}
-
-	// MARK: - Font resources
-
-	private func resourceName(for baseFontName: String) -> String {
-		if let existing = fontResourceNames[baseFontName] { return existing }
-		let name = "F\(fontOrder.count + 1)"
-		fontResourceNames[baseFontName] = name
-		fontOrder.append(baseFontName)
-		return name
-	}
-
-	/// Build the `/Resources` dictionary for the painted page.
-	public func resources() -> PDFDictionary {
-		let fontDict = PDFDictionary()
-		for baseFontName in fontOrder {
-			let resource = fontResourceNames[baseFontName]!
-			fontDict[resource] = PDFDictionary([
-				("Type", "/Font"),
-				("Subtype", "/Type1"),
-				("BaseFont", "/\(baseFontName)"),
-				("Encoding", "/WinAnsiEncoding"),
-			])
-		}
-		return PDFDictionary([("Font", fontDict)])
 	}
 }

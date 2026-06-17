@@ -1,24 +1,64 @@
 //  Font.swift
 //  SwiftTextRender
 //
-//  Font metrics and selection for the renderer. This first stage uses the PDF
-//  base-14 fonts (Helvetica, Courier) — no font files, no embedding — with
-//  their standard Adobe metrics, which every PDF viewer reproduces exactly.
-//  Embedding arbitrary OpenType fonts (via SwiftTextOpenType) is layered on
-//  later; the same `Font`/`FontBook` interface will carry it.
+//  Font metrics and selection. Two kinds of font are supported behind one
+//  `Font` value:
+//   • base-14 (`StandardFont`): Helvetica/Courier with standard Adobe metrics,
+//     reproduced by every viewer with no embedding.
+//   • embedded (`EmbeddedFont`): any TrueType/OpenType font read by
+//     SwiftTextOpenType, embedded into the PDF as a CIDFontType2 — this is what
+//     makes the engine truly universal (arbitrary fonts and scripts).
+//
+//  With no fonts registered, FontBook returns base-14 faces (the default).
 
 import Foundation
 import SwiftTextCSS
+import SwiftTextOpenType
 
-/// A resolved font: a base-14 face with metrics in 1000-unit em space.
-public struct Font: Equatable {
-	/// The PDF BaseFont name, e.g. `Helvetica-Bold`.
+/// A font selected for a run of text.
+public enum Font {
+	case standard(StandardFont)
+	case embedded(EmbeddedFont)
+
+	/// The advance width of `string` at `size`, in points/pixels.
+	public func width(of string: String, size: Double) -> Double {
+		switch self {
+		case .standard(let font): return font.width(of: string, size: size)
+		case .embedded(let font): return font.width(of: string, size: size)
+		}
+	}
+
+	/// Ascent scaled to `size`.
+	public func ascent(size: Double) -> Double {
+		switch self {
+		case .standard(let font): return font.ascent(size: size)
+		case .embedded(let font): return font.ascent(size: size)
+		}
+	}
+
+	/// Descent magnitude scaled to `size`.
+	public func descent(size: Double) -> Double {
+		switch self {
+		case .standard(let font): return font.descent(size: size)
+		case .embedded(let font): return font.descent(size: size)
+		}
+	}
+
+	/// A stable identity used to deduplicate PDF font resources.
+	var key: String {
+		switch self {
+		case .standard(let font): return "std:" + font.baseFontName
+		case .embedded(let font): return "emb:" + font.postScriptName
+		}
+	}
+}
+
+/// A base-14 font (no embedding) with standard Adobe metrics in 1000-unit em.
+public struct StandardFont: Equatable {
 	public let baseFontName: String
 	public let unitsPerEm: Double
-	/// Ascent in font units (positive).
-	public let ascent: Double
-	/// Descent in font units (negative).
-	public let descent: Double
+	public let ascentUnits: Double
+	public let descentUnits: Double
 
 	private let widths: [Int: Double]
 	private let defaultWidth: Double
@@ -27,38 +67,74 @@ public struct Font: Equatable {
 		widths[Int(scalar.value)] ?? defaultWidth
 	}
 
-	/// The advance width of a string at `size`, in points/pixels.
 	public func width(of string: String, size: Double) -> Double {
 		var total = 0.0
 		for scalar in string.unicodeScalars { total += advance(scalar) }
 		return total * size / unitsPerEm
 	}
 
-	/// Ascent scaled to `size`.
-	public func ascent(size: Double) -> Double { ascent * size / unitsPerEm }
-	/// Descent magnitude scaled to `size`.
-	public func descent(size: Double) -> Double { -descent * size / unitsPerEm }
+	public func ascent(size: Double) -> Double { ascentUnits * size / unitsPerEm }
+	public func descent(size: Double) -> Double { -descentUnits * size / unitsPerEm }
 }
 
-/// Selects fonts for computed styles, mapping CSS families to base-14 faces.
+/// A TrueType/OpenType font embedded into the PDF.
+public struct EmbeddedFont {
+	let otf: OpenTypeFont
+	/// The PDF BaseFont / PostScript name (no spaces).
+	public let postScriptName: String
+
+	public init(otf: OpenTypeFont, postScriptName: String) {
+		self.otf = otf
+		self.postScriptName = postScriptName
+	}
+
+	var unitsPerEm: Double { Double(otf.unitsPerEm) }
+	var ascentUnits: Int { otf.ascent }
+	var descentUnits: Int { otf.descent }
+	var boundingBox: (xMin: Int, yMin: Int, xMax: Int, yMax: Int) { otf.boundingBox }
+	var data: Data { otf.data }
+
+	public func width(of string: String, size: Double) -> Double { otf.width(of: string, size: size) }
+	public func ascent(size: Double) -> Double { Double(otf.ascent) * size / unitsPerEm }
+	public func descent(size: Double) -> Double { -Double(otf.descent) * size / unitsPerEm }
+	public func glyphID(for scalar: Unicode.Scalar) -> Int { otf.glyphID(for: scalar) ?? 0 }
+	public func advanceWidth(glyph: Int) -> Int { otf.advanceWidth(glyph: glyph) }
+}
+
+/// Selects fonts for computed styles. Registered fonts (by family name) embed;
+/// everything else falls back to base-14.
 public final class FontBook {
+	private var registered: [String: EmbeddedFont] = [:]
+
 	public init() {}
 
+	/// Register a TrueType/OpenType font to be used (and embedded) whenever a
+	/// style's `font-family` names `family` (case-insensitive).
+	@discardableResult
+	public func register(data: Data, family: String, fontIndex: Int = 0) throws -> EmbeddedFont {
+		let otf = try OpenTypeFont(data: data, fontIndex: fontIndex)
+		let font = EmbeddedFont(otf: otf, postScriptName: Self.postScriptName(from: family))
+		registered[family.lowercased()] = font
+		return font
+	}
+
 	public func font(for style: ComputedStyle) -> Font {
+		for family in style.fontFamily {
+			if let embedded = registered[family.lowercased()] {
+				return .embedded(embedded)
+			}
+		}
 		let bold = style.fontWeight >= 600
 		let italic = style.fontStyle != .normal
-		switch resolvedFamily(style.fontFamily) {
-		case .monospace:
-			return Font.courier(bold: bold, italic: italic)
-		case .sansSerif, .serif:
-			// Times metrics are added later; serif currently maps to Helvetica.
-			return Font.helvetica(bold: bold, italic: italic)
+		switch Self.genericFamily(style.fontFamily) {
+		case .monospace: return .standard(.courier(bold: bold, italic: italic))
+		case .serif, .sansSerif: return .standard(.helvetica(bold: bold, italic: italic))
 		}
 	}
 
 	private enum GenericFamily { case serif, sansSerif, monospace }
 
-	private func resolvedFamily(_ families: [String]) -> GenericFamily {
+	private static func genericFamily(_ families: [String]) -> GenericFamily {
 		for family in families {
 			switch family.lowercased() {
 			case "monospace", "courier", "courier new", "menlo", "monaco", "consolas":
@@ -73,10 +149,16 @@ public final class FontBook {
 		}
 		return .sansSerif
 	}
+
+	private static func postScriptName(from family: String) -> String {
+		let cleaned = family.unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) }
+		let name = String(String.UnicodeScalarView(cleaned))
+		return name.isEmpty ? "EmbeddedFont" : name
+	}
 }
 
-extension Font {
-	static func helvetica(bold: Bool, italic: Bool) -> Font {
+extension StandardFont {
+	static func helvetica(bold: Bool, italic: Bool) -> StandardFont {
 		let name: String
 		switch (bold, italic) {
 		case (true, true): name = "Helvetica-BoldOblique"
@@ -84,11 +166,11 @@ extension Font {
 		case (false, true): name = "Helvetica-Oblique"
 		case (false, false): name = "Helvetica"
 		}
-		return Font(baseFontName: name, unitsPerEm: 1000, ascent: 718, descent: -207,
-		            widths: helveticaWidths, defaultWidth: 556)
+		return StandardFont(baseFontName: name, unitsPerEm: 1000, ascentUnits: 718, descentUnits: -207,
+		                    widths: helveticaWidths, defaultWidth: 556)
 	}
 
-	static func courier(bold: Bool, italic: Bool) -> Font {
+	static func courier(bold: Bool, italic: Bool) -> StandardFont {
 		let name: String
 		switch (bold, italic) {
 		case (true, true): name = "Courier-BoldOblique"
@@ -96,9 +178,8 @@ extension Font {
 		case (false, true): name = "Courier-Oblique"
 		case (false, false): name = "Courier"
 		}
-		// Courier is monospaced: every glyph advances 600 units.
-		return Font(baseFontName: name, unitsPerEm: 1000, ascent: 629, descent: -157,
-		            widths: [:], defaultWidth: 600)
+		return StandardFont(baseFontName: name, unitsPerEm: 1000, ascentUnits: 629, descentUnits: -157,
+		                    widths: [:], defaultWidth: 600)
 	}
 }
 

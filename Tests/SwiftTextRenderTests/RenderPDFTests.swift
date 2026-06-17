@@ -51,6 +51,42 @@ struct RenderPDFTests {
 		#endif
 	}
 
+	#if os(macOS)
+	@Test("Registered OpenType fonts are embedded (CIDFontType2)")
+	func embedsOpenTypeFont() async throws {
+		let candidates = [
+			"/System/Library/Fonts/Supplemental/Arial.ttf",
+			"/System/Library/Fonts/Monaco.ttf",
+			"/System/Library/Fonts/Geneva.ttf",
+			"/System/Library/Fonts/SFNS.ttf",
+		]
+		guard let path = candidates.first(where: { FileManager.default.fileExists(atPath: $0) }) else {
+			return // No suitable system font; skip.
+		}
+		let data = try Data(contentsOf: URL(fileURLWithPath: path))
+		let fonts = FontBook()
+		try fonts.register(data: data, family: "MyEmbeddedFont")
+
+		let pdf = try await HTMLRenderer.renderPDF(
+			html: "<p style=\"font-family: MyEmbeddedFont\">Hello embedded font</p>",
+			fonts: fonts)
+
+		func contains(_ marker: String) -> Bool { pdf.range(of: Data(marker.utf8)) != nil }
+		#expect(pdf.starts(with: Data("%PDF".utf8)))
+		#expect(contains("/Subtype /Type0"))
+		#expect(contains("/CIDFontType2"))
+		#expect(contains("/Identity-H"))
+		#expect(contains("/FontFile2"))
+
+		#if canImport(PDFKit)
+		let document = try #require(PDFDocument(data: pdf))
+		#expect(document.pageCount >= 1)
+		// ToUnicode lets the text be extracted even though it's encoded as glyphs.
+		#expect((document.string ?? "").contains("Hello"))
+		#endif
+	}
+	#endif
+
 	// MARK: - Layout geometry
 
 	private func layoutTree(_ html: String, css: [String] = [], contentWidth: Double) async throws -> BlockBox {

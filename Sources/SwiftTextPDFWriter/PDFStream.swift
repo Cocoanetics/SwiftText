@@ -163,6 +163,14 @@ public final class PDFStream: PDFObject {
 		token.append(contentsOf: " Tj".utf8)
 		emit(token)
 	}
+	/// Show a hex-encoded byte string with `Tj`. Used for embedded fonts whose
+	/// codes are raw 2-byte glyph identifiers (Identity-H).
+	public func showHexString(_ bytes: Data) {
+		var token = Data([0x3C]) // <
+		token.append(Data(bytes.map { String(format: "%02x", $0) }.joined().utf8))
+		token.append(contentsOf: "> Tj".utf8)
+		emit(token)
+	}
 	/// Show pre-built positioned glyph runs (`TJ`). `text` is the already
 	/// serialized contents of the TJ array (strings interleaved with numeric
 	/// adjustments).

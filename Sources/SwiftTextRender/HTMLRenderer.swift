@@ -45,8 +45,10 @@ public enum HTMLRenderer {
 	///   - css: Additional author stylesheets, applied after any `<style>` the
 	///     document carries (note: `<style>` extraction is added later; for now
 	///     pass author CSS here).
+	///   - fonts: A font book; register OpenType fonts on it to embed them and
+	///     render arbitrary families/scripts. Defaults to base-14 only.
 	///   - options: Page geometry.
-	public static func renderPDF(html: String, css: [String] = [], options: RenderOptions = RenderOptions()) async throws -> Data {
+	public static func renderPDF(html: String, css: [String] = [], fonts: FontBook = FontBook(), options: RenderOptions = RenderOptions()) async throws -> Data {
 		let builder = try await DomBuilder(html: Data(html.utf8), baseURL: nil)
 		guard let root = builder.root else { throw RenderError.noDocument }
 
@@ -57,7 +59,6 @@ public enum HTMLRenderer {
 		let styled = StyledElement.build(domElement: root, resolver: resolver)
 		guard let rootBox = BoxTreeBuilder.build(from: styled) as? BlockBox else { throw RenderError.noRootBox }
 
-		let fonts = FontBook()
 		let engine = LayoutEngine(fonts: fonts)
 		let margin = options.pageMarginPx
 		let contentWidth = max(0, options.pageWidthPx - 2 * margin)
@@ -69,10 +70,11 @@ public enum HTMLRenderer {
 		let slices = paginate(rootBox, columnHeight: columnHeight, pageHeightPx: pageHeightPx, margin: margin)
 
 		let pdf = PDF()
+		let fontBuilder = FontResourceBuilder(pdf: pdf)
 		for slice in slices {
 			let geometry = PageGeometry(pageWidthPx: options.pageWidthPx, pageHeightPx: pageHeightPx,
 			                            marginPx: margin, columnTop: slice.top, sliceHeightPx: slice.bottom - slice.top)
-			let painter = Painter(geometry: geometry, fonts: fonts)
+			let painter = Painter(geometry: geometry, fonts: fonts, builder: fontBuilder)
 			painter.paint(rootBox)
 			pdf.addObject(painter.stream)
 			let page = PDFDictionary([
@@ -80,7 +82,7 @@ public enum HTMLRenderer {
 				("Parent", pdf.pages.reference),
 				("MediaBox", PDFArray([0, 0, options.pageWidthPx * pxToPt, pageHeightPx * pxToPt])),
 				("Contents", painter.stream.reference),
-				("Resources", painter.resources()),
+				("Resources", fontBuilder.resourcesReference),
 			])
 			let annotations = painter.annotations()
 			if !annotations.isEmpty {
@@ -93,6 +95,8 @@ public enum HTMLRenderer {
 			}
 			pdf.addPage(page)
 		}
+		// Build the shared font objects now that every page's glyph use is known.
+		fontBuilder.finalize()
 		return pdf.write()
 	}
 
