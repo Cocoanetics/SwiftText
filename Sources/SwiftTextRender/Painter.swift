@@ -108,7 +108,9 @@ public final class Painter {
 	}
 
 	private func encodeWinAnsi(_ text: String) -> Data {
-		text.data(using: .isoLatin1, allowLossyConversion: true) ?? Data()
+		// The font declares WinAnsiEncoding (Windows CP1252), which — unlike
+		// ISO Latin-1 — includes the em/en dashes, smart quotes and bullet.
+		text.data(using: .windowsCP1252, allowLossyConversion: true) ?? Data()
 	}
 
 	// MARK: - Font resources
