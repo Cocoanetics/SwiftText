@@ -66,6 +66,11 @@ public enum TextAlign: String, Equatable, Sendable {
 	case start, end, left, right, center, justify
 }
 
+public enum Direction: String, Equatable, Sendable {
+	case ltr, rtl
+	public var isRTL: Bool { self == .rtl }
+}
+
 public enum VerticalAlign: String, Equatable, Sendable {
 	case baseline, top, middle, bottom, sub
 	case textTop = "text-top"
@@ -157,6 +162,8 @@ public struct ComputedStyle: Equatable, Sendable {
 	public var listStyleType: ListStyleType
 	/// First-line indentation in pixels (`text-indent`).
 	public var textIndent: Double
+	/// Base writing direction (`direction`; also set by the `dir` attribute).
+	public var direction: Direction
 
 	// Non-inherited properties.
 	public var display: Display
@@ -197,6 +204,7 @@ public struct ComputedStyle: Equatable, Sendable {
 		wordSpacing: 0,
 		listStyleType: .disc,
 		textIndent: 0,
+		direction: .ltr,
 		display: .inline,
 		verticalAlign: .baseline,
 		backgroundColor: nil,
@@ -228,6 +236,7 @@ public struct ComputedStyle: Equatable, Sendable {
 		style.wordSpacing = parent.wordSpacing
 		style.listStyleType = parent.listStyleType
 		style.textIndent = parent.textIndent
+		style.direction = parent.direction
 		// Initial border color is `currentColor`, i.e. the (inherited) color.
 		style.borderColor = Edges(parent.color)
 		return style

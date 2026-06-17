@@ -46,6 +46,9 @@ pre, listing, plaintext, xmp { white-space: pre }
 nobr { white-space: nowrap }
 big { font-size: larger }
 small { font-size: smaller }
+[dir=rtl] { direction: rtl }
+[dir=ltr] { direction: ltr }
+bdo[dir=rtl] { direction: rtl }
 a { color: #0000ee; text-decoration: underline }
 del, s, strike { text-decoration: line-through }
 ins, u { text-decoration: underline }

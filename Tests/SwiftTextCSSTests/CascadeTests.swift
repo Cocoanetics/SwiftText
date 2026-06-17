@@ -128,6 +128,24 @@ struct CascadeTests {
 		#expect(div.borderStyle.top.isVisible)
 	}
 
+	@Test("direction from the dir attribute and CSS, and its inheritance")
+	func direction() {
+		// dir="rtl" sets direction via the UA stylesheet, and it inherits.
+		let resolver = StyleResolver()
+		let div = Element("div", ["dir": "rtl"])
+		let child = Element("span")
+		div.adding(child)
+		let divStyle = style(div, resolver: resolver)
+		#expect(divStyle.direction == .rtl)
+		let childStyle = resolver.style(for: child, inheriting: divStyle, rootFontSize: 16)
+		#expect(childStyle.direction == .rtl) // inherited
+
+		// CSS direction property too.
+		let authored = StyleResolver(authorStyleSheets: ["p { direction: rtl }"])
+		#expect(style(Element("p"), resolver: authored).direction == .rtl)
+		#expect(style(Element("p"), resolver: StyleResolver()).direction == .ltr) // default
+	}
+
 	@Test("text-decoration from UA and author rules")
 	func textDecoration() {
 		// Links are underlined by the user-agent stylesheet.
