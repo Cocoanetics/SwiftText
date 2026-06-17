@@ -135,6 +135,15 @@ struct RenderPDFTests {
 	}
 	#endif
 
+	@Test("Bold text uses wider Helvetica-Bold metrics")
+	func boldMetrics() {
+		let fonts = FontBook()
+		let regular = ComputedStyle.initial
+		var bold = ComputedStyle.initial
+		bold.fontWeight = 700
+		#expect(fonts.font(for: bold).width(of: "Modules", size: 16) > fonts.font(for: regular).width(of: "Modules", size: 16))
+	}
+
 	// MARK: - Layout geometry
 
 	private func layoutTree(_ html: String, css: [String] = [], contentWidth: Double) async throws -> BlockBox {
