@@ -39,6 +39,39 @@ struct DomStyleContentTests {
 		#expect(root.styleSheets() == ["a { color: red }", "b { margin: 0 }"])
 	}
 
+	@Test("styleSheetSources() lists <style> and <link> in document order")
+	func styleSheetSourcesOrdered() async throws {
+		let html = """
+		<head>
+		<link rel="stylesheet" href="a.css">
+		<style>p { color: red }</style>
+		<link rel="preload">
+		</head><body><p>hi</p></body>
+		"""
+		let builder = try await DomBuilder(html: Data(html.utf8), baseURL: nil)
+		let root = try #require(builder.root)
+		// The link comes first in source order; the non-stylesheet link is ignored.
+		#expect(root.styleSheetSources() == [.link(href: "a.css"), .inline("p { color: red }")])
+		#expect(root.styleSheets() == ["p { color: red }"]) // inline only
+	}
+
+	@Test("resolvedStyleSheets() fetches a <link> (data: URL), keeping order")
+	func resolvesLinkedStyleSheets() async throws {
+		// data:text/css,a%20%7B%20color%3A%20red%20%7D  →  "a { color: red }"
+		let html = """
+		<head>
+		<link rel="stylesheet" href="data:text/css,a%20%7B%20color%3A%20red%20%7D">
+		<style>b { margin: 0 }</style>
+		</head><body><p>hi</p></body>
+		"""
+		let document = try await HTMLDocument(data: Data(html.utf8))
+		// Sync convenience: inline only.
+		#expect(document.styleSheets() == ["b { margin: 0 }"])
+		// Resolved: the linked sheet is fetched and kept in document order.
+		let all = await document.resolvedStyleSheets()
+		#expect(all == ["a { color: red }", "b { margin: 0 }"])
+	}
+
 	@Test("CSS text stays out of the document's text")
 	func cssNotInText() async throws {
 		let html = "<style>p { color: red }</style><p>hi</p>"
