@@ -1,4 +1,5 @@
 import Foundation
+import SwiftTextCore
 
 /// Builds the iWork object graph for inline images: each image becomes a
 /// `TSD.ImageArchive` drawable (type 3005) referencing the placed media via a
@@ -58,7 +59,7 @@ enum PagesImageBuilder {
             let imageID = nextObject; nextObject += 1
             let attachmentID = nextObject; nextObject += 1
 
-            let (pw, ph) = dimensions(of: input.bytes) ?? (Int(columnWidth), Int(columnWidth))
+            let (pw, ph) = ImageDimensions.dimensions(of: input.bytes) ?? (Int(columnWidth), Int(columnWidth))
             let natW = Float(pw), natH = Float(ph)
             // Scale to the column width if wider, preserving aspect ratio.
             let dispW = min(natW, columnWidth)
@@ -147,33 +148,6 @@ enum PagesImageBuilder {
     /// A `TSP.Reference` `{#1: identifier}`.
     private static func reference(_ id: UInt64) -> [UInt8] {
         var w = ProtobufWriter(); w.varintField(1, id); return w.bytes
-    }
-
-    // MARK: Image dimensions (dependency-free)
-
-    /// Pixel dimensions of a PNG or JPEG, by parsing the header.
-    static func dimensions(of data: [UInt8]) -> (width: Int, height: Int)? {
-        // PNG: 8-byte signature, then IHDR (width/height big-endian at offset 16).
-        if data.count >= 24, data[0] == 0x89, data[1] == 0x50, data[2] == 0x4E, data[3] == 0x47 {
-            let w = Int(data[16]) << 24 | Int(data[17]) << 16 | Int(data[18]) << 8 | Int(data[19])
-            let h = Int(data[20]) << 24 | Int(data[21]) << 16 | Int(data[22]) << 8 | Int(data[23])
-            return (w, h)
-        }
-        // JPEG: scan segments for a Start-Of-Frame marker.
-        if data.count >= 4, data[0] == 0xFF, data[1] == 0xD8 {
-            var i = 2
-            while i + 9 < data.count {
-                guard data[i] == 0xFF else { i += 1; continue }
-                let marker = data[i + 1]
-                if marker >= 0xC0, marker <= 0xCF, marker != 0xC4, marker != 0xC8, marker != 0xCC {
-                    let h = Int(data[i + 5]) << 8 | Int(data[i + 6])
-                    let w = Int(data[i + 7]) << 8 | Int(data[i + 8])
-                    return (w, h)
-                }
-                i += 2 + (Int(data[i + 2]) << 8 | Int(data[i + 3]))
-            }
-        }
-        return nil
     }
 }
 

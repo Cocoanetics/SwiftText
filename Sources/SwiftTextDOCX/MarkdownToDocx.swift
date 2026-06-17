@@ -13,11 +13,15 @@ public enum MarkdownToDocx {
 	///   - markdown: The Markdown source text.
 	///   - url: Destination file URL for the `.docx` output.
 	///   - pageSetup: Page configuration (paper size, margins, orientation). Defaults to A4 portrait.
-	public static func convert(_ markdown: String, to url: URL, pageSetup: DocxPageSetup = .a4) throws {
+	///   - baseURL: The directory standalone Markdown image paths are resolved against
+	///     (typically the source `.md` file's folder). When `nil`, images fall back to
+	///     alt-text placeholders.
+	public static func convert(_ markdown: String, to url: URL, pageSetup: DocxPageSetup = .a4, baseURL: URL? = nil) throws {
 		let blocks = parseBlocks(markdown)
 		let writer = DocxWriter()
 		writer.blocks = blocks
 		writer.pageSetup = pageSetup
+		writer.baseURL = baseURL
 		try writer.write(to: url)
 	}
 

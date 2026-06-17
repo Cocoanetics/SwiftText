@@ -129,6 +129,16 @@ private struct BlockVisitor: MarkupVisitor {
 	}
 
 	mutating func visitParagraph(_ paragraph: Paragraph) {
+		// A paragraph that is solely an image becomes an embedded inline image (the
+		// writer resolves + sizes it). Images mixed with text still fall back to the
+		// italic alt-text placeholder produced by RunCollector.
+		let children = Array(paragraph.children)
+		if children.count == 1, let image = children.first as? Image,
+		   let source = image.source, !source.isEmpty {
+			let alt = reverseSmartPunct(swiftMarkdownPlainText(of: image))
+			blocks.append(.image(source: source, alt: alt))
+			return
+		}
 		blocks.append(.paragraph(runs: MarkdownDocxBuilder.runs(from: paragraph)))
 	}
 

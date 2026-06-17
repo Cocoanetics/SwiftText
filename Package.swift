@@ -151,6 +151,9 @@ let packageTargets: [Target] = [
 			// ["DOCX", "CLI"] would drop ZIPFoundation on 6.2 toolchains. The CLI case
 			// is covered by the CLI trait transitively enabling DOCX instead.
 			.product(name: "ZIPFoundation", package: "ZIPFoundation", condition: .when(traits: ["DOCX"])),
+			// Shared dependency-free utilities (ImageDimensions). No external product,
+			// so no trait condition is needed.
+			"SwiftTextCore",
 		],
 		path: "Sources/SwiftTextDOCX"
 	),
@@ -168,6 +171,8 @@ let packageTargets: [Target] = [
 			// resolved (as in SwiftTextDOCX), so they are not trait-gated.
 			"SwiftTextMarkdown",
 			.product(name: "Markdown", package: "swift-markdown"),
+			// Shared dependency-free utilities (ImageDimensions); see SwiftTextDOCX.
+			"SwiftTextCore",
 		],
 		path: "Sources/SwiftTextPages"
 	),
