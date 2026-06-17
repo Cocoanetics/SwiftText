@@ -63,6 +63,10 @@ public final class DocxWriter {
 		case blockquote(blocks: [Block])
 		case horizontalRule
 		case table(headers: [[Run]], rows: [[[Run]]], alignments: [ColumnAlignment])
+		/// A standalone image: `source` is resolved against ``DocxWriter/baseURL`` and
+		/// embedded as an inline picture; `alt` is the placeholder used when the file
+		/// can't be read (or when no `baseURL` is set).
+		case image(source: String, alt: String)
 	}
 
 	/// A styled span of inline text.
@@ -90,11 +94,24 @@ public final class DocxWriter {
 	/// Page setup (paper size, margins, orientation). Defaults to A4 portrait.
 	public var pageSetup: DocxPageSetup = .a4
 
+	/// Directory that standalone-image sources are resolved against. When `nil`,
+	/// images render as their alt-text placeholder instead of being embedded.
+	public var baseURL: URL?
+
 	// MARK: - Private State
 
 	/// Tracks hyperlink relationships for document.xml.rels.
 	private var hyperlinks: [(id: String, url: String)] = []
 	private var hyperlinkCounter = 0
+
+	/// Embedded image media collected while rendering the body: the `word/media/*`
+	/// part bytes, the `document.xml.rels` relationship, and the `[Content_Types].xml`
+	/// `<Default>` for each distinct extension. Populated as a side effect of
+	/// `generateBodyXML()`, which runs before the rels/content-types are emitted.
+	private var mediaFiles: [(path: String, data: Data)] = []
+	private var imageRels: [(id: String, target: String)] = []
+	private var imageContentDefaults: [String: String] = [:]
+	private var imageCounter = 0
 
 	/// Tracks numbering instances for list continuity.
 	private var nextNumId = 0
@@ -122,8 +139,13 @@ public final class DocxWriter {
 		nextNumId = 0
 		lastListType = nil
 		numInstances = []
+		mediaFiles = []
+		imageRels = []
+		imageContentDefaults = [:]
+		imageCounter = 0
 
-		// Build document body XML
+		// Build document body XML. This populates `hyperlinks` and the image media
+		// state as a side effect, so it must run before the rels / content-types parts.
 		let bodyXML = generateBodyXML()
 
 		// Build all required parts
@@ -158,12 +180,20 @@ public final class DocxWriter {
 		try addEntry(archive, path: "word/numbering.xml", content: numberingXML)
 		try addEntry(archive, path: "word/settings.xml", content: settingsXML)
 		try addEntry(archive, path: "word/fontTable.xml", content: fontTableXML)
+
+		// Embedded image media parts (word/media/imageN.ext).
+		for media in mediaFiles {
+			try addEntry(archive, path: media.path, data: media.data)
+		}
 	}
 
 	// MARK: - Archive Helpers
 
 	private func addEntry(_ archive: Archive, path: String, content: String) throws {
-		let data = Data(content.utf8)
+		try addEntry(archive, path: path, data: Data(content.utf8))
+	}
+
+	private func addEntry(_ archive: Archive, path: String, data: Data) throws {
 		try archive.addEntry(with: path, type: .file, uncompressedSize: Int64(data.count)) { position, size in
 			data[Int(position)..<(Int(position) + size)]
 		}
@@ -227,6 +257,10 @@ public final class DocxWriter {
 		case .table(let headers, let rows, let alignments):
 			lastListType = nil
 			return tableXML(headers: headers, rows: rows, alignments: alignments, quoteDepth: quoteDepth)
+
+		case .image(let source, let alt):
+			lastListType = nil
+			return imageParagraph(source: source, alt: alt, quoteDepth: quoteDepth)
 		}
 	}
 
@@ -338,6 +372,118 @@ public final class DocxWriter {
 		</w:pPr></w:p>
 
 		"""
+	}
+
+	// MARK: - Image Rendering
+
+	/// Renders a standalone image. Resolves `source` against ``baseURL``, reads the
+	/// bytes + pixel dimensions, and emits an OOXML inline picture (`w:drawing` →
+	/// `wp:inline` → `a:graphic` → `pic:pic` → `a:blip`). Registers the media part,
+	/// its relationship, and its content-type as a side effect. Any failure (no
+	/// `baseURL`, unreadable/remote file, unsupported format) degrades to the italic
+	/// alt-text placeholder the inline renderer also uses.
+	private func imageParagraph(source: String, alt: String, quoteDepth: Int) -> String {
+		guard let baseURL,
+			  let resolved = resolvedImageURL(source, baseURL: baseURL),
+			  let data = try? Data(contentsOf: resolved), !data.isEmpty,
+			  let (pixelWidth, pixelHeight) = DocxImageDimensions.dimensions(of: [UInt8](data)),
+			  let format = imageFormat(path: resolved, data: data) else {
+			return imagePlaceholderParagraph(alt: alt, quoteDepth: quoteDepth)
+		}
+
+		imageCounter += 1
+		let n = imageCounter
+		let target = "media/image\(n).\(format.ext)"
+		let rId = "rImg\(n)"
+		mediaFiles.append((path: "word/\(target)", data: data))
+		imageRels.append((id: rId, target: target))
+		imageContentDefaults[format.ext] = format.contentType
+
+		// EMU sizing: natural pixels × 9525, capped to the content width (preserving
+		// aspect ratio) so a large image doesn't overflow the page — mirrors Pages.
+		let emuPerPixel = 9525
+		let emuPerTwip = 635 // 914400 EMU/inch ÷ 1440 twips/inch
+		var cx = pixelWidth * emuPerPixel
+		var cy = pixelHeight * emuPerPixel
+		let indentTwips = quoteDepth * 360
+		let maxCx = max(0, pageSetup.contentWidth - indentTwips) * emuPerTwip
+		if maxCx > 0, cx > maxCx {
+			cy = Int((Double(cy) * Double(maxCx) / Double(cx)).rounded())
+			cx = maxCx
+		}
+
+		let indentXML = quoteDepth > 0 ? "<w:ind w:left=\"\(indentTwips)\"/>" : ""
+		let pPrXML = indentXML.isEmpty ? "" : "<w:pPr>\(indentXML)</w:pPr>"
+		let descr = xmlEscape(alt)
+		let drawing = """
+		<w:drawing>\
+		<wp:inline distT="0" distB="0" distL="0" distR="0">\
+		<wp:extent cx="\(cx)" cy="\(cy)"/>\
+		<wp:effectExtent l="0" t="0" r="0" b="0"/>\
+		<wp:docPr id="\(n)" name="Picture \(n)" descr="\(descr)"/>\
+		<wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr>\
+		<a:graphic>\
+		<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">\
+		<pic:pic>\
+		<pic:nvPicPr>\
+		<pic:cNvPr id="\(n)" name="image\(n).\(format.ext)" descr="\(descr)"/>\
+		<pic:cNvPicPr/>\
+		</pic:nvPicPr>\
+		<pic:blipFill>\
+		<a:blip r:embed="\(rId)"/>\
+		<a:stretch><a:fillRect/></a:stretch>\
+		</pic:blipFill>\
+		<pic:spPr>\
+		<a:xfrm><a:off x="0" y="0"/><a:ext cx="\(cx)" cy="\(cy)"/></a:xfrm>\
+		<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>\
+		</pic:spPr>\
+		</pic:pic>\
+		</a:graphicData>\
+		</a:graphic>\
+		</wp:inline>\
+		</w:drawing>
+		"""
+		return "<w:p>\(pPrXML)<w:r>\(drawing)</w:r></w:p>\n"
+	}
+
+	/// The italic alt-text fallback for an image that can't be embedded — identical
+	/// to the placeholder the inline renderer emits for images mixed with text.
+	private func imagePlaceholderParagraph(alt: String, quoteDepth: Int) -> String {
+		let display = alt.isEmpty ? "[image]" : alt
+		return paragraph(style: nil, runs: [Run(text: display, italic: true)], quoteDepth: quoteDepth)
+	}
+
+	/// Resolves a Markdown image source to a local file URL, or `nil` if it shouldn't
+	/// be read from disk (remote/`data:` URLs degrade to the placeholder).
+	private func resolvedImageURL(_ source: String, baseURL: URL) -> URL? {
+		if let scheme = URL(string: source)?.scheme?.lowercased(),
+		   scheme == "http" || scheme == "https" || scheme == "data" {
+			return nil
+		}
+		if source.hasPrefix("/") {
+			return URL(fileURLWithPath: source)
+		}
+		return baseURL.appendingPathComponent(source)
+	}
+
+	/// Determines the media extension + content type from the path, falling back to a
+	/// magic-byte sniff. Only PNG and JPEG are supported (matching the dimension
+	/// parser); anything else returns `nil` so the caller uses the placeholder.
+	private func imageFormat(path: URL, data: Data) -> (ext: String, contentType: String)? {
+		switch path.pathExtension.lowercased() {
+		case "png": return ("png", "image/png")
+		case "jpg": return ("jpg", "image/jpeg")
+		case "jpeg": return ("jpeg", "image/jpeg")
+		default: break
+		}
+		let head = [UInt8](data.prefix(4))
+		if head.count >= 4, head[0] == 0x89, head[1] == 0x50, head[2] == 0x4E, head[3] == 0x47 {
+			return ("png", "image/png")
+		}
+		if head.count >= 2, head[0] == 0xFF, head[1] == 0xD8 {
+			return ("jpg", "image/jpeg")
+		}
+		return nil
 	}
 
 	// MARK: - Table Rendering
@@ -472,6 +618,9 @@ public final class DocxWriter {
 		<w:document \
 		xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" \
 		xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" \
+		xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" \
+		xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" \
+		xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" \
 		xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" \
 		mc:Ignorable="w14">
 		<w:body>
@@ -482,11 +631,16 @@ public final class DocxWriter {
 	}
 
 	private func generateContentTypes() -> String {
-		"""
+		let imageDefaults = imageContentDefaults
+			.sorted { $0.key < $1.key }
+			.map { "<Default Extension=\"\($0.key)\" ContentType=\"\($0.value)\"/>" }
+			.joined(separator: "\n")
+		let imageDefaultsXML = imageDefaults.isEmpty ? "" : "\n\(imageDefaults)"
+		return """
 		<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 		<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
 		<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-		<Default Extension="xml" ContentType="application/xml"/>
+		<Default Extension="xml" ContentType="application/xml"/>\(imageDefaultsXML)
 		<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
 		<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
 		<Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>
@@ -517,6 +671,9 @@ public final class DocxWriter {
 		"""
 		for link in hyperlinks {
 			rels += "<Relationship Id=\"\(link.id)\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink\" Target=\"\(xmlEscape(link.url))\" TargetMode=\"External\"/>\n"
+		}
+		for image in imageRels {
+			rels += "<Relationship Id=\"\(image.id)\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"\(xmlEscape(image.target))\"/>\n"
 		}
 		rels += "</Relationships>"
 		return rels

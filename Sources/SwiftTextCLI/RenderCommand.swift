@@ -86,7 +86,7 @@ struct Render: AsyncParsableCommand {
 			try await renderPDF(html: html, baseURL: baseURL, outputURL: outputURL)
 			print(outputURL.path)
 		case .docx:
-			try MarkdownToDocx.convert(markdownText, to: outputURL, pageSetup: docxPageSetup())
+			try MarkdownToDocx.convert(markdownText, to: outputURL, pageSetup: docxPageSetup(), baseURL: baseURL)
 			print(outputURL.path)
 		case .pages:
 			try MarkdownToPages.convert(markdownText, to: outputURL, packaging: package ? .package : .singleFile, baseURL: baseURL)
