@@ -70,13 +70,15 @@ public final class DocxWriter {
 		public var text: String
 		public var bold: Bool
 		public var italic: Bool
+		public var strike: Bool
 		public var code: Bool
 		public var link: String?
 
-		public init(text: String, bold: Bool = false, italic: Bool = false, code: Bool = false, link: String? = nil) {
+		public init(text: String, bold: Bool = false, italic: Bool = false, strike: Bool = false, code: Bool = false, link: String? = nil) {
 			self.text = text
 			self.bold = bold
 			self.italic = italic
+			self.strike = strike
 			self.code = code
 			self.link = link
 		}
@@ -441,11 +443,13 @@ public final class DocxWriter {
 				var rPr = "<w:rStyle w:val=\"Hyperlink\"/>"
 				if run.bold { rPr += "<w:b/><w:bCs/>" }
 				if run.italic { rPr += "<w:i/><w:iCs/>" }
+				if run.strike { rPr += "<w:strike/>" }
 				xml += "<w:hyperlink r:id=\"\(rId)\"><w:r><w:rPr>\(rPr)</w:rPr><w:t xml:space=\"preserve\">\(xmlEscape(run.text))</w:t></w:r></w:hyperlink>"
 			} else {
 				var rPr = ""
 				if run.bold { rPr += "<w:b/><w:bCs/>" }
 				if run.italic { rPr += "<w:i/><w:iCs/>" }
+				if run.strike { rPr += "<w:strike/>" }
 				if run.code {
 					rPr += "<w:rFonts w:ascii=\"Courier New\" w:hAnsi=\"Courier New\" w:cs=\"Courier New\"/>"
 					rPr += "<w:sz w:val=\"21\"/><w:szCs w:val=\"21\"/>"

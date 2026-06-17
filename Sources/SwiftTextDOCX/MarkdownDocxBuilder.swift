@@ -33,6 +33,7 @@ enum MarkdownDocxBuilder {
 private struct RunStyle {
 	var bold: Bool = false
 	var italic: Bool = false
+	var strike: Bool = false
 	var code: Bool = false
 	var link: String? = nil
 }
@@ -57,16 +58,16 @@ private struct RunCollector {
 			withStyle({ $0.bold = true }) {
 				$0.collect(from: strong)
 			}
-		case is Strikethrough:
-			// DocxWriter.Run has no strikethrough field today, so we drop the
-			// marker and emit the inner content as a regular styled span. If a
-			// future writer adds support, this is the place to thread it.
-			collect(from: markup)
+		case let strikethrough as Strikethrough:
+			withStyle({ $0.strike = true }) {
+				$0.collect(from: strikethrough)
+			}
 		case let inlineCode as InlineCode:
 			runs.append(DocxWriter.Run(
 				text: inlineCode.code,
 				bold: style.bold,
 				italic: style.italic,
+				strike: style.strike,
 				code: true,
 				link: style.link
 			))
@@ -99,6 +100,7 @@ private struct RunCollector {
 			text: text,
 			bold: style.bold,
 			italic: style.italic,
+			strike: style.strike,
 			code: style.code,
 			link: style.link
 		))
