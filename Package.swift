@@ -144,6 +144,12 @@ let packageProducts: [Product] = [
 		name: "SwiftTextCSS",
 		targets: ["SwiftTextCSS"]
 	),
+	// The cross-platform HTML/CSS → PDF rendering engine itself: box tree,
+	// layout, and drawing over the CSS/OpenType/PDF-writer foundations.
+	.library(
+		name: "SwiftTextRender",
+		targets: ["SwiftTextRender"]
+	),
 ] + htmlProducts + macOSProducts
 
 let swiftTextDependencies: [Target.Dependency] = [
@@ -243,6 +249,23 @@ let packageTargets: [Target] = [
 		name: "SwiftTextCSSTests",
 		dependencies: ["SwiftTextCSS"],
 		path: "Tests/SwiftTextCSSTests"
+	),
+	// The rendering engine. Depends on SwiftTextHTML (the libxml2-backed DOM,
+	// like SwiftTextCLI) plus the cross-platform CSS/OpenType/PDF foundations.
+	.target(
+		name: "SwiftTextRender",
+		dependencies: [
+			"SwiftTextHTML",
+			"SwiftTextCSS",
+			"SwiftTextOpenType",
+			"SwiftTextPDFWriter",
+		],
+		path: "Sources/SwiftTextRender"
+	),
+	.testTarget(
+		name: "SwiftTextRenderTests",
+		dependencies: ["SwiftTextRender", "SwiftTextHTML", "SwiftTextCSS"],
+		path: "Tests/SwiftTextRenderTests"
 	),
 ] + htmlTargets + macOSTargets
 
