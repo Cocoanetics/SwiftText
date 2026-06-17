@@ -94,6 +94,30 @@ struct DocxWriterTests {
 		#expect(xml.contains("rLink1"))
 	}
 
+	@Test("Markdown table headers preserve strikethrough")
+	func markdownTableHeaderStrikethrough() throws {
+		let markdown = """
+		| ~~Old~~ | Fresh |
+		| --- | --- |
+		| value | next |
+		"""
+
+		let url = FileManager.default.temporaryDirectory
+			.appendingPathComponent("md-table-header-strike-\(UUID().uuidString).docx")
+		defer { try? FileManager.default.removeItem(at: url) }
+
+		try MarkdownToDocx.convert(markdown, to: url)
+
+		let archive = try #require(Archive(url: url, accessMode: .read))
+		var documentData = Data()
+		let entry = try #require(archive["word/document.xml"])
+		_ = try archive.extract(entry) { documentData.append($0) }
+		let xml = String(data: documentData, encoding: .utf8)!
+
+		#expect(xml.contains("Old"))
+		#expect(xml.contains("<w:strike/>"))
+	}
+
 	@Test("Inline parser handles mixed formatting")
 	func inlineParser() {
 		let runs = MarkdownToDocx.parseInline("Hello **bold** and *italic* with `code`")
