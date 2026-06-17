@@ -102,4 +102,56 @@ struct DocxFootnoteWriterTests {
 		_ = try archive.extract(entry) { data.append($0) }
 		#expect(!String(decoding: data, as: UTF8.self).contains("footnotes"))
 	}
+
+	@Test("A footnote reference inside a table header cell is rendered, not dropped")
+	func tableHeaderFootnoteRenders() throws {
+		let markdown = """
+		| Metric[^h] | Value |
+		| --- | --- |
+		| Speed | Fast |
+
+		[^h]: Measured on the test rig.
+		"""
+
+		let url = FileManager.default.temporaryDirectory
+			.appendingPathComponent("fn-thead-\(UUID().uuidString).docx")
+		defer { try? FileManager.default.removeItem(at: url) }
+
+		try MarkdownToDocx.convert(markdown, to: url)
+
+		let archive = try #require(Archive(url: url, accessMode: .read))
+		// The only reference is in the header cell, so its presence proves the
+		// header path renders footnote runs (it now goes through renderRuns).
+		#expect(try part("word/document.xml", from: archive).contains("<w:footnoteReference w:id=\"1\"/>"))
+		// And the matching note body is emitted — no orphaned footnote.
+		#expect(try part("word/footnotes.xml", from: archive).contains("Measured on the test rig."))
+	}
+
+	@Test("parseBlocks leaves footnotes as literal text — the low-level path emits no orphan references")
+	func parseBlocksKeepsFootnotesLiteral() throws {
+		// A caller using the documented low-level flow assigns parseBlocks output
+		// straight to DocxWriter.blocks. Since that path can't carry footnote
+		// bodies, it must not emit footnote-reference runs (which would be orphans).
+		let writer = DocxWriter()
+		writer.blocks = MarkdownToDocx.parseBlocks("See note[^1].\n\n[^1]: The note.")
+
+		let url = FileManager.default.temporaryDirectory
+			.appendingPathComponent("fn-parseblocks-\(UUID().uuidString).docx")
+		defer { try? FileManager.default.removeItem(at: url) }
+		try writer.write(to: url)
+
+		let archive = try #require(Archive(url: url, accessMode: .read))
+		#expect(archive["word/footnotes.xml"] == nil)
+		let document = try part("word/document.xml", from: archive)
+		#expect(!document.contains("<w:footnoteReference"))
+		#expect(document.contains("[^1]"))  // reference stays literal
+	}
+
+	/// Reads a part out of a `.docx` archive as a UTF-8 string.
+	private func part(_ path: String, from archive: Archive) throws -> String {
+		let entry = try #require(archive[path], "missing part \(path)")
+		var data = Data()
+		_ = try archive.extract(entry) { data.append($0) }
+		return String(decoding: data, as: UTF8.self)
+	}
 }

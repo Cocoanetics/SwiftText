@@ -27,6 +27,10 @@ public enum MarkdownToDocx {
 	}
 
 	/// Parses Markdown text into an array of ``DocxWriter/Block`` elements.
+	///
+	/// This returns blocks only, so footnotes can't be represented: `[^id]`
+	/// references and `[^id]: …` definitions are left as literal text. Use
+	/// ``convert(_:to:pageSetup:baseURL:)`` for native Word footnotes.
 	public static func parseBlocks(_ markdown: String) -> [DocxWriter.Block] {
 		MarkdownDocxBuilder.blocks(from: markdown)
 	}

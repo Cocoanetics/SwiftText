@@ -54,8 +54,14 @@ enum MarkdownDocxBuilder {
 		return Build(blocks: bodyBlocks, footnotes: footnotes)
 	}
 
+	/// Body blocks only — the low-level path behind `MarkdownToDocx.parseBlocks`.
+	/// It can't carry the footnote bodies (it returns only blocks), so `[^id]`
+	/// references and definitions are left as literal text rather than turned into
+	/// footnote-reference runs whose `word/footnotes.xml` part would be lost,
+	/// leaving orphan `w:footnoteReference` ids. Use `build(from:)` (the `convert`
+	/// path) for native footnotes.
 	static func blocks(from markdown: String) -> [DocxWriter.Block] {
-		build(from: markdown).blocks
+		blocks(from: markdown, resolver: nil)
 	}
 
 	private static func blocks(from markdown: String, resolver: MarkdownFootnoteResolver?) -> [DocxWriter.Block] {
