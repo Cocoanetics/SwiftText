@@ -125,6 +125,13 @@ let packageProducts: [Product] = [
 		name: "SwiftTextPages",
 		targets: ["SwiftTextPages"]
 	),
+	// Cross-platform HTML/CSS → PDF rendering engine (a port of WeasyPrint).
+	// SwiftTextPDFWriter is the Foundation-only PDF output substrate (a port of
+	// pydyf); it is always available because it has no external dependencies.
+	.library(
+		name: "SwiftTextPDFWriter",
+		targets: ["SwiftTextPDFWriter"]
+	),
 ] + htmlProducts + macOSProducts
 
 let swiftTextDependencies: [Target.Dependency] = [
@@ -196,6 +203,16 @@ let packageTargets: [Target] = [
 		name: "SwiftTextCoreTests",
 		dependencies: ["SwiftTextCore"],
 		path: "Tests/SwiftTextCoreTests"
+	),
+	// Cross-platform HTML/CSS → PDF rendering engine (a port of WeasyPrint).
+	.target(
+		name: "SwiftTextPDFWriter",
+		path: "Sources/SwiftTextPDFWriter"
+	),
+	.testTarget(
+		name: "SwiftTextPDFWriterTests",
+		dependencies: ["SwiftTextPDFWriter"],
+		path: "Tests/SwiftTextPDFWriterTests"
 	),
 ] + htmlTargets + macOSTargets
 
