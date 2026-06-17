@@ -33,6 +33,24 @@ struct RenderPDFTests {
 		#endif
 	}
 
+	@Test("A tall document is paginated across multiple pages")
+	func paginatesTallDocument() async throws {
+		var html = "<body>"
+		for index in 0 ..< 120 {
+			html += "<p>Paragraph number \(index): a line of text to fill the page.</p>"
+		}
+		html += "</body>"
+		let data = try await HTMLRenderer.renderPDF(html: html)
+
+		#if canImport(PDFKit)
+		let document = try #require(PDFDocument(data: data))
+		#expect(document.pageCount > 1)
+		// Every page is the same fixed size.
+		let firstBounds = document.page(at: 0)?.bounds(for: .mediaBox)
+		#expect(firstBounds?.height == 1056 * 0.75)
+		#endif
+	}
+
 	// MARK: - Layout geometry
 
 	private func layoutTree(_ html: String, css: [String] = [], contentWidth: Double) async throws -> BlockBox {

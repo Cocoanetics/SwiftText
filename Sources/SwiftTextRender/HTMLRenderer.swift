@@ -16,11 +16,16 @@ import SwiftTextPDFWriter
 public struct RenderOptions {
 	/// Page width in CSS pixels (default ≈ US Letter, 816px = 8.5in @96dpi).
 	public var pageWidthPx: Double
+	/// Page height in CSS pixels. `nil` produces a single auto-height page;
+	/// otherwise content is paginated to this height (default ≈ US Letter,
+	/// 1056px = 11in @96dpi).
+	public var pageHeightPx: Double?
 	/// Page margin in CSS pixels applied on all sides.
 	public var pageMarginPx: Double
 
-	public init(pageWidthPx: Double = 816, pageMarginPx: Double = 32) {
+	public init(pageWidthPx: Double = 816, pageHeightPx: Double? = 1056, pageMarginPx: Double = 32) {
 		self.pageWidthPx = pageWidthPx
+		self.pageHeightPx = pageHeightPx
 		self.pageMarginPx = pageMarginPx
 	}
 }
@@ -54,16 +59,77 @@ public enum HTMLRenderer {
 
 		let fonts = FontBook()
 		let engine = LayoutEngine(fonts: fonts)
-		let contentWidth = max(0, options.pageWidthPx - 2 * options.pageMarginPx)
-		let contentHeight = engine.layout(root: rootBox, contentWidth: contentWidth,
-		                                  originX: options.pageMarginPx, originY: options.pageMarginPx)
+		let margin = options.pageMarginPx
+		let contentWidth = max(0, options.pageWidthPx - 2 * margin)
+		// Lay the document out as a single tall column (origin at column y = 0).
+		let columnHeight = engine.layout(root: rootBox, contentWidth: contentWidth, originX: margin, originY: 0)
 
-		let pageHeightPx = contentHeight + 2 * options.pageMarginPx
-		let painter = Painter(pageHeightPx: pageHeightPx, fonts: fonts)
-		painter.paint(rootBox)
+		// Page height: fixed (paginated) or just enough for the whole column.
+		let pageHeightPx = options.pageHeightPx ?? (columnHeight + 2 * margin)
+		let slices = paginate(rootBox, columnHeight: columnHeight, pageHeightPx: pageHeightPx, margin: margin)
 
-		return assemble(content: painter.stream, resources: painter.resources(),
-		                pageWidthPx: options.pageWidthPx, pageHeightPx: pageHeightPx)
+		let pdf = PDF()
+		for slice in slices {
+			let geometry = PageGeometry(pageWidthPx: options.pageWidthPx, pageHeightPx: pageHeightPx,
+			                            marginPx: margin, columnTop: slice.top, sliceHeightPx: slice.bottom - slice.top)
+			let painter = Painter(geometry: geometry, fonts: fonts)
+			painter.paint(rootBox)
+			pdf.addObject(painter.stream)
+			let page = PDFDictionary([
+				("Type", "/Page"),
+				("Parent", pdf.pages.reference),
+				("MediaBox", PDFArray([0, 0, options.pageWidthPx * pxToPt, pageHeightPx * pxToPt])),
+				("Contents", painter.stream.reference),
+				("Resources", painter.resources()),
+			])
+			pdf.addPage(page)
+		}
+		return pdf.write()
+	}
+
+	/// Split the laid-out column into page slices, breaking only at line and
+	/// block boundaries where possible.
+	private static func paginate(_ root: BlockBox, columnHeight: Double, pageHeightPx: Double, margin: Double) -> [(top: Double, bottom: Double)] {
+		let contentHeight = max(1, pageHeightPx - 2 * margin)
+		guard columnHeight > contentHeight + 0.5 else {
+			return [(0, columnHeight)]
+		}
+
+		var breaks: Set<Double> = []
+		collectBreaks(root, into: &breaks)
+		let sortedBreaks = breaks.sorted()
+
+		var slices: [(top: Double, bottom: Double)] = []
+		var top = 0.0
+		while top < columnHeight - 0.5 {
+			let target = top + contentHeight
+			if target >= columnHeight {
+				slices.append((top, columnHeight))
+				break
+			}
+			// The furthest break strictly inside (top, target]; force a hard break
+			// if a single line/block is taller than the page.
+			let candidate = sortedBreaks.last { $0 > top + 0.5 && $0 <= target + 0.5 }
+			let bottom = (candidate ?? target) > top ? (candidate ?? target) : target
+			slices.append((top, bottom))
+			top = bottom
+		}
+		return slices.isEmpty ? [(0, columnHeight)] : slices
+	}
+
+	/// Collect candidate page-break y-coordinates: line and block edges.
+	private static func collectBreaks(_ box: Box, into ys: inout Set<Double>) {
+		guard let block = box as? BlockBox else { return }
+		ys.insert(block.y)
+		ys.insert(block.y + block.height)
+		if block.establishesInlineContext {
+			for line in block.lines {
+				ys.insert(line.y)
+				ys.insert(line.y + line.height)
+			}
+		} else {
+			for child in block.children { collectBreaks(child, into: &ys) }
+		}
 	}
 
 	/// Collect the CSS text of every `<style>` element, in document order.
@@ -87,17 +153,4 @@ public enum HTMLRenderer {
 		return sheets
 	}
 
-	private static func assemble(content: PDFStream, resources: PDFDictionary, pageWidthPx: Double, pageHeightPx: Double) -> Data {
-		let pdf = PDF()
-		pdf.addObject(content)
-		let page = PDFDictionary([
-			("Type", "/Page"),
-			("Parent", pdf.pages.reference),
-			("MediaBox", PDFArray([0, 0, pageWidthPx * pxToPt, pageHeightPx * pxToPt])),
-			("Contents", content.reference),
-			("Resources", resources),
-		])
-		pdf.addPage(page)
-		return pdf.write()
-	}
 }

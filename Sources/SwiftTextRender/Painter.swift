@@ -1,10 +1,11 @@
 //  Painter.swift
 //  SwiftTextRender
 //
-//  Paints a laid-out box tree into a PDF content stream: backgrounds, borders
-//  and text. Layout is in CSS pixels with a y-down, top-left origin; a single
-//  CTM (scale 0.75 = px→pt) is applied and each y is flipped into PDF's y-up
-//  space, so glyphs stay upright.
+//  Paints a laid-out box tree onto one page of a paginated document. The box
+//  tree is laid out once as a single tall column (CSS px, y-down); each page
+//  maps a vertical slice of that column onto a fixed-size page, clipping to the
+//  slice so neighbouring pages' content does not bleed in. A single CTM scales
+//  CSS px to PDF pt and the y axis is flipped so glyphs stay upright.
 
 import Foundation
 import SwiftTextCSS
@@ -13,22 +14,58 @@ import SwiftTextPDFWriter
 /// CSS pixels to PDF points: 1px = 1/96in, 1pt = 1/72in.
 let pxToPt = 0.75
 
+/// Where a page sits within the laid-out column.
+public struct PageGeometry {
+	public let pageWidthPx: Double
+	public let pageHeightPx: Double
+	public let marginPx: Double
+	/// The column y-coordinate shown at the top of this page's content area.
+	public let columnTop: Double
+	/// The height of the column slice shown on this page.
+	public let sliceHeightPx: Double
+
+	public init(pageWidthPx: Double, pageHeightPx: Double, marginPx: Double, columnTop: Double, sliceHeightPx: Double) {
+		self.pageWidthPx = pageWidthPx
+		self.pageHeightPx = pageHeightPx
+		self.marginPx = marginPx
+		self.columnTop = columnTop
+		self.sliceHeightPx = sliceHeightPx
+	}
+}
+
 public final class Painter {
 	public let stream = PDFStream()
-	private let pageHeightPx: Double
+	private let geometry: PageGeometry
 	private let fonts: FontBook
 
 	private var fontResourceNames: [String: String] = [:]
 	private var fontOrder: [String] = []
 
-	public init(pageHeightPx: Double, fonts: FontBook) {
-		self.pageHeightPx = pageHeightPx
+	public init(geometry: PageGeometry, fonts: FontBook) {
+		self.geometry = geometry
 		self.fonts = fonts
 		// Map CSS px (y-down) to PDF pt (y-up) for the whole page.
 		stream.setMatrix(pxToPt, 0, 0, pxToPt, 0, 0)
+		// Clip to this page's content slice so other pages don't bleed in.
+		let contentWidth = geometry.pageWidthPx - 2 * geometry.marginPx
+		stream.rectangle(geometry.marginPx,
+		                 geometry.pageHeightPx - geometry.marginPx - geometry.sliceHeightPx,
+		                 contentWidth, geometry.sliceHeightPx)
+		stream.clip()
+		stream.endPath()
 	}
 
-	/// Paint the box tree.
+	/// Page y (from page top) for a column y-coordinate.
+	private func pageY(_ columnY: Double) -> Double {
+		geometry.marginPx + (columnY - geometry.columnTop)
+	}
+
+	/// Lower-left y (PDF y-up) for a box whose column top and height are given.
+	private func yUp(columnTop: Double, height: Double) -> Double {
+		geometry.pageHeightPx - (pageY(columnTop) + height)
+	}
+
+	/// Paint the box tree onto this page.
 	public func paint(_ box: Box) {
 		if let block = box as? BlockBox {
 			paintBackground(block)
@@ -50,44 +87,40 @@ public final class Painter {
 
 	// MARK: - Backgrounds and borders
 
-	private func yUp(top: Double, height: Double) -> Double {
-		pageHeightPx - (top + height)
-	}
-
 	private func paintBackground(_ box: Box) {
 		guard let color = box.style.backgroundColor, color.alpha > 0 else { return }
 		stream.pushState()
 		stream.setColorRGB(color.red, color.green, color.blue)
-		stream.rectangle(box.x, yUp(top: box.y, height: box.height), box.width, box.height)
+		stream.rectangle(box.x, yUp(columnTop: box.y, height: box.height), box.width, box.height)
 		stream.fill()
 		stream.popState()
 	}
 
 	private func paintBorders(_ box: Box) {
 		let border = box.usedBorder
+		guard border.top > 0 || border.right > 0 || border.bottom > 0 || border.left > 0 else { return }
 		let style = box.style
-		let bottomY = yUp(top: box.y, height: box.height)
+		let bottomY = yUp(columnTop: box.y, height: box.height)
 
-		func fillEdge(_ rect: (x: Double, y: Double, w: Double, h: Double), _ color: RGBA) {
-			guard rect.w > 0, rect.h > 0 else { return }
+		func fillEdge(_ x: Double, _ y: Double, _ w: Double, _ h: Double, _ color: RGBA) {
+			guard w > 0, h > 0 else { return }
 			stream.setColorRGB(color.red, color.green, color.blue)
-			stream.rectangle(rect.x, rect.y, rect.w, rect.h)
+			stream.rectangle(x, y, w, h)
 			stream.fill()
 		}
 
-		guard border.top > 0 || border.right > 0 || border.bottom > 0 || border.left > 0 else { return }
 		stream.pushState()
 		if border.top > 0 {
-			fillEdge((box.x, bottomY + box.height - border.top, box.width, border.top), style.borderColor.top)
+			fillEdge(box.x, bottomY + box.height - border.top, box.width, border.top, style.borderColor.top)
 		}
 		if border.bottom > 0 {
-			fillEdge((box.x, bottomY, box.width, border.bottom), style.borderColor.bottom)
+			fillEdge(box.x, bottomY, box.width, border.bottom, style.borderColor.bottom)
 		}
 		if border.left > 0 {
-			fillEdge((box.x, bottomY, border.left, box.height), style.borderColor.left)
+			fillEdge(box.x, bottomY, border.left, box.height, style.borderColor.left)
 		}
 		if border.right > 0 {
-			fillEdge((box.x + box.width - border.right, bottomY, border.right, box.height), style.borderColor.right)
+			fillEdge(box.x + box.width - border.right, bottomY, border.right, box.height, style.borderColor.right)
 		}
 		stream.popState()
 	}
@@ -102,7 +135,7 @@ public final class Painter {
 		stream.beginText()
 		stream.setColorRGB(color.red, color.green, color.blue)
 		stream.setFontSize(resource, fragment.style.fontSize)
-		stream.moveTextTo(fragment.x, pageHeightPx - fragment.baseline)
+		stream.moveTextTo(fragment.x, geometry.pageHeightPx - pageY(fragment.baseline))
 		stream.showRawString(encodeWinAnsi(fragment.text))
 		stream.endText()
 	}
