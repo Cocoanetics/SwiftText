@@ -128,6 +128,17 @@ struct CascadeTests {
 		#expect(div.borderStyle.top.isVisible)
 	}
 
+	@Test("text-decoration from UA and author rules")
+	func textDecoration() {
+		// Links are underlined by the user-agent stylesheet.
+		#expect(style(Element("a"), resolver: StyleResolver()).underline)
+
+		let resolver = StyleResolver(authorStyleSheets: ["span { text-decoration: line-through }"])
+		let span = style(Element("span"), resolver: resolver)
+		#expect(span.lineThrough)
+		#expect(span.underline == false)
+	}
+
 	@Test("inherit and initial keywords")
 	func globalKeywords() {
 		let resolver = StyleResolver(authorStyleSheets: [

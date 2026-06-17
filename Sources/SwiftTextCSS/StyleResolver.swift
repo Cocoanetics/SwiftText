@@ -264,6 +264,20 @@ private func applyLonghand(_ name: String, _ value: [ComponentValue], to style: 
 		}
 	case "white-space":
 		if let whiteSpace = parseWhiteSpace(value) { style.whiteSpace = whiteSpace }
+	case "text-decoration", "text-decoration-line":
+		var underline = false
+		var lineThrough = false
+		for token in significant(value) {
+			if case .ident(let ident) = token.token {
+				switch ident.asciiLowercased {
+				case "underline": underline = true
+				case "line-through": lineThrough = true
+				default: break // none, overline, blink, or color/style — ignored
+				}
+			}
+		}
+		style.underline = underline
+		style.lineThrough = lineThrough
 	case "width":
 		if let length = parseLength(value, fontSize: fontSize, rootFontSize: rootFontSize) { style.width = length }
 	case "height":
@@ -306,6 +320,7 @@ private func globalKeyword(_ value: [ComponentValue]) -> String? {
 private let inheritedProperties: Set<String> = [
 	"color", "font-family", "font-size", "font-style", "font-weight",
 	"line-height", "text-align", "white-space",
+	"text-decoration", "text-decoration-line",
 ]
 
 private func applyGlobal(_ name: String, _ keyword: String, to style: inout ComputedStyle, parent: ComputedStyle) {
@@ -331,6 +346,9 @@ private func copyLonghand(_ name: String, from source: ComputedStyle, into style
 	case "line-height": style.lineHeight = source.lineHeight
 	case "text-align": style.textAlign = source.textAlign
 	case "white-space": style.whiteSpace = source.whiteSpace
+	case "text-decoration", "text-decoration-line":
+		style.underline = source.underline
+		style.lineThrough = source.lineThrough
 	case "width": style.width = source.width
 	case "height": style.height = source.height
 	case "margin-top", "margin-right", "margin-bottom", "margin-left": setEdge(&style.margin, name, edgeValue(source.margin, name))

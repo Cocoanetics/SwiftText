@@ -122,6 +122,10 @@ public struct ComputedStyle: Equatable, Sendable {
 	public var lineHeight: LineHeight
 	public var textAlign: TextAlign
 	public var whiteSpace: WhiteSpace
+	/// Whether text is underlined (`text-decoration: underline`).
+	public var underline: Bool
+	/// Whether text has a line through it (`text-decoration: line-through`).
+	public var lineThrough: Bool
 
 	// Non-inherited properties.
 	public var display: Display
@@ -154,6 +158,8 @@ public struct ComputedStyle: Equatable, Sendable {
 		lineHeight: .normal,
 		textAlign: .start,
 		whiteSpace: .normal,
+		underline: false,
+		lineThrough: false,
 		display: .inline,
 		backgroundColor: nil,
 		margin: Edges(.px(0)),
@@ -176,6 +182,10 @@ public struct ComputedStyle: Equatable, Sendable {
 		style.lineHeight = parent.lineHeight
 		style.textAlign = parent.textAlign
 		style.whiteSpace = parent.whiteSpace
+		// text-decoration is not formally inherited, but an ancestor's decoration
+		// visually spans descendants; propagating it approximates that.
+		style.underline = parent.underline
+		style.lineThrough = parent.lineThrough
 		// Initial border color is `currentColor`, i.e. the (inherited) color.
 		style.borderColor = Edges(parent.color)
 		return style

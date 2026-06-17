@@ -145,9 +145,33 @@ public final class Painter {
 		}
 		stream.endText()
 
+		if fragment.style.underline || fragment.style.lineThrough {
+			paintDecorations(fragment, font: font)
+		}
 		if let href = fragment.href {
 			addLinkAnnotation(for: fragment, font: font, href: href)
 		}
+	}
+
+	/// Draw underline and/or line-through bars for a fragment.
+	private func paintDecorations(_ fragment: TextFragment, font: Font) {
+		let size = fragment.style.fontSize
+		let thickness = max(0.5, size / 16)
+		let color = fragment.style.color
+		stream.pushState()
+		stream.setColorRGB(color.red, color.green, color.blue)
+		func bar(atColumnY columnY: Double) {
+			let bottom = geometry.pageHeightPx - pageY(columnY + thickness / 2)
+			stream.rectangle(fragment.x, bottom, fragment.width, thickness)
+			stream.fill()
+		}
+		if fragment.style.underline {
+			bar(atColumnY: fragment.baseline + size * 0.12)
+		}
+		if fragment.style.lineThrough {
+			bar(atColumnY: fragment.baseline - font.ascent(size: size) * 0.30)
+		}
+		stream.popState()
 	}
 
 	/// Encode text as 2-byte glyph identifiers (Identity-H) and record the glyphs

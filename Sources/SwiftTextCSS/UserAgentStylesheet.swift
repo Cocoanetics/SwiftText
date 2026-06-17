@@ -44,6 +44,8 @@ pre, listing, plaintext, xmp { white-space: pre }
 nobr { white-space: nowrap }
 big { font-size: larger }
 small { font-size: smaller }
-a { color: #0000ee }
+a { color: #0000ee; text-decoration: underline }
+del, s, strike { text-decoration: line-through }
+ins, u { text-decoration: underline }
 mark { background-color: #ffff00 }
 """
