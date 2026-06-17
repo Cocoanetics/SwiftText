@@ -259,7 +259,7 @@ public final class LayoutEngine {
 
 		var lines: [LineBox] = []
 		var fragments: [TextFragment] = []
-		var penX = 0.0
+		var penX = box.style.textIndent // first line indentation (reset to 0 after)
 		var pendingSpace: ComputedStyle? = nil
 		var lineTop = contentTop
 

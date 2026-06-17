@@ -334,6 +334,25 @@ struct RenderPDFTests {
 		#expect(collectBlocks(in: plain) { $0.element?.localName == "li" }.first?.marker == nil)
 	}
 
+	@Test("text-indent indents only the first line")
+	func textIndent() async throws {
+		let text = "Hello world this is a longer paragraph that wraps onto several lines here"
+		let plain = try await layoutTree("<p>\(text)</p>", contentWidth: 150)
+		let indented = try await layoutTree("<p style=\"text-indent: 30px\">\(text)</p>", contentWidth: 150)
+		let plainBlock = try #require(firstBlock(in: plain) { $0.element?.localName == "p" })
+		let indentedBlock = try #require(firstBlock(in: indented) { $0.element?.localName == "p" })
+		#expect(plainBlock.lines.count >= 2)
+
+		let plainFirst = try #require(plainBlock.lines.first?.fragments.first?.x)
+		let indentedFirst = try #require(indentedBlock.lines.first?.fragments.first?.x)
+		#expect(abs((indentedFirst - plainFirst) - 30) < 0.5)
+
+		// The second line is not indented.
+		let plainSecond = try #require(plainBlock.lines.dropFirst().first?.fragments.first?.x)
+		let indentedSecond = try #require(indentedBlock.lines.dropFirst().first?.fragments.first?.x)
+		#expect(abs(indentedSecond - plainSecond) < 0.5)
+	}
+
 	@Test("text-align: center shifts the line inward")
 	func textAlignCenter() async throws {
 		let left = try await layoutTree("<p>hi there</p>", contentWidth: 400)

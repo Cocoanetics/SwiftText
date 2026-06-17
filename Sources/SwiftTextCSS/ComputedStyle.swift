@@ -149,6 +149,8 @@ public struct ComputedStyle: Equatable, Sendable {
 	public var wordSpacing: Double
 	/// The list marker style (`list-style-type`).
 	public var listStyleType: ListStyleType
+	/// First-line indentation in pixels (`text-indent`).
+	public var textIndent: Double
 
 	// Non-inherited properties.
 	public var display: Display
@@ -186,6 +188,7 @@ public struct ComputedStyle: Equatable, Sendable {
 		letterSpacing: 0,
 		wordSpacing: 0,
 		listStyleType: .disc,
+		textIndent: 0,
 		display: .inline,
 		backgroundColor: nil,
 		margin: Edges(.px(0)),
@@ -215,6 +218,7 @@ public struct ComputedStyle: Equatable, Sendable {
 		style.letterSpacing = parent.letterSpacing
 		style.wordSpacing = parent.wordSpacing
 		style.listStyleType = parent.listStyleType
+		style.textIndent = parent.textIndent
 		// Initial border color is `currentColor`, i.e. the (inherited) color.
 		style.borderColor = Edges(parent.color)
 		return style

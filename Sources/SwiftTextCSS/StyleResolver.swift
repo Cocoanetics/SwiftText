@@ -306,6 +306,10 @@ private func applyLonghand(_ name: String, _ value: [ComponentValue], to style: 
 				style.listStyleType = type
 			}
 		}
+	case "text-indent":
+		if let length = parseLength(value, fontSize: fontSize, rootFontSize: rootFontSize), case .px(let pixels) = length {
+			style.textIndent = pixels
+		}
 	case "width":
 		if let length = parseLength(value, fontSize: fontSize, rootFontSize: rootFontSize) { style.width = length }
 	case "height":
@@ -351,6 +355,7 @@ private let inheritedProperties: Set<String> = [
 	"text-decoration", "text-decoration-line",
 	"letter-spacing", "word-spacing",
 	"list-style-type", "list-style",
+	"text-indent",
 ]
 
 /// Map a CSS `list-style-type` keyword (including latin aliases) to the enum.
@@ -391,6 +396,7 @@ private func copyLonghand(_ name: String, from source: ComputedStyle, into style
 	case "letter-spacing": style.letterSpacing = source.letterSpacing
 	case "word-spacing": style.wordSpacing = source.wordSpacing
 	case "list-style-type", "list-style": style.listStyleType = source.listStyleType
+	case "text-indent": style.textIndent = source.textIndent
 	case "width": style.width = source.width
 	case "height": style.height = source.height
 	case "margin-top", "margin-right", "margin-bottom", "margin-left": setEdge(&style.margin, name, edgeValue(source.margin, name))
