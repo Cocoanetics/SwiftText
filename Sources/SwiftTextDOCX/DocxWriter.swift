@@ -78,14 +78,34 @@ public final class DocxWriter {
 		public var strike: Bool
 		public var code: Bool
 		public var link: String?
+		/// When set, this run is a footnote reference to the footnote with this
+		/// id (see ``Footnote``). The writer emits a `w:footnoteReference` run
+		/// and ignores `text`/styling.
+		public var footnoteRef: Int?
 
-		public init(text: String, bold: Bool = false, italic: Bool = false, strike: Bool = false, code: Bool = false, link: String? = nil) {
+		public init(text: String, bold: Bool = false, italic: Bool = false, strike: Bool = false, code: Bool = false, link: String? = nil, footnoteRef: Int? = nil) {
 			self.text = text
 			self.bold = bold
 			self.italic = italic
 			self.strike = strike
 			self.code = code
 			self.link = link
+			self.footnoteRef = footnoteRef
+		}
+	}
+
+	/// A footnote: its `w:id` (referenced by ``Run/footnoteRef`` runs in the
+	/// body) and its body content, rendered at the bottom of the page by Word.
+	public struct Footnote {
+		/// The footnote's `w:id`. Must be positive (ids `-1`/`0` are reserved
+		/// for the separator/continuationSeparator pseudo-footnotes).
+		public var id: Int
+		/// The footnote body as block content (typically one or more paragraphs).
+		public var blocks: [Block]
+
+		public init(id: Int, blocks: [Block]) {
+			self.id = id
+			self.blocks = blocks
 		}
 	}
 
@@ -93,6 +113,10 @@ public final class DocxWriter {
 
 	/// The blocks to render into the DOCX document.
 	public var blocks: [Block] = []
+
+	/// The document's footnotes. When non-empty, a `word/footnotes.xml` part is
+	/// emitted and registered; body runs reference them via ``Run/footnoteRef``.
+	public var footnotes: [Footnote] = []
 
 	/// Page setup (paper size, margins, orientation). Defaults to A4 portrait.
 	public var pageSetup: DocxPageSetup = .a4
@@ -187,6 +211,10 @@ public final class DocxWriter {
 		// Embedded image media parts (word/media/imageN.ext).
 		for media in mediaFiles {
 			try addEntry(archive, path: media.path, data: media.data)
+		}
+
+		if !footnotes.isEmpty {
+			try addEntry(archive, path: "word/footnotes.xml", content: generateFootnotes())
 		}
 	}
 
@@ -584,6 +612,12 @@ public final class DocxWriter {
 	private func renderRuns(_ runs: [Run], forceBold: Bool = false) -> String {
 		var xml = ""
 		for run in runs {
+			if let number = run.footnoteRef {
+				// Native Word footnote reference: a superscript auto-number that
+				// Word resolves against the matching <w:footnote w:id> body.
+				xml += "<w:r><w:rPr><w:rStyle w:val=\"FootnoteReference\"/></w:rPr><w:footnoteReference w:id=\"\(number)\"/></w:r>"
+				continue
+			}
 			if let link = run.link {
 				let rId = nextHyperlinkId(url: link)
 				var rPr = "<w:rStyle w:val=\"Hyperlink\"/>"
@@ -640,6 +674,10 @@ public final class DocxWriter {
 			.map { "<Default Extension=\"\($0.key)\" ContentType=\"\($0.value)\"/>" }
 			.joined(separator: "\n")
 		let imageDefaultsXML = imageDefaults.isEmpty ? "" : "\n\(imageDefaults)"
+		let footnotesOverride = footnotes.isEmpty ? "" : """
+		<Override PartName="/word/footnotes.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml"/>
+
+		"""
 		return """
 		<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 		<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
@@ -650,7 +688,7 @@ public final class DocxWriter {
 		<Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>
 		<Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/>
 		<Override PartName="/word/fontTable.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.fontTable+xml"/>
-		</Types>
+		\(footnotesOverride)</Types>
 		"""
 	}
 
@@ -673,6 +711,9 @@ public final class DocxWriter {
 		<Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/fontTable" Target="fontTable.xml"/>
 
 		"""
+		if !footnotes.isEmpty {
+			rels += "<Relationship Id=\"rId5\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes\" Target=\"footnotes.xml\"/>\n"
+		}
 		for link in hyperlinks {
 			rels += "<Relationship Id=\"\(link.id)\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink\" Target=\"\(xmlEscape(link.url))\" TargetMode=\"External\"/>\n"
 		}
@@ -766,6 +807,24 @@ public final class DocxWriter {
 		<w:rPr>
 		<w:color w:val="0366D6"/>
 		<w:u w:val="single"/>
+		</w:rPr>
+		</w:style>
+
+		<w:style w:type="paragraph" w:styleId="FootnoteText">
+		<w:name w:val="footnote text"/>
+		<w:basedOn w:val="Normal"/>
+		<w:pPr>
+		<w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/>
+		</w:pPr>
+		<w:rPr>
+		<w:sz w:val="20"/><w:szCs w:val="20"/>
+		</w:rPr>
+		</w:style>
+
+		<w:style w:type="character" w:styleId="FootnoteReference">
+		<w:name w:val="footnote reference"/>
+		<w:rPr>
+		<w:vertAlign w:val="superscript"/>
 		</w:rPr>
 		</w:style>
 
@@ -899,6 +958,107 @@ public final class DocxWriter {
 		</w:font>
 		</w:fonts>
 		"""
+	}
+
+	// MARK: - Footnotes
+
+	private func generateFootnotes() -> String {
+		// Word requires the separator / continuationSeparator pseudo-footnotes at
+		// the reserved ids -1 and 0; it draws the rule above the notes from them.
+		var xml = """
+		<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+		<w:footnotes \
+		xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" \
+		xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+		<w:footnote w:type="separator" w:id="-1"><w:p><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:r><w:separator/></w:r></w:p></w:footnote>
+		<w:footnote w:type="continuationSeparator" w:id="0"><w:p><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:r><w:continuationSeparator/></w:r></w:p></w:footnote>
+
+		"""
+		for footnote in footnotes.sorted(by: { $0.id < $1.id }) {
+			xml += "<w:footnote w:id=\"\(footnote.id)\">\n"
+			xml += footnoteBodyXML(footnote.blocks)
+			xml += "</w:footnote>\n"
+		}
+		xml += "</w:footnotes>"
+		return xml
+	}
+
+	/// Renders a footnote body as one or more `FootnoteText` paragraphs. The
+	/// first paragraph carries the auto-numbered reference mark (`w:footnoteRef`).
+	private func footnoteBodyXML(_ blocks: [Block]) -> String {
+		var paragraphs = footnoteRunParagraphs(from: blocks)
+		if paragraphs.isEmpty { paragraphs = [[]] }  // empty note still needs the mark
+
+		var xml = ""
+		for (index, runs) in paragraphs.enumerated() {
+			xml += "<w:p><w:pPr><w:pStyle w:val=\"FootnoteText\"/></w:pPr>"
+			if index == 0 {
+				xml += "<w:r><w:rPr><w:rStyle w:val=\"FootnoteReference\"/></w:rPr><w:footnoteRef/></w:r>"
+				xml += "<w:r><w:t xml:space=\"preserve\"> </w:t></w:r>"
+			}
+			xml += renderFootnoteRuns(runs)
+			xml += "</w:p>\n"
+		}
+		return xml
+	}
+
+	/// Flattens footnote body blocks into a list of paragraphs (each a run list).
+	/// Word footnotes don't carry tables/rules/nested numbering, so those are
+	/// reduced to their inline text; code blocks become one line per paragraph.
+	private func footnoteRunParagraphs(from blocks: [Block]) -> [[Run]] {
+		var paragraphs: [[Run]] = []
+		for block in blocks {
+			switch block {
+			case .paragraph(let runs):
+				paragraphs.append(runs)
+			case .heading(_, let runs):
+				paragraphs.append(runs)
+			case .listItem(_, _, let runs):
+				paragraphs.append(runs)
+			case .blockquote(let inner):
+				paragraphs.append(contentsOf: footnoteRunParagraphs(from: inner))
+			case .codeBlock(_, let text):
+				for line in text.components(separatedBy: "\n") {
+					paragraphs.append([Run(text: line, code: true)])
+				}
+			case .table(let headers, let rows, _):
+				for cell in headers { paragraphs.append(cell) }
+				for row in rows { for cell in row { paragraphs.append(cell) } }
+			case .image(_, let alt):
+				// Word footnotes don't embed pictures here; degrade to the italic
+				// alt-text placeholder, matching the inline-image fallback.
+				paragraphs.append([Run(text: alt, italic: true)])
+			case .horizontalRule:
+				break
+			}
+		}
+		return paragraphs
+	}
+
+	/// Like ``renderRuns(_:)`` but for footnote bodies: never allocates document
+	/// hyperlink relationships (links render as styled text), and a nested
+	/// footnote reference degrades to a superscript `[N]` since Word can't nest
+	/// footnotes.
+	private func renderFootnoteRuns(_ runs: [Run]) -> String {
+		var xml = ""
+		for run in runs {
+			if let number = run.footnoteRef {
+				xml += "<w:r><w:rPr><w:rStyle w:val=\"FootnoteReference\"/></w:rPr><w:t xml:space=\"preserve\">[\(number)]</w:t></w:r>"
+				continue
+			}
+			var rPr = ""
+			if run.link != nil { rPr += "<w:rStyle w:val=\"Hyperlink\"/>" }
+			if run.bold { rPr += "<w:b/><w:bCs/>" }
+			if run.italic { rPr += "<w:i/><w:iCs/>" }
+			if run.strike { rPr += "<w:strike/>" }
+			if run.code {
+				rPr += "<w:rFonts w:ascii=\"Courier New\" w:hAnsi=\"Courier New\" w:cs=\"Courier New\"/>"
+				rPr += "<w:sz w:val=\"21\"/><w:szCs w:val=\"21\"/>"
+			}
+			let rPrXML = rPr.isEmpty ? "" : "<w:rPr>\(rPr)</w:rPr>"
+			xml += "<w:r>\(rPrXML)<w:t xml:space=\"preserve\">\(xmlEscape(run.text))</w:t></w:r>"
+		}
+		return xml
 	}
 
 	// MARK: - Utilities

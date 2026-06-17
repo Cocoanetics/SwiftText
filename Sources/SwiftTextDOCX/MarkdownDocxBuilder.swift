@@ -6,9 +6,67 @@ import SwiftTextMarkdown
 /// AST. Internal helper for `MarkdownToDocx`.
 enum MarkdownDocxBuilder {
 
+	/// The document model built from Markdown: body blocks plus any footnotes.
+	struct Build {
+		var blocks: [DocxWriter.Block]
+		var footnotes: [DocxWriter.Footnote]
+	}
+
+	/// Builds body blocks and footnotes from Markdown. `[^id]` references and
+	/// `[^id]: …` definitions are parsed with ``MarkdownFootnoteParser`` (which
+	/// swift-markdown can't do natively) and emitted as native Word footnotes.
+	static func build(from markdown: String) -> Build {
+		let (cleaned, definitions) = MarkdownFootnoteParser.extractDefinitions(from: markdown)
+
+		// Fast path: no footnote definitions -> nothing to resolve.
+		guard !definitions.isEmpty else {
+			return Build(blocks: blocks(from: markdown, resolver: nil), footnotes: [])
+		}
+
+		let resolver = MarkdownFootnoteResolver(definitionIDs: definitions.map(\.id))
+
+		// Body blocks: walking the body in document order assigns footnote
+		// numbers in source order of first reference.
+		let bodyBlocks = blocks(from: cleaned, resolver: resolver)
+
+		// Render each referenced definition's body into footnote blocks. A
+		// definition can be referenced only from inside another definition that
+		// appears earlier in source, so re-scan until a pass renders nothing new.
+		var blocksByNumber: [Int: [DocxWriter.Block]] = [:]
+		var renderedIDs = Set<String>()
+		var renderedNew = true
+		while renderedNew {
+			renderedNew = false
+			for definition in definitions where !renderedIDs.contains(definition.id) {
+				guard let number = resolver.number(forID: definition.id) else {
+					// Definition not referenced (yet) — skip it.
+					continue
+				}
+				blocksByNumber[number] = blocks(from: definition.body, resolver: resolver)
+				renderedIDs.insert(definition.id)
+				renderedNew = true
+			}
+		}
+
+		let footnotes = blocksByNumber
+			.sorted { $0.key < $1.key }
+			.map { DocxWriter.Footnote(id: $0.key, blocks: $0.value) }
+		return Build(blocks: bodyBlocks, footnotes: footnotes)
+	}
+
+	/// Body blocks only — the low-level path behind `MarkdownToDocx.parseBlocks`.
+	/// It can't carry the footnote bodies (it returns only blocks), so `[^id]`
+	/// references and definitions are left as literal text rather than turned into
+	/// footnote-reference runs whose `word/footnotes.xml` part would be lost,
+	/// leaving orphan `w:footnoteReference` ids. Use `build(from:)` (the `convert`
+	/// path) for native footnotes.
 	static func blocks(from markdown: String) -> [DocxWriter.Block] {
+		blocks(from: markdown, resolver: nil)
+	}
+
+	private static func blocks(from markdown: String, resolver: MarkdownFootnoteResolver?) -> [DocxWriter.Block] {
 		let document = Document(parsing: markdown, options: [])
-		var visitor = BlockVisitor()
+		var visitor = BlockVisitor(resolver: resolver)
 		visitor.visit(document)
 		return visitor.blocks
 	}
@@ -18,11 +76,11 @@ enum MarkdownDocxBuilder {
 	static func runs(fromInline text: String) -> [DocxWriter.Run] {
 		let document = Document(parsing: text, options: [])
 		guard let firstParagraph = document.child(at: 0) as? Paragraph else { return [] }
-		return runs(from: firstParagraph)
+		return runs(from: firstParagraph, resolver: nil)
 	}
 
-	static func runs(from inlineContainer: Markup) -> [DocxWriter.Run] {
-		var collector = RunCollector()
+	static func runs(from inlineContainer: Markup, resolver: MarkdownFootnoteResolver?) -> [DocxWriter.Run] {
+		var collector = RunCollector(resolver: resolver)
 		collector.collect(from: inlineContainer)
 		return collector.runs
 	}
@@ -41,6 +99,12 @@ private struct RunStyle {
 private struct RunCollector {
 	var runs: [DocxWriter.Run] = []
 	private var style = RunStyle()
+	/// When present, `[^id]` references in `Text` nodes become footnote runs.
+	let resolver: MarkdownFootnoteResolver?
+
+	init(resolver: MarkdownFootnoteResolver?) {
+		self.resolver = resolver
+	}
 
 	mutating func collect(from container: Markup) {
 		for child in container.children { visit(child) }
@@ -49,7 +113,7 @@ private struct RunCollector {
 	private mutating func visit(_ markup: Markup) {
 		switch markup {
 		case let text as Text:
-			append(text: reverseSmartPunct(text.string))
+			appendResolvingFootnotes(in: text.string)
 		case let emphasis as Emphasis:
 			withStyle({ $0.italic = true }) {
 				$0.collect(from: emphasis)
@@ -106,6 +170,24 @@ private struct RunCollector {
 		))
 	}
 
+	/// Appends a plain `Text` node, splitting out any `[^id]` footnote
+	/// references (when a resolver is active) into dedicated footnote-reference
+	/// runs. Without a resolver this is just `append(text:)`.
+	private mutating func appendResolvingFootnotes(in string: String) {
+		guard let resolver else {
+			append(text: reverseSmartPunct(string))
+			return
+		}
+		for segment in resolver.resolve(string) {
+			switch segment {
+			case .text(let value):
+				if !value.isEmpty { append(text: reverseSmartPunct(value)) }
+			case .reference(let number):
+				runs.append(DocxWriter.Run(text: "", footnoteRef: number))
+			}
+		}
+	}
+
 	private mutating func withStyle(_ apply: (inout RunStyle) -> Void, _ body: (inout RunCollector) -> Void) {
 		let saved = style
 		apply(&style)
@@ -121,6 +203,12 @@ private struct BlockVisitor: MarkupVisitor {
 
 	var blocks: [DocxWriter.Block] = []
 	private var listLevel: Int = 0
+	/// Shared across the whole document so footnote numbers stay in source order.
+	let resolver: MarkdownFootnoteResolver?
+
+	init(resolver: MarkdownFootnoteResolver?) {
+		self.resolver = resolver
+	}
 
 	mutating func defaultVisit(_ markup: Markup) {
 		for child in markup.children { visit(child) }
@@ -141,12 +229,12 @@ private struct BlockVisitor: MarkupVisitor {
 			blocks.append(.image(source: source, alt: alt))
 			return
 		}
-		blocks.append(.paragraph(runs: MarkdownDocxBuilder.runs(from: paragraph)))
+		blocks.append(.paragraph(runs: MarkdownDocxBuilder.runs(from: paragraph, resolver: resolver)))
 	}
 
 	mutating func visitHeading(_ heading: Heading) {
 		let level = max(1, min(heading.level, 6))
-		blocks.append(.heading(level: level, runs: MarkdownDocxBuilder.runs(from: heading)))
+		blocks.append(.heading(level: level, runs: MarkdownDocxBuilder.runs(from: heading, resolver: resolver)))
 	}
 
 	mutating func visitCodeBlock(_ codeBlock: CodeBlock) {
@@ -160,7 +248,7 @@ private struct BlockVisitor: MarkupVisitor {
 	}
 
 	mutating func visitBlockQuote(_ blockQuote: BlockQuote) {
-		var inner = BlockVisitor()
+		var inner = BlockVisitor(resolver: resolver)
 		inner.listLevel = listLevel
 		for child in blockQuote.children { inner.visit(child) }
 		blocks.append(.blockquote(blocks: inner.blocks))
@@ -193,7 +281,7 @@ private struct BlockVisitor: MarkupVisitor {
 				nestedLists.append(child)
 			}
 		}
-		let runs = inlineParagraphs.flatMap { MarkdownDocxBuilder.runs(from: $0) }
+		let runs = inlineParagraphs.flatMap { MarkdownDocxBuilder.runs(from: $0, resolver: resolver) }
 		blocks.append(.listItem(ordered: ordered, level: level, runs: runs))
 
 		listLevel = level + 1
@@ -213,13 +301,13 @@ private struct BlockVisitor: MarkupVisitor {
 		}
 		var headers: [[DocxWriter.Run]] = []
 		for cell in table.head.cells {
-			headers.append(MarkdownDocxBuilder.runs(from: cell))
+			headers.append(MarkdownDocxBuilder.runs(from: cell, resolver: resolver))
 		}
 		var rows: [[[DocxWriter.Run]]] = []
 		for row in table.body.rows {
 			var cells: [[DocxWriter.Run]] = []
 			for cell in row.cells {
-				cells.append(MarkdownDocxBuilder.runs(from: cell))
+				cells.append(MarkdownDocxBuilder.runs(from: cell, resolver: resolver))
 			}
 			rows.append(cells)
 		}
