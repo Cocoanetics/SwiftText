@@ -240,6 +240,28 @@ struct RenderPDFTests {
 		#expect(paragraph.computedStyle.color == RGBA(1, 0, 0, 1))
 	}
 
+	@Test("Headings produce a PDF outline (bookmarks)")
+	func buildsOutline() async throws {
+		let html = """
+		<h1>Chapter One</h1><p>Intro.</p>
+		<h2>Section A</h2><p>Body.</p>
+		<h1>Chapter Two</h1><p>More.</p>
+		"""
+		let data = try await HTMLRenderer.renderPDF(html: html)
+		func contains(_ marker: String) -> Bool { data.range(of: Data(marker.utf8)) != nil }
+		#expect(contains("/Outlines"))
+		#expect(contains("Chapter One"))
+		#expect(contains("Section A"))
+
+		#if canImport(PDFKit)
+		let document = try #require(PDFDocument(data: data))
+		let outline = try #require(document.outlineRoot)
+		#expect(outline.numberOfChildren == 2) // two top-level <h1> chapters
+		#expect(outline.child(at: 0)?.label == "Chapter One")
+		#expect(outline.child(at: 0)?.numberOfChildren == 1) // the nested <h2>
+		#endif
+	}
+
 	// MARK: - Sample artifact
 
 	@Test("Generates a sample PDF artifact")

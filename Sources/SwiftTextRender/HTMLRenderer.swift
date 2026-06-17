@@ -71,6 +71,7 @@ public enum HTMLRenderer {
 
 		let pdf = PDF()
 		let fontBuilder = FontResourceBuilder(pdf: pdf)
+		var pageObjects: [PDFDictionary] = []
 		for slice in slices {
 			let geometry = PageGeometry(pageWidthPx: options.pageWidthPx, pageHeightPx: pageHeightPx,
 			                            marginPx: margin, columnTop: slice.top, sliceHeightPx: slice.bottom - slice.top)
@@ -94,10 +95,96 @@ public enum HTMLRenderer {
 				page["Annots"] = PDFArray(references)
 			}
 			pdf.addPage(page)
+			pageObjects.append(page)
 		}
 		// Build the shared font objects now that every page's glyph use is known.
 		fontBuilder.finalize()
+		addOutline(to: pdf, root: rootBox, slices: slices, pages: pageObjects, pageHeightPx: pageHeightPx, margin: margin)
 		return pdf.write()
+	}
+
+	// MARK: - Bookmarks / outline
+
+	/// Build a PDF outline (bookmarks) from the document's heading hierarchy.
+	private static func addOutline(to pdf: PDF, root: BlockBox, slices: [(top: Double, bottom: Double)],
+	                               pages: [PDFDictionary], pageHeightPx: Double, margin: Double) {
+		var headings: [(level: Int, title: String, y: Double)] = []
+		collectHeadings(root, into: &headings)
+		guard !headings.isEmpty, !pages.isEmpty else { return }
+
+		// Nest headings by level using a stack of open ancestors.
+		var nodes: [(level: Int, title: String, y: Double, parent: Int?, children: [Int], dict: PDFDictionary)] = []
+		var stack: [Int] = []
+		for heading in headings {
+			while let top = stack.last, nodes[top].level >= heading.level { stack.removeLast() }
+			let index = nodes.count
+			nodes.append((heading.level, heading.title, heading.y, stack.last, [], PDFDictionary()))
+			if let parent = stack.last { nodes[parent].children.append(index) }
+			stack.append(index)
+		}
+
+		func destination(forColumnY y: Double) -> PDFArray {
+			var pageIndex = slices.count - 1
+			for (index, slice) in slices.enumerated() where y >= slice.top - 0.5 && y < slice.bottom + 0.5 {
+				pageIndex = index
+				break
+			}
+			let pageY = margin + (y - slices[pageIndex].top)
+			let topPt = (pageHeightPx - pageY) * pxToPt
+			return PDFArray([pages[pageIndex].reference, "/XYZ", margin * pxToPt, topPt, "null"])
+		}
+
+		let outlineRoot = PDFDictionary([("Type", "/Outlines")])
+		pdf.addObject(outlineRoot)
+		for index in nodes.indices { pdf.addObject(nodes[index].dict) }
+
+		func wire(_ siblings: [Int], parentReference: Data) {
+			for (position, index) in siblings.enumerated() {
+				let node = nodes[index]
+				let dict = node.dict
+				dict["Title"] = PDFString(node.title)
+				dict["Parent"] = parentReference
+				dict["Dest"] = destination(forColumnY: node.y)
+				if position > 0 { dict["Prev"] = nodes[siblings[position - 1]].dict.reference }
+				if position < siblings.count - 1 { dict["Next"] = nodes[siblings[position + 1]].dict.reference }
+				if !node.children.isEmpty {
+					dict["First"] = nodes[node.children.first!].dict.reference
+					dict["Last"] = nodes[node.children.last!].dict.reference
+					dict["Count"] = node.children.count
+					wire(node.children, parentReference: dict.reference)
+				}
+			}
+		}
+
+		let roots = nodes.indices.filter { nodes[$0].parent == nil }
+		wire(roots, parentReference: outlineRoot.reference)
+		outlineRoot["First"] = nodes[roots.first!].dict.reference
+		outlineRoot["Last"] = nodes[roots.last!].dict.reference
+		outlineRoot["Count"] = roots.count
+		pdf.catalog["Outlines"] = outlineRoot.reference
+	}
+
+	private static func collectHeadings(_ box: Box, into headings: inout [(level: Int, title: String, y: Double)]) {
+		guard let block = box as? BlockBox else { return }
+		if let tag = block.element?.localName, tag.count == 2, tag.hasPrefix("h"),
+		   let level = Int(tag.dropFirst()), (1 ... 6).contains(level) {
+			let title = headingTitle(block)
+			if !title.isEmpty { headings.append((level, title, block.y)) }
+		}
+		if !block.establishesInlineContext {
+			for child in block.children { collectHeadings(child, into: &headings) }
+		}
+	}
+
+	private static func headingTitle(_ box: BlockBox) -> String {
+		var words: [String] = []
+		func gather(_ box: Box) {
+			guard let block = box as? BlockBox else { return }
+			for line in block.lines { for fragment in line.fragments { words.append(fragment.text) } }
+			for child in block.children { gather(child) }
+		}
+		gather(box)
+		return words.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
 	}
 
 	/// Split the laid-out column into page slices, breaking only at line and
