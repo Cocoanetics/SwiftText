@@ -1,3 +1,4 @@
+import SwiftTextIWA
 import Foundation
 import Markdown
 
@@ -88,7 +89,7 @@ public final class PagesFile {
 		// Fallback (no registry, e.g. legacy) and the include-everything mode:
 		// list the `Data/` folder directly.
 		var extracted = [URL]()
-		for entry in try PagesContainer.entries(at: url, prefix: "Data/") {
+		for entry in try IWAContainer.entries(at: url, prefix: "Data/") {
 			let fileName = URL(fileURLWithPath: entry.path).lastPathComponent
 			guard PagesImageCatalog.isImageName(fileName) else { continue }
 			if !includingThumbnailsAndAssets,
@@ -106,7 +107,7 @@ public final class PagesFile {
 	/// The bytes of every file in the package's `Data/` folder, keyed by file name.
 	private func mediaDataByFileName() throws -> [String: Data] {
 		var result = [String: Data]()
-		for entry in try PagesContainer.entries(at: url, prefix: "Data/") {
+		for entry in try IWAContainer.entries(at: url, prefix: "Data/") {
 			result[URL(fileURLWithPath: entry.path).lastPathComponent] = entry.data
 		}
 		return result

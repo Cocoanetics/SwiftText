@@ -72,6 +72,8 @@ let macOSTargets: [Target] = [
 			"SwiftTextPDF",
 			"SwiftTextDOCX",
 			"SwiftTextPages",
+			"SwiftTextNumbers",
+			"SwiftTextKeynote",
 			"SwiftTextRender",
 			.product(name: "ArgumentParser", package: "swift-argument-parser", condition: .when(traits: ["CLI"]))
 		],
@@ -183,6 +185,21 @@ let packageProducts: [Product] = [
 		name: "SwiftTextPages",
 		targets: ["SwiftTextPages"]
 	),
+	// Shared iWork (IWA) read core: Snappy, Protobuf, the .iwa container/object
+	// store, and the TST table decoder — the foundation both SwiftTextPages and
+	// SwiftTextNumbers build on.
+	.library(
+		name: "SwiftTextIWA",
+		targets: ["SwiftTextIWA"]
+	),
+	.library(
+		name: "SwiftTextNumbers",
+		targets: ["SwiftTextNumbers"]
+	),
+	.library(
+		name: "SwiftTextKeynote",
+		targets: ["SwiftTextKeynote"]
+	),
 	// Cross-platform HTML/CSS → PDF rendering engine (a port of WeasyPrint).
 	// SwiftTextPDFWriter is the Foundation-only PDF output substrate (a port of
 	// pydyf); it is always available because it has no external dependencies.
@@ -242,15 +259,23 @@ let packageTargets: [Target] = [
 		],
 		path: "Sources/SwiftTextDOCX"
 	),
+	// Shared iWork (IWA) read core. Snappy and Protocol Buffers decoding are
+	// implemented in-target; ZIPFoundation (the .iwa container is a Zip archive)
+	// is the only external dependency, gated by PAGES with the same single-trait
+	// reasoning as SwiftTextDOCX — the CLI default trait enables PAGES transitively.
+	.target(
+		name: "SwiftTextIWA",
+		dependencies: [
+			.product(name: "ZIPFoundation", package: "ZIPFoundation", condition: .when(traits: ["PAGES"]))
+		],
+		path: "Sources/SwiftTextIWA"
+	),
 	.target(
 		name: "SwiftTextPages",
 		dependencies: [
-			// Same single-trait reasoning as SwiftTextDOCX's ZIPFoundation
-			// dependency: Pages files are Zip archives, and the CLI default trait
-			// enables PAGES transitively for a plain `swift build`. Snappy and
-			// Protocol Buffers decoding are implemented in-target, so ZIPFoundation
-			// is the only external dependency.
-			.product(name: "ZIPFoundation", package: "ZIPFoundation", condition: .when(traits: ["PAGES"])),
+			// The shared IWA read core (Snappy/Protobuf/container/object store/TST
+			// table decoder), which also carries the ZIPFoundation dependency.
+			"SwiftTextIWA",
 			// Markdown → Pages writing parses with swift-markdown and reuses the
 			// shared plain-text helper. Both are platform-agnostic and always
 			// resolved (as in SwiftTextDOCX), so they are not trait-gated.
@@ -260,6 +285,20 @@ let packageTargets: [Target] = [
 			"SwiftTextCore"
 		],
 		path: "Sources/SwiftTextPages"
+	),
+	// Apple Numbers reader: sheets of tables to Markdown/HTML/JSON/TSV. Reuses the
+	// IWA core and the shared TST table decoder; no Pages dependency.
+	.target(
+		name: "SwiftTextNumbers",
+		dependencies: ["SwiftTextIWA"],
+		path: "Sources/SwiftTextNumbers"
+	),
+	// Apple Keynote reader: deck slide text (title/body/notes) to Markdown/JSON/text.
+	// Navigates the slide graph structurally via the IWA core; no Pages dependency.
+	.target(
+		name: "SwiftTextKeynote",
+		dependencies: ["SwiftTextIWA"],
+		path: "Sources/SwiftTextKeynote"
 	),
 	.testTarget(
 		name: "SwiftTextDOCXTests",
@@ -271,8 +310,24 @@ let packageTargets: [Target] = [
 	),
 	.testTarget(
 		name: "SwiftTextPagesTests",
-		dependencies: ["SwiftTextPages"],
+		dependencies: ["SwiftTextPages", "SwiftTextIWA"],
 		path: "Tests/SwiftTextPagesTests",
+		resources: [
+			.process("Resources")
+		]
+	),
+	.testTarget(
+		name: "SwiftTextNumbersTests",
+		dependencies: ["SwiftTextNumbers", "SwiftTextIWA"],
+		path: "Tests/SwiftTextNumbersTests",
+		resources: [
+			.process("Resources")
+		]
+	),
+	.testTarget(
+		name: "SwiftTextKeynoteTests",
+		dependencies: ["SwiftTextKeynote", "SwiftTextIWA"],
+		path: "Tests/SwiftTextKeynoteTests",
 		resources: [
 			.process("Resources")
 		]

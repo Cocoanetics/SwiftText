@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import SwiftTextPages
+import SwiftTextIWA
 
 @Suite("Pages synthesizer (graph-driven)")
 struct PagesSynthesizerTests {
@@ -38,7 +39,7 @@ struct PagesSynthesizerTests {
 
 		// Re-reads cleanly with the text, and the graph gained synthesized objects
 		// (a combined bold-italic character style #2021 and a link object #2032).
-		let entries = try PagesContainer.entries(at: url, prefix: "").map { ($0.path, [UInt8]($0.data)) }
+		let entries = try IWAContainer.entries(at: url, prefix: "").map { ($0.path, [UInt8]($0.data)) }
 		let graph = IWAObjectGraph.read(IWAPackage.read(entries))
 		let synthesizedTypes = graph.allIdentifiers
 			.filter { $0 >= PagesStyleID.synthesizedBase }
@@ -57,7 +58,7 @@ struct PagesSynthesizerTests {
 		let synth = PagesSynthesizer()
 		try synth.write(text: "Validation document.", to: url)
 
-		let entries = try PagesContainer.entries(at: url, prefix: "").map { ($0.path, [UInt8]($0.data)) }
+		let entries = try IWAContainer.entries(at: url, prefix: "").map { ($0.path, [UInt8]($0.data)) }
 		let graph = IWAObjectGraph.read(IWAPackage.read(entries))
 		let known = graph.allIdentifiers
 		#expect(known.count > 100)

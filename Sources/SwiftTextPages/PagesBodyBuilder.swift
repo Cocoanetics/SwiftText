@@ -1,3 +1,4 @@
+import SwiftTextIWA
 import Foundation
 
 /// Object identifiers of the built-in styles in the bundled blank template

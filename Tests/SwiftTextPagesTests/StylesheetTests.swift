@@ -2,6 +2,7 @@ import Foundation
 import Testing
 
 @testable import SwiftTextPages
+import SwiftTextIWA
 
 /// Verifies the default stylesheet `MarkdownToPages` installs lives in the document's
 /// *style objects* (so editing a style in Pages re-cascades to every paragraph that
@@ -16,7 +17,7 @@ struct StylesheetTests {
             .appendingPathComponent("swifttext-style-\(UUID().uuidString).pages")
         defer { try? FileManager.default.removeItem(at: url) }
         try MarkdownToPages.convert(markdown, to: url)
-        let sheet = try PagesContainer.entries(at: url, prefix: "Index/")
+        let sheet = try IWAContainer.entries(at: url, prefix: "Index/")
             .first { $0.path.hasSuffix("DocumentStylesheet.iwa") }
         let objects = try IWAArchive.objects(from: #require(sheet).data)
         return Dictionary(objects.map { ($0.identifier, $0) }, uniquingKeysWith: { a, _ in a })
@@ -150,7 +151,7 @@ struct StylesheetTests {
 
         // The nesting depth must live in para-data field 2 ("first") — that's where Pages
         // reads it to apply the list style's per-level indent. Field 3 stays 0.
-        let entries = try PagesContainer.entries(at: url, prefix: "Index/", suffix: ".iwa")
+        let entries = try IWAContainer.entries(at: url, prefix: "Index/", suffix: ".iwa")
         var store = IWAObjectStore()
         for e in entries { (try? IWAArchive.objects(from: e.data))?.forEach { store.add($0) } }
         let body = try #require(store.objects(ofType: 2001)

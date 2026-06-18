@@ -1,3 +1,4 @@
+import SwiftTextIWA
 import Foundation
 
 /// One archived object that preserves its **full record framing**, so a payload can be

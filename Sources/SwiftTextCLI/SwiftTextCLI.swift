@@ -14,6 +14,8 @@ import SwiftTextHTML
 import SwiftTextPDF
 import SwiftTextDOCX
 import SwiftTextPages
+import SwiftTextNumbers
+import SwiftTextKeynote
 import SwiftTextOCR
 #if canImport(Vision)
 import Vision
@@ -27,7 +29,7 @@ struct SwiftTextCLI: AsyncParsableCommand {
 		commandName: "swifttext",
 		abstract: "Extract text from HTML, PDF, image, DOCX, or Pages sources.",
 		version: swiftTextVersion,
-		subcommands: [OCR.self, Docx.self, Pages.self, HTML.self, Overlay.self, PDF.self, Render.self],
+		subcommands: [OCR.self, Docx.self, Pages.self, Numbers.self, Keynote.self, HTML.self, Overlay.self, PDF.self, Render.self],
 		defaultSubcommand: OCR.self
 	)
 }
@@ -671,6 +673,107 @@ struct Pages: AsyncParsableCommand {
 		}
 
 		return URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
+	}
+}
+
+@available(macOS 10.15, macCatalyst 13, iOS 13, tvOS 13, watchOS 6, *)
+struct Numbers: AsyncParsableCommand {
+	static let configuration = CommandConfiguration(
+		commandName: "numbers",
+		abstract: "Extract tables from Apple Numbers (iWork) spreadsheets as Markdown, HTML, or TSV."
+	)
+
+	@Argument(help: "Path to the .numbers file.")
+	var path: String
+
+	@Flag(name: .shortAndLong, help: "Output GitHub-flavored Markdown tables.")
+	var markdown: Bool = false
+
+	@Flag(name: .long, help: "Output HTML tables.")
+	var html: Bool = false
+
+	@Flag(name: .long, help: "Output JSON (sheets of tables) for programmatic use.")
+	var json: Bool = false
+
+	@Option(name: .shortAndLong, help: "Write output to a file instead of stdout.")
+	var outputPath: String?
+
+	func run() async throws {
+		let fileURL = resolvedURL(from: path)
+		guard FileManager.default.fileExists(atPath: fileURL.path) else {
+			throw ValidationError("File not found: \(fileURL.path)")
+		}
+		guard [markdown, html, json].filter({ $0 }).count <= 1 else {
+			throw ValidationError("Choose at most one of --markdown / --html / --json.")
+		}
+
+		let numbers = try NumbersFile(url: fileURL)
+		let output = markdown ? numbers.markdown() : html ? numbers.html() : json ? try numbers.json() : numbers.plainText()
+		if !output.isEmpty {
+			try writeOutputIfNeeded(output)
+		}
+	}
+
+	private func writeOutputIfNeeded(_ contents: String) throws {
+		if let outputPath {
+			let expanded = (outputPath as NSString).expandingTildeInPath
+			let url = URL(fileURLWithPath: expanded)
+			let dir = url.deletingLastPathComponent()
+			try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+			try contents.write(to: url, atomically: true, encoding: .utf8)
+			return
+		}
+
+		print(contents)
+	}
+}
+
+@available(macOS 10.15, macCatalyst 13, iOS 13, tvOS 13, watchOS 6, *)
+struct Keynote: AsyncParsableCommand {
+	static let configuration = CommandConfiguration(
+		commandName: "keynote",
+		abstract: "Extract slide text from Apple Keynote (iWork) presentations as Markdown, JSON, or text."
+	)
+
+	@Argument(help: "Path to the .key file.")
+	var path: String
+
+	@Flag(name: .shortAndLong, help: "Output Markdown (one heading per slide, body as bullets).")
+	var markdown: Bool = false
+
+	@Flag(name: .long, help: "Output JSON (slides of title/body/notes) for programmatic use.")
+	var json: Bool = false
+
+	@Option(name: .shortAndLong, help: "Write output to a file instead of stdout.")
+	var outputPath: String?
+
+	func run() async throws {
+		let fileURL = resolvedURL(from: path)
+		guard FileManager.default.fileExists(atPath: fileURL.path) else {
+			throw ValidationError("File not found: \(fileURL.path)")
+		}
+		if markdown && json {
+			throw ValidationError("Choose at most one of --markdown / --json.")
+		}
+
+		let keynote = try KeynoteFile(url: fileURL)
+		let output = markdown ? keynote.markdown() : json ? try keynote.json() : keynote.plainText()
+		if !output.isEmpty {
+			try writeOutputIfNeeded(output)
+		}
+	}
+
+	private func writeOutputIfNeeded(_ contents: String) throws {
+		if let outputPath {
+			let expanded = (outputPath as NSString).expandingTildeInPath
+			let url = URL(fileURLWithPath: expanded)
+			let dir = url.deletingLastPathComponent()
+			try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+			try contents.write(to: url, atomically: true, encoding: .utf8)
+			return
+		}
+
+		print(contents)
 	}
 }
 

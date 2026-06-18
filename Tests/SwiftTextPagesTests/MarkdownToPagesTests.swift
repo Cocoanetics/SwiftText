@@ -3,6 +3,7 @@ import Testing
 import Markdown
 
 @testable import SwiftTextPages
+import SwiftTextIWA
 
 @Suite("Markdown → Pages")
 struct MarkdownToPagesTests {
@@ -257,7 +258,7 @@ struct MarkdownToPagesTests {
 	/// Loads every `Index/*.iwa` object from a written `.pages` into one store.
 	private func objectStore(at url: URL) throws -> IWAObjectStore {
 		var store = IWAObjectStore()
-		for entry in try PagesContainer.entries(at: url, prefix: "Index/", suffix: ".iwa") {
+		for entry in try IWAContainer.entries(at: url, prefix: "Index/", suffix: ".iwa") {
 			guard let objects = try? IWAArchive.objects(from: entry.data) else { continue }
 			for object in objects { store.add(object) }
 		}
@@ -315,7 +316,7 @@ struct MarkdownToPagesTests {
 
 		// The Document component must carry a TSWP hyperlink object (type 2032)
 		// whose field 2 is the destination URL.
-		let entries = try PagesContainer.entries(at: url, prefix: "Index/", suffix: ".iwa")
+		let entries = try IWAContainer.entries(at: url, prefix: "Index/", suffix: ".iwa")
 		let documentData = try #require(entries.first { $0.path.hasSuffix("Document.iwa") }?.data)
 		let hyperlinks = try IWAArchive.objects(from: documentData).filter { $0.type == 2032 }
 		#expect(hyperlinks.count == 1)

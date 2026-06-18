@@ -2,6 +2,7 @@ import Foundation
 import Testing
 
 @testable import SwiftTextPages
+import SwiftTextIWA
 
 @Suite("Pages native footnotes")
 struct PagesFootnoteTests {
@@ -15,7 +16,7 @@ struct PagesFootnoteTests {
 
         // The native footnote object graph is present: a kind-2 content storage plus the
         // body reference mark (2008) and the in-note number mark (2004).
-        let entries = try PagesContainer.entries(at: url, prefix: "Index/", suffix: ".iwa")
+        let entries = try IWAContainer.entries(at: url, prefix: "Index/", suffix: ".iwa")
         var store = IWAObjectStore()
         for e in entries { (try? IWAArchive.objects(from: e.data))?.forEach { store.add($0) } }
         let footnoteStorages = store.objects(ofType: 2001).filter { ProtobufMessage($0.payload).varint(1) == 2 }

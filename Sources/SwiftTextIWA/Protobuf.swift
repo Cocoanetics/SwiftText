@@ -1,15 +1,20 @@
 import Foundation
 
 /// A single decoded Protocol Buffers field (wire-format only — no schema).
-struct ProtobufField {
-	let number: Int
-	let value: Value
+public struct ProtobufField {
+	public let number: Int
+	public let value: Value
 
-	enum Value {
+	public enum Value {
 		case varint(UInt64)
 		case fixed64([UInt8])
 		case lengthDelimited([UInt8])
 		case fixed32([UInt8])
+	}
+
+	public init(number: Int, value: Value) {
+		self.number = number
+		self.value = value
 	}
 }
 
@@ -19,19 +24,19 @@ struct ProtobufField {
 /// public, so the reader works purely at the wire level: it walks fields by
 /// number and wire type without needing generated types. Repeated fields appear
 /// multiple times; `all(_:)` collects them in order.
-struct ProtobufMessage {
-	let fields: [ProtobufField]
+public struct ProtobufMessage {
+	public let fields: [ProtobufField]
 
-	init(_ bytes: [UInt8]) {
+	public init(_ bytes: [UInt8]) {
 		self.fields = ProtobufMessage.decode(bytes)
 	}
 
-	init(_ data: Data) {
+	public init(_ data: Data) {
 		self.init([UInt8](data))
 	}
 
 	/// The first varint value for the given field number, if present.
-	func varint(_ number: Int) -> UInt64? {
+	public func varint(_ number: Int) -> UInt64? {
 		for field in fields where field.number == number {
 			if case .varint(let value) = field.value { return value }
 		}
@@ -39,7 +44,7 @@ struct ProtobufMessage {
 	}
 
 	/// The first length-delimited payload for the given field number.
-	func bytes(_ number: Int) -> [UInt8]? {
+	public func bytes(_ number: Int) -> [UInt8]? {
 		for field in fields where field.number == number {
 			if case .lengthDelimited(let value) = field.value { return value }
 		}
@@ -47,7 +52,7 @@ struct ProtobufMessage {
 	}
 
 	/// Every length-delimited payload for the given field number, in order.
-	func allBytes(_ number: Int) -> [[UInt8]] {
+	public func allBytes(_ number: Int) -> [[UInt8]] {
 		var result = [[UInt8]]()
 		for field in fields where field.number == number {
 			if case .lengthDelimited(let value) = field.value { result.append(value) }
@@ -56,18 +61,18 @@ struct ProtobufMessage {
 	}
 
 	/// The first sub-message for the given field number.
-	func message(_ number: Int) -> ProtobufMessage? {
+	public func message(_ number: Int) -> ProtobufMessage? {
 		guard let bytes = bytes(number) else { return nil }
 		return ProtobufMessage(bytes)
 	}
 
 	/// Every sub-message for the given field number, in order.
-	func messages(_ number: Int) -> [ProtobufMessage] {
+	public func messages(_ number: Int) -> [ProtobufMessage] {
 		allBytes(number).map(ProtobufMessage.init)
 	}
 
 	/// Every varint value for the given field number, in order (repeated field).
-	func allVarints(_ number: Int) -> [UInt64] {
+	public func allVarints(_ number: Int) -> [UInt64] {
 		var result = [UInt64]()
 		for field in fields where field.number == number {
 			if case .varint(let value) = field.value { result.append(value) }
@@ -76,7 +81,7 @@ struct ProtobufMessage {
 	}
 
 	/// The first 32-bit float value (fixed32 wire type) for the given field.
-	func float(_ number: Int) -> Float? {
+	public func float(_ number: Int) -> Float? {
 		for field in fields where field.number == number {
 			if case .fixed32(let value) = field.value, value.count == 4 {
 				let bits = UInt32(value[0]) | UInt32(value[1]) << 8 | UInt32(value[2]) << 16 | UInt32(value[3]) << 24
@@ -146,12 +151,14 @@ struct ProtobufMessage {
 /// in the order iWork emits them, and read the assembled bytes from ``bytes``.
 /// This is the foundation for writing `.iwa` payloads (ArchiveInfo/MessageInfo
 /// framing today; object payloads as the writer grows).
-struct ProtobufWriter {
+public struct ProtobufWriter {
 	/// The message bytes assembled so far.
-	private(set) var bytes = [UInt8]()
+	public private(set) var bytes = [UInt8]()
+
+	public init() {}
 
 	/// Encodes a value as a base-128 varint (no field tag).
-	static func varint(_ value: UInt64) -> [UInt8] {
+	public static func varint(_ value: UInt64) -> [UInt8] {
 		var result = [UInt8]()
 		var remaining = value
 		repeat {
@@ -168,36 +175,36 @@ struct ProtobufWriter {
 	}
 
 	/// Appends a varint field (wire type 0).
-	mutating func varintField(_ number: Int, _ value: UInt64) {
+	public mutating func varintField(_ number: Int, _ value: UInt64) {
 		appendTag(number, 0)
 		bytes.append(contentsOf: ProtobufWriter.varint(value))
 	}
 
 	/// Appends a length-delimited field (wire type 2) carrying raw bytes.
-	mutating func bytesField(_ number: Int, _ data: [UInt8]) {
+	public mutating func bytesField(_ number: Int, _ data: [UInt8]) {
 		appendTag(number, 2)
 		bytes.append(contentsOf: ProtobufWriter.varint(UInt64(data.count)))
 		bytes.append(contentsOf: data)
 	}
 
 	/// Appends a length-delimited field carrying a nested message's bytes.
-	mutating func messageField(_ number: Int, _ message: [UInt8]) {
+	public mutating func messageField(_ number: Int, _ message: [UInt8]) {
 		bytesField(number, message)
 	}
 
 	/// Appends a length-delimited field carrying a UTF-8 string.
-	mutating func stringField(_ number: Int, _ string: String) {
+	public mutating func stringField(_ number: Int, _ string: String) {
 		bytesField(number, Array(string.utf8))
 	}
 
 	/// Appends a 32-bit little-endian field (wire type 5).
-	mutating func fixed32Field(_ number: Int, _ value: UInt32) {
+	public mutating func fixed32Field(_ number: Int, _ value: UInt32) {
 		appendTag(number, 5)
 		bytes.append(contentsOf: ProtobufWriter.fixed32(value))
 	}
 
 	/// The 4 little-endian bytes of a fixed32 value (no field tag).
-	static func fixed32(_ value: UInt32) -> [UInt8] {
+	public static func fixed32(_ value: UInt32) -> [UInt8] {
 		var raw = [UInt8]()
 		for shift in stride(from: 0, through: 24, by: 8) {
 			raw.append(UInt8((value >> shift) & 0xFF))
@@ -206,13 +213,13 @@ struct ProtobufWriter {
 	}
 
 	/// Appends a wire-type-5 field from its raw 4-byte little-endian value.
-	mutating func appendFixed32(_ number: Int, _ raw: [UInt8]) {
+	public mutating func appendFixed32(_ number: Int, _ raw: [UInt8]) {
 		appendTag(number, 5)
 		bytes.append(contentsOf: raw)
 	}
 
 	/// Appends a 64-bit little-endian field (wire type 1).
-	mutating func fixed64Field(_ number: Int, _ value: UInt64) {
+	public mutating func fixed64Field(_ number: Int, _ value: UInt64) {
 		appendTag(number, 1)
 		for shift in stride(from: 0, through: 56, by: 8) {
 			bytes.append(UInt8((value >> UInt64(shift)) & 0xFF))
@@ -221,7 +228,7 @@ struct ProtobufWriter {
 
 	/// Appends a packed repeated varint field (wire type 2 holding back-to-back
 	/// varints) — the form iWork uses for `MessageInfo.object_references`.
-	mutating func packedVarintField(_ number: Int, _ values: [UInt64]) {
+	public mutating func packedVarintField(_ number: Int, _ values: [UInt64]) {
 		var packed = [UInt8]()
 		for value in values { packed.append(contentsOf: ProtobufWriter.varint(value)) }
 		bytesField(number, packed)
@@ -231,7 +238,7 @@ struct ProtobufWriter {
 	/// round-trip a message field-by-field, substituting only the fields it wants
 	/// to change — used to rewrite an `ArchiveInfo`/`MessageInfo` while preserving
 	/// every other field exactly (e.g. `object_references`).
-	mutating func append(_ field: ProtobufField) {
+	public mutating func append(_ field: ProtobufField) {
 		switch field.value {
 		case .varint(let value):
 			varintField(field.number, value)

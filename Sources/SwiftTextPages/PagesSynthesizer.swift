@@ -1,3 +1,4 @@
+import SwiftTextIWA
 import Foundation
 
 /// Synthesizes a `.pages` document by composing a typed object graph, rather than
