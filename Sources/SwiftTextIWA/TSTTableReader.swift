@@ -50,8 +50,10 @@ public enum TSTTableReader {
 		static let dataStoreStyleTableField = 5
 		static let dataStoreRichTextTableField = 17
 
-		static let tileStorageTileField = 1
-		static let tileStorageTileRefField = 2
+		static let tileStorageTileField = 1        // TileStorage.tiles (repeated entry)
+		static let tileStorageTileSizeField = 2     // TileStorage.tile_size (rows per tile)
+		static let tileStorageTileIDField = 1       // tile entry: tileid (0-based tile index)
+		static let tileStorageTileRefField = 2      // tile entry: reference to the Tile
 		static let tileRowInfosField = 5
 		static let tileRowIndexField = 1
 		// Modern ("BNC") cell storage: wide buffer/offsets, decimal128 numbers at byte 12.
@@ -158,12 +160,19 @@ public enum TSTTableReader {
 			}
 		}
 
-		// tiles → the single tile holding all rows → per-row cell keys.
-		guard let tileID = dataStore.message(Const.dataStoreTilesField)?
-				.message(Const.tileStorageTileField)?
-				.message(Const.tileStorageTileRefField)?
-				.varint(Const.referenceIdentifierField),
-		      let tile = store.object(tileID) else { return nil }
+		// tiles → every TileStorage tile's rows, merged. A table taller than `tileSize`
+		// spans multiple tiles; tile entry `tileid` holds rows starting at tileid*tileSize,
+		// and a row's tile-local index plus that base is its absolute row. Following only
+		// the first tile (as a naive reader does) silently drops every row past the first
+		// tile (~256 rows). Each row info is paired here with its tile's base offset.
+		guard let tileStorage = dataStore.message(Const.dataStoreTilesField) else { return nil }
+		let tileSize = Int(tileStorage.varint(Const.tileStorageTileSizeField) ?? 256)
+		let tileRows: [(base: Int, rowInfo: ProtobufMessage)] = tileStorage.messages(Const.tileStorageTileField).flatMap { entry -> [(Int, ProtobufMessage)] in
+			let base = Int(entry.varint(Const.tileStorageTileIDField) ?? 0) * tileSize
+			guard let tileID = entry.message(Const.tileStorageTileRefField)?.varint(Const.referenceIdentifierField),
+			      let tile = store.object(tileID) else { return [] }
+			return ProtobufMessage(tile.payload).messages(Const.tileRowInfosField).map { (base, $0) }
+		}
 
 		var grid = Array(repeating: Array(repeating: "", count: columns), count: rows)
 		var columnAlignments = Array(repeating: TSTTable.Alignment.left, count: columns)
@@ -173,8 +182,10 @@ public enum TSTTableReader {
 		var columnHasNumber = Array(repeating: false, count: columns)
 		var columnHasText = Array(repeating: false, count: columns)
 		var columnExplicitlyAligned = Array(repeating: false, count: columns)
-		for rowInfo in ProtobufMessage(tile.payload).messages(Const.tileRowInfosField) {
-			guard let rowIndex = rowInfo.varint(Const.tileRowIndexField).map(Int.init), rowIndex < rows else { continue }
+		for (tileBase, rowInfo) in tileRows {
+			guard let localRow = rowInfo.varint(Const.tileRowIndexField).map(Int.init) else { continue }
+			let rowIndex = tileBase + localRow
+			guard rowIndex < rows else { continue }
 			// A row carries its cells in one of two storage generations: prefer the modern
 			// ("BNC") buffer, fall back to the older pre-BNC buffer. They differ in where a
 			// cell's key/value sit and in how numbers are encoded (decimal128 vs. `double`).
