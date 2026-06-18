@@ -1,3 +1,4 @@
+import SwiftTextIWA
 import Foundation
 
 /// Writes a `.pages` document from scratch.

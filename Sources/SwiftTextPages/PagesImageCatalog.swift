@@ -1,3 +1,4 @@
+import SwiftTextIWA
 import Foundation
 
 /// Resolves a document's embedded images: it reads the data registry (which maps

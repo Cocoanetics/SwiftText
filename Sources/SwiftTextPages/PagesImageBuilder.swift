@@ -1,3 +1,4 @@
+import SwiftTextIWA
 import Foundation
 import SwiftTextCore
 

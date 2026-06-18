@@ -1,3 +1,4 @@
+import SwiftTextIWA
 import Foundation
 
 /// Horizontal text alignment of a table column (from the Markdown delimiter row).

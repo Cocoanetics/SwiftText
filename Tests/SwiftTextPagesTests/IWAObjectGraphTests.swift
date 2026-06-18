@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import SwiftTextPages
+import SwiftTextIWA
 
 @Suite("IWA object graph")
 struct IWAObjectGraphTests {
@@ -75,6 +76,6 @@ struct IWAObjectGraphTests {
 
 	/// Unzips a STORED `.pages` back into (path, bytes) entries for re-reading.
 	private func unzip(_ url: URL) throws -> [(path: String, bytes: [UInt8])] {
-		try PagesContainer.entries(at: url, prefix: "").map { ($0.path, [UInt8]($0.data)) }
+		try IWAContainer.entries(at: url, prefix: "").map { ($0.path, [UInt8]($0.data)) }
 	}
 }

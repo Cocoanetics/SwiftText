@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 
+import SwiftTextIWA
 @testable import SwiftTextPages
 
 /// Unit tests for decoding a cell's frozen numeric value — the IEEE 754-2008 decimal128
@@ -21,7 +22,7 @@ struct PagesCellValueTests {
 	@Test("decimal128 decodes integers, decimals, and signs")
 	func decimal128() {
 		func decode(_ c: UInt64, _ e: Int, neg: Bool = false) -> String? {
-			PagesParser.decimal128String(decimal128Bytes(coefficient: c, exponent: e, negative: neg), at: 0)
+			TSTTableReader.decimal128String(decimal128Bytes(coefficient: c, exponent: e, negative: neg), at: 0)
 		}
 		#expect(decode(1, 0) == "1")
 		#expect(decode(11, 0) == "11")
@@ -38,6 +39,6 @@ struct PagesCellValueTests {
 		// 05 02 <header to 12> then the decimal128 for 42.
 		var cell: [UInt8] = [0x05, 0x02, 0, 0, 0, 0, 0, 0, 0x01, 0x30, 0, 0]
 		cell += decimal128Bytes(coefficient: 42, exponent: 0)
-		#expect(PagesParser.decimal128String(cell, at: 12) == "42")
+		#expect(TSTTableReader.decimal128String(cell, at: 12) == "42")
 	}
 }

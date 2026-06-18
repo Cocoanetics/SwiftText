@@ -1,3 +1,4 @@
+import SwiftTextIWA
 import Foundation
 
 /// Reads a `.pages` archive and reconstructs its body text and paragraph
@@ -130,17 +131,17 @@ final class PagesParser {
 		}
 
 		// Modern (iWork '13+) documents store content as Index/*.iwa objects.
-		let indexEntries = try PagesContainer.entries(at: url, prefix: "Index/", suffix: ".iwa")
+		let indexEntries = try IWAContainer.entries(at: url, prefix: "Index/", suffix: ".iwa")
 		if !indexEntries.isEmpty {
 			return buildDocument(from: loadObjectStore(from: indexEntries))
 		}
 
 		// Legacy (iWork '09) documents store a single uncompressed index.xml.
-		if let indexXML = PagesContainer.data(at: url, named: "index.xml") {
+		if let indexXML = IWAContainer.data(at: url, named: "index.xml") {
 			return try PagesLegacyParser().parseDocument(from: indexXML)
 		}
 		// The very oldest documents gzip that index; flag it rather than mis-report.
-		if PagesContainer.data(at: url, named: "index.xml.gz") != nil {
+		if IWAContainer.data(at: url, named: "index.xml.gz") != nil {
 			throw PagesFileError.legacyGzipUnsupported(url)
 		}
 
@@ -148,7 +149,7 @@ final class PagesParser {
 	}
 
 	/// Decodes the given `Index/*.iwa` entries into a unified object store.
-	private func loadObjectStore(from entries: [PagesContainer.Entry]) -> IWAObjectStore {
+	private func loadObjectStore(from entries: [IWAContainer.Entry]) -> IWAObjectStore {
 		var store = IWAObjectStore()
 		for entry in entries {
 			// Skip any entry that isn't a standard Snappy/Protobuf IWA file. Some
@@ -404,137 +405,39 @@ final class PagesParser {
 	}
 
 	/// Follows a drawable attachment (`type 2003`) through its `TableInfoArchive`
-	/// (`6000`) to the `TableModelArchive` (`6001`) and reconstructs the cell grid
-	/// from the tile (cell → `DataList` key) and the cell-string list, plus each
-	/// column's alignment (from the styled cells' paragraph styles). Returns `nil`
-	/// when the object isn't a table attachment.
+	/// (`6000`) to the `TableModelArchive` (`6001`), then defers to the shared
+	/// ``TSTTableReader`` to decode the cell grid — the same decoder Numbers uses, since
+	/// both apps store tables with the identical `TST` model. Pages supplies its own
+	/// rich-cell renderer (inline bold/italic from char-style runs) and rich-cell
+	/// alignment. Returns `nil` when the object isn't a table attachment.
 	private func tableGrid(forAttachment attachmentID: UInt64, store: IWAObjectStore) -> PagesDocument.Paragraph.Table? {
 		guard let attachment = store.object(attachmentID), attachment.type == IWork.drawableAttachmentType,
 		      let infoID = ProtobufMessage(attachment.payload).message(IWork.referenceIdentifierField)?.varint(IWork.referenceIdentifierField),
 		      let info = store.object(infoID), info.type == IWork.tableInfoType,
-		      let modelID = ProtobufMessage(info.payload).message(IWork.tableInfoModelField)?.varint(IWork.referenceIdentifierField),
-		      let model = store.object(modelID), model.type == IWork.tableModelType else { return nil }
+		      let modelID = ProtobufMessage(info.payload).message(IWork.tableInfoModelField)?.varint(IWork.referenceIdentifierField)
+		else { return nil }
 
-		let modelMessage = ProtobufMessage(model.payload)
-		let rows = Int(modelMessage.varint(IWork.tableRowCountField) ?? 0)
-		let columns = Int(modelMessage.varint(IWork.tableColumnCountField) ?? 0)
-		guard rows > 0, columns > 0, let dataStore = modelMessage.message(IWork.tableDataStoreField) else { return nil }
-
-		// stringTable → cell-string DataList → key → string.
-		var stringsByKey = [UInt64: String]()
-		if let stringTableID = dataStore.message(IWork.dataStoreStringTableField)?.varint(IWork.referenceIdentifierField),
-		   let dataList = store.object(stringTableID) {
-			for entry in ProtobufMessage(dataList.payload).messages(IWork.dataListEntryField) {
-				if let key = entry.varint(IWork.dataListKeyField), let string = entry.bytes(IWork.dataListStringField) {
-					stringsByKey[key] = String(decoding: string, as: UTF8.self)
+		guard let table = TSTTableReader.table(
+			forModelID: modelID,
+			store: store,
+			richText: { storage, store in self.cellMarkdown(storage, store: store) },
+			richAlignment: { storage, store in
+				switch self.cellAlignment(storage, store: store) {
+				case .right: return .right
+				case .center: return .center
+				default: return nil
 				}
 			}
-		}
+		) else { return nil }
 
-		// styleTable → key → cell paragraph style id (for alignment).
-		var styleIDByKey = [UInt64: UInt64]()
-		if let styleTableID = dataStore.message(IWork.dataStoreStyleTableField)?.varint(IWork.referenceIdentifierField),
-		   let styleList = store.object(styleTableID) {
-			for entry in ProtobufMessage(styleList.payload).messages(IWork.dataListEntryField) {
-				if let key = entry.varint(IWork.dataListKeyField),
-				   let styleID = entry.message(IWork.styleTableRefField)?.varint(IWork.referenceIdentifierField) {
-					styleIDByKey[key] = styleID
-				}
+		let columnAlignments = table.columnAlignments.map { align -> PagesDocument.Paragraph.Table.ColumnAlignment in
+			switch align {
+			case .left: return .left
+			case .center: return .center
+			case .right: return .right
 			}
 		}
-		func alignment(forStyleKey key: UInt64) -> PagesDocument.Paragraph.Table.ColumnAlignment {
-			guard let styleID = styleIDByKey[key], let style = store.object(styleID),
-			      let value = ProtobufMessage(style.payload).message(IWork.paragraphPropertiesField)?.varint(IWork.paragraphAlignmentField) else { return .left }
-			switch value {
-			case 1: return .right
-			case 2: return .center
-			default: return .left
-			}
-		}
-
-		// rich_text_table → key → cell text StorageArchive id (for in-cell bold/italic).
-		// Each entry's reference is a 6218 wrapper around the 2001 storage; a direct
-		// storage reference is also tolerated for resilience against other writers.
-		var richStorageByKey = [UInt64: UInt64]()
-		if let richTableID = dataStore.message(IWork.dataStoreRichTextTableField)?.varint(IWork.referenceIdentifierField),
-		   let richList = store.object(richTableID) {
-			for entry in ProtobufMessage(richList.payload).messages(IWork.dataListEntryField) {
-				guard let key = entry.varint(IWork.dataListKeyField),
-				      let refID = entry.message(IWork.dataListWrapperRefField)?.varint(IWork.referenceIdentifierField),
-				      let ref = store.object(refID) else { continue }
-				let storageID = ref.type == IWork.storageArchiveType
-					? refID
-					: ProtobufMessage(ref.payload).message(IWork.referenceIdentifierField)?.varint(IWork.referenceIdentifierField)
-				if let storageID { richStorageByKey[key] = storageID }
-			}
-		}
-
-		// tiles → the single tile holding all rows → per-row cell keys.
-		guard let tileID = dataStore.message(IWork.dataStoreTilesField)?
-				.message(IWork.tileStorageTileField)?
-				.message(IWork.tileStorageTileRefField)?
-				.varint(IWork.referenceIdentifierField),
-		      let tile = store.object(tileID) else { return nil }
-
-		var grid = Array(repeating: Array(repeating: "", count: columns), count: rows)
-		var columnAlignments = Array(repeating: PagesDocument.Paragraph.Table.ColumnAlignment.left, count: columns)
-		// Per-column body-cell census, for the implicit alignment Pages applies by value
-		// type: a column whose body cells are all numeric/date (no text) right-aligns by
-		// default — matching the display — unless an explicit alignment override is set.
-		var columnHasNumber = Array(repeating: false, count: columns)
-		var columnHasText = Array(repeating: false, count: columns)
-		var columnExplicitlyAligned = Array(repeating: false, count: columns)
-		for rowInfo in ProtobufMessage(tile.payload).messages(IWork.tileRowInfosField) {
-			guard let rowIndex = rowInfo.varint(IWork.runCharIndexField).map(Int.init), rowIndex < rows,
-			      let buffer = rowInfo.bytes(IWork.tileCellBufferField),
-			      let offsets = rowInfo.bytes(IWork.tileCellOffsetsField) else { continue }
-			let cellStarts = cellOffsets(offsets)
-			for (column, start) in cellStarts.enumerated() where column < columns {
-				guard start + IWork.cellKeyByteOffset + 4 <= buffer.count else { continue }
-				let base = start + IWork.cellKeyByteOffset
-				let key = UInt64(buffer[base]) | UInt64(buffer[base + 1]) << 8 | UInt64(buffer[base + 2]) << 16 | UInt64(buffer[base + 3]) << 24
-				let typeByte = start + IWork.cellTypeByteOffset < buffer.count ? buffer[start + IWork.cellTypeByteOffset] : 0
-				if typeByte == IWork.cellRichType, let storageID = richStorageByKey[key], let storage = store.object(storageID) {
-					// A rich cell's text + char-style runs reconstruct the inline markup;
-					// its column alignment comes from the storage's own paragraph style.
-					grid[rowIndex][column] = cellMarkdown(storage, store: store)
-					if rowIndex >= 1, let aligned = cellAlignment(storage, store: store) {
-						columnAlignments[column] = aligned
-					}
-				} else if let frozen = frozenValue(buffer, at: start, type: typeByte) {
-					// Numeric / date / bool / duration cells store their cached value — the
-					// formula result, no recalculation — so the table reads as static text.
-					grid[rowIndex][column] = frozen
-				} else if let string = stringsByKey[key] {
-					grid[rowIndex][column] = string
-				}
-				// Census body cells by value type for the implicit-alignment default.
-				if rowIndex >= 1 {
-					switch typeByte {
-					case IWork.cellNumberType, IWork.cellDateType, IWork.cellDurationType, IWork.cellBoolType:
-						columnHasNumber[column] = true
-					default:
-						if !grid[rowIndex][column].isEmpty { columnHasText[column] = true }
-					}
-				}
-				// Column alignment comes from body cells: a styled cell (flag bit set)
-				// carries a styleTable key in W1; an unstyled cell is left-aligned.
-				if rowIndex >= 1, start + IWork.cellFlagsByteOffset < buffer.count,
-				   buffer[start + IWork.cellFlagsByteOffset] & IWork.cellStyleKeyBit != 0,
-				   start + IWork.cellStyleKeyByteOffset + 4 <= buffer.count {
-					let styleBase = start + IWork.cellStyleKeyByteOffset
-					let styleKey = UInt64(buffer[styleBase]) | UInt64(buffer[styleBase + 1]) << 8 | UInt64(buffer[styleBase + 2]) << 16 | UInt64(buffer[styleBase + 3]) << 24
-					columnAlignments[column] = alignment(forStyleKey: styleKey)
-					columnExplicitlyAligned[column] = true
-				}
-			}
-		}
-		// Implicit default: a column of purely numeric/date values right-aligns (as Pages
-		// displays it) unless an explicit alignment override is present.
-		for column in 0..<columns where !columnExplicitlyAligned[column] && columnHasNumber[column] && !columnHasText[column] {
-			columnAlignments[column] = .right
-		}
-		return PagesDocument.Paragraph.Table(cells: grid, columnAlignments: columnAlignments)
+		return PagesDocument.Paragraph.Table(cells: table.cells, columnAlignments: columnAlignments)
 	}
 
 	/// Reconstructs a rich cell's Markdown: the cell-storage text with each
@@ -561,78 +464,6 @@ final class PagesParser {
 		case 2: return .center
 		default: return nil
 		}
-	}
-
-	/// The frozen (cached) value of a numeric / date / bool / duration cell rendered as
-	/// static text — the displayed formula result, no recalculation. Returns `nil` for
-	/// text cells (which carry a string-table key the caller resolves instead).
-	private func frozenValue(_ b: [UInt8], at start: Int, type: UInt8) -> String? {
-		let o = start + IWork.cellKeyByteOffset
-		func readDouble(_ off: Int) -> Double? {
-			guard off + 8 <= b.count else { return nil }
-			var bits: UInt64 = 0; for k in 0..<8 { bits |= UInt64(b[off + k]) << (8 * k) }
-			return Double(bitPattern: bits)
-		}
-		switch type {
-		case IWork.cellNumberType:
-			return Self.decimal128String(b, at: o)
-		case IWork.cellDateType:
-			guard let seconds = readDouble(o) else { return nil }
-			let formatter = DateFormatter()
-			formatter.dateFormat = "yyyy-MM-dd HH:mm"
-			formatter.timeZone = TimeZone(identifier: "UTC")
-			return formatter.string(from: Date(timeIntervalSinceReferenceDate: seconds))
-		case IWork.cellBoolType:
-			guard let v = readDouble(o) else { return nil }
-			return v != 0 ? "true" : "false"
-		case IWork.cellDurationType:
-			guard let s = readDouble(o) else { return nil }
-			return "\(Int(s.rounded()))s"
-		default:
-			return nil
-		}
-	}
-
-	/// Decodes an IEEE 754-2008 decimal128 (BID) at `o` (16 bytes, little-endian) to an
-	/// exact decimal string: value = coefficient × 10^(exponent). Handles the common
-	/// small-coefficient form (≤ 64-bit coefficient); returns `nil` for the rarer large
-	/// form so the caller falls back gracefully.
-	static func decimal128String(_ b: [UInt8], at o: Int) -> String? {
-		guard o + 16 <= b.count else { return nil }
-		func u64(_ off: Int) -> UInt64 { var v: UInt64 = 0; for k in 0..<8 { v |= UInt64(b[off + k]) << (8 * k) }; return v }
-		let lo = u64(o), hi = u64(o + 8)
-		let sign = (hi >> 63) & 1
-		guard (hi >> 61) & 0x3 != 0x3 else { return nil }     // large-coefficient/special form
-		let exponent = Int((hi >> 49) & 0x3FFF) - 6176
-		guard hi & 0x1_FFFF_FFFF_FFFF == 0 else { return nil } // >64-bit coefficient
-		var digits = String(lo)
-		let result: String
-		if exponent >= 0 {
-			result = digits + String(repeating: "0", count: min(exponent, 40))
-		} else {
-			let frac = -exponent
-			if digits.count <= frac { digits = String(repeating: "0", count: frac - digits.count + 1) + digits }
-			let split = digits.index(digits.endIndex, offsetBy: -frac)
-			let intPart = String(digits[..<split])
-			var fracPart = String(digits[split...])
-			while fracPart.hasSuffix("0") { fracPart.removeLast() }
-			result = fracPart.isEmpty ? intPart : "\(intPart).\(fracPart)"
-		}
-		return sign == 1 && result != "0" ? "-" + result : result
-	}
-
-	/// Parses a tile row's `u16` cell-offset array (little-endian), terminated by the
-	/// `0xFFFF` sentinel — the byte offset of each cell into the cell buffer.
-	private func cellOffsets(_ bytes: [UInt8]) -> [Int] {
-		var offsets = [Int]()
-		var i = 0
-		while i + 1 < bytes.count {
-			let value = Int(bytes[i]) | Int(bytes[i + 1]) << 8
-			if value == 0xFFFF { break }
-			offsets.append(value)
-			i += 2
-		}
-		return offsets
 	}
 
 	/// Reads the paragraph-style run table: a sorted list of
