@@ -1,5 +1,31 @@
 // swift-tools-version:6.1
 import PackageDescription
+import Foundation
+
+// When SWIFTTEXT_PORTABLE_ONLY=1, the manifest is trimmed to the pure-Swift,
+// Foundation-only targets and their tests — the surface with no libxml2
+// (SwiftTextHTML / SwiftTextRender) and no ZIPFoundation (SwiftTextDOCX /
+// SwiftTextPages) dependency. This lets CI *run* the portable unit tests on
+// platforms where those native dependencies aren't readily available — Windows
+// and the Android cross-compile SDK — instead of only build-checking the
+// Markdown core. A plain `swift build` / `swift test` is completely unchanged.
+let portableOnly = ProcessInfo.processInfo.environment["SWIFTTEXT_PORTABLE_ONLY"] == "1"
+
+// Targets (and their test targets) that depend only on Foundation + swift-markdown.
+let portableTargetNames: Set<String> = [
+	"SwiftTextCore",
+	"SwiftTextMarkdown",
+	"SwiftTextAttributedString",
+	"SwiftTextPDFWriter",
+	"SwiftTextOpenType",
+	"SwiftTextCSS",
+	"SwiftTextCoreTests",
+	"SwiftTextMarkdownTests",
+	"SwiftTextAttributedStringTests",
+	"SwiftTextPDFWriterTests",
+	"SwiftTextOpenTypeTests",
+	"SwiftTextCSSTests"
+]
 
 // macOS-only targets (Vision, PDFKit, AppKit, WebKit)
 #if !os(macOS)
@@ -289,6 +315,37 @@ let packageTargets: [Target] = [
 	)
 ] + htmlTargets + macOSTargets
 
+let allTraits: Set<Trait> = [
+	.trait(name: "OCR", description: "Image OCR support"),
+	.trait(name: "HTML", description: "HTML parsing"),
+	.trait(name: "PDF", description: "PDF text extraction", enabledTraits: ["OCR"]),
+	.trait(name: "DOCX", description: "DOCX extraction"),
+	.trait(name: "PAGES", description: "Pages (iWork) extraction"),
+	// CLI enables DOCX, PAGES, and HTML because SwiftTextCLI links
+	// SwiftTextDOCX, SwiftTextPages, and SwiftTextHTML, whose external products
+	// (ZIPFoundation, XMLKit's HTMLParser) are guarded by those traits.
+	.trait(name: "CLI", description: "swifttext command-line tool dependencies", enabledTraits: ["DOCX", "PAGES", "HTML"]),
+	// "CLI" must be a default trait: the SwiftTextCLI and SwiftTextDOCX targets are
+	// always part of the manifest, so a plain `swift build` needs their external
+	// products (ArgumentParser, ZIPFoundation) active to compile. Consumers that
+	// specify explicit traits (e.g. ["HTML"]) drop the defaults, which lets SwiftPM
+	// prune both packages from their dependency resolution.
+	.default(enabledTraits: ["OCR", "CLI"])
+]
+
+let allDependencies: [Package.Dependency] = [
+	.package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0"),
+	.package(url: "https://github.com/weichsel/ZIPFoundation.git", from: "0.9.12"),
+	.package(url: "https://github.com/swiftlang/swift-markdown.git", from: "0.8.0"),
+	.package(url: "https://github.com/Cocoanetics/XMLKit.git", from: "1.0.0")
+]
+
+// The portable subset needs only swift-markdown; dropping the others keeps the
+// dependency graph clean on platforms without libxml2 / ZIPFoundation toolchains.
+let portableDependencies: [Package.Dependency] = [
+	.package(url: "https://github.com/swiftlang/swift-markdown.git", from: "0.8.0")
+]
+
 let package = Package(
 	name: "SwiftText",
 	platforms: [
@@ -297,29 +354,8 @@ let package = Package(
 		.tvOS(.v13),
 		.watchOS(.v6)
 	],
-	products: packageProducts,
-	traits: [
-		.trait(name: "OCR", description: "Image OCR support"),
-		.trait(name: "HTML", description: "HTML parsing"),
-		.trait(name: "PDF", description: "PDF text extraction", enabledTraits: ["OCR"]),
-		.trait(name: "DOCX", description: "DOCX extraction"),
-		.trait(name: "PAGES", description: "Pages (iWork) extraction"),
-		// CLI enables DOCX, PAGES, and HTML because SwiftTextCLI links
-		// SwiftTextDOCX, SwiftTextPages, and SwiftTextHTML, whose external products
-		// (ZIPFoundation, XMLKit's HTMLParser) are guarded by those traits.
-		.trait(name: "CLI", description: "swifttext command-line tool dependencies", enabledTraits: ["DOCX", "PAGES", "HTML"]),
-		// "CLI" must be a default trait: the SwiftTextCLI and SwiftTextDOCX targets are
-		// always part of the manifest, so a plain `swift build` needs their external
-		// products (ArgumentParser, ZIPFoundation) active to compile. Consumers that
-		// specify explicit traits (e.g. ["HTML"]) drop the defaults, which lets SwiftPM
-		// prune both packages from their dependency resolution.
-		.default(enabledTraits: ["OCR", "CLI"])
-	],
-	dependencies: [
-		.package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0"),
-		.package(url: "https://github.com/weichsel/ZIPFoundation.git", from: "0.9.12"),
-		.package(url: "https://github.com/swiftlang/swift-markdown.git", from: "0.8.0"),
-		.package(url: "https://github.com/Cocoanetics/XMLKit.git", from: "1.0.0")
-	],
-	targets: packageTargets
+	products: portableOnly ? packageProducts.filter { portableTargetNames.contains($0.name) } : packageProducts,
+	traits: portableOnly ? [] : allTraits,
+	dependencies: portableOnly ? portableDependencies : allDependencies,
+	targets: portableOnly ? packageTargets.filter { portableTargetNames.contains($0.name) } : packageTargets
 )

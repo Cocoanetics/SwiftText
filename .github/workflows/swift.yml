@@ -71,15 +71,17 @@ jobs:
             -destination "platform=iOS Simulator,name=iPhone 17,OS=latest" \
             -skipPackagePluginValidation
 
-  # Windows job — verifies swift-markdown / swift-cmark portability. We scope
-  # to the SwiftTextMarkdown target on purpose: the existing SwiftTextHTML
-  # target depends on libxml2 via vcpkg, which is a separate, pre-existing
-  # concern. This job specifically proves that the swift-markdown dependency
-  # chain (swift-cmark, CAtomic, the Windows static-define) resolves and
-  # builds on the production toolchain (Swift 6.3.1 via SwiftyLab/setup-swift).
-  build-windows-swift-markdown:
+  # Windows job — runs the portable unit tests (Foundation + swift-markdown only).
+  # SWIFTTEXT_PORTABLE_ONLY trims the package to the pure-Swift targets, so the
+  # libxml2-backed SwiftTextHTML/SwiftTextRender and the ZIPFoundation-backed
+  # DOCX/Pages targets are absent from the graph — `swift test` builds and runs
+  # only what the Windows toolchain can satisfy with no vcpkg/libxml2 needed.
+  # Production toolchain is Swift 6.3.1 via SwiftyLab/setup-swift.
+  test-windows-portable:
     runs-on: windows-latest
     timeout-minutes: 30
+    env:
+      SWIFTTEXT_PORTABLE_ONLY: "1"
     steps:
       - uses: actions/checkout@v6
       - name: Setup Swift
@@ -88,38 +90,29 @@ jobs:
           swift-version: "6.3.1"
       - name: Verify Swift version
         run: swift --version
-      - name: Resolve dependencies
-        run: swift package resolve
-      - name: Build (SwiftTextMarkdown)
-        # Build-only, matching the Android job. The goal is verifying that the
-        # swift-markdown / swift-cmark cross-compile produces a working object
-        # graph on Windows — not running tests. (`swift test --filter` would
-        # still build all test targets including SwiftTextHTML, which needs
-        # libxml2 via vcpkg, an unrelated, pre-existing concern.)
-        run: swift build -v --target SwiftTextMarkdown
+      - name: Build & Test (portable targets)
+        run: swift test -v
 
-  # Android job — same scope as Windows. Uses skiptools/swift-android-action,
-  # which provisions the Swift Android SDK and runs SwiftPM against an x86_64
-  # emulator. cmark-gfm is portable C; this job confirms the bionic libc
-  # toolchain produces a working build.
-  build-android-swift-markdown:
+  # Android job — runs the portable unit tests on an x86_64 emulator via
+  # skiptools/swift-android-action, which provisions the Swift Android SDK.
+  # SWIFTTEXT_PORTABLE_ONLY trims the package to the pure-Swift targets (no
+  # libxml2/ZIPFoundation, which the Android SDK doesn't provide), so the action
+  # can build the test bundle and actually run it under the emulator — proving
+  # the Markdown/AttributedString/CSS/OpenType/PDF-writer core works on bionic.
+  test-android-portable:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
+    env:
+      SWIFTTEXT_PORTABLE_ONLY: "1"
     steps:
       - uses: actions/checkout@v6
-      - name: Build (Android cross-compile)
+      - name: Build & Test (Android cross-compile, portable targets)
         uses: skiptools/swift-android-action@v2
         with:
           swift-version: "6.3"
           # Default GitHub Linux runner has ~14 GiB free; SDK + NDK + emulator
           # together push past that without cleanup.
           free-disk-space: true
-          # Build-only: the action's default is `swift build --target X --build-tests`
-          # which SwiftPM rejects as mutually exclusive flags. We're scoping to a
-          # single target (`SwiftTextMarkdown`) to avoid the existing libxml2 dep
-          # on `SwiftTextHTML` (not provided by the Android SDK), and the goal
-          # here is portability of the swift-markdown / swift-cmark toolchain —
-          # not running tests on the emulator.
-          build-tests: false
-          run-tests: false
-          swift-build-flags: "--target SwiftTextMarkdown"
+          # Build the test bundle and run it on the emulator. With the portable
+          # subset there's no libxml2/ZIPFoundation for the SDK to choke on.
+          run-tests: true
