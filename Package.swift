@@ -33,6 +33,7 @@ let macOSTargets: [Target] = [
 			"SwiftTextDOCX",
 			"SwiftTextPages",
 			"SwiftTextNumbers",
+			"SwiftTextKeynote",
 			"SwiftTextRender",
 			.product(name: "ArgumentParser", package: "swift-argument-parser", condition: .when(traits: ["CLI"]))
 		],
@@ -155,6 +156,10 @@ let packageProducts: [Product] = [
 		name: "SwiftTextNumbers",
 		targets: ["SwiftTextNumbers"]
 	),
+	.library(
+		name: "SwiftTextKeynote",
+		targets: ["SwiftTextKeynote"]
+	),
 	// Cross-platform HTML/CSS → PDF rendering engine (a port of WeasyPrint).
 	// SwiftTextPDFWriter is the Foundation-only PDF output substrate (a port of
 	// pydyf); it is always available because it has no external dependencies.
@@ -248,6 +253,13 @@ let packageTargets: [Target] = [
 		dependencies: ["SwiftTextIWA"],
 		path: "Sources/SwiftTextNumbers"
 	),
+	// Apple Keynote reader: deck slide text (title/body/notes) to Markdown/JSON/text.
+	// Navigates the slide graph structurally via the IWA core; no Pages dependency.
+	.target(
+		name: "SwiftTextKeynote",
+		dependencies: ["SwiftTextIWA"],
+		path: "Sources/SwiftTextKeynote"
+	),
 	.testTarget(
 		name: "SwiftTextDOCXTests",
 		dependencies: ["SwiftTextDOCX"],
@@ -268,6 +280,14 @@ let packageTargets: [Target] = [
 		name: "SwiftTextNumbersTests",
 		dependencies: ["SwiftTextNumbers", "SwiftTextIWA"],
 		path: "Tests/SwiftTextNumbersTests",
+		resources: [
+			.process("Resources")
+		]
+	),
+	.testTarget(
+		name: "SwiftTextKeynoteTests",
+		dependencies: ["SwiftTextKeynote", "SwiftTextIWA"],
+		path: "Tests/SwiftTextKeynoteTests",
 		resources: [
 			.process("Resources")
 		]
