@@ -2,6 +2,7 @@ import Foundation
 import Testing
 
 @testable import SwiftTextPages
+import SwiftTextIWA
 
 /// Validates the generated iWork wire models (`Sources/SwiftTextPages/Generated/IWA/`,
 /// produced by `Scripts/GenerateIWAModels.swift`). Every modeled object must decode
@@ -53,7 +54,7 @@ struct IWAGeneratedModelTests {
 	private func assertLosslessRoundTrip(at url: URL, minObjects: Int) throws {
 		var modeled = 0
 		var failures = [String]()
-		for entry in try PagesContainer.entries(at: url, prefix: "Index/", suffix: ".iwa") {
+		for entry in try IWAContainer.entries(at: url, prefix: "Index/", suffix: ".iwa") {
 			guard let objects = try? IWAArchive.objects(from: entry.data) else { continue }
 			for object in objects {
 				guard IWATypeRegistry.modeledTypes.contains(object.type),

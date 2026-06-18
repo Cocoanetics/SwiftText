@@ -2,10 +2,16 @@ import Foundation
 
 /// One archived object inside an `.iwa` file: a typed Protocol Buffers payload
 /// addressed by a document-unique identifier.
-struct IWAObject {
-	let identifier: UInt64
-	let type: UInt64
-	let payload: [UInt8]
+public struct IWAObject {
+	public let identifier: UInt64
+	public let type: UInt64
+	public let payload: [UInt8]
+
+	public init(identifier: UInt64, type: UInt64, payload: [UInt8]) {
+		self.identifier = identifier
+		self.type = type
+		self.payload = payload
+	}
 }
 
 /// Decodes the iWork Archive (`.iwa`) container format into its objects.
@@ -19,15 +25,15 @@ struct IWAObject {
 ///     (`identifier` = field 1, repeated `MessageInfo` = field 2);
 ///   - for every `MessageInfo` (`type` = field 1, `length` = field 3), that
 ///     many bytes of the object's payload message.
-enum IWAArchive {
-	enum Error: Swift.Error {
+public enum IWAArchive {
+	public enum Error: Swift.Error {
 		case truncatedChunkHeader
 		case truncatedChunkBody
 		case objectNotFound
 	}
 
 	/// Decodes every object stored in a single `.iwa` file.
-	static func objects(from data: Data) throws -> [IWAObject] {
+	public static func objects(from data: Data) throws -> [IWAObject] {
 		let stream = try decompress(data)
 		return parse(stream)
 	}
@@ -45,7 +51,7 @@ enum IWAArchive {
 	/// identifier and no CRC — Apple emits neither, and its reader expects neither.
 	/// This is the exact inverse of ``decompress(_:)``, so re-emitting a stream the
 	/// reader produced yields a file the reader (and Pages) reads back identically.
-	static func encode(stream: [UInt8]) -> Data {
+	public static func encode(stream: [UInt8]) -> Data {
 		var output = [UInt8]()
 		var pos = 0
 		while pos < stream.count {
@@ -70,7 +76,7 @@ enum IWAArchive {
 	/// `type` = field 1 and `length` = field 3), then the payload — concatenated
 	/// into the record stream that ``encode(stream:)`` frames. This mirrors
 	/// ``parse(_:)`` and round-trips through ``objects(from:)``.
-	static func encode(_ objects: [IWAObject]) -> Data {
+	public static func encode(_ objects: [IWAObject]) -> Data {
 		var stream = [UInt8]()
 		for object in objects {
 			var messageInfo = ProtobufWriter()
@@ -100,7 +106,7 @@ enum IWAArchive {
 	///   - objectID: The identifier of the object to edit (must store a single payload).
 	///   - transform: Maps the object's current payload to its replacement.
 	/// - Throws: ``Error/objectNotFound`` if no single-payload object has that id.
-	static func replacingPayload(in data: Data, objectID: UInt64, transform: ([UInt8]) -> [UInt8]) throws -> Data {
+	public static func replacingPayload(in data: Data, objectID: UInt64, transform: ([UInt8]) -> [UInt8]) throws -> Data {
 		let stream = try decompress(data)
 		var output = [UInt8]()
 		var pos = 0
@@ -180,7 +186,7 @@ enum IWAArchive {
 	/// ``encode(_:)`` (one `ArchiveInfo` with a single `MessageInfo`). Used to add
 	/// freshly-built objects (e.g. character styles) into the document component
 	/// that references them.
-	static func appending(_ objects: [IWAObject], to data: Data) throws -> Data {
+	public static func appending(_ objects: [IWAObject], to data: Data) throws -> Data {
 		var stream = try decompress(data)
 		for object in objects {
 			var messageInfo = ProtobufWriter()
@@ -206,7 +212,7 @@ enum IWAArchive {
 	/// Used to inject a captured object set (e.g. a native table) into an existing
 	/// component while preserving each object's full `ArchiveInfo` (object
 	/// references included), which ``appending(_:to:)`` would not.
-	static func appendingRecordStream(_ records: [UInt8], to data: Data) throws -> Data {
+	public static func appendingRecordStream(_ records: [UInt8], to data: Data) throws -> Data {
 		var stream = try decompress(data)
 		stream.append(contentsOf: records)
 		return encode(stream: stream)
@@ -214,7 +220,7 @@ enum IWAArchive {
 
 	/// De-chunks an `.iwa` file and concatenates the decompressed Snappy blocks.
 	/// The inverse of ``encode(stream:)``.
-	static func decompress(_ data: Data) throws -> [UInt8] {
+	public static func decompress(_ data: Data) throws -> [UInt8] {
 		let bytes = [UInt8](data)
 		var pos = 0
 		var stream = [UInt8]()
@@ -277,12 +283,14 @@ enum IWAArchive {
 
 /// An in-memory index of every object across a document's `.iwa` files,
 /// addressable by identifier. Mirrors how iWork resolves cross-file references.
-struct IWAObjectStore {
+public struct IWAObjectStore {
 	/// Objects in the order they were discovered (stream order within each file).
-	private(set) var objects = [IWAObject]()
+	public private(set) var objects = [IWAObject]()
 	private var byIdentifier = [UInt64: Int]()
 
-	mutating func add(_ object: IWAObject) {
+	public init() {}
+
+	public mutating func add(_ object: IWAObject) {
 		// First writer wins: the primary archive for an identifier appears before
 		// any auxiliary ones, and is the one references expect to resolve to.
 		if byIdentifier[object.identifier] == nil {
@@ -292,13 +300,13 @@ struct IWAObjectStore {
 	}
 
 	/// The primary object registered for an identifier, if any.
-	func object(_ identifier: UInt64) -> IWAObject? {
+	public func object(_ identifier: UInt64) -> IWAObject? {
 		guard let index = byIdentifier[identifier] else { return nil }
 		return objects[index]
 	}
 
 	/// Every object of the given archive type, in discovery order.
-	func objects(ofType type: UInt64) -> [IWAObject] {
+	public func objects(ofType type: UInt64) -> [IWAObject] {
 		objects.filter { $0.type == type }
 	}
 }

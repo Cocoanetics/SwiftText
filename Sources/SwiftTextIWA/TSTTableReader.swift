@@ -34,7 +34,7 @@ public struct TSTTable: Sendable, Equatable, Codable {
 /// > (`tableGrid(forAttachment:store:)`). That path is test-covered and predates this
 /// > extraction; converging it onto this reader is a deliberate, separate follow-up so
 /// > the Pages tests gate the change.
-enum TSTTableReader {
+public enum TSTTableReader {
 	/// Field numbers and cell-buffer byte offsets for the `TST` table model. Mirrors the
 	/// documented constants in `PagesParser.IWork`; kept here so the reader is
 	/// self-contained and reusable across iWork apps.
@@ -97,7 +97,7 @@ enum TSTTableReader {
 	///     renderer (e.g. Pages) can pass one that emits inline Markdown instead.
 	///   - richAlignment: resolves a rich cell's column alignment from its own
 	///     paragraph style. Defaults to `nil` (left).
-	static func table(
+	public static func table(
 		forModelID modelID: UInt64,
 		store: IWAObjectStore,
 		richText: (IWAObject, IWAObjectStore) -> String = { storage, _ in plainText(of: storage) },
@@ -252,7 +252,7 @@ enum TSTTableReader {
 	///   - numberIsDecimal128: modern storage encodes numbers as decimal128; pre-BNC
 	///     storage encodes them as a `double`. Dates, durations, and bools are `double`
 	///     in both.
-	static func frozenValue(_ b: [UInt8], valueAt o: Int, type: UInt8, numberIsDecimal128: Bool) -> String? {
+	public static func frozenValue(_ b: [UInt8], valueAt o: Int, type: UInt8, numberIsDecimal128: Bool) -> String? {
 		func readDouble(_ off: Int) -> Double? {
 			guard off + 8 <= b.count else { return nil }
 			var bits: UInt64 = 0; for k in 0..<8 { bits |= UInt64(b[off + k]) << (8 * k) }
@@ -285,7 +285,7 @@ enum TSTTableReader {
 	/// binary-`double` representation noise that Numbers itself hides on display (e.g.
 	/// `12040.079999999998` → `12040.08`). Subnormal/non-finite results — the signature of
 	/// a misread cell — render blank rather than as an absurd value.
-	static func formatDouble(_ v: Double) -> String {
+	public static func formatDouble(_ v: Double) -> String {
 		guard v.isFinite, !v.isSubnormal else { return "" }
 		if v == v.rounded(), abs(v) < 1e15 { return String(Int64(v)) }
 		return String(format: "%.12g", v)
@@ -294,7 +294,7 @@ enum TSTTableReader {
 	/// Decodes an IEEE 754-2008 decimal128 (BID) at `o` (16 bytes, little-endian) to an
 	/// exact decimal string. Handles the common small-coefficient form (≤ 64-bit
 	/// coefficient); returns `nil` for the rarer large form so the caller falls back.
-	static func decimal128String(_ b: [UInt8], at o: Int) -> String? {
+	public static func decimal128String(_ b: [UInt8], at o: Int) -> String? {
 		guard o + 16 <= b.count else { return nil }
 		func u64(_ off: Int) -> UInt64 { var v: UInt64 = 0; for k in 0..<8 { v |= UInt64(b[off + k]) << (8 * k) }; return v }
 		let lo = u64(o), hi = u64(o + 8)
@@ -324,7 +324,7 @@ enum TSTTableReader {
 	/// end-of-row terminator, so the array continues past it. Treating it as a terminator
 	/// (as a naive reader does) silently drops every cell that follows a gap, which is
 	/// common in spreadsheets (e.g. a total in column C with column B left blank).
-	static func cellOffsets(_ bytes: [UInt8]) -> [Int] {
+	public static func cellOffsets(_ bytes: [UInt8]) -> [Int] {
 		var offsets = [Int]()
 		var i = 0
 		while i + 1 < bytes.count {
@@ -337,7 +337,7 @@ enum TSTTableReader {
 
 	/// Concatenates a `TSWP.StorageArchive`'s repeated text chunks (`#3`) into its plain
 	/// text — the default rendering for rich-text cells.
-	static func plainText(of storage: IWAObject) -> String {
+	public static func plainText(of storage: IWAObject) -> String {
 		let message = ProtobufMessage(storage.payload)
 		var text = ""
 		for chunk in message.allBytes(Const.storageTextField) {

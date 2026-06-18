@@ -2,6 +2,7 @@ import Foundation
 import Testing
 
 @testable import SwiftTextPages
+import SwiftTextIWA
 
 /// Exercises the comprehensive programmatic table model: per-cell appearance (fill,
 /// vertical alignment, borders, wrap), custom column widths / row heights, and header /
@@ -18,7 +19,7 @@ struct PagesTableStyleTests {
 		                         attachment: PagesTableTemplate.attachmentID, table: table)
 		try PagesWriter().write(paragraphs: [para], to: url)
 		var store = IWAObjectStore()
-		for entry in try PagesContainer.entries(at: url, prefix: "Index/", suffix: ".iwa") {
+		for entry in try IWAContainer.entries(at: url, prefix: "Index/", suffix: ".iwa") {
 			guard let objects = try? IWAArchive.objects(from: entry.data) else { continue }
 			for object in objects { store.add(object) }
 		}

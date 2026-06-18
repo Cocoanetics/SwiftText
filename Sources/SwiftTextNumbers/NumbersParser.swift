@@ -1,3 +1,4 @@
+import SwiftTextIWA
 import Foundation
 
 public enum NumbersParserError: Error, CustomStringConvertible {
@@ -15,7 +16,7 @@ public enum NumbersParserError: Error, CustomStringConvertible {
 /// Reads an Apple Numbers (`.numbers`) spreadsheet into a `NumbersDocument`.
 ///
 /// The container, compression, and object-graph machinery are identical to Pages —
-/// Numbers is the same IWA package format — so this reuses `PagesContainer`,
+/// Numbers is the same IWA package format — so this reuses `IWAContainer`,
 /// `IWAArchive`, and `IWAObjectStore` verbatim. What differs is navigation: a Numbers
 /// document reaches its tables through `TN.DocumentArchive → sheets → TN.SheetArchive →
 /// drawable_infos`, whereas Pages reaches them through the body text flow. From the
@@ -44,7 +45,7 @@ public struct NumbersParser {
 			throw NumbersParserError.fileNotFound(url)
 		}
 		// Modern (iWork '13+) documents store content as Index/*.iwa objects.
-		let entries = try PagesContainer.entries(at: url, prefix: "Index/", suffix: ".iwa")
+		let entries = try IWAContainer.entries(at: url, prefix: "Index/", suffix: ".iwa")
 		guard !entries.isEmpty else { throw NumbersParserError.notANumbersDocument(url) }
 
 		var store = IWAObjectStore()

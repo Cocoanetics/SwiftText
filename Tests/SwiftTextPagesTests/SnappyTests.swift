@@ -2,6 +2,7 @@ import Foundation
 import Testing
 
 @testable import SwiftTextPages
+import SwiftTextIWA
 
 @Suite("Snappy block decompression")
 struct SnappyTests {

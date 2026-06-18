@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import SwiftTextPages
+import SwiftTextIWA
 
 @Suite("ZIP byte parity")
 struct ZipParityTests {

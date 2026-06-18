@@ -1,3 +1,4 @@
+import SwiftTextIWA
 import Foundation
 
 /// A minimal, read-only model of an Apple Numbers spreadsheet: an ordered list of

@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 
+import SwiftTextIWA
 @testable import SwiftTextPages
 
 /// Unit tests for decoding a cell's frozen numeric value — the IEEE 754-2008 decimal128

@@ -1,3 +1,4 @@
+import SwiftTextIWA
 import Foundation
 
 /// A read-only handle on an Apple Numbers (`.numbers`) spreadsheet, mirroring the shape

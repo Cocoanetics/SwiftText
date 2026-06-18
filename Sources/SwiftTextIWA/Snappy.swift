@@ -18,8 +18,8 @@ import Foundation
 /// it (a CRC32-built 1.1.10 mismatches every real block), so the multiply-shift hash here
 /// is the correct — not merely older — choice. Other decisive details: `CalculateTableSize`
 /// downsizing, the `skip += bytes_between` search heuristic, the 64/60/remainder chunking.
-enum Snappy {
-	enum Error: Swift.Error {
+public enum Snappy {
+	public enum Error: Swift.Error {
 		case truncated
 		case invalidOffset
 	}
@@ -27,7 +27,7 @@ enum Snappy {
 	/// Decompresses a single raw Snappy block.
 	/// - Parameter input: The compressed block bytes (no stream framing).
 	/// - Returns: The decompressed bytes.
-	static func decompress(_ input: [UInt8]) throws -> [UInt8] {
+	public static func decompress(_ input: [UInt8]) throws -> [UInt8] {
 		var pos = 0
 
 		func readVarint() throws -> Int {
@@ -117,7 +117,7 @@ enum Snappy {
 	/// per-fragment hash-table size, the `skip` search heuristic, the post-match hash
 	/// insertions, and the 64/60/remainder copy chunking) is what lets a `.pages`
 	/// round-trip with full byte parity.
-	static func compress(_ input: [UInt8]) -> [UInt8] {
+	public static func compress(_ input: [UInt8]) -> [UInt8] {
 		var output = [UInt8]()
 		appendVarint(UInt64(input.count), to: &output)
 		// Snappy compresses in fragments of at most 64 KiB; each is an independent

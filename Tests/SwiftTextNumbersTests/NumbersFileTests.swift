@@ -1,5 +1,6 @@
 import XCTest
-@testable import SwiftTextPages
+import SwiftTextIWA
+import SwiftTextNumbers
 
 /// Exercises the Numbers reader against `Sample.numbers`, a small fixture authored in
 /// Numbers with a header row, plain values, and two formula cells (`=SUM(C2:C3)` and

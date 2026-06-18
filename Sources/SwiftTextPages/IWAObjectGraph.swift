@@ -1,3 +1,4 @@
+import SwiftTextIWA
 import Foundation
 
 /// Finds the cross-object references inside an IWA object payload.

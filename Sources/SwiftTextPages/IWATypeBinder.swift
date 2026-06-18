@@ -1,3 +1,4 @@
+import SwiftTextIWA
 import Foundation
 
 /// Derives IWA persistence type-number → message bindings *without a debugger*, by

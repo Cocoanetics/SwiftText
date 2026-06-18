@@ -2,6 +2,7 @@ import Foundation
 import Testing
 
 @testable import SwiftTextPages
+import SwiftTextIWA
 
 @Suite("Embedded image extraction")
 struct PagesImageTests {
@@ -140,7 +141,7 @@ struct PagesImageTests {
 		try MarkdownToPages.convert("# Title\n\n![a picture](pic.png)\n", to: out, baseURL: dir)
 
 		// Embedded: a Data/ file carrying the exact image bytes.
-		let dataEntries = try PagesContainer.entries(at: out, prefix: "Data/")
+		let dataEntries = try IWAContainer.entries(at: out, prefix: "Data/")
 		let image = try #require(dataEntries.first { $0.path.hasSuffix(".png") })
 		#expect(image.data == PagesImageTests.onePixelPNG)
 
@@ -164,7 +165,7 @@ struct PagesImageTests {
 
 		try MarkdownToPages.convert("![the alt text](nope.png)\n", to: out, baseURL: dir)
 
-		#expect(try PagesContainer.entries(at: out, prefix: "Data/").isEmpty)
+		#expect(try IWAContainer.entries(at: out, prefix: "Data/").isEmpty)
 		#expect(try PagesFile(url: out).markdown().contains("the alt text"))
 	}
 

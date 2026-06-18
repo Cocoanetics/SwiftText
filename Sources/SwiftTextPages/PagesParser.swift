@@ -1,3 +1,4 @@
+import SwiftTextIWA
 import Foundation
 
 /// Reads a `.pages` archive and reconstructs its body text and paragraph
@@ -130,17 +131,17 @@ final class PagesParser {
 		}
 
 		// Modern (iWork '13+) documents store content as Index/*.iwa objects.
-		let indexEntries = try PagesContainer.entries(at: url, prefix: "Index/", suffix: ".iwa")
+		let indexEntries = try IWAContainer.entries(at: url, prefix: "Index/", suffix: ".iwa")
 		if !indexEntries.isEmpty {
 			return buildDocument(from: loadObjectStore(from: indexEntries))
 		}
 
 		// Legacy (iWork '09) documents store a single uncompressed index.xml.
-		if let indexXML = PagesContainer.data(at: url, named: "index.xml") {
+		if let indexXML = IWAContainer.data(at: url, named: "index.xml") {
 			return try PagesLegacyParser().parseDocument(from: indexXML)
 		}
 		// The very oldest documents gzip that index; flag it rather than mis-report.
-		if PagesContainer.data(at: url, named: "index.xml.gz") != nil {
+		if IWAContainer.data(at: url, named: "index.xml.gz") != nil {
 			throw PagesFileError.legacyGzipUnsupported(url)
 		}
 
@@ -148,7 +149,7 @@ final class PagesParser {
 	}
 
 	/// Decodes the given `Index/*.iwa` entries into a unified object store.
-	private func loadObjectStore(from entries: [PagesContainer.Entry]) -> IWAObjectStore {
+	private func loadObjectStore(from entries: [IWAContainer.Entry]) -> IWAObjectStore {
 		var store = IWAObjectStore()
 		for entry in entries {
 			// Skip any entry that isn't a standard Snappy/Protobuf IWA file. Some

@@ -14,6 +14,7 @@ import SwiftTextHTML
 import SwiftTextPDF
 import SwiftTextDOCX
 import SwiftTextPages
+import SwiftTextNumbers
 import SwiftTextOCR
 #if canImport(Vision)
 import Vision

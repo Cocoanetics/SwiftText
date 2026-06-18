@@ -1,3 +1,4 @@
+import SwiftTextIWA
 import Foundation
 
 /// Builds the iWork object graph for native (page-bottom) footnotes.

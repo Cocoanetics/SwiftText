@@ -2,6 +2,7 @@ import Foundation
 import Testing
 
 @testable import SwiftTextPages
+import SwiftTextIWA
 
 /// Tests for the write side: the Protobuf encoder and the IWA file writer. These
 /// are the foundation for writing `.pages` documents; everything here round-trips

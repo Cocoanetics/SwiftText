@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import SwiftTextPages
+import SwiftTextIWA
 
 /// The package layer can disassemble a complete iWork document into framing-preserving
 /// records and reassemble a valid package — verbatim, and with every modeled object
@@ -21,7 +22,7 @@ struct IWAPackageTests {
 	}
 	private func census(at url: URL) throws -> [UInt64: Int] {
 		var c = [UInt64: Int]()
-		for e in try PagesContainer.entries(at: url, prefix: "Index/", suffix: ".iwa") {
+		for e in try IWAContainer.entries(at: url, prefix: "Index/", suffix: ".iwa") {
 			if let objs = try? IWAArchive.objects(from: e.data) { for o in objs { c[o.type, default: 0] += 1 } }
 		}
 		return c
