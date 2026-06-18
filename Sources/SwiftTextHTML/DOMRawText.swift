@@ -7,8 +7,7 @@ import Foundation
 /// ``DOMText`` — so it is never mistaken for, or collected as, document text.
 /// `text()` and `markdown()` yield nothing. It is an implementation detail of
 /// the DOM; read a document's CSS via ``DOMElement/styleSheets()``.
-final class DOMRawText: DOMNode, @unchecked Sendable
-{
+final class DOMRawText: DOMNode, @unchecked Sendable {
 	let name = "#raw-text"
 
 	/// The verbatim source (CSS or script), preserved exactly — no whitespace

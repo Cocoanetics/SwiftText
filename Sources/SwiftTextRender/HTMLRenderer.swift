@@ -108,7 +108,7 @@ public enum HTMLRenderer {
 				("Parent", pdf.pages.reference),
 				("MediaBox", PDFArray([0, 0, options.pageWidthPx * pxToPt, pageHeightPx * pxToPt])),
 				("Contents", painter.stream.reference),
-				("Resources", fontBuilder.resourcesReference),
+				("Resources", fontBuilder.resourcesReference)
 			])
 			let annotations = painter.annotations()
 			if !annotations.isEmpty {
@@ -139,7 +139,7 @@ public enum HTMLRenderer {
 			"a5": (148 * mm, 210 * mm),
 			"b5": (176 * mm, 250 * mm),
 			"letter": (8.5 * inch, 11 * inch),
-			"legal": (8.5 * inch, 14 * inch),
+			"legal": (8.5 * inch, 14 * inch)
 		]
 	}()
 
@@ -161,14 +161,12 @@ public enum HTMLRenderer {
 
 	private static func applyPageSize(_ value: [ComponentValue], to options: inout RenderOptions) {
 		var landscape = false
-		var named: (width: Double, height: Double)? = nil
+		var named: (width: Double, height: Double)?
 		var lengths: [Double] = []
 		for token in value where !token.isWhitespaceOrComment {
 			if case .ident(let ident) = token.token {
 				let lower = ident.lowercased()
-				if lower == "landscape" { landscape = true }
-				else if lower == "portrait" { continue }
-				else if let size = pageSizesPx[lower] { named = size }
+				if lower == "landscape" { landscape = true } else if lower == "portrait" { continue } else if let size = pageSizesPx[lower] { named = size }
 			} else if let length = parseLength([token], fontSize: 16, rootFontSize: 16), case .px(let pixels) = length {
 				lengths.append(pixels)
 			}
@@ -203,7 +201,9 @@ public enum HTMLRenderer {
 		guard !headings.isEmpty, !pages.isEmpty else { return }
 
 		// Nest headings by level using a stack of open ancestors.
-		var nodes: [(level: Int, title: String, y: Double, parent: Int?, children: [Int], dict: PDFDictionary)] = []
+		// Local PDF-outline node record; its fields travel together.
+			// swiftlint:disable:next large_tuple
+			var nodes: [(level: Int, title: String, y: Double, parent: Int?, children: [Int], dict: PDFDictionary)] = []
 		var stack: [Int] = []
 		for heading in headings {
 			while let top = stack.last, nodes[top].level >= heading.level { stack.removeLast() }

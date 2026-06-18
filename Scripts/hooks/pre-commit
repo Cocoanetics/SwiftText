@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# SwiftLint auto-fix + strict lint on staged .swift files.
+# Activate once per clone: ./Scripts/install-hooks.sh
+set -euo pipefail
+
+[ -n "${CI:-}" ] && exit 0
+
+if ! command -v swiftlint >/dev/null 2>&1; then
+  echo "swiftlint not found — install via 'brew install swiftlint' (or skip with --no-verify)" >&2
+  exit 1
+fi
+
+staged=()
+while IFS= read -r -d '' file; do
+  case "$file" in
+    *.swift) staged+=("$file") ;;
+  esac
+done < <(git diff --cached --name-only --diff-filter=ACMR -z)
+
+[ ${#staged[@]} -eq 0 ] && exit 0
+
+# Refuse if any staged Swift file has unstaged edits — auto-fix + re-stage
+# would otherwise sweep working-tree changes into the commit silently.
+dirty=$(git diff --name-only -- "${staged[@]}")
+if [ -n "$dirty" ]; then
+  echo "pre-commit: staged Swift files have unstaged changes — stage or stash first:" >&2
+  printf '  %s\n' $dirty >&2
+  exit 1
+fi
+
+# SwiftLint exits 1 with "No lintable files found" when every staged file
+# matches `excluded:` in .swiftlint.yml (e.g. all changes are under
+# Sources/SwiftTextPages/Generated). That's not a failure — the hook handed it
+# files and it correctly excluded them. Swallow that one specific case.
+run_swiftlint() {
+  local out
+  if out=$(swiftlint lint "$@" 2>&1); then
+    [ -n "$out" ] && printf '%s\n' "$out"
+    return 0
+  fi
+  if [[ "$out" == "Error: No lintable files found"* ]]; then
+    return 0
+  fi
+  printf '%s\n' "$out" >&2
+  return 1
+}
+
+run_swiftlint --fix --quiet --force-exclude "${staged[@]}"
+git add -- "${staged[@]}"
+run_swiftlint --strict --quiet --force-exclude "${staged[@]}"

@@ -68,7 +68,7 @@ public enum PseudoClass: Equatable, Sendable {
 
 /// A compound selector: simple selectors with no combinator between them.
 public struct CompoundSelector: Equatable, Sendable {
-	public var type: String? = nil          // lowercased element name; nil = none
+	public var type: String?          // lowercased element name; nil = none
 	public var universal: Bool = false
 	public var ids: [String] = []
 	public var classes: [String] = []

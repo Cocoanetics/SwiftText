@@ -32,7 +32,7 @@ struct PagesImageTests {
 		"bullet_gbutton_gray-30.png", // list-bullet glyph -> skipped
 		"pasted-image-16.png",        // content
 		"pasted-image-21.png",        // content (distinct, shares base name)
-		"pasted-image-small-17.png",  // downscaled preview -> skipped
+		"pasted-image-small-17.png"  // downscaled preview -> skipped
 	]
 
 	@Test("Keeps content images, cleans names, and disambiguates collisions")
@@ -95,7 +95,7 @@ struct PagesImageTests {
 			.init(identifier: 2, type: 11006, payload: registry),
 			.init(identifier: 10, type: 2001, payload: body),
 			.init(identifier: 50, type: 2003, payload: attachment),
-			.init(identifier: 51, type: 3005, payload: drawable),
+			.init(identifier: 51, type: 3005, payload: drawable)
 		])
 
 		let bundle = FileManager.default.temporaryDirectory

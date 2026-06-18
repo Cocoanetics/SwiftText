@@ -33,7 +33,7 @@ struct FontFallbackTests {
 			"/System/Library/Fonts/Supplemental/Damascus.ttc",
 			"/System/Library/Fonts/Supplemental/AlBayan.ttc",
 			"/System/Library/Fonts/Supplemental/Baghdad.ttc",
-			"/System/Library/Fonts/Supplemental/Nadeem.ttc",
+			"/System/Library/Fonts/Supplemental/Nadeem.ttc"
 		]
 		guard let path = candidates.first(where: { FileManager.default.fileExists(atPath: $0) }) else {
 			return

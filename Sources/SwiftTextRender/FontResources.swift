@@ -69,7 +69,7 @@ public final class FontResourceBuilder {
 				("Type", "/Font"),
 				("Subtype", "/Type1"),
 				("BaseFont", "/\(font.baseFontName)"),
-				("Encoding", "/WinAnsiEncoding"),
+				("Encoding", "/WinAnsiEncoding")
 			])
 		}
 		for (key, font) in embeddedFonts {
@@ -104,14 +104,14 @@ public final class FontResourceBuilder {
 				Int((Double(bbox.xMin) * scale).rounded()),
 				Int((Double(bbox.yMin) * scale).rounded()),
 				Int((Double(bbox.xMax) * scale).rounded()),
-				Int((Double(bbox.yMax) * scale).rounded()),
+				Int((Double(bbox.yMax) * scale).rounded())
 			])),
 			("ItalicAngle", 0),
 			("Ascent", Int((Double(font.ascentUnits) * scale).rounded())),
 			("Descent", Int((Double(font.descentUnits) * scale).rounded())),
 			("CapHeight", Int((Double(font.ascentUnits) * scale).rounded())),
 			("StemV", 80),
-			(cff ? "FontFile3" : "FontFile2", fontFile.reference),
+			(cff ? "FontFile3" : "FontFile2", fontFile.reference)
 		])
 		pdf.addObject(descriptor)
 
@@ -131,11 +131,11 @@ public final class FontResourceBuilder {
 			("CIDSystemInfo", PDFDictionary([
 				("Registry", PDFString("Adobe")),
 				("Ordering", PDFString("Identity")),
-				("Supplement", 0),
+				("Supplement", 0)
 			])),
 			("FontDescriptor", descriptor.reference),
 			("DW", 1000),
-			("W", widths),
+			("W", widths)
 		]
 		if !cff {
 			cidEntries.insert(("CIDToGIDMap", "/Identity"), at: 5)
@@ -152,7 +152,7 @@ public final class FontResourceBuilder {
 			("BaseFont", "/\(name)"),
 			("Encoding", "/Identity-H"),
 			("DescendantFonts", PDFArray([cidFont.reference])),
-			("ToUnicode", toUnicode.reference),
+			("ToUnicode", toUnicode.reference)
 		])
 		pdf.addObject(type0)
 		return type0

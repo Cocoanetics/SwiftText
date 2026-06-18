@@ -259,5 +259,5 @@ let colorKeywords: [String: CSSColor] = [
 	"turquoise": rgb255(64, 224, 208), "violet": rgb255(238, 130, 238),
 	"wheat": rgb255(245, 222, 179), "white": rgb255(255, 255, 255),
 	"whitesmoke": rgb255(245, 245, 245), "yellow": rgb255(255, 255, 0),
-	"yellowgreen": rgb255(154, 205, 50),
+	"yellowgreen": rgb255(154, 205, 50)
 ]

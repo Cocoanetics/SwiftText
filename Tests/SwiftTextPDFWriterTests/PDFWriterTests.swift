@@ -94,19 +94,19 @@ struct PDFWriterTests {
 		let font = PDFDictionary([
 			("Type", "/Font"),
 			("Subtype", "/Type1"),
-			("BaseFont", "/Helvetica"),
+			("BaseFont", "/Helvetica")
 		])
 		pdf.addObject(font)
 
 		let resources = PDFDictionary([
-			("Font", PDFDictionary([("F1", font.reference)])),
+			("Font", PDFDictionary([("F1", font.reference)]))
 		])
 		let page = PDFDictionary([
 			("Type", "/Page"),
 			("Parent", pdf.pages.reference),
 			("MediaBox", PDFArray([0, 0, 612, 792])),
 			("Contents", content.reference),
-			("Resources", resources),
+			("Resources", resources)
 		])
 		pdf.addPage(page)
 		return pdf

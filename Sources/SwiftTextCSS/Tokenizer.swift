@@ -104,7 +104,7 @@ private final class Tokenizer {
 				pos += 1
 				while let n = peek(), isWhitespace(n) { pos += 1 }
 				append(.whitespace(string(from: start, to: pos)), at: start)
-			} else if (c == "U" || c == "u"), pos + 2 < length, scalars[pos + 1] == "+",
+			} else if c == "U" || c == "u", pos + 2 < length, scalars[pos + 1] == "+",
 			          isHex(scalars[pos + 2]) || scalars[pos + 2] == "?" {
 				let range = consumeUnicodeRange(from: pos + 2)
 				append(.unicodeRange(start: range.start, end: range.end), at: start)
@@ -442,7 +442,7 @@ private final class Tokenizer {
 		var endHex: String
 		if questionMarks > 0 {
 			endHex = startHex + String(repeating: "F", count: questionMarks)
-			startHex = startHex + String(repeating: "0", count: questionMarks)
+			startHex += String(repeating: "0", count: questionMarks)
 		} else if p + 1 < length, scalars[p] == "-", isHex(scalars[p + 1]) {
 			p += 1
 			let secondStart = p

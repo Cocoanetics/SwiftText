@@ -83,7 +83,7 @@ public enum ImageDecoder {
 					("Height", height),
 					("ColorSpace", colorSpace),
 					("BitsPerComponent", 8),
-					("Filter", "/DCTDecode"),
+					("Filter", "/DCTDecode")
 				])
 				return DecodedImage(width: width, height: height, pdfStream: stream)
 			}
@@ -156,8 +156,8 @@ public enum ImageDecoder {
 				("Predictor", 15),
 				("Colors", colors),
 				("BitsPerComponent", bitDepth),
-				("Columns", width),
-			])),
+				("Columns", width)
+			]))
 		])
 		return DecodedImage(width: width, height: height, pdfStream: stream)
 	}

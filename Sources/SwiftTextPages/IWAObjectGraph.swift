@@ -250,8 +250,7 @@ struct IWAObjectGraph {
 		var writer = ProtobufWriter()
 		var wrote = false
 		for field in ProtobufMessage(part.payload).fields {
-			if field.number == 1 { writer.varintField(1, highWater); wrote = true }
-			else { writer.append(field) }
+			if field.number == 1 { writer.varintField(1, highWater); wrote = true } else { writer.append(field) }
 		}
 		if !wrote { writer.varintField(1, highWater) }
 		// Preserve the original framing (its references are unchanged by an id bump).

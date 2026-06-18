@@ -1,7 +1,6 @@
 import Foundation
 
-public protocol DOMNode
-{
+public protocol DOMNode {
 	var name: String { get }
 	func markdown() -> String
 	func markdown(imageResolver: ((String) -> String?)?) -> String
@@ -13,10 +12,8 @@ private let blockLevelElements: Set<String> = [
 	"blockquote", "pre", "figure", "table", "noscript"
 ]
 
-public extension DOMNode
-{
-	var isBlockLevelElement: Bool
-	{
+public extension DOMNode {
+	var isBlockLevelElement: Bool {
 		blockLevelElements.contains(name)
 	}
 }

@@ -15,12 +15,12 @@ struct DocxWriterTests {
 				.init(text: "Normal text "),
 				.init(text: "bold", bold: true),
 				.init(text: " and "),
-				.init(text: "italic", italic: true),
+				.init(text: "italic", italic: true)
 			]),
 			.listItem(ordered: false, level: 0, runs: [.init(text: "Bullet")]),
 			.listItem(ordered: true, level: 0, runs: [.init(text: "Numbered")]),
 			.codeBlock(language: "swift", text: "let x = 42"),
-			.horizontalRule,
+			.horizontalRule
 		]
 
 		let url = FileManager.default.temporaryDirectory

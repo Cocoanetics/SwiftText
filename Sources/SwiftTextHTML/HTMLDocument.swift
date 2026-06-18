@@ -4,13 +4,11 @@ import FoundationNetworking
 #endif
 
 @available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 6.0, *)
-public final class HTMLDocument
-{
+public final class HTMLDocument {
 	public let root: DOMElement
 	public let baseURL: URL?
 
-	public init(data: Data, baseURL: URL? = nil, encoding: String.Encoding? = nil) async throws
-	{
+	public init(data: Data, baseURL: URL? = nil, encoding: String.Encoding? = nil) async throws {
 		self.baseURL = baseURL
 		let builder = try await DomBuilder(html: data, baseURL: baseURL, encoding: encoding)
 		guard let root = builder.root else {
@@ -30,13 +28,11 @@ public final class HTMLDocument
 		return root
 	}
 
-	public func markdown() -> String
-	{
+	public func markdown() -> String {
 		contentRoot.markdown(imageResolver: resolveMarkdownImageSource).trimmingCharacters(in: .whitespacesAndNewlines)
 	}
 
-	public func markdown(saveImagesAt folderURL: URL?) async throws -> String
-	{
+	public func markdown(saveImagesAt folderURL: URL?) async throws -> String {
 		guard let folderURL else {
 			return markdown()
 		}
@@ -49,8 +45,7 @@ public final class HTMLDocument
 		}).trimmingCharacters(in: .whitespacesAndNewlines)
 	}
 
-	public func text() -> String
-	{
+	public func text() -> String {
 		contentRoot.text().trimmingCharacters(in: .whitespacesAndNewlines)
 	}
 
@@ -59,8 +54,7 @@ public final class HTMLDocument
 	/// The document's inline `<style>` CSS, in document order. A convenience
 	/// forwarding to the root element; external `<link>` sheets are not fetched
 	/// (use ``resolvedStyleSheets()`` for that).
-	public func styleSheets() -> [String]
-	{
+	public func styleSheets() -> [String] {
 		root.styleSheets()
 	}
 
@@ -68,19 +62,15 @@ public final class HTMLDocument
 	/// blocks and the contents of `<link rel="stylesheet">`, resolved against
 	/// the base URL and fetched. Unreachable or undecodable links are skipped,
 	/// the way browsers ignore a failed stylesheet load.
-	public func resolvedStyleSheets() async -> [String]
-	{
+	public func resolvedStyleSheets() async -> [String] {
 		var sheets: [String] = []
-		for source in root.styleSheetSources()
-		{
-			switch source
-			{
+		for source in root.styleSheetSources() {
+			switch source {
 			case .inline(let css):
 				sheets.append(css)
 
 			case .link(let href):
-				if let css = await fetchStyleSheet(href: href)
-				{
+				if let css = await fetchStyleSheet(href: href) {
 					sheets.append(css)
 				}
 			}
@@ -88,10 +78,8 @@ public final class HTMLDocument
 		return sheets
 	}
 
-	private func fetchStyleSheet(href: String) async -> String?
-	{
-		if href.lowercased().hasPrefix("data:")
-		{
+	private func fetchStyleSheet(href: String) async -> String? {
+		if href.lowercased().hasPrefix("data:") {
 			return Self.decodeTextDataURL(href)
 		}
 
@@ -105,13 +93,11 @@ public final class HTMLDocument
 
 	/// Decode a `data:` URL carrying text (e.g. `data:text/css,...` or its
 	/// `;base64` form) to its string payload.
-	private static func decodeTextDataURL(_ uri: String) -> String?
-	{
+	private static func decodeTextDataURL(_ uri: String) -> String? {
 		guard let comma = uri.firstIndex(of: ",") else { return nil }
 		let meta = uri[uri.startIndex ..< comma].lowercased()
 		let payload = String(uri[uri.index(after: comma)...])
-		if meta.contains(";base64")
-		{
+		if meta.contains(";base64") {
 			guard let data = Data(base64Encoded: payload) else { return nil }
 			return String(data: data, encoding: .utf8)
 		}
@@ -126,8 +112,7 @@ public final class HTMLDocument
 		if element.name == "img",
 		   let src = element.attributes["src"] as? String,
 		   !src.isEmpty,
-		   !src.hasPrefix("data:")
-		{
+		   !src.hasPrefix("data:") {
 			sources.append(src)
 		}
 
@@ -233,7 +218,7 @@ public final class HTMLDocument
 
 	private func fetchData(from url: URL) async throws -> Data {
 		try await withCheckedThrowingContinuation { continuation in
-			let task = URLSession.shared.dataTask(with: url) { data, response, error in
+			let task = URLSession.shared.dataTask(with: url) { data, _, error in
 				if let error {
 					continuation.resume(throwing: error)
 					return
@@ -251,8 +236,7 @@ public final class HTMLDocument
 	}
 }
 
-public enum HTMLDocumentError: Error
-{
+public enum HTMLDocumentError: Error {
 	case missingRoot
 	case missingImageData(URL)
 }

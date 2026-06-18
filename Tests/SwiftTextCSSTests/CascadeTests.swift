@@ -172,7 +172,7 @@ struct CascadeTests {
 	@Test("inherit and initial keywords")
 	func globalKeywords() {
 		let resolver = StyleResolver(authorStyleSheets: [
-			"div { color: red } span { color: initial }",
+			"div { color: red } span { color: initial }"
 		])
 		let parent = Element("div")
 		let child = Element("span")

@@ -566,8 +566,7 @@ private final class NumberingExtractor: NSObject, XMLParserDelegate {
 		case "lvl":
 			if
 				let abstractId = currentAbstractId,
-				let builder = currentLevelBuilder
-			{
+				let builder = currentLevelBuilder {
 				catalog.addLevel(builder.build(), to: abstractId)
 			}
 			currentLevelBuilder = nil

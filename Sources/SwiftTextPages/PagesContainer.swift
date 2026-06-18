@@ -63,7 +63,7 @@ enum PagesContainer {
 			return nil
 		}
 		var data = Data()
-		guard let _ = try? archive.extract(entry, consumer: { data.append($0) }) else { return nil }
+		guard (try? archive.extract(entry, consumer: { data.append($0) })) != nil else { return nil }
 		return data
 	}
 

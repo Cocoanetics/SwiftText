@@ -50,7 +50,7 @@ struct CSSTokenizerTests {
 			.literal(","),
 			.number(2, int: 2, representation: "2"),
 			.literal(","),
-			.number(3, int: 3, representation: "3"),
+			.number(3, int: 3, representation: "3")
 		])
 		#expect(tokens("url(foo.png)") == [.url("foo.png")])
 	}

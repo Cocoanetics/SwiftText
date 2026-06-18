@@ -26,7 +26,7 @@ struct DOMMarkupConverter {
 
 	/// Footnote restoration index, or `nil` when the document has no detectable
 	/// footnotes (in which case the converter behaves exactly as before).
-	var footnotes: DOMFootnoteIndex? = nil
+	var footnotes: DOMFootnoteIndex?
 
 	/// Formatting options for `MarkupFormatter`. Most defaults already match the
 	/// previous renderer (`-` bullets, `*`/`**` emphasis, fenced code blocks,
@@ -82,7 +82,7 @@ struct DOMMarkupConverter {
 	/// Tags whose entire subtree is dropped from Markdown output.
 	private static let skippedTags: Set<String> = [
 		"script", "style", "iframe", "nav", "meta", "link", "title",
-		"select", "input", "button", "noscript", "footer", "head",
+		"select", "input", "button", "noscript", "footer", "head"
 	]
 
 	/// Tags treated as block-level for the inline-buffering decision. Anything
@@ -92,7 +92,7 @@ struct DOMMarkupConverter {
 		"div", "p", "figure", "figcaption",
 		"h1", "h2", "h3", "h4", "h5", "h6",
 		"ul", "ol", "li", "dl", "dd", "dt",
-		"blockquote", "pre", "table", "hr",
+		"blockquote", "pre", "table", "hr"
 	]
 
 	private func isBlockLevel(_ node: DOMNode) -> Bool {
@@ -305,6 +305,9 @@ struct DOMMarkupConverter {
 	/// through it. `withUncheckedChildren` lets arbitrary inline content survive.
 	private func makeLink(destination: String, children: [InlineMarkup]) -> InlineMarkup {
 		let markupChildren = children.map { $0 as Markup }
+		// withUncheckedChildren erases the type to `Markup`; the input was a Link,
+		// so casting back is sound.
+		// swiftlint:disable:next force_cast
 		return Link(destination: destination).withUncheckedChildren(markupChildren) as! Link
 	}
 

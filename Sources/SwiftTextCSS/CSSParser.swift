@@ -113,7 +113,7 @@ private func consumeAtRule(_ atKeyword: ComponentValue, _ stream: inout TokenStr
 		return .error(atKeyword.position, kind: "invalid", message: "Expected at-keyword")
 	}
 	var prelude: [ComponentValue] = []
-	var content: [ComponentValue]? = nil
+	var content: [ComponentValue]?
 	while let token = stream.next() {
 		if token.type == "{} block" {
 			content = token.blockContent
@@ -152,7 +152,7 @@ private func consumeQualifiedRule(_ first: ComponentValue, _ stream: inout Token
 		block = first
 	} else {
 		prelude = [first]
-		var found: ComponentValue? = nil
+		var found: ComponentValue?
 		while let token = stream.next() {
 			if isStop(token) {
 				return ruleError(token, "Stop token")
@@ -222,7 +222,7 @@ func parseDeclaration(first: ComponentValue, stream: inout TokenStream, nested: 
 
 	var value: [ComponentValue] = []
 	var state = "value"
-	var bangPosition: Int? = nil
+	var bangPosition: Int?
 	var containsNonWhitespace = false
 	var containsSimpleBlock = false
 

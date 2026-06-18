@@ -15,7 +15,7 @@ public enum DocumentScannerError: Error, CustomStringConvertible {
 	case visionUnavailable
 	case unrecognizedDocument
 	case requestFailed(Error)
-	
+
 	public var description: String {
 		switch self {
 		case .visionUnavailable:
@@ -36,11 +36,11 @@ public func documentBlocks(from cgImage: CGImage, applyPostProcessing: Bool = tr
 	let pageSize = CGSize(width: CGFloat(cgImage.width), height: CGFloat(cgImage.height))
 	let recognizeRequest = RecognizeDocumentsRequest()
 	let observations = try await recognizeRequest.perform(on: cgImage, orientation: nil)
-	
+
 	guard let document = observations.first?.document else {
 		throw DocumentScannerError.unrecognizedDocument
 	}
-	
+
 	let extractor = DocumentBlockExtractor(image: cgImage, pageSize: pageSize)
 	return try extractor.extractBlocksWithImages(from: document, applyPostProcessing: applyPostProcessing)
 }
@@ -61,77 +61,77 @@ struct DocumentBlockExtractor {
 	let image: CGImage
 	let pageSize: CGSize
 	let allowStandaloneSupplementation: Bool
-	
+
 	init(image: CGImage, pageSize: CGSize, allowStandaloneSupplementation: Bool = true) {
 		self.image = image
 		self.pageSize = pageSize
 		self.allowStandaloneSupplementation = allowStandaloneSupplementation
 	}
-	
+
 	func extractBlocks(from container: DocumentObservation.Container, applyPostProcessing: Bool = true) throws -> [DocumentBlock] {
 		let ocrLines = allowStandaloneSupplementation ? recognizeTextLines() : []
 		var usedOCRLineIDs = Set<Int>()
 		var usedOCRTexts = Set<String>()
-		
+
 		var structuredBlocks = gatherStructuredBlocks(from: container, ocrLines: ocrLines, usedOCRLineIDs: &usedOCRLineIDs, usedOCRTexts: &usedOCRTexts)
 		let imageResult = try detectImageBlocks(excluding: structuredBlocks, captureImages: false)
-		
+
 		let remainingLines = ocrLines.filter { !usedOCRLineIDs.contains($0.id) }
 		if allowStandaloneSupplementation && !remainingLines.isEmpty {
 			let standaloneParagraphs = makeStandaloneParagraphBlocks(from: remainingLines, excluding: structuredBlocks, existingTexts: textSet(from: structuredBlocks))
 			structuredBlocks.append(contentsOf: standaloneParagraphs)
 		}
-		
+
 		structuredBlocks.append(contentsOf: imageResult.blocks)
 		let ordered = structuredBlocks.sorted { SwiftTextOCR.isInReadingOrder($0, $1, pageSize: pageSize) }
 		return applyPostProcessing ? postProcessBlocks(ordered, pageSize: pageSize) : ordered
 	}
-	
+
 	func extractBlocksWithImages(from container: DocumentObservation.Container, applyPostProcessing: Bool = true) throws -> (blocks: [DocumentBlock], images: [DocumentImage]) {
 		let ocrLines = allowStandaloneSupplementation ? recognizeTextLines() : []
 		var usedOCRLineIDs = Set<Int>()
 		var usedOCRTexts = Set<String>()
-		
+
 		var structuredBlocks = gatherStructuredBlocks(from: container, ocrLines: ocrLines, usedOCRLineIDs: &usedOCRLineIDs, usedOCRTexts: &usedOCRTexts)
 		let imageResult = try detectImageBlocks(excluding: structuredBlocks, captureImages: true)
-		
+
 		let remainingLines = ocrLines.filter { !usedOCRLineIDs.contains($0.id) }
 		if allowStandaloneSupplementation && !remainingLines.isEmpty {
 			let standaloneParagraphs = makeStandaloneParagraphBlocks(from: remainingLines, excluding: structuredBlocks, existingTexts: textSet(from: structuredBlocks))
 			structuredBlocks.append(contentsOf: standaloneParagraphs)
 		}
-		
+
 		structuredBlocks.append(contentsOf: imageResult.blocks)
 		let ordered = structuredBlocks.sorted { SwiftTextOCR.isInReadingOrder($0, $1, pageSize: pageSize) }
 		let processed = applyPostProcessing ? postProcessBlocks(ordered, pageSize: pageSize) : ordered
 		return (processed, imageResult.images)
 	}
-	
+
 	private func gatherStructuredBlocks(from container: DocumentObservation.Container, ocrLines: [OCRLine], usedOCRLineIDs: inout Set<Int>, usedOCRTexts: inout Set<String>) -> [DocumentBlock] {
 		var blocks = [DocumentBlock]()
-		
+
 		for list in container.lists {
 			let rect = list.boundingRegion.rect(in: pageSize)
 			let listBlock = makeList(from: list, ocrLines: ocrLines, usedOCRLineIDs: &usedOCRLineIDs, usedOCRTexts: &usedOCRTexts)
 			blocks.append(DocumentBlock(bounds: rect, kind: .list(listBlock)))
 			consumeLines(in: rect, ocrLines: ocrLines, usedOCRLineIDs: &usedOCRLineIDs, usedOCRTexts: &usedOCRTexts, tolerance: 12)
 		}
-		
+
 		for table in container.tables {
 			let rect = table.boundingRegion.rect(in: pageSize)
 			let tableBlock = makeTable(from: table, ocrLines: ocrLines, usedOCRLineIDs: &usedOCRLineIDs, usedOCRTexts: &usedOCRTexts)
 			blocks.append(DocumentBlock(bounds: rect, kind: .table(tableBlock)))
 			consumeLines(in: rect, ocrLines: ocrLines, usedOCRLineIDs: &usedOCRLineIDs, usedOCRTexts: &usedOCRTexts, tolerance: 12)
 		}
-		
+
 		let listTableBounds = blocks.map(\.bounds)
 		let listTableTexts = textSet(from: blocks)
-		
+
 		for paragraph in container.paragraphs {
 			let rect = paragraph.boundingRegion.rect(in: pageSize)
 			let overlapsListTable = listTableBounds.contains { overlapRatio(between: $0, and: rect) > 0.25 }
 			if overlapsListTable { continue }
-			
+
 			if let paragraphBlock = makeParagraph(from: paragraph, ocrLines: ocrLines, usedOCRLineIDs: &usedOCRLineIDs, usedOCRTexts: &usedOCRTexts) {
 				let trimmedText = paragraphBlock.text.trimmingCharacters(in: .whitespacesAndNewlines)
 				let normalizedParagraph = normalizedComparableText(trimmedText)
@@ -140,46 +140,46 @@ struct DocumentBlockExtractor {
 				consumeLines(in: rect, ocrLines: ocrLines, usedOCRLineIDs: &usedOCRLineIDs, usedOCRTexts: &usedOCRTexts, tolerance: 8)
 			}
 		}
-		
+
 		return blocks
 	}
-	
+
 	private func makeParagraph(from text: DocumentObservation.Container.Text, ocrLines: [OCRLine], usedOCRLineIDs: inout Set<Int>, usedOCRTexts: inout Set<String>) -> DocumentBlock.Paragraph? {
 		let trimmed = text.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
 		let rect = text.boundingRegion.rect(in: pageSize)
-		
+
 		let paragraphLines = linesOverlapping(rect, in: ocrLines, usedOCRLineIDs: &usedOCRLineIDs, usedOCRTexts: &usedOCRTexts)
 		if !paragraphLines.isEmpty {
 			let docLines = paragraphLines.map { DocumentBlock.TextLine(text: $0.text, bounds: $0.bounds) }
 			let combined = docLines.map(\.text).joined(separator: "\n")
 			return DocumentBlock.Paragraph(text: combined, lines: docLines)
 		}
-		
+
 		if !trimmed.isEmpty && usedOCRTexts.contains(where: { $0.contains(trimmed) }) {
 			return nil
 		}
-		
+
 		let mappedLines = text.lines.map { observation -> DocumentBlock.TextLine in
 			let candidate = observation.topCandidates(1).first?.string ?? trimmed
 			let normalizedRect = convertNormalizedRect(observation.boundingBox, in: pageSize)
 			return DocumentBlock.TextLine(text: candidate.trimmingCharacters(in: .whitespacesAndNewlines), bounds: normalizedRect)
 		}
-		
+
 		let fallbackLines = mappedLines.isEmpty
 			? [DocumentBlock.TextLine(text: trimmed, bounds: rect)]
 			: mappedLines
-		
+
 		return DocumentBlock.Paragraph(text: trimmed, lines: fallbackLines)
 	}
-	
+
 	private func makeList(from list: DocumentObservation.Container.List, ocrLines: [OCRLine], usedOCRLineIDs: inout Set<Int>, usedOCRTexts: inout Set<String>) -> DocumentBlock.List {
 		var items = [DocumentBlock.List.Item]()
-		
+
 		for item in list.items {
 			let paragraphs = paragraphs(from: item.content, ocrLines: ocrLines, usedOCRLineIDs: &usedOCRLineIDs, usedOCRTexts: &usedOCRTexts)
 			let combinedText: String
 			let combinedLines: [DocumentBlock.TextLine]
-			
+
 			if paragraphs.isEmpty {
 				let cleaned = cleanListItemText(item.itemString, marker: item.markerString)
 				combinedText = cleaned
@@ -196,13 +196,13 @@ struct DocumentBlockExtractor {
 				combinedLines = deduplicatedLines(rawLines)
 			}
 			let rect = item.content.boundingRegion.rect(in: pageSize)
-			
+
 			let finalLines = combinedLines.isEmpty
 				? [DocumentBlock.TextLine(text: combinedText, bounds: rect)]
 				: combinedLines
-			
+
 			let finalText = finalLines.map(\.text).joined(separator: "\n")
-			
+
 			items.append(
 				DocumentBlock.List.Item(
 					text: finalText,
@@ -212,17 +212,17 @@ struct DocumentBlockExtractor {
 				)
 			)
 		}
-		
+
 		let marker: DocumentBlock.List.Marker
 		if let firstItem = list.items.first {
 			marker = resolveMarker(from: firstItem.markerType, fallback: firstItem.markerString)
 		} else {
 			marker = .custom("")
 		}
-		
+
 		return DocumentBlock.List(marker: marker, items: items)
 	}
-	
+
 	private func makeTable(from table: DocumentObservation.Container.Table, ocrLines: [OCRLine], usedOCRLineIDs: inout Set<Int>, usedOCRTexts: inout Set<String>) -> DocumentBlock.Table {
 		let rows: [[DocumentBlock.Table.Cell]] = table.rows.map { row in
 			row.map { cell in
@@ -239,10 +239,10 @@ struct DocumentBlockExtractor {
 				)
 			}
 		}
-		
+
 		return DocumentBlock.Table(rows: rows)
 	}
-	
+
 	private func paragraphs(from container: DocumentObservation.Container, ocrLines: [OCRLine], usedOCRLineIDs: inout Set<Int>, usedOCRTexts: inout Set<String>) -> [DocumentBlock.Paragraph] {
 		if container.paragraphs.isEmpty {
 			let trimmed = container.text.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -253,12 +253,12 @@ struct DocumentBlockExtractor {
 			return container.paragraphs.compactMap { makeParagraph(from: $0, ocrLines: ocrLines, usedOCRLineIDs: &usedOCRLineIDs, usedOCRTexts: &usedOCRTexts) }
 		}
 	}
-	
+
 	private func resolveMarker(from markerType: DocumentObservation.Container.List.Marker?, fallback: String) -> DocumentBlock.List.Marker {
 		guard let markerType else {
 			return .custom(fallback)
 		}
-		
+
 		switch markerType {
 		case .bullet:
 			return .bullet
@@ -278,57 +278,57 @@ struct DocumentBlockExtractor {
 			return .custom(fallback)
 		}
 	}
-	
+
 	private func detectImageBlocks(excluding structured: [DocumentBlock], captureImages: Bool) throws -> (blocks: [DocumentBlock], images: [DocumentImage]) {
 		let rectangles = try detectRectangles(in: image, pageSize: pageSize)
-		
+
 		guard !rectangles.isEmpty else {
 			return ([], [])
 		}
-		
+
 		let structuredBounds = structured.map(\.bounds)
 		let pageArea = pageSize.width * pageSize.height
 		let minimumImageArea = pageArea * 0.01
 		let pageBounds = CGRect(origin: .zero, size: pageSize)
-		
+
 		var imageBlocks = [DocumentBlock]()
 		var images = [DocumentImage]()
-		
+
 		for rectangleBounds in rectangles {
 			let rect = rectangleBounds
 			let area = rect.width * rect.height
-			
+
 			guard area >= minimumImageArea,
 			      rect.width < pageSize.width * 0.95,
 			      rect.height < pageSize.height * 0.95 else {
 				continue
 			}
-			
+
 			let overlapsStructured = structuredBounds.contains { overlapRatio(between: $0, and: rect) > 0.35 }
 			if overlapsStructured {
 				continue
 			}
-			
+
 			let overlapsImages = imageBlocks.contains { overlapRatio(between: $0.bounds, and: rect) > 0.65 }
 			if overlapsImages {
 				continue
 			}
-			
+
 			imageBlocks.append(DocumentBlock(bounds: rect, kind: .image(.init(caption: nil))))
-			
+
 			if captureImages, let cropped = image.cropping(to: rect.integral.clamped(to: pageBounds)) {
 				images.append(DocumentImage(bounds: rect, image: cropped))
 			}
 		}
-		
+
 		return (imageBlocks, images)
 	}
-	
+
 	private func recognizeTextLines() -> [OCRLine] {
 		guard let textLines = try? image.performOCR(imageSize: pageSize) else {
 			return []
 		}
-		
+
 		return textLines.enumerated().map { index, line in
 			let bounds = line.fragments.reduce(line.fragments.first?.bounds ?? .zero) { partialResult, fragment in
 				partialResult.union(fragment.bounds)
@@ -344,7 +344,7 @@ struct DocumentBlockExtractor {
 			return lhs.bounds.minX < rhs.bounds.minX
 		}
 	}
-	
+
 	private func linesOverlapping(_ rect: CGRect, in lines: [OCRLine], usedOCRLineIDs: inout Set<Int>, usedOCRTexts: inout Set<String>) -> [OCRLine] {
 		let tolerance = max(rect.height * 0.2, 12)
 		let matched = lines
@@ -364,7 +364,7 @@ struct DocumentBlockExtractor {
 		}
 		return matched
 	}
-	
+
 	private func consumeLines(in rect: CGRect, ocrLines: [OCRLine], usedOCRLineIDs: inout Set<Int>, usedOCRTexts: inout Set<String>, tolerance: CGFloat) {
 		for line in ocrLines {
 			if usedOCRLineIDs.contains(line.id) { continue }
@@ -377,41 +377,41 @@ struct DocumentBlockExtractor {
 			}
 		}
 	}
-	
+
 	private func isInReadingOrder(_ lhs: DocumentBlock, _ rhs: DocumentBlock) -> Bool {
 		isInReadingOrder(lhs.bounds, rhs.bounds)
 	}
-	
+
 	private func isInReadingOrder(_ lhs: CGRect, _ rhs: CGRect) -> Bool {
 		let page = CGRect(origin: .zero, size: pageSize)
 		let lhsNormalized = normalize(lhs, in: page)
 		let rhsNormalized = normalize(rhs, in: page)
-		
+
 		let verticalDelta = lhsNormalized.minY - rhsNormalized.minY
 		let tolerance: CGFloat = 0.01
-		
+
 		if abs(verticalDelta) > tolerance {
 			// Origin is top-left, so lower Y should sort ahead
 			return verticalDelta < 0
 		}
-		
+
 		return lhsNormalized.minX < rhsNormalized.minX
 	}
-	
+
 	private func makeStandaloneParagraphBlocks(from lines: [OCRLine], excluding existing: [DocumentBlock], existingTexts: Set<String>) -> [DocumentBlock] {
 		guard !lines.isEmpty else { return [] }
-		
+
 		let sorted = lines.sorted { isInReadingOrder($0.bounds, $1.bounds) }
 		var groups: [[OCRLine]] = []
 		let existingBounds = existing.map(\.bounds)
-		
+
 		for line in sorted {
 			let overlapsExisting = existingBounds.contains { overlapRatio(between: $0, and: line.bounds) > 0.2 }
 			if overlapsExisting { continue }
 			if existingTexts.contains(normalizedComparableText(line.text)) {
 				continue
 			}
-			
+
 			if var current = groups.last, isAdjacent(current.last!, line) {
 				current.append(line)
 				groups[groups.count - 1] = current
@@ -419,7 +419,7 @@ struct DocumentBlockExtractor {
 				groups.append([line])
 			}
 		}
-		
+
 		return groups.map { group in
 			let docLines = group.map { DocumentBlock.TextLine(text: $0.text, bounds: $0.bounds) }
 			let text = docLines.map(\.text).joined(separator: "\n")
@@ -427,17 +427,17 @@ struct DocumentBlockExtractor {
 			return DocumentBlock(bounds: bounds, kind: .paragraph(.init(text: text, lines: docLines)))
 		}
 	}
-	
+
 	private func isAdjacent(_ lhs: OCRLine, _ rhs: OCRLine) -> Bool {
 		let verticalGap = rhs.bounds.minY - lhs.bounds.maxY
 		let maxHeight = max(lhs.bounds.height, rhs.bounds.height)
 		return verticalGap <= max(maxHeight * 1.2, 12)
 	}
-	
+
 	private func cleanListItemText(_ text: String, marker: String) -> String {
 		let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
 		guard !trimmed.isEmpty else { return trimmed }
-		
+
 		if !marker.isEmpty {
 			let escaped = NSRegularExpression.escapedPattern(for: marker)
 			let pattern = "^\(escaped)[.)\\s]*"
@@ -446,20 +446,20 @@ struct DocumentBlockExtractor {
 				return cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
 			}
 		}
-		
+
 		let pattern = #"^[0-9]+[.)\s]+"#
 		if let range = trimmed.range(of: pattern, options: .regularExpression) {
 			let cleaned = trimmed.replacingCharacters(in: range, with: "")
 			return cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
 		}
-		
+
 		return trimmed
 	}
-	
+
 	private func deduplicatedLines(_ lines: [DocumentBlock.TextLine]) -> [DocumentBlock.TextLine] {
 		var seen = Set<String>()
 		var result = [DocumentBlock.TextLine]()
-		
+
 		for line in lines {
 			let key = normalizedComparableText(line.text)
 			guard !key.isEmpty else { continue }
@@ -467,7 +467,7 @@ struct DocumentBlockExtractor {
 			seen.insert(key)
 			result.append(line)
 		}
-		
+
 		return result
 	}
 }
@@ -478,21 +478,21 @@ private func detectRectangles(in cgImage: CGImage, pageSize: CGSize) throws -> [
 	rectangleRequest.minimumAspectRatio = 0.1
 	rectangleRequest.minimumSize = 0.02
 	rectangleRequest.minimumConfidence = 0.3
-	
+
 	let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
-	
+
 	do {
 		try handler.perform([rectangleRequest])
 	} catch {
 		throw DocumentScannerError.requestFailed(error)
 	}
-	
+
 	guard let rectangles = rectangleRequest.results, !rectangles.isEmpty else {
 		return []
 	}
-	
+
 	let pageBounds = CGRect(origin: .zero, size: pageSize)
-	
+
 	return rectangles.compactMap { observation in
 		let rect = convertNormalizedBoundingBox(observation.boundingBox, in: pageSize)
 		let clamped = rect.integral.clamped(to: pageBounds)
@@ -537,7 +537,7 @@ private extension CGRect {
 	var center: CGPoint {
 		CGPoint(x: midX, y: midY)
 	}
-	
+
 	func clamped(to limits: CGRect) -> CGRect {
 		let x = max(limits.minX, min(minX, limits.maxX))
 		let y = max(limits.minY, min(minY, limits.maxY))
@@ -565,7 +565,7 @@ private func normalizedComparableText(_ text: String) -> String {
 private func deduplicatedBlocks(_ blocks: [DocumentBlock]) -> [DocumentBlock] {
 	var seen = [String]()
 	var result = [DocumentBlock]()
-	
+
 	for block in blocks {
 		let key: String?
 		switch block.kind {
@@ -580,29 +580,29 @@ private func deduplicatedBlocks(_ blocks: [DocumentBlock]) -> [DocumentBlock] {
 		case .image:
 			key = nil
 		}
-		
+
 		if let key, !key.isEmpty {
 			let isExactDuplicate = seen.contains(key)
 			let isContainedDuplicate = key.count > 40 && seen.contains { existing in
 				existing.count > key.count + 10 && existing.contains(key)
 			}
-			
+
 			if isExactDuplicate || isContainedDuplicate {
 				continue
 			}
-			
+
 			seen.append(key)
 		}
-		
+
 		result.append(block)
 	}
-	
+
 	return result
 }
 
 private func mergeAdjacentParagraphs(_ blocks: [DocumentBlock], pageSize: CGSize) -> [DocumentBlock] {
 	guard !blocks.isEmpty else { return blocks }
-	
+
 	var result = [DocumentBlock]()
 	let maxLeftDelta = max(pageSize.width * 0.04, 14)
 	let debug = ProcessInfo.processInfo.environment["SWIFTTEXT_DEBUG_MERGE"] == "1"
@@ -610,7 +610,7 @@ private func mergeAdjacentParagraphs(_ blocks: [DocumentBlock], pageSize: CGSize
 	if debug {
 		print("DEBUG merge start: \(blocks.count) blocks")
 	}
-	
+
 	func logParagraph(_ paragraph: DocumentBlock.Paragraph, bounds: CGRect, prefix: String) {
 		guard debugRects else { return }
 		if paragraph.text.contains("Filters von krankhaften Faktoren entlastet") ||
@@ -624,7 +624,7 @@ private func mergeAdjacentParagraphs(_ blocks: [DocumentBlock], pageSize: CGSize
 			}
 		}
 	}
-	
+
 	for block in blocks {
 		guard
 			case .paragraph(let currentParagraph) = block.kind,
@@ -637,24 +637,24 @@ private func mergeAdjacentParagraphs(_ blocks: [DocumentBlock], pageSize: CGSize
 			}
 			continue
 		}
-		
+
 		let verticalGap = block.bounds.minY - last.bounds.maxY
 		let lastLine = previousParagraph.lines.last
 		let firstLine = currentParagraph.lines.first
-		
+
 		let currentLineHeight = firstLine?.bounds.height ?? block.bounds.height
 		let baselineHeight = currentLineHeight
 		// Allow merges when the gap is at most ~1.5x the lower line height (capped with a modest buffer).
 		let allowedGap = max(min(baselineHeight * 1.5, baselineHeight + 20), 6)
 		let leftDelta = abs(block.bounds.minX - last.bounds.minX)
-		
+
 		let lineGap: CGFloat
 		if let lastLine, let firstLine {
 			lineGap = firstLine.bounds.minY - lastLine.bounds.maxY
 		} else {
 			lineGap = verticalGap
 		}
-		
+
 		if shouldPreserveParagraphBoundary(previous: previousParagraph, current: currentParagraph) {
 			if debug {
 				print("DEBUG preserved boundary due to heading check")
@@ -664,7 +664,7 @@ private func mergeAdjacentParagraphs(_ blocks: [DocumentBlock], pageSize: CGSize
 		}
 
 		let isContinuation = (lineGap >= -6 && lineGap <= allowedGap && leftDelta <= maxLeftDelta)
-		
+
 		if isContinuation {
 			let combinedLines = previousParagraph.lines + currentParagraph.lines
 			let combinedText = combinedLines.map(\.text).joined(separator: "\n")
@@ -687,7 +687,7 @@ private func mergeAdjacentParagraphs(_ blocks: [DocumentBlock], pageSize: CGSize
 			logParagraph(currentParagraph, bounds: block.bounds, prefix: "kept")
 		}
 	}
-	
+
 	if debug {
 		let paragraphs = result.enumerated().compactMap { index, block -> String? in
 			if case .paragraph(let paragraph) = block.kind {
@@ -699,7 +699,7 @@ private func mergeAdjacentParagraphs(_ blocks: [DocumentBlock], pageSize: CGSize
 		print("DEBUG merge end paragraphs:")
 		paragraphs.forEach { print($0) }
 	}
-	
+
 	return result
 }
 
@@ -782,7 +782,7 @@ private func shouldPreserveParagraphBoundary(previous: DocumentBlock.Paragraph, 
 
 private func isHeadingStyle(_ text: String) -> Bool {
 	let firstLine = text.components(separatedBy: .newlines).first ?? text
-	let pattern = #"^[A-ZÄÖÜ][^:\n]{0,30}:"# 
+	let pattern = #"^[A-ZÄÖÜ][^:\n]{0,30}:"#
 	return firstLine.range(of: pattern, options: .regularExpression) != nil
 }
 
@@ -802,14 +802,14 @@ private func isInReadingOrder(_ lhs: DocumentBlock, _ rhs: DocumentBlock, pageSi
 private func isInReadingOrder(_ lhs: CGRect, _ rhs: CGRect, page: CGRect) -> Bool {
 	let lhsNormalized = normalize(lhs, in: page)
 	let rhsNormalized = normalize(rhs, in: page)
-	
+
 	let verticalDelta = lhsNormalized.minY - rhsNormalized.minY
 	let tolerance: CGFloat = 0.01
-	
+
 	if abs(verticalDelta) > tolerance {
 		return verticalDelta < 0
 	}
-	
+
 	return lhsNormalized.minX < rhsNormalized.minX
 }
 
@@ -842,13 +842,13 @@ private func overlapRatio(between first: CGRect, and second: CGRect) -> CGFloat 
 	guard !intersection.isNull && !intersection.isInfinite else {
 		return 0
 	}
-	
+
 	let intersectionArea = intersection.width * intersection.height
 	let referenceArea = min(first.width * first.height, second.width * second.height)
 	guard referenceArea > 0 else {
 		return 0
 	}
-	
+
 	return intersectionArea / referenceArea
 }
 

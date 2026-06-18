@@ -1,0 +1,40 @@
+# swiftformat configuration for SwiftText. Run locally; CI enforces SwiftLint
+# only (see .swiftlint.yml + .github/workflows/swiftlint.yml).
+#
+# Run:
+#   swiftformat .
+
+--swiftversion 6.1
+--indent tab
+--indentcase false
+--tabwidth unspecified
+
+# Keep `let`/`var` inline in case patterns (`case .foo(let x)`), the style used
+# throughout — not hoisted to `case let .foo(x)`.
+--patternlet inline
+
+# Disabled rules:
+#
+# Conflict with SwiftLint (CI gate), so SwiftFormat must not undo them:
+#   trailingCommas — SwiftLint's `trailing_comma` forbids trailing commas in
+#     collection literals.
+#   wrapMultilineStatementBraces — pushes `{` onto its own line for multi-line
+#     conditions; conflicts with SwiftLint's `opening_brace`.
+#
+# Would rewrite working code in risky ways:
+#   redundantReturn — strips `return` from single-expression functions and
+#     closures, which can break generic inference for
+#     `withCheckedThrowingContinuation<T>` in async/Void contexts.
+#
+# Would fight the established house style (keep SwiftFormat to whitespace and
+# indentation, not restructuring):
+#   wrapLoopBodies / wrapFunctionBodies / wrapPropertyBodies — the readers and
+#     writers use compact single-line bodies on purpose
+#     (e.g. `while len >= 68 { … }`); don't explode them onto three lines.
+#   numberFormatting — the binary-format code is full of hand-tuned hex and
+#     byte literals; leave their grouping and casing exactly as written.
+--disable trailingCommas,wrapMultilineStatementBraces,redundantReturn,wrapLoopBodies,wrapFunctionBodies,wrapPropertyBodies,numberFormatting
+
+# Same paths SwiftLint skips: machine-generated iWork models and binary test
+# fixtures should never be reformatted.
+--exclude Sources/SwiftTextPages/Generated,Tests/SwiftTextDOCXTests/Resources,.build

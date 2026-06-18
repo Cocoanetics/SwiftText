@@ -1,8 +1,7 @@
 import Foundation
 import HTMLParser
 
-public final class DomBuilder
-{
+public final class DomBuilder {
 	// MARK: - Public Properties
 
 	public private(set) var root: DOMElement?
@@ -12,8 +11,7 @@ public final class DomBuilder
 	private let baseURL: URL?
 	private let encoding: String.Encoding?
 
-	public init(html: Data, baseURL: URL?, encoding: String.Encoding? = nil) async throws
-	{
+	public init(html: Data, baseURL: URL?, encoding: String.Encoding? = nil) async throws {
 		self.baseURL = baseURL
 		self.encoding = encoding
 
@@ -84,26 +82,22 @@ public final class DomBuilder
 
 // MARK: - Errors
 
-public enum DomBuilderError: Error
-{
+public enum DomBuilderError: Error {
 	case parsingFailed(Error)
 }
 
-private enum HTMLParserFallbackError: Error
-{
+private enum HTMLParserFallbackError: Error {
 	case parseFailed
 }
 
-private actor DOMBuilderState
-{
+private actor DOMBuilderState {
 	private let baseURL: URL?
 	private let root: DOMElement
 	private var currentElement: DOMElement
 	private var elementStack: [DOMElement] = []
 	private var parseError: HTMLParserError?
 
-	init(baseURL: URL?)
-	{
+	init(baseURL: URL?) {
 		self.baseURL = baseURL
 
 		let documentRoot = DOMElement(name: "document", attributes: [:])
@@ -112,10 +106,8 @@ private actor DOMBuilderState
 		self.currentElement = documentRoot
 	}
 
-	func apply(_ event: HTMLParserEvent)
-	{
-		switch event
-		{
+	func apply(_ event: HTMLParserEvent) {
+		switch event {
 		case .startDocument, .endDocument, .comment, .processingInstruction:
 			return
 
@@ -136,26 +128,21 @@ private actor DOMBuilderState
 		}
 	}
 
-	func rootElement() -> DOMElement
-	{
+	func rootElement() -> DOMElement {
 		root
 	}
 
-	func recordedParseError() -> HTMLParserError?
-	{
+	func recordedParseError() -> HTMLParserError? {
 		parseError
 	}
 }
 
-private extension DOMBuilderState
-{
-	func handleStartElement(_ elementName: String, attributes: [String: String])
-	{
+private extension DOMBuilderState {
+	func handleStartElement(_ elementName: String, attributes: [String: String]) {
 		var attributes = attributes
 
 		if elementName == "a",
-		   let href = attributes["href"]
-		{
+		   let href = attributes["href"] {
 			if href.hasPrefix("javascript:") {
 				attributes["href"] = nil
 			} else if let url = URL(string: href, relativeTo: baseURL) {
@@ -171,8 +158,7 @@ private extension DOMBuilderState
 		currentElement = element
 	}
 
-	func handleCharacters(_ string: String)
-	{
+	func handleCharacters(_ string: String) {
 		// Raw-text elements (`<style>`, `<script>`) carry CSS/JS, not document
 		// text: store it as a DOMRawText child, never a `#text` node.
 		if isRawTextElement(currentElement.name) {
@@ -188,8 +174,7 @@ private extension DOMBuilderState
 		}
 
 		if isWhitespace,
-		   ["ul", "ol", "body", "div", "blockquote", "tr", "table", "document"].contains(currentElement.name)
-		{
+		   ["ul", "ol", "body", "div", "blockquote", "tr", "table", "document"].contains(currentElement.name) {
 			return
 		}
 
@@ -200,8 +185,7 @@ private extension DOMBuilderState
 	/// as a DOMRawText child so the CSS/JS is available from the tree without
 	/// re-parsing, yet stays distinct from rendered text. CDATA outside a
 	/// raw-text element is ignored, as before.
-	func handleCDATA(_ data: Data)
-	{
+	func handleCDATA(_ data: Data) {
 		guard isRawTextElement(currentElement.name),
 		      let string = String(data: data, encoding: .utf8) else { return }
 		appendRawText(string)
@@ -209,8 +193,7 @@ private extension DOMBuilderState
 
 	/// Append raw source to the current raw-text element, coalescing the chunks
 	/// the parser may deliver into a single DOMRawText child.
-	func appendRawText(_ string: String)
-	{
+	func appendRawText(_ string: String) {
 		if let last = currentElement.children.last as? DOMRawText {
 			last.append(string)
 		} else {
@@ -219,14 +202,12 @@ private extension DOMBuilderState
 	}
 
 	/// HTML "raw text elements": their content is unparsed source text.
-	func isRawTextElement(_ name: String) -> Bool
-	{
+	func isRawTextElement(_ name: String) -> Bool {
 		let tag = name.lowercased()
 		return tag == "style" || tag == "script"
 	}
 
-	func handleEndElement(_ _: String)
-	{
+	func handleEndElement(_ _: String) {
 		guard !elementStack.isEmpty else {
 			currentElement = root
 			return
@@ -235,8 +216,7 @@ private extension DOMBuilderState
 		currentElement = elementStack.removeLast()
 	}
 
-	func isTransparentWrapperTag(_ name: String, attributes: [String: String]) -> Bool
-	{
+	func isTransparentWrapperTag(_ name: String, attributes: [String: String]) -> Bool {
 		let tag = name.lowercased()
 
 		guard ["div", "p", "span", "font", "center"].contains(tag) else {

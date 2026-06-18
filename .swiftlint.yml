@@ -1,0 +1,106 @@
+included:
+  - Sources
+  - Tests
+  # The package manifest and the build-tool plugin are real project code, so
+  # they're linted too — and the CI trigger is scoped to match this list (see
+  # .github/workflows/swiftlint.yml), so no `**/*.swift` change can green the
+  # lint job without the file actually being checked. The standalone dev /
+  # reverse-engineering tools under Scripts/ are intentionally out of both.
+  - Package.swift
+  - Plugins
+
+excluded:
+  # Machine-generated iWork wire models (protobuf → Swift), produced by
+  # Scripts/GenerateIWAModels.swift and never hand-edited. Their style is the
+  # generator's, not the project's — linting them is pure noise.
+  - Sources/SwiftTextPages/Generated
+  # Binary test fixtures (.docx payloads) bundled as test resources.
+  - Tests/SwiftTextDOCXTests/Resources
+  - .build
+  - .swiftpm
+  - "**/.build"
+  - "**/.swiftpm"
+
+disabled_rules:
+  # The codebase consistently uses trailing-closure syntax even when a call
+  # takes more than one closure (common in the HTML/markup builders). That's a
+  # deliberate style choice here, not an oversight.
+  - multiple_closures_with_trailing_closure
+  # The readers consistently spell `Data` → `String` as
+  # `String(data:encoding:)`. It's equally failable to the suggested
+  # `String(bytes:encoding:)` and reads better next to the surrounding
+  # `Data`-based decoding; not worth rewriting ~30 call sites for a tie.
+  - optional_data_string_conversion
+
+# Indentation is tabs — the house style, enforced by `.editorconfig` (read by
+# Xcode and most editors) and `swiftformat --indent tab` locally. SwiftLint's
+# `indentation_width` rule is intentionally left disabled: it rejects the
+# multi-line condition continuation style (alignment past `if `/`guard `) used
+# throughout, and adds nothing the formatter doesn't already cover.
+
+# Switch cases sit flush with the `switch` keyword (SwiftLint's default), which
+# is the style used everywhere in this codebase — keep it explicit so a future
+# default change can't silently reformat 400+ sites.
+switch_case_alignment:
+  indented_cases: false
+
+identifier_name:
+  # The binary-format readers/writers lean on short mathematical and loop
+  # names by design — `w`/`h` (width/height), `r`/`g`/`b` (color channels),
+  # `lo`/`hi` (bounds), `i`/`j` (indices). It would be inconsistent to ban new
+  # one-character names while grandfathering hundreds, so the minimum-length
+  # check is switched off; max-length and the other identifier checks stay on.
+  min_length:
+    warning: 0
+    error: 0
+  excluded:
+    - id
+    # `R`/`C` are matrix row/column counts in the table builder, written in the
+    # conventional uppercase math notation (cell key = `r*C + c + 1`).
+    - R
+    - C
+
+# Doc comments and URLs (links to the OOXML / iWork format notes) wrap
+# differently from code and shouldn't count against the line limit. Under
+# `--strict` only `warning` is enforced; `error` documents the harder ceiling
+# for non-strict local runs.
+line_length:
+  warning: 200
+  error: 250
+  ignores_comments: true
+  ignores_urls: true
+
+# The DOCX/Pages writers mirror the on-disk OOXML / iWork object graph, so
+# Codable models nest types plus their CodingKeys several levels deep — a
+# normal Swift idiom the default `type_level: 1` is too strict to express.
+nesting:
+  type_level: 3
+
+# Tuple arity is higher in the table/geometry code (cell coordinates, rects,
+# decoded character-run flags travel together) where a struct per record would
+# be more ceremony than clarity.
+large_tuple:
+  warning: 5
+  error: 7
+
+# Structural thresholds. The format writers (DocxWriter, PagesParser,
+# PagesTableBuilder, the CLI dispatcher) are inherently large: each linearly
+# emits or decodes a whole document object graph, which reads more clearly as
+# one pass than as a fan-out of helpers. These run ~3× the SwiftLint defaults
+# (file 400 / type 250 / func 50 / complexity 10) — strict enough to catch new
+# bloat, lenient enough to fit the existing shape.
+file_length:
+  warning: 1200
+  error: 1600
+type_body_length:
+  warning: 900
+  error: 1100
+function_body_length:
+  warning: 300
+  error: 500
+cyclomatic_complexity:
+  warning: 45
+  error: 60
+function_parameter_count:
+  warning: 12
+  error: 20

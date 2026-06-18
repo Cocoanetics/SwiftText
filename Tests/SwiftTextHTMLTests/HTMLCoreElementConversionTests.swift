@@ -15,7 +15,7 @@ struct HTMLCoreElementConversionTests {
 	@Test func headingsAllLevels() async throws {
 		let html = "<h1>A</h1><h2>B</h2><h3>C</h3><h4>D</h4><h5>E</h5><h6>F</h6>"
 		let expected = [
-			"# A", "", "## B", "", "### C", "", "#### D", "", "##### E", "", "###### F",
+			"# A", "", "## B", "", "### C", "", "#### D", "", "##### E", "", "###### F"
 		].joined(separator: "\n")
 		#expect(try await markdown(html) == expected)
 	}

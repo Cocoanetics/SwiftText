@@ -538,8 +538,7 @@ enum PagesTableBuilder {
 	private static func normalizedRuns(_ entries: [(index: Int, styleID: UInt64?)]) -> [(index: Int, styleID: UInt64?)] {
 		var byIndex = [(index: Int, styleID: UInt64?)]()
 		for entry in entries {
-			if let last = byIndex.last, last.index == entry.index { byIndex[byIndex.count - 1].styleID = entry.styleID }
-			else { byIndex.append(entry) }
+			if let last = byIndex.last, last.index == entry.index { byIndex[byIndex.count - 1].styleID = entry.styleID } else { byIndex.append(entry) }
 		}
 		var result = [(index: Int, styleID: UInt64?)]()
 		for entry in byIndex { if let last = result.last, last.styleID == entry.styleID { continue }; result.append(entry) }
@@ -603,11 +602,19 @@ enum PagesTableBuilder {
 				PagesTableTemplate.columnRowUIDsID: buildColumnRowUIDs(rows: R, columns: C),
 				PagesTableTemplate.tileID: buildTile(rows: R, columns: C, styling: styling, cellPlans: rich.cellPlans),
 				PagesTableTemplate.cellStringsID: rich.cellStrings,
-				PagesTableTemplate.modelID: patchModel(try record(PagesTableTemplate.modelID).payloadOnly, rows: R, columns: C, name: table.title ?? "Table \(tableIndex + 1)", titleVisible: table.title != nil, headerRows: table.headerRows, headerColumns: table.headerColumns, footerRows: table.footerRows),
+				PagesTableTemplate.modelID: patchModel(
+					try record(PagesTableTemplate.modelID).payloadOnly,
+					rows: R, columns: C,
+					name: table.title ?? "Table \(tableIndex + 1)",
+					titleVisible: table.title != nil,
+					headerRows: table.headerRows,
+					headerColumns: table.headerColumns,
+					footerRows: table.footerRows
+				),
 				PagesTableTemplate.rowHeadersBucketID: buildBucket(try record(PagesTableTemplate.rowHeadersBucketID).payloadOnly, count: R, otherDimension: C, size: rowHeight, sizes: table.rowHeights),
 				PagesTableTemplate.columnHeadersBucketID: buildBucket(try record(PagesTableTemplate.columnHeadersBucketID).payloadOnly, count: C, otherDimension: R, size: columnWidth, sizes: table.columnWidths),
 				PagesTableTemplate.tableInfoID: hideTitleAndCaption(try record(PagesTableTemplate.tableInfoID).payloadOnly, titleHidden: table.title == nil),
-				styleTableID: styling.styleTable,
+				styleTableID: styling.styleTable
 			]
 			if !rich.storageRecords.isEmpty { rewritten[richTextTableID] = rich.richTextTable }
 			if let borders { rewritten[strokeSidecarID] = borders.sidecar }
@@ -689,7 +696,12 @@ enum PagesTableBuilder {
 	/// `TST.Tile` — top `#4` numrows = R, `#6`/per-row `#5` are storage_version (=5,
 	/// constant — NOT counts). One `TileRowInfo` (`#5`) per row with C 28/24-byte
 	/// string cells whose `u32@12` is the cell-string key (`r*C + c + 1`).
-	static func buildTile(rows R: Int, columns C: Int, styling: Styling = Styling(styleTable: [], styleObjects: [], headerKeys: [], bodyKeys: [], headerParaStyleIDs: [], bodyParaStyleIDs: [], maxObjectID: 0), cellPlans: [(isRich: Bool, key: Int)] = []) -> [UInt8] {
+	static func buildTile(
+		rows R: Int,
+		columns C: Int,
+		styling: Styling = Styling(styleTable: [], styleObjects: [], headerKeys: [], bodyKeys: [], headerParaStyleIDs: [], bodyParaStyleIDs: [], maxObjectID: 0),
+		cellPlans: [(isRich: Bool, key: Int)] = []
+	) -> [UInt8] {
 		var w = ProtobufWriter()
 		w.varintField(1, 0); w.varintField(2, 0); w.varintField(3, 0)   // maxColumn/maxRow/numCells
 		w.varintField(4, UInt64(R))                                     // numrows
@@ -902,9 +914,14 @@ enum PagesTableBuilder {
 				guard case .lengthDelimited(let fieldInfo) = field.value else { writer.append(field); continue }
 				writer.bytesField(4, relocateFieldInfo(fieldInfo, offset: offset))
 			case 5:
-				if let objectReferences { writer.packedVarintField(5, objectReferences); wroteRefs = true }
-				else if offset != 0, case .lengthDelimited(let refs) = field.value { writer.bytesField(5, offsetPackedVarints(refs, by: offset)) }
-				else { writer.append(field) }
+				if let objectReferences {
+					writer.packedVarintField(5, objectReferences)
+					wroteRefs = true
+				} else if offset != 0, case .lengthDelimited(let refs) = field.value {
+					writer.bytesField(5, offsetPackedVarints(refs, by: offset))
+				} else {
+					writer.append(field)
+				}
 			default:
 				writer.append(field)
 			}
@@ -1127,7 +1144,7 @@ enum PagesTableBuilder {
 		guard case .lengthDelimited(let ref) = field.value else { return [] }
 		var writer = ProtobufWriter()
 		for refField in ProtobufMessage(ref).fields {
-			if case .varint(let value) = refField.value, (refField.number == 1 || refField.number == 2) {
+			if case .varint(let value) = refField.value, refField.number == 1 || refField.number == 2 {
 				writer.varintField(refField.number, shifted(value, by: offset))
 			} else {
 				writer.append(refField)

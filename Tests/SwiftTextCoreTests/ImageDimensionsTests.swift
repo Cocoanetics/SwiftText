@@ -20,7 +20,7 @@ struct ImageDimensionsTests {
 			0x08,                   // sample precision
 			0x00, 0x10,             // height = 16
 			0x00, 0x20,             // width = 32
-			0x03, 0x01, 0x22, 0x00, // (truncated) component data
+			0x03, 0x01, 0x22, 0x00 // (truncated) component data
 		])
 		return bytes
 	}

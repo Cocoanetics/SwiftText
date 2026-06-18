@@ -146,10 +146,8 @@ public enum UnicodeAbuseSanitizer {
 			return []
 		}
 
-		for index in tagIndices.dropLast() {
-			if !isAllowedSubdivisionTag(scalars[index]) {
-				return []
-			}
+		for index in tagIndices.dropLast() where !isAllowedSubdivisionTag(scalars[index]) {
+			return []
 		}
 
 		return Set(tagIndices)

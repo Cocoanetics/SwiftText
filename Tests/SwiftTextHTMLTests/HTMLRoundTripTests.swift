@@ -27,7 +27,7 @@ struct HTMLRoundTripTests {
 			"- one", "- two", "",
 			"> a quote", "",
 			"-----", "",
-			"```", "let x = 1", "```",
+			"```", "let x = 1", "```"
 		].joined(separator: "\n")
 
 		let once = try await mdThroughHTML(md)

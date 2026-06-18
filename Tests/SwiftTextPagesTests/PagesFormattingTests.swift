@@ -52,7 +52,7 @@ struct PagesFormattingTests {
 			.init(identifier: 61, type: 2021, payload: IWAWriter.bytesField(11, IWAWriter.varintField(1, 1))),
 			// List styles: per-level marker type (field 11): 0 = none, 2 = bullet.
 			.init(identifier: 70, type: 2023, payload: IWAWriter.varintField(11, 0)),
-			.init(identifier: 71, type: 2023, payload: IWAWriter.varintField(11, 2)),
+			.init(identifier: 71, type: 2023, payload: IWAWriter.varintField(11, 2))
 		]
 
 		let url = try bundle(documentObjects: objects)
@@ -71,7 +71,7 @@ struct PagesFormattingTests {
 			.init(identifier: 10, type: 2001, payload: body),
 			.init(identifier: 60, type: 2021, payload: IWAWriter.bytesField(11, IWAWriter.varintField(1, 0))),
 			// char_properties strikethrough flag is field 12.
-			.init(identifier: 62, type: 2021, payload: IWAWriter.bytesField(11, IWAWriter.varintField(12, 1))),
+			.init(identifier: 62, type: 2021, payload: IWAWriter.bytesField(11, IWAWriter.varintField(12, 1)))
 		]
 		let url = try bundle(documentObjects: objects)
 		defer { try? FileManager.default.removeItem(at: url) }
@@ -89,7 +89,7 @@ struct PagesFormattingTests {
 		let objects: [IWAWriter.Object] = [
 			.init(identifier: 10, type: 2001, payload: body),
 			.init(identifier: 20, type: 2008, payload: mark),
-			.init(identifier: 30, type: 2001, payload: footStorage),
+			.init(identifier: 30, type: 2001, payload: footStorage)
 		]
 		let url = try bundle(documentObjects: objects)
 		defer { try? FileManager.default.removeItem(at: url) }
@@ -113,7 +113,7 @@ struct PagesFormattingTests {
 		let objects: [IWAWriter.Object] = [
 			.init(identifier: 10, type: 2001, payload: body),
 			.init(identifier: 80, type: 2023, payload: IWAWriter.varintField(11, 3)),
-			.init(identifier: 81, type: 2023, payload: IWAWriter.bytesField(1, anonymousBase)),
+			.init(identifier: 81, type: 2023, payload: IWAWriter.bytesField(1, anonymousBase))
 		]
 
 		let url = try bundle(documentObjects: objects)

@@ -73,7 +73,7 @@ struct OpenTypeTests {
 		cmap += sub
 
 		let tables: [(String, [UInt8])] = [
-			("cmap", cmap), ("head", head), ("hhea", hhea), ("hmtx", hmtx), ("maxp", maxp),
+			("cmap", cmap), ("head", head), ("hhea", hhea), ("hmtx", hmtx), ("maxp", maxp)
 		]
 
 		var sfnt: [UInt8] = []
@@ -152,7 +152,7 @@ struct OpenTypeTests {
 			"/System/Library/Fonts/Geneva.ttf",
 			"/System/Library/Fonts/Monaco.ttf",
 			"/System/Library/Fonts/Supplemental/Arial.ttf",
-			"/System/Library/Fonts/Supplemental/Times New Roman.ttf",
+			"/System/Library/Fonts/Supplemental/Times New Roman.ttf"
 		]
 		guard let path = candidates.first(where: { FileManager.default.fileExists(atPath: $0) }) else {
 			return // No known font present; nothing to assert.

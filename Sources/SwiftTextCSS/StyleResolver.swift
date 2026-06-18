@@ -199,7 +199,7 @@ private func expandBox(prefix: String, suffix: String = "", value: [ComponentVal
 		("\(prefix)-top\(suffix)", top),
 		("\(prefix)-right\(suffix)", right),
 		("\(prefix)-bottom\(suffix)", bottom),
-		("\(prefix)-left\(suffix)", left),
+		("\(prefix)-left\(suffix)", left)
 	]
 }
 
@@ -212,9 +212,9 @@ private func expandBorder(name: String, value: [ComponentValue]) -> [(name: Stri
 		sides = [String(name.dropFirst("border-".count))]
 	}
 
-	var width: ComponentValue? = nil
-	var style: ComponentValue? = nil
-	var color: ComponentValue? = nil
+	var width: ComponentValue?
+	var style: ComponentValue?
+	var color: ComponentValue?
 	for token in significant(value) {
 		if case .ident(let ident) = token.token, BorderStyle(rawValue: ident.asciiLowercased) != nil {
 			style = token
@@ -255,6 +255,8 @@ private func keyword(_ name: String) -> ComponentValue {
 
 // MARK: - Longhand application
 
+// One branch per CSS longhand property — an inherently wide but linear dispatcher.
+// swiftlint:disable:next cyclomatic_complexity
 private func applyLonghand(_ name: String, _ value: [ComponentValue], to style: inout ComputedStyle, parent: ComputedStyle, rootFontSize: Double) {
 	if let global = globalKeyword(value) {
 		applyGlobal(name, global, to: &style, parent: parent)
@@ -394,7 +396,7 @@ private let inheritedProperties: Set<String> = [
 	"text-decoration", "text-decoration-line",
 	"letter-spacing", "word-spacing",
 	"list-style-type", "list-style",
-	"text-indent", "direction",
+	"text-indent", "direction"
 ]
 
 /// Map a CSS `list-style-type` keyword (including latin aliases) to the enum.

@@ -61,7 +61,7 @@ struct RenderPDFTests {
 			"/System/Library/Fonts/Supplemental/Arial.ttf",
 			"/System/Library/Fonts/Monaco.ttf",
 			"/System/Library/Fonts/Geneva.ttf",
-			"/System/Library/Fonts/SFNS.ttf",
+			"/System/Library/Fonts/SFNS.ttf"
 		]
 		guard let path = candidates.first(where: { FileManager.default.fileExists(atPath: $0) }) else {
 			return // No suitable system font; skip.
@@ -97,7 +97,7 @@ struct RenderPDFTests {
 		let cases: [(path: String, sample: String)] = [
 			("/System/Library/Fonts/Supplemental/NotoSansCanadianAboriginal-Regular.otf", "\u{1401}"),
 			("/System/Library/Fonts/Supplemental/NotoSansTifinagh-Regular.otf", "\u{2D30}"),
-			("/System/Library/Fonts/Supplemental/NotoSansJavanese-Regular.otf", "\u{A984}"),
+			("/System/Library/Fonts/Supplemental/NotoSansJavanese-Regular.otf", "\u{A984}")
 		]
 		guard let testCase = cases.first(where: { FileManager.default.fileExists(atPath: $0.path) }) else {
 			return // No CFF system font; skip.

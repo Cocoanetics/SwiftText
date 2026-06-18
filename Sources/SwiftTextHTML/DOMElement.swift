@@ -1,8 +1,7 @@
 import Foundation
 
 /// A stylesheet reference found in the DOM, in document order.
-public enum StyleSheetSource: Sendable, Equatable
-{
+public enum StyleSheetSource: Sendable, Equatable {
 	/// CSS from an inline `<style>` element.
 	case inline(String)
 	/// The `href` of a `<link rel="stylesheet">`, unresolved — resolve it
@@ -10,8 +9,7 @@ public enum StyleSheetSource: Sendable, Equatable
 	case link(href: String)
 }
 
-public class DOMElement: DOMNode, @unchecked Sendable
-{
+public class DOMElement: DOMNode, @unchecked Sendable {
 	// MARK: - Public Properties
 
 	public let name: String
@@ -33,13 +31,11 @@ public class DOMElement: DOMNode, @unchecked Sendable
 
 	// MARK: - Public Functions
 
-	func addChild(_ child: DOMNode)
-	{
+	func addChild(_ child: DOMNode) {
 		children.append(child)
 	}
 
-	public func markdown() -> String
-	{
+	public func markdown() -> String {
 		markdown(imageResolver: nil)
 	}
 
@@ -49,22 +45,18 @@ public class DOMElement: DOMNode, @unchecked Sendable
 	/// ``DOMMarkupConverter``) and rendered with swift-markdown's
 	/// `MarkupFormatter`, which owns all spacing, list numbering, table padding,
 	/// and nested-structure indentation.
-	public func markdown(imageResolver: ((String) -> String?)?) -> String
-	{
+	public func markdown(imageResolver: ((String) -> String?)?) -> String {
 		DOMMarkupConverter.markdown(from: self, imageResolver: imageResolver)
 	}
 
-	public func text() -> String
-	{
-		if ["script", "style", "iframe", "nav", "meta", "link", "title", "select", "input", "button", "noscript", "footer"].contains(name)
-		{
+	public func text() -> String {
+		if ["script", "style", "iframe", "nav", "meta", "link", "title", "select", "input", "button", "noscript", "footer"].contains(name) {
 			return ""
 		}
 
 		var result = ""
 
-		switch name
-		{
+		switch name {
 		case "br":
 			result += "\n"
 
@@ -99,8 +91,7 @@ public class DOMElement: DOMNode, @unchecked Sendable
 			result += children.map { $0.text() }.joined()
 		}
 
-		if isBlockLevelElement
-		{
+		if isBlockLevelElement {
 			result.ensureTwoTrailingNewlines()
 		}
 
@@ -110,8 +101,7 @@ public class DOMElement: DOMNode, @unchecked Sendable
 	/// Every stylesheet reference in this subtree, in document order: inline
 	/// `<style>` blocks and `<link rel="stylesheet">` hrefs. Order is preserved
 	/// so the cascade is honoured when the two interleave.
-	public func styleSheetSources() -> [StyleSheetSource]
-	{
+	public func styleSheetSources() -> [StyleSheetSource] {
 		var sources: [StyleSheetSource] = []
 		collectStyleSheetSources(into: &sources)
 		return sources
@@ -121,22 +111,18 @@ public class DOMElement: DOMNode, @unchecked Sendable
 	/// order. Mirrors the DOM's `styleSheets`: the source is already in the tree
 	/// (as `DOMRawText`), so this needs no HTML re-parse. External `<link>`
 	/// sheets are not fetched here — see `HTMLDocument.resolvedStyleSheets()`.
-	public func styleSheets() -> [String]
-	{
+	public func styleSheets() -> [String] {
 		styleSheetSources().compactMap { source in
 			if case .inline(let css) = source { return css }
 			return nil
 		}
 	}
 
-	private func collectStyleSheetSources(into sources: inout [StyleSheetSource])
-	{
-		switch name.lowercased()
-		{
+	private func collectStyleSheetSources(into sources: inout [StyleSheetSource]) {
+		switch name.lowercased() {
 		case "style":
 			let css = children.compactMap { ($0 as? DOMRawText)?.content }.joined()
-			if !css.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-			{
+			if !css.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
 				sources.append(.inline(css))
 			}
 
@@ -144,8 +130,7 @@ public class DOMElement: DOMNode, @unchecked Sendable
 			if let rel = (attributes["rel"] as? String)?.lowercased(),
 			   rel.split(whereSeparator: \.isWhitespace).contains("stylesheet"),
 			   let href = attributes["href"] as? String,
-			   !href.isEmpty
-			{
+			   !href.isEmpty {
 				sources.append(.link(href: href))
 			}
 
@@ -153,8 +138,7 @@ public class DOMElement: DOMNode, @unchecked Sendable
 			break
 		}
 
-		for case let child as DOMElement in children
-		{
+		for case let child as DOMElement in children {
 			child.collectStyleSheetSources(into: &sources)
 		}
 	}

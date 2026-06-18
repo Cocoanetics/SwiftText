@@ -26,10 +26,10 @@ struct PagesWriterTests {
 			BodyParagraph(text: "Document Title", paragraphStyle: PagesStyleID.heading1),
 			BodyParagraph(text: "Plain then bold then italic.", paragraphStyle: PagesStyleID.body, runs: [
 				.init(start: 11, length: 4, style: InlineStyle(bold: true)),
-				.init(start: 21, length: 6, style: InlineStyle(italic: true)),
+				.init(start: 21, length: 6, style: InlineStyle(italic: true))
 			]),
 			BodyParagraph(text: "First bullet", paragraphStyle: PagesStyleID.body, listStyle: PagesStyleID.bulletList),
-			BodyParagraph(text: "Second bullet", paragraphStyle: PagesStyleID.body, listStyle: PagesStyleID.bulletList),
+			BodyParagraph(text: "Second bullet", paragraphStyle: PagesStyleID.body, listStyle: PagesStyleID.bulletList)
 		]
 
 		let url = FileManager.default.temporaryDirectory

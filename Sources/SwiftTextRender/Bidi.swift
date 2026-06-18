@@ -116,9 +116,13 @@ private func resolveLevels(_ classes: [BidiClass], baseLevel: UInt8) -> [UInt8] 
 	// W4: a single ES between EN/EN, or CS between EN/EN or AN/AN, joins them.
 	if n >= 3 {
 		for i in 1 ..< (n - 1) {
-			if t[i] == .es, t[i - 1] == .en, t[i + 1] == .en { t[i] = .en }
-			else if t[i] == .cs, t[i - 1] == .en, t[i + 1] == .en { t[i] = .en }
-			else if t[i] == .cs, t[i - 1] == .an, t[i + 1] == .an { t[i] = .an }
+			if t[i] == .es, t[i - 1] == .en, t[i + 1] == .en {
+				t[i] = .en
+			} else if t[i] == .cs, t[i - 1] == .en, t[i + 1] == .en {
+				t[i] = .en
+			} else if t[i] == .cs, t[i - 1] == .an, t[i + 1] == .an {
+				t[i] = .an
+			}
 		}
 	}
 	// W5: a run of ET adjacent to EN becomes EN.

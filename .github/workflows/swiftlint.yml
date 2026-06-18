@@ -1,0 +1,36 @@
+---
+name: SwiftLint
+on:
+  pull_request:
+    # Keep these paths in sync with `included:` in .swiftlint.yml — the job must
+    # only be triggered by files it actually lints, or a change to an unlinted
+    # Swift file (e.g. under Scripts/) would get a misleading green check.
+    paths:
+      - '.github/workflows/swiftlint.yml'
+      - '.swiftlint.yml'
+      - 'Sources/**/*.swift'
+      - 'Tests/**/*.swift'
+      - 'Package.swift'
+      - 'Plugins/**/*.swift'
+  push:
+    branches:
+      - main
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  lint:
+    # macOS + Homebrew SwiftLint keeps CI aligned with the local pre-commit
+    # hook (Scripts/hooks/pre-commit) — same binary, same rule set, no version
+    # drift between dev and CI.
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install SwiftLint
+        run: brew install swiftlint
+      - name: SwiftLint version
+        run: swiftlint --version
+      - name: Lint
+        run: swiftlint lint --strict --quiet

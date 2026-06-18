@@ -237,7 +237,7 @@ public final class Painter {
 			("Subtype", "/Link"),
 			("Rect", PDFArray([x0, yBottom, x1, yTop])),
 			("Border", PDFArray([0, 0, 0])),
-			("A", PDFDictionary([("S", "/URI"), ("URI", PDFString(href))])),
+			("A", PDFDictionary([("S", "/URI"), ("URI", PDFString(href))]))
 		]))
 	}
 

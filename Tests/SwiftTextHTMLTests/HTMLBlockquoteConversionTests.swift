@@ -41,7 +41,7 @@ func markdownRendersBlockquotesWithNestedLevels() async throws {
 		"> *Everything* is proceeding as **planned**.",
 		"",
 		"> Dorothy crossed several halls in the castle.",
-		"> > The Witch told her to scrub the kettles and keep the fire going.",
+		"> > The Witch told her to scrub the kettles and keep the fire going."
 	].joined(separator: "\n")
 
 	#expect(markdown == expected)

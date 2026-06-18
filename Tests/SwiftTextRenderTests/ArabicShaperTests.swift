@@ -75,7 +75,7 @@ struct ArabicShaperTests {
 			"/System/Library/Fonts/Supplemental/AlBayan.ttc",
 			"/System/Library/Fonts/Supplemental/Baghdad.ttc",
 			"/System/Library/Fonts/Supplemental/Nadeem.ttc",
-			"/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+			"/System/Library/Fonts/Supplemental/Arial Unicode.ttf"
 		]
 		guard let path = candidates.first(where: { FileManager.default.fileExists(atPath: $0) }) else {
 			return // No Arabic system font available; skip.

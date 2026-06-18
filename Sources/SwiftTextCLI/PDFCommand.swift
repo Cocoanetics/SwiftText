@@ -33,7 +33,7 @@ enum PaperSize: String, ExpressibleByArgument, CaseIterable {
 	var pointSize: CGSize {
 		switch self {
 		case .a4:     return CGSize(width: 595.28, height: 841.89)
-		case .letter: return CGSize(width: 612.0,  height: 792.0)
+		case .letter: return CGSize(width: 612.0, height: 792.0)
 		}
 	}
 
@@ -142,7 +142,7 @@ struct PDF: AsyncParsableCommand {
 				let md = try String(contentsOf: fileURL, encoding: .utf8)
 				html = markdownToHTML(md, paper: paper, landscape: landscape)
 			}
-			
+
 			// Write HTML to temp file in source directory (enables local image access)
 			let tempHTML = baseURL.appendingPathComponent(".\(UUID().uuidString).html")
 			try html.write(to: tempHTML, atomically: true, encoding: .utf8)
@@ -187,7 +187,7 @@ struct PDF: AsyncParsableCommand {
 			try await renderSwift(html: html, baseURL: baseURL, to: outputURL)
 			return
 		}
-		var tempFileToCleanup: URL? = nil
+		var tempFileToCleanup: URL?
 		defer {
 			if let temp = tempFileToCleanup {
 				try? FileManager.default.removeItem(at: temp)
@@ -495,7 +495,7 @@ func markdownToHTML(_ markdown: String, paper: PaperSize, landscape: Bool) -> St
 func extractHTMLFromEML(_ content: String) -> String? {
 	let text = content
 		.replacingOccurrences(of: "\r\n", with: "\n")
-		.replacingOccurrences(of: "\r",   with: "\n")
+		.replacingOccurrences(of: "\r", with: "\n")
 
 	let (topHeaders, _) = mimeHeadersAndBody(text)
 	let contentType = topHeaders["content-type"] ?? ""
@@ -542,7 +542,7 @@ private func mimeHeadersAndBody(_ text: String) -> ([String: String], String) {
 	var headers: [String: String] = [:]
 	let lines = text.components(separatedBy: "\n")
 	var bodyStart = lines.endIndex
-	var lastKey: String? = nil
+	var lastKey: String?
 
 	for (idx, line) in lines.enumerated() {
 		if line.trimmingCharacters(in: .whitespaces).isEmpty {

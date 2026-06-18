@@ -51,7 +51,7 @@ enum IWAWriter {
 			UInt8(bits & 0xFF),
 			UInt8((bits >> 8) & 0xFF),
 			UInt8((bits >> 16) & 0xFF),
-			UInt8((bits >> 24) & 0xFF),
+			UInt8((bits >> 24) & 0xFF)
 		]
 	}
 
@@ -91,7 +91,7 @@ enum IWAWriter {
 			0x00,
 			UInt8(block.count & 0xFF),
 			UInt8((block.count >> 8) & 0xFF),
-			UInt8((block.count >> 16) & 0xFF),
+			UInt8((block.count >> 16) & 0xFF)
 		]
 		file += block
 		return Data(file)

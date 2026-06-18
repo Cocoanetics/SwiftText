@@ -37,7 +37,7 @@ public final class PDF {
 		pages = PDFDictionary([
 			("Type", "/Pages"),
 			("Kids", PDFArray()),
-			("Count", 0),
+			("Count", 0)
 		])
 		info = PDFDictionary()
 		catalog = PDFDictionary([("Type", "/Catalog")])

@@ -134,7 +134,7 @@ public struct DocxDocument {
 		public let italic: Bool
 		public let strike: Bool
 		/// When set, this run is a footnote reference rendered as `[^number]`.
-		public var footnoteNumber: Int? = nil
+		public var footnoteNumber: Int?
 
 		/// Returns the run text with Markdown bold/italic/strikethrough markers
 		/// applied. Strikethrough (`~~`) wraps any emphasis markers.

@@ -169,7 +169,7 @@ public final class FontBook {
 		let primary = font(for: style)
 		var runs: [(text: String, font: Font)] = []
 		var currentText = String.UnicodeScalarView()
-		var currentFont: Font? = nil
+		var currentFont: Font?
 		for scalar in text.unicodeScalars {
 			let resolved = coveringFont(for: scalar, primary: primary, style: style)
 			if let current = currentFont, current.key == resolved.key {
@@ -240,27 +240,27 @@ public final class FontBook {
 				"/System/Library/Fonts/Supplemental/Damascus.ttc",
 				"/System/Library/Fonts/Supplemental/AlBayan.ttc",
 				"/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf",
-				"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+				"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 			]
 		case 0x0590...0x05FF, 0xFB1D...0xFB4F:
 			return [ // Hebrew
 				"/System/Library/Fonts/Supplemental/Arial Hebrew.ttc",
 				"/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
 				"/usr/share/fonts/truetype/noto/NotoSansHebrew-Regular.ttf",
-				"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+				"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 			]
 		case 0x3040...0x30FF, 0x3400...0x9FFF, 0xAC00...0xD7AF, 0xF900...0xFAFF:
 			return [ // CJK / Kana / Hangul
 				"/System/Library/Fonts/PingFang.ttc",
 				"/System/Library/Fonts/Hiragino Sans GB.ttc",
 				"/System/Library/Fonts/Supplemental/Songti.ttc",
-				"/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+				"/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
 			]
 		default:
 			return [ // Broad Unicode coverage as a last resort
 				"/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
 				"/Library/Fonts/Arial Unicode.ttf",
-				"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+				"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 			]
 		}
 	}
@@ -342,7 +342,7 @@ private let helveticaWidths: [Int: Double] = {
 		"`": 333, "a": 556, "b": 556, "c": 500, "d": 556, "e": 556, "f": 278, "g": 556,
 		"h": 556, "i": 222, "j": 222, "k": 500, "l": 222, "m": 833, "n": 556, "o": 556,
 		"p": 556, "q": 556, "r": 333, "s": 500, "t": 278, "u": 556, "v": 500, "w": 722,
-		"x": 500, "y": 500, "z": 500, "{": 334, "|": 260, "}": 334, "~": 584,
+		"x": 500, "y": 500, "z": 500, "{": 334, "|": 260, "}": 334, "~": 584
 	]
 	var widths: [Int: Double] = [:]
 	for (character, width) in table {
@@ -377,7 +377,7 @@ private let timesWidths = asciiWidths([
 	"`": 333, "a": 444, "b": 500, "c": 444, "d": 500, "e": 444, "f": 333, "g": 500,
 	"h": 500, "i": 278, "j": 278, "k": 500, "l": 278, "m": 778, "n": 500, "o": 500,
 	"p": 500, "q": 500, "r": 333, "s": 389, "t": 278, "u": 500, "v": 500, "w": 722,
-	"x": 500, "y": 500, "z": 444, "{": 480, "|": 200, "}": 480, "~": 541,
+	"x": 500, "y": 500, "z": 444, "{": 480, "|": 200, "}": 480, "~": 541
 ])
 
 /// Adobe Times-Bold advance widths for ASCII, in 1000-unit em space.
@@ -393,7 +393,7 @@ private let timesBoldWidths = asciiWidths([
 	"`": 333, "a": 500, "b": 556, "c": 444, "d": 556, "e": 444, "f": 333, "g": 500,
 	"h": 556, "i": 278, "j": 333, "k": 556, "l": 278, "m": 833, "n": 556, "o": 500,
 	"p": 556, "q": 556, "r": 444, "s": 389, "t": 333, "u": 556, "v": 500, "w": 722,
-	"x": 500, "y": 500, "z": 444, "{": 394, "|": 220, "}": 394, "~": 520,
+	"x": 500, "y": 500, "z": 444, "{": 394, "|": 220, "}": 394, "~": 520
 ])
 
 /// Adobe Helvetica-Bold advance widths for ASCII, in 1000-unit em space.
@@ -410,7 +410,7 @@ private let helveticaBoldWidths: [Int: Double] = {
 		"`": 333, "a": 556, "b": 611, "c": 556, "d": 611, "e": 556, "f": 333, "g": 611,
 		"h": 611, "i": 278, "j": 278, "k": 556, "l": 278, "m": 889, "n": 611, "o": 611,
 		"p": 611, "q": 611, "r": 389, "s": 556, "t": 333, "u": 611, "v": 556, "w": 778,
-		"x": 556, "y": 556, "z": 500, "{": 389, "|": 280, "}": 389, "~": 584,
+		"x": 556, "y": 556, "z": 500, "{": 389, "|": 280, "}": 389, "~": 584
 	]
 	var widths: [Int: Double] = [:]
 	for (character, width) in table {

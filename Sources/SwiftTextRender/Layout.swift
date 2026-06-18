@@ -315,7 +315,7 @@ public final class LayoutEngine {
 		var lines: [LineBox] = []
 		var fragments: [TextFragment] = []
 		var penX = box.style.textIndent // first line indentation (reset to 0 after)
-		var pendingSpace: ComputedStyle? = nil
+		var pendingSpace: ComputedStyle?
 		var lineTop = contentTop
 
 		func spaceWidth(_ style: ComputedStyle) -> Double {

@@ -95,7 +95,7 @@ struct CmapSubtable {
 			guard value >= firstCode, value - firstCode < glyphIDs.count else { return nil }
 			glyph = glyphIDs[value - firstCode]
 		case .format12(let groups):
-			var result: Int? = nil
+			var result: Int?
 			for group in groups where code >= group.start && code <= group.end {
 				result = Int(group.startGlyph + (code - group.start))
 				break
@@ -115,7 +115,7 @@ extension CmapSubtable {
 	static func best(fonts: FontBytes, cmapOffset: Int) -> CmapSubtable? {
 		guard let count = try? fonts.u16(cmapOffset + 2) else { return nil }
 		var bestScore = Int.min
-		var bestOffset: Int? = nil
+		var bestOffset: Int?
 		for index in 0 ..< count {
 			let record = cmapOffset + 4 + index * 8
 			guard let platform = try? fonts.u16(record),

@@ -15,6 +15,7 @@ struct IWAGeneratedModelTests {
 	private static func strictFields(_ bytes: [UInt8]) -> [ProtobufField]? {
 		guard !bytes.isEmpty else { return nil }
 		var fields = [ProtobufField](); var pos = 0
+		// swiftlint:disable:next line_length
 		func rv() -> UInt64? { var s = UInt64(0), r = UInt64(0); while pos < bytes.count { let b = bytes[pos]; pos += 1; r |= UInt64(b & 0x7F) << s; if b & 0x80 == 0 { return r }; s += 7; if s >= 64 { return nil } }; return nil }
 		while pos < bytes.count {
 			guard let key = rv() else { return nil }

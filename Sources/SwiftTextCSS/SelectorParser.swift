@@ -48,11 +48,17 @@ private func parseComplexSelector(_ tokens: [ComponentValue]) -> ComplexSelector
 		if pos >= count { break } // trailing whitespace
 
 		let combinator: Combinator
-		if tokens[pos].isLiteral(">") { combinator = .child; pos += 1 }
-		else if tokens[pos].isLiteral("+") { combinator = .nextSibling; pos += 1 }
-		else if tokens[pos].isLiteral("~") { combinator = .subsequentSibling; pos += 1 }
-		else if sawWhitespace { combinator = .descendant }
-		else { return nil }
+		if tokens[pos].isLiteral(">") {
+			combinator = .child; pos += 1
+		} else if tokens[pos].isLiteral("+") {
+			combinator = .nextSibling; pos += 1
+		} else if tokens[pos].isLiteral("~") {
+			combinator = .subsequentSibling; pos += 1
+		} else if sawWhitespace {
+			combinator = .descendant
+		} else {
+			return nil
+		}
 
 		while pos < count, tokens[pos].type == "whitespace" { pos += 1 }
 		guard let next = parseCompoundSelector(tokens, &pos) else { return nil }

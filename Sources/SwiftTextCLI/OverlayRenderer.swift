@@ -33,7 +33,7 @@ enum OverlayRenderer {
 		) else {
 			throw NSError(domain: "SwiftTextCLI", code: 1, userInfo: [NSLocalizedDescriptionKey: "Unable to create overlay context"])
 		}
-		
+
 			context.draw(baseImage, in: CGRect(origin: .zero, size: pageSize))
 
 			context.saveGState()
@@ -45,14 +45,14 @@ enum OverlayRenderer {
 			drawRectangles(rectangles, on: context)
 
 			context.restoreGState()
-		
+
 		guard let cgImage = context.makeImage() else {
 			throw NSError(domain: "SwiftTextCLI", code: 2, userInfo: [NSLocalizedDescriptionKey: "Unable to finalize overlay image"])
 		}
-		
+
 		return cgImage
 	}
-	
+
 	static func writeImage(_ image: CGImage, to url: URL, suggestedExtension: String) throws {
 		let destinationType: UTType
 		if let type = UTType(filenameExtension: suggestedExtension) {
@@ -60,7 +60,7 @@ enum OverlayRenderer {
 		} else {
 			destinationType = .png
 		}
-		
+
 		guard let destination = CGImageDestinationCreateWithURL(url as CFURL, destinationType.identifier as CFString, 1, nil) else {
 			throw NSError(domain: "SwiftTextCLI", code: 3, userInfo: [NSLocalizedDescriptionKey: "Unable to create image destination at \(url.path)"])
 		}
@@ -69,7 +69,7 @@ enum OverlayRenderer {
 			throw NSError(domain: "SwiftTextCLI", code: 4, userInfo: [NSLocalizedDescriptionKey: "Failed to save image at \(url.path)"])
 		}
 	}
-	
+
 	static func beginPDFContext(at url: URL) throws -> CGContext {
 		guard let consumer = CGDataConsumer(url: url as CFURL) else {
 			throw NSError(domain: "SwiftTextCLI", code: 5, userInfo: [NSLocalizedDescriptionKey: "Unable to create PDF consumer at \(url.path)"])
@@ -79,7 +79,7 @@ enum OverlayRenderer {
 		}
 		return context
 	}
-	
+
 	static func drawPage(
 		overlayImage: CGImage,
 		into pdfContext: CGContext,
@@ -100,13 +100,13 @@ private extension OverlayRenderer {
 		context.setStrokeColor(CGColor(red: 0, green: 0.6, blue: 1, alpha: 0.7))
 		context.setLineWidth(1.5)
 		context.setLineDash(phase: 0, lengths: [6, 4])
-		
+
 		for rect in rectangles {
 			context.stroke(rect)
 		}
 		context.restoreGState()
 	}
-	
+
 	static func drawBlocks(_ blocks: [DocumentBlock], on context: CGContext) {
 		for block in blocks {
 			let color: CGColor
@@ -125,13 +125,13 @@ private extension OverlayRenderer {
 				color = CGColor(red: 1, green: 1, blue: 0, alpha: 0.8) // yellow
 				outlineWidth = 2.5
 			}
-			
+
 			context.setStrokeColor(color)
 			context.setLineWidth(outlineWidth)
-			
+
 			let rect = block.bounds
 			context.stroke(rect)
-			
+
 			if case .table(let table) = block.kind {
 				let shouldFlipCells = shouldFlipTableCells(table, tableBounds: rect)
 				context.saveGState()
@@ -148,13 +148,13 @@ private extension OverlayRenderer {
 			}
 		}
 	}
-	
+
 	static func drawLines(_ lines: [TextLine], on context: CGContext) {
 		guard !lines.isEmpty else { return }
 		context.saveGState()
 		context.setStrokeColor(CGColor(red: 0, green: 1, blue: 0, alpha: 0.6))
 		context.setLineWidth(1.5)
-		
+
 		for line in lines {
 			let bounds = line.fragments.reduce(line.fragments.first?.bounds ?? .zero) { partial, fragment in
 				partial.union(fragment.bounds)
@@ -163,7 +163,7 @@ private extension OverlayRenderer {
 		}
 		context.restoreGState()
 	}
-	
+
 	static func shouldFlipTableCells(_ table: DocumentBlock.Table, tableBounds: CGRect) -> Bool {
 		guard let firstRow = table.rows.first else { return false }
 		let firstRowBounds = unionRect(for: firstRow)
@@ -172,13 +172,13 @@ private extension OverlayRenderer {
 		let distanceToBottom = abs(firstRowBounds.minY - tableBounds.maxY)
 		return distanceToBottom < distanceToTop
 	}
-	
+
 	static func unionRect(for row: [DocumentBlock.Table.Cell]) -> CGRect {
 		row.reduce(into: CGRect.null) { partial, cell in
 			partial = partial.union(cell.bounds)
 		}
 	}
-	
+
 	static func flipVertically(_ rect: CGRect, within bounds: CGRect) -> CGRect {
 		CGRect(
 			x: rect.minX,
