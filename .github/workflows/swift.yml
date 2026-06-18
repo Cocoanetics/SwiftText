@@ -78,11 +78,13 @@ jobs:
   # only what the Windows toolchain can satisfy with no vcpkg/libxml2 needed.
   # Production toolchain is Swift 6.3.1 via SwiftyLab/setup-swift.
   #
-  # AttributedString is excluded on Windows only: it compiles, but the 6.3.1
-  # toolchain's swift-foundation doesn't ship the linkable
-  # `_FoundationCollections.BigString` symbols backing it, so it fails at link.
-  # Linux and Android link and run it fine (see test-android-portable). Drop the
-  # exclude once a Windows toolchain ships those symbols.
+  # AttributedString is excluded on Windows only: it compiles, but the toolchain
+  # doesn't export the `_FoundationCollections.BigString` symbols backing it
+  # (Foundation vendors that module as a static `internal import`; ELF re-exports
+  # those symbols from libFoundationEssentials.so on Linux/Android, but Windows
+  # DLLs don't), so it fails at link. Tracked upstream as a compiler-side fix at
+  # https://github.com/swiftlang/swift/issues/88132 — drop the exclude once that
+  # lands in a Windows toolchain.
   test-windows-portable:
     runs-on: windows-latest
     timeout-minutes: 30

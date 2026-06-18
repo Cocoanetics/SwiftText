@@ -28,11 +28,11 @@ let portableTargetNames: Set<String> = [
 ]
 
 // A platform may need to drop a portable target it can't yet link. The Windows
-// Swift 6.3.1 toolchain's swift-foundation provides the AttributedString *API*
-// (it compiles) but not the linkable `_FoundationCollections.BigString` symbols
-// that back its storage, so SwiftTextAttributedString fails at link time there.
-// SWIFTTEXT_PORTABLE_EXCLUDE is a comma-separated list of target/test/product
-// names to remove from the portable subset. (Linux and Android link it fine.)
+// toolchain provides the AttributedString *API* (it compiles) but doesn't export
+// the `_FoundationCollections.BigString` symbols that back its storage, so
+// SwiftTextAttributedString fails at link there (swiftlang/swift#88132 — a
+// compiler-side fix). Linux and Android link it fine. SWIFTTEXT_PORTABLE_EXCLUDE
+// is a comma-separated list of target/test/product names to drop from the subset.
 let portableExclude = Set(
 	(ProcessInfo.processInfo.environment["SWIFTTEXT_PORTABLE_EXCLUDE"] ?? "")
 		.split(separator: ",")
