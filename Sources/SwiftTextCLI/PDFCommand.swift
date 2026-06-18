@@ -339,10 +339,19 @@ struct PDF: AsyncParsableCommand {
 
 /// Converts a Markdown string to a self-contained HTML document
 /// styled for print output and with CSS `@page` size directives.
-func markdownToHTML(_ markdown: String, paper: PaperSize, landscape: Bool) -> String {
+func markdownToHTML(_ markdown: String, paper: PaperSize, landscape: Bool, pageBreakBefore: HeadingBreakLevel? = nil) -> String {
 	let orientation = landscape ? "landscape" : "portrait"
 	let pageCSS = "\(paper.cssName) \(orientation)"
 	let body = MarkdownToHTML.convert(markdown)
+	// Optional forced page break before a given heading level (e.g. h2 so each
+	// chapter starts on a new page). Placed after the base heading rules so it
+	// wins on source order; the leading break is ignored by the print engine
+	// when the heading is the first box, so no blank first page is emitted.
+	let headingBreakCSS = pageBreakBefore.map { level in
+		"""
+		\(level.rawValue) { page-break-before: always; break-before: page; }
+		"""
+	} ?? ""
 	return """
 	<!DOCTYPE html>
 	<html lang="en">
@@ -479,6 +488,7 @@ func markdownToHTML(_ markdown: String, paper: PaperSize, landscape: Bool) -> St
 	    font-size: 0.95em;
 	}
 	.footnote-definition p { margin: 0.4em 0; }
+	\(headingBreakCSS)
 	</style>
 	</head>
 	<body>

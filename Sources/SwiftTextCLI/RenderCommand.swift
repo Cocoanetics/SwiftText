@@ -19,6 +19,11 @@ enum RenderOutputFormat: String, ExpressibleByArgument, CaseIterable {
 	case pages
 }
 
+/// Heading level before which a page break is forced (PDF/HTML print output).
+enum HeadingBreakLevel: String, ExpressibleByArgument, CaseIterable {
+	case h1, h2, h3, h4, h5, h6
+}
+
 @available(macOS 10.15, macCatalyst 13, iOS 13, tvOS 13, watchOS 6, *)
 struct Render: AsyncParsableCommand {
 	static let configuration = CommandConfiguration(
@@ -43,6 +48,9 @@ struct Render: AsyncParsableCommand {
 
 	@Flag(name: .long, help: "Use landscape orientation (default: portrait).")
 	var landscape: Bool = false
+
+	@Option(name: .long, help: "For PDF/HTML output, force a page break before every heading of this level (h1–h6). Use h2 to start each chapter on its own page. Omit to disable.")
+	var pageBreakBefore: HeadingBreakLevel?
 
 	@Flag(name: .long, help: "For Pages output, write a directory-package bundle instead of a single file.")
 	var package: Bool = false
@@ -78,11 +86,11 @@ struct Render: AsyncParsableCommand {
 
 		switch chosenFormat {
 		case .html:
-			let html = markdownToHTML(markdownText, paper: paper, landscape: landscape)
+			let html = markdownToHTML(markdownText, paper: paper, landscape: landscape, pageBreakBefore: pageBreakBefore)
 			try writeString(html, to: outputURL)
 			print(outputURL.path)
 		case .pdf:
-			let html = markdownToHTML(markdownText, paper: paper, landscape: landscape)
+			let html = markdownToHTML(markdownText, paper: paper, landscape: landscape, pageBreakBefore: pageBreakBefore)
 			try await renderPDF(html: html, baseURL: baseURL, outputURL: outputURL)
 			print(outputURL.path)
 		case .docx:
