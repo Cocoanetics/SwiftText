@@ -49,6 +49,61 @@ public final class HTMLDocument {
 		contentRoot.text().trimmingCharacters(in: .whitespacesAndNewlines)
 	}
 
+	// MARK: - Stylesheets
+
+	/// The document's inline `<style>` CSS, in document order. A convenience
+	/// forwarding to the root element; external `<link>` sheets are not fetched
+	/// (use ``resolvedStyleSheets()`` for that).
+	public func styleSheets() -> [String] {
+		root.styleSheets()
+	}
+
+	/// All of the document's stylesheets in document order — inline `<style>`
+	/// blocks and the contents of `<link rel="stylesheet">`, resolved against
+	/// the base URL and fetched. Unreachable or undecodable links are skipped,
+	/// the way browsers ignore a failed stylesheet load.
+	public func resolvedStyleSheets() async -> [String] {
+		var sheets: [String] = []
+		for source in root.styleSheetSources() {
+			switch source {
+			case .inline(let css):
+				sheets.append(css)
+
+			case .link(let href):
+				if let css = await fetchStyleSheet(href: href) {
+					sheets.append(css)
+				}
+			}
+		}
+		return sheets
+	}
+
+	private func fetchStyleSheet(href: String) async -> String? {
+		if href.lowercased().hasPrefix("data:") {
+			return Self.decodeTextDataURL(href)
+		}
+
+		guard let url = resolveURL(href),
+		      let data = try? await fetchData(from: url)
+		else {
+			return nil
+		}
+		return String(data: data, encoding: .utf8)
+	}
+
+	/// Decode a `data:` URL carrying text (e.g. `data:text/css,...` or its
+	/// `;base64` form) to its string payload.
+	private static func decodeTextDataURL(_ uri: String) -> String? {
+		guard let comma = uri.firstIndex(of: ",") else { return nil }
+		let meta = uri[uri.startIndex ..< comma].lowercased()
+		let payload = String(uri[uri.index(after: comma)...])
+		if meta.contains(";base64") {
+			guard let data = Data(base64Encoded: payload) else { return nil }
+			return String(data: data, encoding: .utf8)
+		}
+		return payload.removingPercentEncoding ?? payload
+	}
+
 	private func collectImageSources(from node: DOMNode, into sources: inout [String]) {
 		guard let element = node as? DOMElement else {
 			return
@@ -82,7 +137,7 @@ public final class HTMLDocument {
 			guard !seenSources.contains(source) else { continue }
 			seenSources.insert(source)
 
-			guard let resolvedURL = resolveImageURL(source) else { continue }
+			guard let resolvedURL = resolveURL(source) else { continue }
 			let baseName = suggestedFileName(for: resolvedURL, fallbackIndex: index)
 			let uniqueName = uniquifyFileName(baseName, usedNames: &usedNames)
 			mapping[source] = uniqueName
@@ -96,7 +151,9 @@ public final class HTMLDocument {
 		return mapping
 	}
 
-	private func resolveImageURL(_ source: String) -> URL? {
+	/// Resolve an href/src against the document base URL (absolute URLs pass
+	/// through unchanged). Used for both image sources and stylesheet links.
+	private func resolveURL(_ source: String) -> URL? {
 		if let url = URL(string: source), url.scheme != nil {
 			return url
 		}

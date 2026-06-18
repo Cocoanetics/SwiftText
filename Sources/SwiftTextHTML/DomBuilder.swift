@@ -108,7 +108,7 @@ private actor DOMBuilderState {
 
 	func apply(_ event: HTMLParserEvent) {
 		switch event {
-		case .startDocument, .endDocument, .comment, .cdata, .processingInstruction:
+		case .startDocument, .endDocument, .comment, .processingInstruction:
 			return
 
 		case let .startElement(name, attributes):
@@ -119,6 +119,9 @@ private actor DOMBuilderState {
 
 		case let .characters(string):
 			handleCharacters(string)
+
+		case let .cdata(data):
+			handleCDATA(data)
 
 		case let .parseError(error):
 			parseError = error
@@ -156,6 +159,13 @@ private extension DOMBuilderState {
 	}
 
 	func handleCharacters(_ string: String) {
+		// Raw-text elements (`<style>`, `<script>`) carry CSS/JS, not document
+		// text: store it as a DOMRawText child, never a `#text` node.
+		if isRawTextElement(currentElement.name) {
+			appendRawText(string)
+			return
+		}
+
 		let isWhitespace = string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 
 		if ["pre", "code"].contains(currentElement.name) {
@@ -169,6 +179,32 @@ private extension DOMBuilderState {
 		}
 
 		currentElement.addChild(DOMText(text: string, preserveWhitespace: false))
+	}
+
+	/// libxml delivers `<style>`/`<script>` bodies as a CDATA event. Capture it
+	/// as a DOMRawText child so the CSS/JS is available from the tree without
+	/// re-parsing, yet stays distinct from rendered text. CDATA outside a
+	/// raw-text element is ignored, as before.
+	func handleCDATA(_ data: Data) {
+		guard isRawTextElement(currentElement.name),
+		      let string = String(data: data, encoding: .utf8) else { return }
+		appendRawText(string)
+	}
+
+	/// Append raw source to the current raw-text element, coalescing the chunks
+	/// the parser may deliver into a single DOMRawText child.
+	func appendRawText(_ string: String) {
+		if let last = currentElement.children.last as? DOMRawText {
+			last.append(string)
+		} else {
+			currentElement.addChild(DOMRawText(content: string))
+		}
+	}
+
+	/// HTML "raw text elements": their content is unparsed source text.
+	func isRawTextElement(_ name: String) -> Bool {
+		let tag = name.lowercased()
+		return tag == "style" || tag == "script"
 	}
 
 	func handleEndElement(_ _: String) {
