@@ -84,6 +84,19 @@ struct NumbersFileTests {
 		#expect(table.columnAlignments == [.left, .right, .right])
 	}
 
+	@Test("Reads a legacy iWork '09 (index.xml) spreadsheet")
+	func readsLegacyXMLDocument() throws {
+		// LegacySample.numbers is the iWork '09 format: a single index.xml with an
+		// <sf:tabular-model>, not the modern .iwa package. The reader routes to
+		// NumbersLegacyParser and produces the same TSTTable model.
+		let url = try #require(Bundle.module.url(forResource: "LegacySample", withExtension: "numbers"))
+		let table = try #require(NumbersFile(url: url).document.allTables.first?.trimmedToUsedRange())
+		#expect(table.cells[0] == ["Item", "Qty", "Note"])
+		#expect(table.cells[1] == ["Widget", "3", ""])
+		// A '09 formula cell surfaces its source text (the format keeps no readable result).
+		#expect(table.cells[2] == ["Total", "=SUM(B1:B2)", ""])
+	}
+
 	@Test("Reads cells beyond the first tile (rows past tileSize)")
 	func readsCellsAcrossMultipleTiles() throws {
 		// MultiTile.numbers is a 300-row table; with the standard 256-row tiles, A260 and
