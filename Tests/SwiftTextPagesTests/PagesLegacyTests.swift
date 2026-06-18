@@ -68,6 +68,34 @@ struct PagesLegacyTests {
 		#expect(!markdown.contains("# Body"))
 	}
 
+	@Test("Extracts a legacy table (the shared '09 tabular-model) into the document")
+	func extractsLegacyTable() throws {
+		let xml = """
+		<?xml version="1.0"?>
+		<sl:document xmlns:sf="http://developer.apple.com/namespaces/sf" \
+		xmlns:sfa="http://developer.apple.com/namespaces/sfa" \
+		xmlns:sl="http://developer.apple.com/namespaces/sl">
+		<sf:text-storage sf:kind="body"><sf:text-body>
+		<sf:p><sf:span>Intro paragraph.</sf:span></sf:p>
+		</sf:text-body></sf:text-storage>
+		<sf:tabular-model><sf:grid sf:numcols="2" sf:numrows="2"><sf:datasource>
+		<sf:t><sf:ct sfa:s="Name"/></sf:t><sf:t><sf:ct sfa:s="Score"/></sf:t>
+		<sf:t><sf:ct sfa:s="Ada"/></sf:t><sf:t><sf:ct sfa:s="42"/></sf:t>
+		</sf:datasource></sf:grid></sf:tabular-model>
+		</sl:document>
+		"""
+		let bundle = FileManager.default.temporaryDirectory
+			.appendingPathComponent("legacy-table-\(UUID().uuidString).pages", isDirectory: true)
+		try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
+		try Data(xml.utf8).write(to: bundle.appendingPathComponent("index.xml"))
+		defer { try? FileManager.default.removeItem(at: bundle) }
+
+		let markdown = try PagesFile(url: bundle).markdown()
+		#expect(markdown.contains("Intro paragraph."))
+		#expect(markdown.contains("| Name | Score |"))
+		#expect(markdown.contains("| Ada | 42 |"))
+	}
+
 	@Test("Maps standard style names to heading levels across languages")
 	func headingLevelNameMapping() {
 		#expect(PagesLegacyHeading.level(forStyleName: "Title") == 1)

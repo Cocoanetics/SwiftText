@@ -4,14 +4,11 @@ import Foundation
 public enum NumbersParserError: Error, CustomStringConvertible {
 	case fileNotFound(URL)
 	case notANumbersDocument(URL)
-	case legacyXMLParsingFailed(Error?)
 
 	public var description: String {
 		switch self {
 		case .fileNotFound(let url): return "File not found: \(url.path)"
 		case .notANumbersDocument(let url): return "Not a Numbers document: \(url.path)"
-		case .legacyXMLParsingFailed(let error):
-			return "Failed to parse legacy Numbers index.xml" + (error.map { ": \($0.localizedDescription)" } ?? "")
 		}
 	}
 }
@@ -51,9 +48,12 @@ public struct NumbersParser {
 		let entries = try IWAContainer.entries(at: url, prefix: "Index/", suffix: ".iwa")
 		guard !entries.isEmpty else {
 			// Legacy (iWork '09) documents store a single uncompressed index.xml instead,
-			// mirroring how PagesParser falls back to PagesLegacyParser.
+			// mirroring how PagesParser falls back to PagesLegacyParser. Tables are decoded
+			// by the shared IWALegacyTableReader (the same `<sf:tabular-model>` the legacy
+			// Pages reader uses).
 			if let indexXML = IWAContainer.data(at: url, named: "index.xml") {
-				return try NumbersLegacyParser().parseDocument(from: indexXML)
+				let tables = try IWALegacyTableReader.tables(fromIndexXML: indexXML)
+				return NumbersDocument(sheets: tables.isEmpty ? [] : [NumbersDocument.Sheet(name: nil, tables: tables)])
 			}
 			throw NumbersParserError.notANumbersDocument(url)
 		}

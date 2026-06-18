@@ -19,6 +19,25 @@ public struct TSTTable: Sendable, Equatable, Codable {
 		self.cells = cells
 		self.columnAlignments = columnAlignments
 	}
+
+	/// Crops trailing all-empty rows and columns to the table's used range. iWork
+	/// allocates a default grid (e.g. 7×22) that is mostly blank; the used range is what a
+	/// reader wants. Returns `nil` when the table has no non-empty cells.
+	public func trimmedToUsedRange() -> TSTTable? {
+		var lastRow = -1, lastColumn = -1
+		for (r, row) in cells.enumerated() {
+			for (c, value) in row.enumerated() where !value.isEmpty {
+				lastRow = max(lastRow, r)
+				lastColumn = max(lastColumn, c)
+			}
+		}
+		guard lastRow >= 0, lastColumn >= 0 else { return nil }
+		let croppedCells = cells[0...lastRow].map { row -> [String] in
+			(0...lastColumn).map { row.indices.contains($0) ? row[$0] : "" }
+		}
+		let croppedAlignments = (0...lastColumn).map { columnAlignments.indices.contains($0) ? columnAlignments[$0] : .left }
+		return TSTTable(cells: croppedCells, columnAlignments: croppedAlignments)
+	}
 }
 
 /// Decodes a `TST.TableModelArchive` (and the `DataStore` / tile / cell-buffer chain

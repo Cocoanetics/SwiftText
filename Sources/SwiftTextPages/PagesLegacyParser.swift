@@ -3,6 +3,7 @@ import Foundation
 // On Linux, XMLParser/XMLParserDelegate live in FoundationXML, not Foundation.
 import FoundationXML
 #endif
+import SwiftTextIWA
 
 /// Reads the legacy iWork '09 Pages format, whose content is a single
 /// `index.xml` (the APXL schema) rather than `.iwa` objects.
@@ -13,7 +14,8 @@ import FoundationXML
 /// resolvable font size (it comes from the theme), but their names are the
 /// standard set ("Heading 1", "Title", "Body", …), so headings are recovered by
 /// matching the style name. `<sf:ghost-text>` is placeholder prompt text and is
-/// skipped.
+/// skipped. Tables (`<sf:tabular-model>`, the same schema Numbers '09 uses) are
+/// decoded by the shared ``IWALegacyTableReader`` and appended after the body text.
 final class PagesLegacyParser {
 	func parseDocument(from data: Data) throws -> PagesDocument {
 		let extractor = LegacyExtractor()
@@ -22,7 +24,25 @@ final class PagesLegacyParser {
 		guard parser.parse() else {
 			throw PagesFileError.legacyXMLParsingFailed(parser.parserError)
 		}
-		return PagesDocument(paragraphs: extractor.makeParagraphs())
+		var paragraphs = extractor.makeParagraphs()
+		// The body XML is known to parse here, so table extraction won't fail; tables are
+		// best-effort either way. Each is cropped to its used range and appended as a
+		// table-bearing paragraph (legacy in-flow position isn't tracked).
+		let tables = ((try? IWALegacyTableReader.tables(fromIndexXML: data)) ?? []).compactMap { $0.trimmedToUsedRange() }
+		for table in tables {
+			let alignments = table.columnAlignments.map { align -> PagesDocument.Paragraph.Table.ColumnAlignment in
+				switch align {
+				case .left: return .left
+				case .center: return .center
+				case .right: return .right
+				}
+			}
+			paragraphs.append(PagesDocument.Paragraph(
+				text: "",
+				tables: [PagesDocument.Paragraph.Table(cells: table.cells, columnAlignments: alignments)]
+			))
+		}
+		return PagesDocument(paragraphs: paragraphs)
 	}
 }
 
