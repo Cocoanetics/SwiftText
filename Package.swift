@@ -11,7 +11,7 @@ let ocrTestDeps: [Target.Dependency] = []
 let macOSProducts: [Product] = [
 	.library(name: "SwiftTextOCR", targets: ["SwiftTextOCR"]),
 	.library(name: "SwiftTextPDF", targets: ["SwiftTextPDF"]),
-	.executable(name: "swifttext", targets: ["SwiftTextCLI"]),
+	.executable(name: "swifttext", targets: ["SwiftTextCLI"])
 ]
 let macOSTargets: [Target] = [
 	.target(
@@ -33,7 +33,7 @@ let macOSTargets: [Target] = [
 			"SwiftTextDOCX",
 			"SwiftTextPages",
 			"SwiftTextRender",
-			.product(name: "ArgumentParser", package: "swift-argument-parser", condition: .when(traits: ["CLI"])),
+			.product(name: "ArgumentParser", package: "swift-argument-parser", condition: .when(traits: ["CLI"]))
 		],
 		path: "Sources/SwiftTextCLI",
 		plugins: [
@@ -49,14 +49,14 @@ let macOSTargets: [Target] = [
 		dependencies: [
 			"SwiftTextOCR",
 			"SwiftTextPDF",
-			.product(name: "Markdown", package: "swift-markdown"),
+			.product(name: "Markdown", package: "swift-markdown")
 		],
 		path: "Tests/SwiftTextOCRTests"
-	),
+	)
 ]
 let swiftTextExtraDeps: [Target.Dependency] = [
 	.target(name: "SwiftTextOCR", condition: .when(traits: ["OCR"])),
-	.target(name: "SwiftTextPDF", condition: .when(traits: ["PDF"])),
+	.target(name: "SwiftTextPDF", condition: .when(traits: ["PDF"]))
 ]
 let ocrTestDeps: [Target.Dependency] = []
 #endif
@@ -71,7 +71,7 @@ let ocrTestDeps: [Target.Dependency] = []
 let htmlProducts: [Product] = [
 	.library(name: "SwiftTextHTML", targets: ["SwiftTextHTML"]),
 	.library(name: "SwiftTextMarkdown", targets: ["SwiftTextMarkdown"]),
-	.library(name: "SwiftTextAttributedString", targets: ["SwiftTextAttributedString"]),
+	.library(name: "SwiftTextAttributedString", targets: ["SwiftTextAttributedString"])
 ]
 let htmlTargets: [Target] = [
 	.target(
@@ -86,14 +86,14 @@ let htmlTargets: [Target] = [
 			// renders it with MarkupFormatter, so it needs the Markdown module
 			// directly (not just transitively via SwiftTextMarkdown). swift-markdown
 			// is platform-agnostic and always resolved, so this isn't trait-gated.
-			.product(name: "Markdown", package: "swift-markdown"),
+			.product(name: "Markdown", package: "swift-markdown")
 		],
 		path: "Sources/SwiftTextHTML"
 	),
 	.target(
 		name: "SwiftTextMarkdown",
 		dependencies: [
-			.product(name: "Markdown", package: "swift-markdown"),
+			.product(name: "Markdown", package: "swift-markdown")
 		],
 		path: "Sources/SwiftTextMarkdown"
 	),
@@ -101,7 +101,7 @@ let htmlTargets: [Target] = [
 		name: "SwiftTextAttributedString",
 		dependencies: [
 			"SwiftTextMarkdown",
-			.product(name: "Markdown", package: "swift-markdown"),
+			.product(name: "Markdown", package: "swift-markdown")
 		],
 		path: "Sources/SwiftTextAttributedString"
 	),
@@ -119,11 +119,11 @@ let htmlTargets: [Target] = [
 		name: "SwiftTextAttributedStringTests",
 		dependencies: ["SwiftTextAttributedString"],
 		path: "Tests/SwiftTextAttributedStringTests"
-	),
+	)
 ]
 
 let swiftTextHTMLDeps: [Target.Dependency] = [
-	.target(name: "SwiftTextHTML", condition: .when(traits: ["HTML"])),
+	.target(name: "SwiftTextHTML", condition: .when(traits: ["HTML"]))
 ]
 
 let packageProducts: [Product] = [
@@ -167,14 +167,14 @@ let packageProducts: [Product] = [
 	.library(
 		name: "SwiftTextRender",
 		targets: ["SwiftTextRender"]
-	),
+	)
 ] + htmlProducts + macOSProducts
 
 let swiftTextDependencies: [Target.Dependency] = [
 	.target(name: "SwiftTextDOCX", condition: .when(traits: ["DOCX"])),
 	.target(name: "SwiftTextPages", condition: .when(traits: ["PAGES"])),
 	// Platform-agnostic and dependency-light, so always linked (not trait-gated).
-	"SwiftTextAttributedString",
+	"SwiftTextAttributedString"
 ] + swiftTextHTMLDeps + swiftTextExtraDeps
 
 let packageTargets: [Target] = [
@@ -198,7 +198,7 @@ let packageTargets: [Target] = [
 			.product(name: "ZIPFoundation", package: "ZIPFoundation", condition: .when(traits: ["DOCX"])),
 			// Shared dependency-free utilities (ImageDimensions). No external product,
 			// so no trait condition is needed.
-			"SwiftTextCore",
+			"SwiftTextCore"
 		],
 		path: "Sources/SwiftTextDOCX"
 	),
@@ -217,7 +217,7 @@ let packageTargets: [Target] = [
 			"SwiftTextMarkdown",
 			.product(name: "Markdown", package: "swift-markdown"),
 			// Shared dependency-free utilities (ImageDimensions); see SwiftTextDOCX.
-			"SwiftTextCore",
+			"SwiftTextCore"
 		],
 		path: "Sources/SwiftTextPages"
 	),
@@ -226,7 +226,7 @@ let packageTargets: [Target] = [
 		dependencies: ["SwiftTextDOCX"],
 		path: "Tests/SwiftTextDOCXTests",
 		resources: [
-			.process("Resources"),
+			.process("Resources")
 		]
 	),
 	.testTarget(
@@ -234,7 +234,7 @@ let packageTargets: [Target] = [
 		dependencies: ["SwiftTextPages"],
 		path: "Tests/SwiftTextPagesTests",
 		resources: [
-			.process("Resources"),
+			.process("Resources")
 		]
 	),
 	.testTarget(
@@ -278,7 +278,7 @@ let packageTargets: [Target] = [
 			"SwiftTextHTML",
 			"SwiftTextCSS",
 			"SwiftTextOpenType",
-			"SwiftTextPDFWriter",
+			"SwiftTextPDFWriter"
 		],
 		path: "Sources/SwiftTextRender"
 	),
@@ -286,7 +286,7 @@ let packageTargets: [Target] = [
 		name: "SwiftTextRenderTests",
 		dependencies: ["SwiftTextRender", "SwiftTextHTML", "SwiftTextCSS"],
 		path: "Tests/SwiftTextRenderTests"
-	),
+	)
 ] + htmlTargets + macOSTargets
 
 let package = Package(
@@ -295,7 +295,7 @@ let package = Package(
 		.macOS(.v12),
 		.iOS(.v13),
 		.tvOS(.v13),
-		.watchOS(.v6),
+		.watchOS(.v6)
 	],
 	products: packageProducts,
 	traits: [
@@ -313,13 +313,13 @@ let package = Package(
 		// products (ArgumentParser, ZIPFoundation) active to compile. Consumers that
 		// specify explicit traits (e.g. ["HTML"]) drop the defaults, which lets SwiftPM
 		// prune both packages from their dependency resolution.
-		.default(enabledTraits: ["OCR", "CLI"]),
+		.default(enabledTraits: ["OCR", "CLI"])
 	],
 	dependencies: [
 		.package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0"),
 		.package(url: "https://github.com/weichsel/ZIPFoundation.git", from: "0.9.12"),
 		.package(url: "https://github.com/swiftlang/swift-markdown.git", from: "0.8.0"),
-		.package(url: "https://github.com/Cocoanetics/XMLKit.git", from: "1.0.0"),
+		.package(url: "https://github.com/Cocoanetics/XMLKit.git", from: "1.0.0")
 	],
 	targets: packageTargets
 )

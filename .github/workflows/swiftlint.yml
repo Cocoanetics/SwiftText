@@ -2,10 +2,16 @@
 name: SwiftLint
 on:
   pull_request:
+    # Keep these paths in sync with `included:` in .swiftlint.yml — the job must
+    # only be triggered by files it actually lints, or a change to an unlinted
+    # Swift file (e.g. under Scripts/) would get a misleading green check.
     paths:
       - '.github/workflows/swiftlint.yml'
       - '.swiftlint.yml'
-      - '**/*.swift'
+      - 'Sources/**/*.swift'
+      - 'Tests/**/*.swift'
+      - 'Package.swift'
+      - 'Plugins/**/*.swift'
   push:
     branches:
       - main

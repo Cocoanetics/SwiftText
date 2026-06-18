@@ -1,6 +1,13 @@
 included:
   - Sources
   - Tests
+  # The package manifest and the build-tool plugin are real project code, so
+  # they're linted too — and the CI trigger is scoped to match this list (see
+  # .github/workflows/swiftlint.yml), so no `**/*.swift` change can green the
+  # lint job without the file actually being checked. The standalone dev /
+  # reverse-engineering tools under Scripts/ are intentionally out of both.
+  - Package.swift
+  - Plugins
 
 excluded:
   # Machine-generated iWork wire models (protobuf → Swift), produced by
