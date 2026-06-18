@@ -27,7 +27,7 @@ struct SwiftTextCLI: AsyncParsableCommand {
 		commandName: "swifttext",
 		abstract: "Extract text from HTML, PDF, image, DOCX, or Pages sources.",
 		version: swiftTextVersion,
-		subcommands: [OCR.self, Docx.self, Pages.self, HTML.self, Overlay.self, PDF.self, Render.self],
+		subcommands: [OCR.self, Docx.self, Pages.self, Numbers.self, HTML.self, Overlay.self, PDF.self, Render.self],
 		defaultSubcommand: OCR.self
 	)
 }
@@ -671,6 +671,55 @@ struct Pages: AsyncParsableCommand {
 		}
 
 		return URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
+	}
+}
+
+@available(macOS 10.15, macCatalyst 13, iOS 13, tvOS 13, watchOS 6, *)
+struct Numbers: AsyncParsableCommand {
+	static let configuration = CommandConfiguration(
+		commandName: "numbers",
+		abstract: "Extract tables from Apple Numbers (iWork) spreadsheets as Markdown, HTML, or TSV."
+	)
+
+	@Argument(help: "Path to the .numbers file.")
+	var path: String
+
+	@Flag(name: .shortAndLong, help: "Output GitHub-flavored Markdown tables.")
+	var markdown: Bool = false
+
+	@Flag(name: .long, help: "Output HTML tables.")
+	var html: Bool = false
+
+	@Option(name: .shortAndLong, help: "Write output to a file instead of stdout.")
+	var outputPath: String?
+
+	func run() async throws {
+		let fileURL = resolvedURL(from: path)
+		guard FileManager.default.fileExists(atPath: fileURL.path) else {
+			throw ValidationError("File not found: \(fileURL.path)")
+		}
+		if markdown && html {
+			throw ValidationError("Choose at most one of --markdown / --html.")
+		}
+
+		let numbers = try NumbersFile(url: fileURL)
+		let output = markdown ? numbers.markdown() : html ? numbers.html() : numbers.plainText()
+		if !output.isEmpty {
+			try writeOutputIfNeeded(output)
+		}
+	}
+
+	private func writeOutputIfNeeded(_ contents: String) throws {
+		if let outputPath {
+			let expanded = (outputPath as NSString).expandingTildeInPath
+			let url = URL(fileURLWithPath: expanded)
+			let dir = url.deletingLastPathComponent()
+			try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+			try contents.write(to: url, atomically: true, encoding: .utf8)
+			return
+		}
+
+		print(contents)
 	}
 }
 

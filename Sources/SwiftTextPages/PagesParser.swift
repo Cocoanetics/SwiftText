@@ -490,7 +490,7 @@ final class PagesParser {
 			      let offsets = rowInfo.bytes(IWork.tileCellOffsetsField) else { continue }
 			let cellStarts = cellOffsets(offsets)
 			for (column, start) in cellStarts.enumerated() where column < columns {
-				guard start + IWork.cellKeyByteOffset + 4 <= buffer.count else { continue }
+				guard start >= 0, start + IWork.cellKeyByteOffset + 4 <= buffer.count else { continue }
 				let base = start + IWork.cellKeyByteOffset
 				let key = UInt64(buffer[base]) | UInt64(buffer[base + 1]) << 8 | UInt64(buffer[base + 2]) << 16 | UInt64(buffer[base + 3]) << 24
 				let typeByte = start + IWork.cellTypeByteOffset < buffer.count ? buffer[start + IWork.cellTypeByteOffset] : 0
@@ -621,15 +621,17 @@ final class PagesParser {
 		return sign == 1 && result != "0" ? "-" + result : result
 	}
 
-	/// Parses a tile row's `u16` cell-offset array (little-endian), terminated by the
-	/// `0xFFFF` sentinel — the byte offset of each cell into the cell buffer.
+	/// Parses a tile row's `u16` cell-offset array (little-endian): one entry per column,
+	/// each the byte offset of that column's cell. The `0xFFFF` sentinel marks an *empty*
+	/// cell (returned as `-1`), not the end of the row — so the array continues past it.
+	/// Stopping at the first `0xFFFF` silently drops every cell after a gap, e.g. a value
+	/// in column C when column B is blank.
 	private func cellOffsets(_ bytes: [UInt8]) -> [Int] {
 		var offsets = [Int]()
 		var i = 0
 		while i + 1 < bytes.count {
 			let value = Int(bytes[i]) | Int(bytes[i + 1]) << 8
-			if value == 0xFFFF { break }
-			offsets.append(value)
+			offsets.append(value == 0xFFFF ? -1 : value)
 			i += 2
 		}
 		return offsets
