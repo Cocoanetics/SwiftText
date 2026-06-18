@@ -77,11 +77,18 @@ jobs:
   # DOCX/Pages targets are absent from the graph — `swift test` builds and runs
   # only what the Windows toolchain can satisfy with no vcpkg/libxml2 needed.
   # Production toolchain is Swift 6.3.1 via SwiftyLab/setup-swift.
+  #
+  # AttributedString is excluded on Windows only: it compiles, but the 6.3.1
+  # toolchain's swift-foundation doesn't ship the linkable
+  # `_FoundationCollections.BigString` symbols backing it, so it fails at link.
+  # Linux and Android link and run it fine (see test-android-portable). Drop the
+  # exclude once a Windows toolchain ships those symbols.
   test-windows-portable:
     runs-on: windows-latest
     timeout-minutes: 30
     env:
       SWIFTTEXT_PORTABLE_ONLY: "1"
+      SWIFTTEXT_PORTABLE_EXCLUDE: "SwiftTextAttributedString,SwiftTextAttributedStringTests"
     steps:
       - uses: actions/checkout@v6
       - name: Setup Swift

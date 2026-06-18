@@ -27,6 +27,20 @@ let portableTargetNames: Set<String> = [
 	"SwiftTextCSSTests"
 ]
 
+// A platform may need to drop a portable target it can't yet link. The Windows
+// Swift 6.3.1 toolchain's swift-foundation provides the AttributedString *API*
+// (it compiles) but not the linkable `_FoundationCollections.BigString` symbols
+// that back its storage, so SwiftTextAttributedString fails at link time there.
+// SWIFTTEXT_PORTABLE_EXCLUDE is a comma-separated list of target/test/product
+// names to remove from the portable subset. (Linux and Android link it fine.)
+let portableExclude = Set(
+	(ProcessInfo.processInfo.environment["SWIFTTEXT_PORTABLE_EXCLUDE"] ?? "")
+		.split(separator: ",")
+		.map { $0.trimmingCharacters(in: .whitespaces) }
+		.filter { !$0.isEmpty }
+)
+let effectivePortableNames = portableTargetNames.subtracting(portableExclude)
+
 // macOS-only targets (Vision, PDFKit, AppKit, WebKit)
 #if !os(macOS)
 let macOSProducts: [Product] = []
@@ -354,8 +368,8 @@ let package = Package(
 		.tvOS(.v13),
 		.watchOS(.v6)
 	],
-	products: portableOnly ? packageProducts.filter { portableTargetNames.contains($0.name) } : packageProducts,
+	products: portableOnly ? packageProducts.filter { effectivePortableNames.contains($0.name) } : packageProducts,
 	traits: portableOnly ? [] : allTraits,
 	dependencies: portableOnly ? portableDependencies : allDependencies,
-	targets: portableOnly ? packageTargets.filter { portableTargetNames.contains($0.name) } : packageTargets
+	targets: portableOnly ? packageTargets.filter { effectivePortableNames.contains($0.name) } : packageTargets
 )
