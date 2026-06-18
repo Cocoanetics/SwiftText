@@ -63,4 +63,14 @@ final class NumbersFileTests: XCTestCase {
 		XCTAssertTrue(html.contains("<th>Item</th>"))
 		XCTAssertTrue(html.contains("<td style=\"text-align:right\">12.49</td>"))
 	}
+
+	func testJSONRoundTripsThroughCodableModel() throws {
+		let jsonString = try fixture().json()
+		let decoded = try JSONDecoder().decode(NumbersDocument.self, from: Data(jsonString.utf8))
+		XCTAssertEqual(decoded.sheets.first?.name, "Sheet 1")
+		let table = try XCTUnwrap(decoded.allTables.first)
+		XCTAssertEqual(table.cells[0], ["Item", "Qty", "Price"])
+		XCTAssertEqual(table.cells[3][2], "12.49")
+		XCTAssertEqual(table.columnAlignments, [.left, .right, .right])
+	}
 }

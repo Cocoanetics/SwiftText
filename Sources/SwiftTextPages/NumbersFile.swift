@@ -41,6 +41,18 @@ public final class NumbersFile {
 		return out.joined(separator: "\n")
 	}
 
+	/// The document as JSON — sheets of used-range tables — for programmatic and LLM-agent
+	/// consumption. The shape is the `Codable` `NumbersDocument` with each table cropped to
+	/// its used range.
+	public func json() throws -> String {
+		let trimmed = NumbersDocument(sheets: document.sheets.map { sheet in
+			NumbersDocument.Sheet(name: sheet.name, tables: sheet.tables.compactMap { $0.trimmedToUsedRange() })
+		})
+		let encoder = JSONEncoder()
+		encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+		return String(decoding: try encoder.encode(trimmed), as: UTF8.self)
+	}
+
 	/// Tab-separated values, one block per table (blank line between tables/sheets).
 	public func plainText() -> String {
 		var blocks = [String]()

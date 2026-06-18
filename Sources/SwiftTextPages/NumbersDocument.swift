@@ -5,8 +5,8 @@ import Foundation
 /// (cached) values. There is no formula engine — every cell reads as the static value
 /// Numbers last computed and stored, which is what `wiki`-style consumers and LLM
 /// agents want when they ask "what does this spreadsheet say right now."
-public struct NumbersDocument: Sendable {
-	public struct Sheet: Sendable {
+public struct NumbersDocument: Sendable, Codable {
+	public struct Sheet: Sendable, Codable {
 		/// The sheet's tab name, when the document records one.
 		public var name: String?
 		public var tables: [TSTTable]

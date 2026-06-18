@@ -4,8 +4,8 @@ import Foundation
 /// alignment. The grid's first row is the table's first row (a header row, when the
 /// table has one). Shared by Pages and Numbers — both store tables with the same
 /// `TST` ("Tabular Spreadsheet Tables") model, so the same decoder serves both.
-public struct TSTTable: Sendable, Equatable {
-	public enum Alignment: String, Sendable, Equatable { case left, center, right }
+public struct TSTTable: Sendable, Equatable, Codable {
+	public enum Alignment: String, Sendable, Equatable, Codable { case left, center, right }
 
 	/// Row-major cell values. `cells[0]` is the first table row.
 	public var cells: [[String]]

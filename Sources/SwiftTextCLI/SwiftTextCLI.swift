@@ -690,6 +690,9 @@ struct Numbers: AsyncParsableCommand {
 	@Flag(name: .long, help: "Output HTML tables.")
 	var html: Bool = false
 
+	@Flag(name: .long, help: "Output JSON (sheets of tables) for programmatic use.")
+	var json: Bool = false
+
 	@Option(name: .shortAndLong, help: "Write output to a file instead of stdout.")
 	var outputPath: String?
 
@@ -698,12 +701,12 @@ struct Numbers: AsyncParsableCommand {
 		guard FileManager.default.fileExists(atPath: fileURL.path) else {
 			throw ValidationError("File not found: \(fileURL.path)")
 		}
-		if markdown && html {
-			throw ValidationError("Choose at most one of --markdown / --html.")
+		guard [markdown, html, json].filter({ $0 }).count <= 1 else {
+			throw ValidationError("Choose at most one of --markdown / --html / --json.")
 		}
 
 		let numbers = try NumbersFile(url: fileURL)
-		let output = markdown ? numbers.markdown() : html ? numbers.html() : numbers.plainText()
+		let output = markdown ? numbers.markdown() : html ? numbers.html() : json ? try numbers.json() : numbers.plainText()
 		if !output.isEmpty {
 			try writeOutputIfNeeded(output)
 		}
