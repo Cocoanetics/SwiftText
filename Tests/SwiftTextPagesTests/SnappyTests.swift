@@ -57,7 +57,7 @@ struct SnappyTests {
 			Array(repeating: 0x41, count: 5000),                  // long run (RLE-style)
 			(0..<4000).map { UInt8(0x61 + ($0 % 6)) },            // periodic "abcdef…"
 			pseudoRandom,                                         // incompressible
-			pseudoRandom + Array(repeating: 0x7E, count: 70000),  // spans more than one window
+			pseudoRandom + Array(repeating: 0x7E, count: 70000)  // spans more than one window
 		]
 		for input in cases {
 			#expect(try Snappy.decompress(Snappy.compress(input)) == input)

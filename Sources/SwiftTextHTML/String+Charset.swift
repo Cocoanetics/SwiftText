@@ -32,7 +32,7 @@ public func stringEncoding(for rawCharset: String) -> String.Encoding? {
 		"shift-jis": "shift_jis",
 		"sjis": "shift_jis",
 		"cp932": "shift_jis",
-		"_iso-2022-jp": "iso-2022-jp",
+		"_iso-2022-jp": "iso-2022-jp"
 	]
 	if let mapped = aliasToIANA[label] { label = mapped }
 
@@ -63,7 +63,7 @@ public func stringEncoding(for rawCharset: String) -> String.Encoding? {
 		"windows-1254": .windowsCP1254,
 		"shift_jis": .shiftJIS,
 		"euc-jp": .japaneseEUC,
-		"iso-2022-jp": .iso2022JP,
+		"iso-2022-jp": .iso2022JP
 	]
 	return additional[label]
 }

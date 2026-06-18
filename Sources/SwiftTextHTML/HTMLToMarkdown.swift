@@ -4,38 +4,32 @@ import FoundationNetworking
 #endif
 
 @available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 6.0, *)
-public final class HTMLToMarkdown
-{
+public final class HTMLToMarkdown {
 	private var url: URL?
 	private var data: Data?
 
-	public init(url: URL)
-	{
+	public init(url: URL) {
 		self.url = url
 	}
 
-	public init(data: Data, url: URL? = nil)
-	{
+	public init(data: Data, url: URL? = nil) {
 		self.data = data
 		self.url = url
 	}
 
-	public func markdown() async throws -> String
-	{
+	public func markdown() async throws -> String {
 		let htmlData = try await resolveData()
 		let document = try await HTMLDocument(data: htmlData, baseURL: url)
 		return document.markdown()
 	}
 
-	public func text() async throws -> String
-	{
+	public func text() async throws -> String {
 		let htmlData = try await resolveData()
 		let document = try await HTMLDocument(data: htmlData, baseURL: url)
 		return document.text()
 	}
 
-	private func resolveData() async throws -> Data
-	{
+	private func resolveData() async throws -> Data {
 		if let data {
 			return data
 		}
@@ -51,10 +45,9 @@ public final class HTMLToMarkdown
 		return try await fetchData(from: url)
 	}
 
-	private func fetchData(from url: URL) async throws -> Data
-	{
+	private func fetchData(from url: URL) async throws -> Data {
 		try await withCheckedThrowingContinuation { continuation in
-			let task = URLSession.shared.dataTask(with: url) { data, response, error in
+			let task = URLSession.shared.dataTask(with: url) { data, _, error in
 				if let error {
 					continuation.resume(throwing: error)
 					return
@@ -72,7 +65,6 @@ public final class HTMLToMarkdown
 	}
 }
 
-public enum HTMLToMarkdownError: Error
-{
+public enum HTMLToMarkdownError: Error {
 	case missingSource
 }

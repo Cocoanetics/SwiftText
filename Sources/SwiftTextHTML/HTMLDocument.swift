@@ -4,13 +4,11 @@ import FoundationNetworking
 #endif
 
 @available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 6.0, *)
-public final class HTMLDocument
-{
+public final class HTMLDocument {
 	public let root: DOMElement
 	public let baseURL: URL?
 
-	public init(data: Data, baseURL: URL? = nil, encoding: String.Encoding? = nil) async throws
-	{
+	public init(data: Data, baseURL: URL? = nil, encoding: String.Encoding? = nil) async throws {
 		self.baseURL = baseURL
 		let builder = try await DomBuilder(html: data, baseURL: baseURL, encoding: encoding)
 		guard let root = builder.root else {
@@ -30,13 +28,11 @@ public final class HTMLDocument
 		return root
 	}
 
-	public func markdown() -> String
-	{
+	public func markdown() -> String {
 		contentRoot.markdown(imageResolver: resolveMarkdownImageSource).trimmingCharacters(in: .whitespacesAndNewlines)
 	}
 
-	public func markdown(saveImagesAt folderURL: URL?) async throws -> String
-	{
+	public func markdown(saveImagesAt folderURL: URL?) async throws -> String {
 		guard let folderURL else {
 			return markdown()
 		}
@@ -49,8 +45,7 @@ public final class HTMLDocument
 		}).trimmingCharacters(in: .whitespacesAndNewlines)
 	}
 
-	public func text() -> String
-	{
+	public func text() -> String {
 		contentRoot.text().trimmingCharacters(in: .whitespacesAndNewlines)
 	}
 
@@ -62,8 +57,7 @@ public final class HTMLDocument
 		if element.name == "img",
 		   let src = element.attributes["src"] as? String,
 		   !src.isEmpty,
-		   !src.hasPrefix("data:")
-		{
+		   !src.hasPrefix("data:") {
 			sources.append(src)
 		}
 
@@ -167,7 +161,7 @@ public final class HTMLDocument
 
 	private func fetchData(from url: URL) async throws -> Data {
 		try await withCheckedThrowingContinuation { continuation in
-			let task = URLSession.shared.dataTask(with: url) { data, response, error in
+			let task = URLSession.shared.dataTask(with: url) { data, _, error in
 				if let error {
 					continuation.resume(throwing: error)
 					return
@@ -185,8 +179,7 @@ public final class HTMLDocument
 	}
 }
 
-public enum HTMLDocumentError: Error
-{
+public enum HTMLDocumentError: Error {
 	case missingRoot
 	case missingImageData(URL)
 }

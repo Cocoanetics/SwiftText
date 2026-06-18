@@ -51,7 +51,7 @@ struct PagesLegacyTests {
 			"First Section",
 			"Body via inherited style.",
 			"Line one\nline two",
-			"Real text.",
+			"Real text."
 		])
 	}
 

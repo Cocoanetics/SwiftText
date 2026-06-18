@@ -51,8 +51,7 @@ struct IWARecord {
 			} else {
 				var wroteLength = false
 				for field in part.messageInfo {
-					if field.number == 3 { info.varintField(3, UInt64(part.payload.count)); wroteLength = true }
-					else { info.append(field) }
+					if field.number == 3 { info.varintField(3, UInt64(part.payload.count)); wroteLength = true } else { info.append(field) }
 				}
 				if !wroteLength { info.varintField(3, UInt64(part.payload.count)) }
 			}

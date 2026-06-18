@@ -8,8 +8,7 @@
 #if canImport(UIKit)
 import UIKit
 
-public extension UIImage
-{
+public extension UIImage {
 	/**
 	 Performs OCR (Optical Character Recognition) on the current image.
 	 
@@ -21,14 +20,13 @@ public extension UIImage
 	 - Note: This method requires iOS 13.0+, tvOS 13.0+, or macOS 10.15+. On earlier versions, this method will not be available.
 	 */
 	@available(iOS 13.0, tvOS 13.0, macOS 10.15, visionOS 1.0, *)
-	func performOCR() throws -> [TextLine]?
-	{
+	func performOCR() throws -> [TextLine]? {
 		guard let cgImage = self.cgImage else {
 			throw OCRError.failedToCreateCGImage
 		}
 		return try cgImage.performOCR(imageSize: self.size)
 	}
-	
+
 	/**
 	 Extracts all text lines from the image as `TextLine` objects using OCR.
 	 
@@ -37,12 +35,11 @@ public extension UIImage
 	 This method performs OCR on the image to extract text. Since images don't have selectable text like PDFs, OCR is the only method available.
 	 */
 	@available(iOS 13.0, tvOS 13.0, macOS 10.15, visionOS 1.0, *)
-	func textLines() -> [TextLine]
-	{
+	func textLines() -> [TextLine] {
 		guard let cgImage = self.cgImage else { return [] }
 		return cgImage.textLines(imageSize: self.size)
 	}
-	
+
 	/**
 	 Extracts all text from the image organized into lines, preserving logical line breaks.
 	 
@@ -53,7 +50,7 @@ public extension UIImage
 		guard let cgImage = self.cgImage else { return [] }
 		return cgImage.stringsFromLines(imageSize: self.size)
 	}
-	
+
 	/**
 	 Extracts all text from the image as a single string, preserving vertical spacing.
 	 
@@ -66,4 +63,3 @@ public extension UIImage
 	}
 }
 #endif
-

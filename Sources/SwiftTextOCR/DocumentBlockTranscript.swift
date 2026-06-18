@@ -28,19 +28,19 @@ private extension DocumentBlock {
 			return format(image: image)
 		}
 	}
-	
+
 	func normalizedLines(from lines: [TextLine], fallback: String) -> String {
 		let trimmedLines = lines
 			.map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }
 			.filter { !$0.isEmpty }
-		
+
 		if trimmedLines.isEmpty {
 			return fallback.trimmingCharacters(in: .whitespacesAndNewlines)
 		}
-		
+
 		return trimmedLines.joined(separator: "\n")
 	}
-	
+
 	func format(list: DocumentBlock.List) -> String {
 		list.items.enumerated().map { index, item in
 			let marker = item.markerString.isEmpty ? list.marker.formatted(index: index) : item.markerString
@@ -48,7 +48,7 @@ private extension DocumentBlock {
 			return indenting(content, prefix: "\(marker) ")
 		}.joined(separator: "\n")
 	}
-	
+
 	func format(table: DocumentBlock.Table) -> String {
 		table.rows.map { row in
 			row.map { cell -> String in
@@ -57,30 +57,30 @@ private extension DocumentBlock {
 			}.joined(separator: " | ")
 		}.joined(separator: "\n")
 	}
-	
+
 	func format(image: DocumentBlock.Image) -> String {
 		if let caption = image.caption?.trimmingCharacters(in: .whitespacesAndNewlines),
 		   !caption.isEmpty {
 			return "[Image: \(caption)]"
 		}
-		
+
 		return "[Image]"
 	}
-	
+
 	func indenting(_ content: String, prefix: String) -> String {
 		let lines = content.components(separatedBy: .newlines)
 		guard let first = lines.first else {
 			return prefix.trimmingCharacters(in: .whitespaces)
 		}
-		
+
 		let remainder = lines.dropFirst()
 		let indentation = String(repeating: " ", count: prefix.count)
 		let tail = remainder.map { indentation + $0 }.joined(separator: "\n")
-		
+
 		if tail.isEmpty {
 			return prefix + first
 		}
-		
+
 		return prefix + first + "\n" + tail
 	}
 }

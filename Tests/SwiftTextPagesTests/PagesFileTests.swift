@@ -14,7 +14,7 @@ struct PagesFileTests {
 		#expect(pages.plainTextParagraphs() == [
 			"Sample Document Title",
 			"This is the first body paragraph with some words.",
-			"This is the second body paragraph.",
+			"This is the second body paragraph."
 		])
 	}
 
@@ -59,11 +59,11 @@ struct PagesFileTests {
 		let bodyStyle = IWAWriter.bytesField(11, IWAWriter.varintField(1, 0) + IWAWriter.floatField(3, 12))
 
 		let documentIWA = IWAWriter.iwaFile([
-			.init(identifier: 1, type: 2001, payload: storage),
+			.init(identifier: 1, type: 2001, payload: storage)
 		])
 		let stylesheetIWA = IWAWriter.iwaFile([
 			.init(identifier: headingStyleID, type: 2022, payload: headingStyle),
-			.init(identifier: bodyStyleID, type: 2022, payload: bodyStyle),
+			.init(identifier: bodyStyleID, type: 2022, payload: bodyStyle)
 		])
 
 		let bundle = FileManager.default.temporaryDirectory
@@ -78,7 +78,7 @@ struct PagesFileTests {
 		#expect(pages.plainTextParagraphs() == [
 			"Big Heading",
 			"Normal paragraph one.",
-			"Normal paragraph two.",
+			"Normal paragraph two."
 		])
 
 		let markdown = pages.markdown()

@@ -142,7 +142,7 @@ public final class DocxWriter {
 
 	/// Tracks numbering instances for list continuity.
 	private var nextNumId = 0
-	private var lastListType: ListType? = nil
+	private var lastListType: ListType?
 	/// Maps each concrete numId to its abstract numbering id (0=bullet, 1=decimal).
 	private var numInstances: [(numId: Int, abstractNumId: Int)] = []
 

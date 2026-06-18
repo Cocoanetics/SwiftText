@@ -93,7 +93,7 @@ private struct RunStyle {
 	var italic: Bool = false
 	var strike: Bool = false
 	var code: Bool = false
-	var link: String? = nil
+	var link: String?
 }
 
 private struct RunCollector {

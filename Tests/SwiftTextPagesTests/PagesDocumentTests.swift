@@ -12,7 +12,7 @@ struct PagesDocumentTests {
 			.init(text: "A Section", fontSize: 17, bold: true),
 			.init(text: "A Subsection", fontSize: 14, bold: false),
 			.init(text: "Body text that establishes the dominant size.", fontSize: 11, bold: false),
-			.init(text: "More body text at the same dominant size.", fontSize: 11, bold: false),
+			.init(text: "More body text at the same dominant size.", fontSize: 11, bold: false)
 		])
 
 		let markdown = document.markdown()
@@ -29,7 +29,7 @@ struct PagesDocumentTests {
 		let document = PagesDocument(paragraphs: [
 			.init(text: long, fontSize: 20, bold: false),
 			.init(text: "Body one.", fontSize: 11, bold: false),
-			.init(text: "Body two.", fontSize: 11, bold: false),
+			.init(text: "Body two.", fontSize: 11, bold: false)
 		])
 		#expect(!document.markdown().contains("#"))
 	}
@@ -38,7 +38,7 @@ struct PagesDocumentTests {
 	func noStyleInfoIsPlain() {
 		let document = PagesDocument(paragraphs: [
 			.init(text: "First paragraph."),
-			.init(text: "Second paragraph."),
+			.init(text: "Second paragraph.")
 		])
 		#expect(document.markdown() == "First paragraph.\n\nSecond paragraph.")
 		#expect(document.plainText() == "First paragraph.\n\nSecond paragraph.")
@@ -56,7 +56,7 @@ struct PagesDocumentTests {
 		let paragraph = PagesDocument.Paragraph(text: "B I X", emphasis: [
 			.init(start: 0, bold: true, italic: false),
 			.init(start: 2, bold: false, italic: true),
-			.init(start: 4, bold: true, italic: true),
+			.init(start: 4, bold: true, italic: true)
 		])
 		let document = PagesDocument(paragraphs: [paragraph])
 		#expect(document.markdown() == "**B** *I* ***X***")
@@ -68,12 +68,12 @@ struct PagesDocumentTests {
 		let strikeOnly = PagesDocument.Paragraph(text: "xYz", emphasis: [
 			.init(start: 0, bold: false, italic: false, strike: false),
 			.init(start: 1, bold: false, italic: false, strike: true),
-			.init(start: 2, bold: false, italic: false, strike: false),
+			.init(start: 2, bold: false, italic: false, strike: false)
 		])
 		let boldStrike = PagesDocument.Paragraph(text: "xYz", emphasis: [
 			.init(start: 0, bold: false, italic: false, strike: false),
 			.init(start: 1, bold: true, italic: false, strike: true),
-			.init(start: 2, bold: false, italic: false, strike: false),
+			.init(start: 2, bold: false, italic: false, strike: false)
 		])
 		#expect(PagesDocument(paragraphs: [strikeOnly]).markdown() == "x~~Y~~z")
 		#expect(PagesDocument(paragraphs: [boldStrike]).markdown() == "x~~**Y**~~z")
@@ -89,7 +89,7 @@ struct PagesDocumentTests {
 			.init(text: "Third", listLevel: 0, listOrdered: true),
 			.init(text: "Body paragraph."),
 			.init(text: "A", listLevel: 0, listOrdered: false),
-			.init(text: "B", listLevel: 0, listOrdered: false),
+			.init(text: "B", listLevel: 0, listOrdered: false)
 		])
 		#expect(document.markdown() == """
 		1. First
@@ -110,7 +110,7 @@ struct PagesDocumentTests {
 			.init(text: "Kept."),
 			.init(text: "   "),
 			.init(text: "\u{FFFC}"),
-			.init(text: "Also kept."),
+			.init(text: "Also kept.")
 		])
 		#expect(document.plainTextParagraphs() == ["Kept.", "Also kept."])
 	}

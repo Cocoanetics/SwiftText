@@ -3,8 +3,7 @@ import SwiftTextHTML
 import Testing
 
 @Test
-func htmlParserEmitsSequentialEvents() async
-{
+func htmlParserEmitsSequentialEvents() async {
 	let html = """
 	<html><body><p>Hello <b>World</b></p></body></html>
 	"""
@@ -32,8 +31,7 @@ func htmlParserEmitsSequentialEvents() async
 }
 
 @Test
-func delegateAdapterForwardsStreamEventsToDelegateCallbacks() async
-{
+func delegateAdapterForwardsStreamEventsToDelegateCallbacks() async {
 	let html = """
 	<html><body><p>Hello</p></body></html>
 	"""
@@ -51,40 +49,32 @@ func delegateAdapterForwardsStreamEventsToDelegateCallbacks() async
 	#expect(recorder.events.last == "endDocument")
 }
 
-private final class DelegateRecorder: HTMLParserDelegate
-{
+private final class DelegateRecorder: HTMLParserDelegate {
 	var events: [String] = []
 
-	func parserDidStartDocument(_ parser: HTMLParser)
-	{
+	func parserDidStartDocument(_ parser: HTMLParser) {
 		events.append("startDocument")
 	}
 
-	func parserDidEndDocument(_ parser: HTMLParser)
-	{
+	func parserDidEndDocument(_ parser: HTMLParser) {
 		events.append("endDocument")
 	}
 
-	func parser(_ parser: HTMLParser, didStartElement elementName: String, attributes attributeDict: [String : String])
-	{
+	func parser(_ parser: HTMLParser, didStartElement elementName: String, attributes attributeDict: [String: String]) {
 		events.append("startElement:\(elementName)")
 	}
 
-	func parser(_ parser: HTMLParser, didEndElement elementName: String)
-	{
+	func parser(_ parser: HTMLParser, didEndElement elementName: String) {
 		events.append("endElement:\(elementName)")
 	}
 
-	func parser(_ parser: HTMLParser, foundCharacters string: String)
-	{
+	func parser(_ parser: HTMLParser, foundCharacters string: String) {
 		events.append("characters:\(string)")
 	}
 }
 
-private func string(for event: HTMLParserEvent) -> String
-{
-	switch event
-	{
+private func string(for event: HTMLParserEvent) -> String {
+	switch event {
 	case .startDocument:
 		return "startDocument"
 
@@ -114,8 +104,7 @@ private func string(for event: HTMLParserEvent) -> String
 	}
 }
 
-private func containsOrderedSubsequence(_ subsequence: [String], in events: [String]) -> Bool
-{
+private func containsOrderedSubsequence(_ subsequence: [String], in events: [String]) -> Bool {
 	var searchStart = events.startIndex
 
 	for needle in subsequence {

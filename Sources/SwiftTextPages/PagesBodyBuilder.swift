@@ -340,7 +340,7 @@ enum PagesBodySerializer {
 			3: Array(fullText.utf8),
 			5: runTable(paragraphStyleEntries),
 			6: paragraphDataTable(paragraphDataEntries),
-			7: runTable(listStyleEntries),
+			7: runTable(listStyleEntries)
 		]
 		if !characterEntries.isEmpty {
 			provided[8] = runTable(characterEntries)
@@ -645,8 +645,7 @@ enum PagesBodySerializer {
 				var inner = ProtobufWriter()
 				var setItalic = false
 				for property in message.fields {
-					if property.number == 2 { inner.varintField(2, 1); setItalic = true }
-					else { inner.append(property) }
+					if property.number == 2 { inner.varintField(2, 1); setItalic = true } else { inner.append(property) }
 				}
 				if !setItalic { inner.varintField(2, 1) }
 				writer.bytesField(11, inner.bytes)

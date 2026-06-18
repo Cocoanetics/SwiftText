@@ -14,7 +14,7 @@ struct HTMLListConversionTests {
 		let expected = [
 			"1. one",
 			"2. two",
-			"3. three",
+			"3. three"
 		].joined(separator: "\n")
 		#expect(markdown == expected)
 	}
@@ -48,7 +48,7 @@ struct HTMLListConversionTests {
 			"- First",
 			"- Second:",
 			"  - inner a",
-			"  - inner b",
+			"  - inner b"
 		].joined(separator: "\n")
 		#expect(markdown == expected)
 	}
@@ -80,7 +80,7 @@ struct HTMLListConversionTests {
 		let expected = [
 			"- Item:",
 			"1. alpha",
-			"2. beta",
+			"2. beta"
 		].joined(separator: "\n")
 		#expect(markdown == expected)
 	}

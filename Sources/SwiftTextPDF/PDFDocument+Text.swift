@@ -11,8 +11,7 @@ import SwiftTextOCR
 import Vision
 #endif
 
-public extension PDFDocument
-{
+public extension PDFDocument {
 	/**
 	 Extracts all text lines from the PDF document as `TextLine` objects. Each `TextLine` represents a logical line of text, preserving vertical alignment and reading order.
 	 
@@ -20,12 +19,10 @@ public extension PDFDocument
 	 - Discussion:
 	   This method processes each page, first attempting to extract text using the PDFKit text selection mechanism. If no selectable text is found, it falls back to OCR using Apple's Vision framework.
 	 */
-	func textLines() -> [TextLine]
-	{
+	func textLines() -> [TextLine] {
 		var allLines = [TextLine]()
 
-		for pageIndex in 0..<self.pageCount
-		{
+		for pageIndex in 0..<self.pageCount {
 			guard let page = self.page(at: pageIndex) else { continue }
 			allLines.append(contentsOf: page.textLines())
 		}
@@ -43,7 +40,7 @@ public extension PDFDocument
 	var stringsFromLines: [String] {
 		return textLines().map { $0.combinedText }
 	}
-	
+
 	/**
 	 Extracts all text from the PDF document as a single string, preserving vertical spacing and page breaks.
 	 
@@ -52,7 +49,7 @@ public extension PDFDocument
 	func extractText() -> String {
 		return textLines().string()
 	}
-	
+
 	/**
 	 Enumerates each page in the PDF document, extracting text lines and calling the provided closure.
 	 
@@ -68,14 +65,12 @@ public extension PDFDocument
 	 }
 	 ```
 	 */
-	func enumeratePages(_ body: (PDFPage, [TextLine]) -> Bool)
-	{
-		for pageIndex in 0..<self.pageCount
-		{
+	func enumeratePages(_ body: (PDFPage, [TextLine]) -> Bool) {
+		for pageIndex in 0..<self.pageCount {
 			guard let page = self.page(at: pageIndex) else { continue }
-			
+
 			let textLines = page.textLines()
-			
+
 			if !body(page, textLines) {
 				break
 			}

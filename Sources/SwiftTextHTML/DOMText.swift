@@ -1,7 +1,6 @@
 import Foundation
 
-final class DOMText: DOMNode, @unchecked Sendable
-{
+final class DOMText: DOMNode, @unchecked Sendable {
 	let name: String
 	let textValue: String
 	let preserveWhitespace: Bool

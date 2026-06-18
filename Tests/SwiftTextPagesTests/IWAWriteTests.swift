@@ -47,7 +47,7 @@ struct IWAWriteTests {
 		let objects = [
 			IWAObject(identifier: 1, type: 10000, payload: Array("root".utf8)),
 			IWAObject(identifier: 1732539, type: 2001, payload: []),            // empty payload
-			IWAObject(identifier: 1732540, type: 2001, payload: Array("body text".utf8)),
+			IWAObject(identifier: 1732540, type: 2001, payload: Array("body text".utf8))
 		]
 		let decoded = try IWAArchive.objects(from: IWAArchive.encode(objects))
 		#expect(decoded.count == objects.count)
@@ -64,7 +64,7 @@ struct IWAWriteTests {
 		// real Document.iwa); separate records with the same id read back the same.
 		let objects = [
 			IWAObject(identifier: 1732619, type: 6247, payload: Array(repeating: 0xAB, count: 226)),
-			IWAObject(identifier: 1732619, type: 6247, payload: Array(repeating: 0xCD, count: 68)),
+			IWAObject(identifier: 1732619, type: 6247, payload: Array(repeating: 0xCD, count: 68))
 		]
 		let decoded = try IWAArchive.objects(from: IWAArchive.encode(objects))
 		#expect(decoded.map(\.type) == [6247, 6247])
@@ -125,7 +125,7 @@ struct IWAWriteTests {
 		let objects = [
 			IWAObject(identifier: 10, type: 2001, payload: Array("alpha".utf8)),
 			IWAObject(identifier: 20, type: 6247, payload: Array("beta".utf8)),
-			IWAObject(identifier: 30, type: 2001, payload: Array("gamma".utf8)),
+			IWAObject(identifier: 30, type: 2001, payload: Array("gamma".utf8))
 		]
 		let edited = try IWAArchive.replacingPayload(in: IWAArchive.encode(objects), objectID: 20) { _ in
 			Array("BETA-REPLACED".utf8)

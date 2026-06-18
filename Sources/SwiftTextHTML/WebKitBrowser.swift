@@ -4,8 +4,7 @@ import Foundation
 import WebKit
 
 @available(macOS 10.15, *)
-public class WebKitBrowser: NSObject, WKNavigationDelegate
-{
+public class WebKitBrowser: NSObject, WKNavigationDelegate {
 	// MARK: - Public Properties
 
 	public let url: URL
@@ -30,8 +29,7 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate
 
 	// MARK: - Public Interface
 
-	public init(url: URL)
-	{
+	public init(url: URL) {
 		self.url = url
 		self.htmlStringToLoad = nil
 		self.fileURLToLoad = nil
@@ -43,8 +41,7 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate
 	/// - Parameters:
 	///   - htmlString: The HTML content to render.
 	///   - baseURL: Optional base URL used to resolve relative resources.
-	public init(htmlString: String, baseURL: URL? = nil)
-	{
+	public init(htmlString: String, baseURL: URL? = nil) {
 		self.url = baseURL ?? URL(string: "about:blank")!
 		self.htmlStringToLoad = htmlString
 		self.fileURLToLoad = nil
@@ -56,8 +53,7 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate
 	/// - Parameters:
 	///   - fileURL: The file URL to the HTML file.
 	///   - readAccessRoot: The directory to grant read access to (for local images/assets).
-	public init(fileURL: URL, readAccessRoot: URL)
-	{
+	public init(fileURL: URL, readAccessRoot: URL) {
 		self.url = fileURL
 		self.htmlStringToLoad = nil
 		self.fileURLToLoad = fileURL
@@ -66,10 +62,8 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate
 	}
 
 	@MainActor
-	public func waitForLoadCompletion() async
-	{
-		guard !didLoad else
-		{
+	public func waitForLoadCompletion() async {
+		guard !didLoad else {
 			return
 		}
 
@@ -81,10 +75,8 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate
 
 	@MainActor
 	@available(macOS 12.0, *)
-	public func exportPDF(to outputURL: URL) async throws
-	{
-		if !didLoad
-		{
+	public func exportPDF(to outputURL: URL) async throws {
+		if !didLoad {
 			await waitForLoadCompletion()
 		}
 
@@ -98,10 +90,8 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate
 	/// - Returns: PDF data for the rendered content.
 	@MainActor
 	@available(macOS 12.0, *)
-	public func exportPDFData(configuration: WKPDFConfiguration = WKPDFConfiguration()) async throws -> Data
-	{
-		if !didLoad
-		{
+	public func exportPDFData(configuration: WKPDFConfiguration = WKPDFConfiguration()) async throws -> Data {
+		if !didLoad {
 			await waitForLoadCompletion()
 		}
 
@@ -118,10 +108,8 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate
 	/// - Returns: Paginated PDF data.
 	@MainActor
 	@available(macOS 11.0, *)
-	public func exportPaginatedPDFData(paperSize: CGSize) async throws -> Data
-	{
-		if !didLoad
-		{
+	public func exportPaginatedPDFData(paperSize: CGSize) async throws -> Data {
+		if !didLoad {
 			await waitForLoadCompletion()
 		}
 
@@ -151,8 +139,7 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate
 	}
 
 	@MainActor
-	public func exportHTML(to outputURL: URL) async throws
-	{
+	public func exportHTML(to outputURL: URL) async throws {
 		guard let html = await html() else {
 			throw WebKitBrowserError.missingHTML
 		}
@@ -161,8 +148,7 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate
 
 	// MARK: - Helpers
 	@MainActor
-	private func load()
-	{
+	private func load() {
 		let config = WKWebViewConfiguration()
 		let contentController = WKUserContentController()
 		contentController.add(self, name: "pageLoaded")
@@ -172,32 +158,25 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate
 		webView = WKWebView(frame: CGRect(origin: .zero, size: initialSize), configuration: config)
 		webView.navigationDelegate = self
 
-		if let html = htmlStringToLoad
-		{
+		if let html = htmlStringToLoad {
 			webView.loadHTMLString(html, baseURL: url == URL(string: "about:blank") ? nil : url)
-		}
-		else if let fileURL = fileURLToLoad, let readRoot = readAccessRoot
-		{
+		} else if let fileURL = fileURLToLoad, let readRoot = readAccessRoot {
 			webView.loadFileURL(fileURL, allowingReadAccessTo: readRoot)
-		}
-		else
-		{
+		} else {
 			let urlRequest = URLRequest(url: url)
 			webView.load(urlRequest)
 		}
 	}
 
 	@MainActor
-	private func updateWebView(size: CGSize)
-	{
+	private func updateWebView(size: CGSize) {
 		let width = frameSize?.width ?? 800
 		self.webView.frame = CGRect(x: 0, y: 0, width: width, height: size.height)
 		self.webView.layout()
 	}
 
 	// MARK: - WKNavigationDelegate
-	public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!)
-	{
+	public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
 		let js = """
 		(function() {
 			var observer = new MutationObserver(function(mutations) {
@@ -223,7 +202,7 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate
 		})();
 		"""
 
-		webView.evaluateJavaScript(js) { (result, error) in
+		webView.evaluateJavaScript(js) { (_, error) in
 			if let error = error {
 				print("Error injecting JavaScript: \(error)")
 			}
@@ -232,20 +211,16 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate
 }
 
 @available(macOS 10.15, *)
-extension WebKitBrowser: WKScriptMessageHandler
-{
-	@objc public func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage)
-	{
-		guard message.name == "pageLoaded", let html = message.body as? String else
-		{
+extension WebKitBrowser: WKScriptMessageHandler {
+	@objc public func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+		guard message.name == "pageLoaded", let html = message.body as? String else {
 			return
 		}
 
 		didLoad = true
 		htmlResult = html
 
-		Task
-		{
+		Task {
 			do {
 				if !preserveFrameHeight {
 					let maxSize = try await webView.getMaxScrollSize()
@@ -267,10 +242,8 @@ extension WebKitBrowser: WKScriptMessageHandler
 }
 
 @available(macOS 10.15, *)
-extension WebKitBrowser
-{
-	public func html() async -> String?
-	{
+extension WebKitBrowser {
+	public func html() async -> String? {
 		if didLoad {
 			return htmlResult
 		}
@@ -281,10 +254,8 @@ extension WebKitBrowser
 }
 
 @available(macOS 10.15, *)
-extension WKWebView
-{
-	func getMaxScrollSize() async throws -> CGSize
-	{
+extension WKWebView {
+	func getMaxScrollSize() async throws -> CGSize {
 		let jsGetMaxScrollSize = """
 		(function() {
 			function getMaxScrollSize() {
@@ -345,8 +316,7 @@ extension WKWebView
 	}
 }
 
-public enum WebKitBrowserError: Error
-{
+public enum WebKitBrowserError: Error {
 	case missingHTML
 	case printFailed
 }
@@ -355,14 +325,12 @@ public enum WebKitBrowserError: Error
 
 /// Bridges NSPrintOperation's delegate callback to async/await.
 @available(macOS 10.15, *)
-private class PrintOperationHelper: NSObject
-{
+private class PrintOperationHelper: NSObject {
 	private var continuation: CheckedContinuation<Data, Error>?
 	private var outputURL: URL?
 
 	@MainActor
-	func run(_ operation: NSPrintOperation, outputURL: URL) async throws -> Data
-	{
+	func run(_ operation: NSPrintOperation, outputURL: URL) async throws -> Data {
 		self.outputURL = outputURL
 
 		return try await withCheckedThrowingContinuation { continuation in
@@ -376,8 +344,7 @@ private class PrintOperationHelper: NSObject
 		}
 	}
 
-	@objc func printOperationDidRun(_ operation: NSPrintOperation, success: Bool, contextInfo: UnsafeMutableRawPointer?)
-	{
+	@objc func printOperationDidRun(_ operation: NSPrintOperation, success: Bool, contextInfo: UnsafeMutableRawPointer?) {
 		guard let outputURL else {
 			continuation?.resume(throwing: WebKitBrowserError.printFailed)
 			return

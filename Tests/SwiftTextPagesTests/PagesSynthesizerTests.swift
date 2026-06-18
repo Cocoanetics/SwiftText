@@ -27,7 +27,7 @@ struct PagesSynthesizerTests {
 		var body = BodyParagraph(text: "This has bold and bold-italic words.", paragraphStyle: PagesStyleID.body)
 		body.runs = [
 			.init(start: 9, length: 4, style: InlineStyle(bold: true)),                 // "bold" → built-in
-			.init(start: 18, length: 11, style: InlineStyle(bold: true, italic: true)), // → synthesized combined style
+			.init(start: 18, length: 11, style: InlineStyle(bold: true, italic: true)) // → synthesized combined style
 		]
 		var link = BodyParagraph(text: "Visit the notes.", paragraphStyle: PagesStyleID.body)
 		link.links = [.init(start: 10, length: 5, url: "https://example.com")]

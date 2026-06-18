@@ -31,7 +31,7 @@ struct DocxFootnoteTests {
 		"""
 		let url = try makeDocx(parts: [
 			"word/document.xml": documentXML,
-			"word/footnotes.xml": footnotesXML,
+			"word/footnotes.xml": footnotesXML
 		])
 		defer { try? FileManager.default.removeItem(at: url) }
 		#expect(try DocxFile(url: url).markdown() == """

@@ -1,7 +1,6 @@
 import Foundation
 
-public class DOMElement: DOMNode, @unchecked Sendable
-{
+public class DOMElement: DOMNode, @unchecked Sendable {
 	// MARK: - Public Properties
 
 	public let name: String
@@ -23,13 +22,11 @@ public class DOMElement: DOMNode, @unchecked Sendable
 
 	// MARK: - Public Functions
 
-	func addChild(_ child: DOMNode)
-	{
+	func addChild(_ child: DOMNode) {
 		children.append(child)
 	}
 
-	public func markdown() -> String
-	{
+	public func markdown() -> String {
 		markdown(imageResolver: nil)
 	}
 
@@ -39,22 +36,18 @@ public class DOMElement: DOMNode, @unchecked Sendable
 	/// ``DOMMarkupConverter``) and rendered with swift-markdown's
 	/// `MarkupFormatter`, which owns all spacing, list numbering, table padding,
 	/// and nested-structure indentation.
-	public func markdown(imageResolver: ((String) -> String?)?) -> String
-	{
+	public func markdown(imageResolver: ((String) -> String?)?) -> String {
 		DOMMarkupConverter.markdown(from: self, imageResolver: imageResolver)
 	}
 
-	public func text() -> String
-	{
-		if ["script", "style", "iframe", "nav", "meta", "link", "title", "select", "input", "button", "noscript", "footer"].contains(name)
-		{
+	public func text() -> String {
+		if ["script", "style", "iframe", "nav", "meta", "link", "title", "select", "input", "button", "noscript", "footer"].contains(name) {
 			return ""
 		}
 
 		var result = ""
 
-		switch name
-		{
+		switch name {
 		case "br":
 			result += "\n"
 
@@ -89,8 +82,7 @@ public class DOMElement: DOMNode, @unchecked Sendable
 			result += children.map { $0.text() }.joined()
 		}
 
-		if isBlockLevelElement
-		{
+		if isBlockLevelElement {
 			result.ensureTwoTrailingNewlines()
 		}
 

@@ -445,7 +445,11 @@ final class PagesParser {
 		func alignment(forStyleKey key: UInt64) -> PagesDocument.Paragraph.Table.ColumnAlignment {
 			guard let styleID = styleIDByKey[key], let style = store.object(styleID),
 			      let value = ProtobufMessage(style.payload).message(IWork.paragraphPropertiesField)?.varint(IWork.paragraphAlignmentField) else { return .left }
-			switch value { case 1: return .right; case 2: return .center; default: return .left }
+			switch value {
+			case 1: return .right
+			case 2: return .center
+			default: return .left
+			}
 		}
 
 		// rich_text_table → key → cell text StorageArchive id (for in-cell bold/italic).
@@ -552,7 +556,11 @@ final class PagesParser {
 		guard let styleID = paragraphStyleRuns(storage).first(where: { $0.styleID != nil })?.styleID,
 		      let style = store.object(styleID),
 		      let value = ProtobufMessage(style.payload).message(IWork.paragraphPropertiesField)?.varint(IWork.paragraphAlignmentField) else { return nil }
-		switch value { case 1: return .right; case 2: return .center; default: return nil }
+		switch value {
+		case 1: return .right
+		case 2: return .center
+		default: return nil
+		}
 	}
 
 	/// The frozen (cached) value of a numeric / date / bool / duration cell rendered as

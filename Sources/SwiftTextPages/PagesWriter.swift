@@ -199,7 +199,14 @@ public final class PagesWriter {
 
 	/// Rebuilds `Index/Document.iwa`: replaces the body storage with serialized
 	/// paragraphs, then appends any character-style objects the body references.
-	private func buildDocument(from documentIWA: [UInt8], paragraphs: [BodyParagraph], registry: CharacterStyleRegistry, extraObjects: [IWAObject] = [], footnoteMarkIDs: [UInt64] = [], footnoteCharStyleID: UInt64? = nil) throws -> [UInt8] {
+	private func buildDocument(
+		from documentIWA: [UInt8],
+		paragraphs: [BodyParagraph],
+		registry: CharacterStyleRegistry,
+		extraObjects: [IWAObject] = [],
+		footnoteMarkIDs: [UInt64] = [],
+		footnoteCharStyleID: UInt64? = nil
+	) throws -> [UInt8] {
 		let data = Data(documentIWA)
 		let bodyID = try bodyStorageIdentifier(in: data)
 		var edited = try IWAArchive.replacingPayload(in: data, objectID: bodyID) { payload in
@@ -219,11 +226,11 @@ public final class PagesWriter {
 	/// "Heading 1" — recascades to every paragraph that uses it.
 	private struct StyleSpec {
 		let id: UInt64
-		var fontSize: Float? = nil          // points (char_properties)
+		var fontSize: Float?          // points (char_properties)
 		var spaceBefore: Float = 0          // points
 		var spaceAfter: Float = 0           // points
-		var lineSpacing: Float? = nil       // relative multiple
-		var color: (r: Float, g: Float, b: Float)? = nil
+		var lineSpacing: Float?       // relative multiple
+		var color: (r: Float, g: Float, b: Float)?
 	}
 
 	/// The default "stylesheet" applied to generated documents — the Pages counterpart
@@ -231,11 +238,11 @@ public final class PagesWriter {
 	/// nearly the same size), comfortable body line spacing, and a neutral Heading 4
 	/// (the theme ships it red). Tunable defaults: the user can still edit any style.
 	private static let stylesheet: [StyleSpec] = [
-		.init(id: PagesStyleID.body,     spaceAfter: 8, lineSpacing: 1.2),
-		.init(id: PagesStyleID.title,    fontSize: 32, spaceAfter: 16),
+		.init(id: PagesStyleID.body, spaceAfter: 8, lineSpacing: 1.2),
+		.init(id: PagesStyleID.title, fontSize: 32, spaceAfter: 16),
 		.init(id: PagesStyleID.heading1, fontSize: 24, spaceBefore: 18, spaceAfter: 6),
 		.init(id: PagesStyleID.heading2, fontSize: 18, spaceBefore: 16, spaceAfter: 6),
-		.init(id: PagesStyleID.heading3, fontSize: 15, spaceBefore: 14, spaceAfter: 4),
+		.init(id: PagesStyleID.heading3, fontSize: 15, spaceBefore: 14, spaceAfter: 4)
 		// Heading 4 is rebuilt below (the theme's "Heading Red" can't be recolored via
 		// the paragraph style — see applyingStylesheet).
 	]

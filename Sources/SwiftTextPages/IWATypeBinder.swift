@@ -44,8 +44,7 @@ enum IWATypeBinder {
 					total += message.fields.count
 					claimed += message.fields.count - candidate.decode(message).unknownFields.count
 				}
-				if best == nil || claimed > best!.claimed { runnerUp = best?.claimed ?? 0; best = (candidate.name, claimed, total) }
-				else if claimed > runnerUp { runnerUp = claimed }
+				if best == nil || claimed > best!.claimed { runnerUp = best?.claimed ?? 0; best = (candidate.name, claimed, total) } else if claimed > runnerUp { runnerUp = claimed }
 			}
 			if let best, best.total > 0, best.claimed == best.total, best.claimed > runnerUp {
 				result[type] = best.name

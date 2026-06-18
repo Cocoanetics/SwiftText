@@ -1,10 +1,7 @@
-extension String
-{
+extension String {
 	/// Ensure the receiver has two trailing newlines for a paragraph break.
-	mutating func ensureTwoTrailingNewlines()
-	{
-		guard !isEmpty else
-		{
+	mutating func ensureTwoTrailingNewlines() {
+		guard !isEmpty else {
 			return
 		}
 
@@ -25,4 +22,3 @@ extension String
 		}
 	}
 }
-

@@ -25,7 +25,7 @@ struct HTMLFootnoteConversionTests {
 			"",
 			"[^1]: First definition.",
 			"",
-			"[^2]: Second, with *emphasis*.",
+			"[^2]: Second, with *emphasis*."
 		].joined(separator: "\n")
 		#expect(restored == expected)
 	}
@@ -75,7 +75,7 @@ struct HTMLFootnoteConversionTests {
 			"",
 			"[^1]: First note.",
 			"",
-			"[^2]: Second note.",
+			"[^2]: Second note."
 		].joined(separator: "\n")
 		#expect(restored == expected)
 	}
