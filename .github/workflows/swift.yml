@@ -189,16 +189,10 @@ jobs:
         shell: pwsh
         run: |
           # libxml2 backs SwiftTextHTML/SwiftTextRender; zlib backs ZIPFoundation's
-          # CZLib (the DOCX/Pages readers).
+          # CZLib (the DOCX/Pages readers). vcpkg installs zlib's import lib as z.lib,
+          # which is exactly what ZIPFoundation's `.linkedLibrary("z")` resolves to.
           & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install libxml2:x64-windows zlib:x64-windows
           $root = "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows"
-          Write-Host "vcpkg lib dir:"; Get-ChildItem "$root\lib" -Filter *.lib | Select-Object -ExpandProperty Name
-          # ZIPFoundation's CZLib does `.linkedLibrary("z")` -> z.lib, but vcpkg ships
-          # zlib under its own name (zlib.lib / zlib1.lib / …); copy whichever it is.
-          $zlib = Get-ChildItem "$root\lib" -Filter "*.lib" | Where-Object { $_.Name -match '^zlib' } | Select-Object -First 1
-          if (-not $zlib) { throw "no zlib import lib found in $root\lib" }
-          Copy-Item $zlib.FullName "$root\lib\z.lib" -Force
-          Write-Host "copied $($zlib.Name) -> z.lib"
           # Put the DLLs (libxml2.dll, zlib1.dll) on PATH so the CLI loads at run time
           # (append-safe). Do NOT set INCLUDE/LIB globally — overwriting them clobbers
           # the Windows SDK header/lib paths and breaks even manifest compilation
