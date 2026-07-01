@@ -5,35 +5,71 @@
 //  Created by Oliver Drobnik on 09.12.24.
 //
 
-#if os(macOS)
 import ArgumentParser
 import Foundation
-import ImageIO
-import PDFKit
+// URLSession lives in FoundationNetworking on Linux/Windows (the `html` command
+// fetches remote pages); it's part of Foundation on Apple platforms.
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 import SwiftTextHTML
-import SwiftTextPDF
 import SwiftTextDOCX
 import SwiftTextPages
 import SwiftTextNumbers
 import SwiftTextKeynote
+#if os(macOS)
+import ImageIO
+import PDFKit
+import SwiftTextPDF
 import SwiftTextOCR
+import UniformTypeIdentifiers
 #if canImport(Vision)
 import Vision
 #endif
-import UniformTypeIdentifiers
+#endif
 
+// Subcommands available on the current platform. OCR (Vision) and Overlay (Vision
+// + CoreGraphics rasterization) are macOS-only; everything else — the iWork/DOCX/
+// HTML readers and the Markdown/HTML → PDF/DOCX/Pages renderers — is cross-platform
+// (the `pdf`/`render` commands use the pure-Swift engine off macOS).
+#if os(macOS)
+let swiftTextSubcommands: [any ParsableCommand.Type] =
+	[OCR.self, Docx.self, Pages.self, Numbers.self, Keynote.self, HTML.self, Overlay.self, PDF.self, Render.self]
+let swiftTextDefaultSubcommand: (any ParsableCommand.Type)? = OCR.self
+#else
+let swiftTextSubcommands: [any ParsableCommand.Type] =
+	[Docx.self, Pages.self, Numbers.self, Keynote.self, HTML.self, PDF.self, Render.self]
+let swiftTextDefaultSubcommand: (any ParsableCommand.Type)? = nil
+#endif
+
+// `swifttext` is a desktop command-line tool (macOS/Linux/Windows). The package's
+// aggregate Xcode scheme still compiles this executable target for the iOS/tvOS/
+// watchOS simulator, where a CLI has no use and the version-generator plugin's
+// prebuild output (`swiftTextVersion`) isn't wired into the xcodebuild build. Stand
+// in a trivial `@main` there so `swift build` on the desktop platforms gets the real
+// tool while the Apple-cross-compile scheme still links.
+#if os(macOS) || os(Linux) || os(Windows)
 @available(macOS 10.15, macCatalyst 13, iOS 13, tvOS 13, watchOS 6, *)
 @main
 struct SwiftTextCLI: AsyncParsableCommand {
 	static let configuration = CommandConfiguration(
 		commandName: "swifttext",
-		abstract: "Extract text from HTML, PDF, image, DOCX, or Pages sources.",
+		abstract: "Extract text from HTML, PDF, image, DOCX, Pages, Numbers, or Keynote sources, and render Markdown/HTML to PDF, DOCX, or Pages.",
 		version: swiftTextVersion,
-		subcommands: [OCR.self, Docx.self, Pages.self, Numbers.self, Keynote.self, HTML.self, Overlay.self, PDF.self, Render.self],
-		defaultSubcommand: OCR.self
+		subcommands: swiftTextSubcommands,
+		defaultSubcommand: swiftTextDefaultSubcommand
 	)
 }
+#else
+@main
+enum SwiftTextCLIStub {
+	static func main() {
+		fatalError("swifttext is a desktop command-line tool and is not available on this platform.")
+	}
+}
+#endif
 
+#if os(macOS)
 @available(macOS 10.15, macCatalyst 13, iOS 13, tvOS 13, watchOS 6, *)
 struct OCR: AsyncParsableCommand {
 	static let configuration = CommandConfiguration(
@@ -258,6 +294,7 @@ struct OCR: AsyncParsableCommand {
 		return (grouped, lookup)
 	}
 }
+#endif
 
 @available(macOS 10.15, macCatalyst 13, iOS 13, tvOS 13, watchOS 6, *)
 struct HTML: AsyncParsableCommand {
@@ -429,6 +466,9 @@ struct HTML: AsyncParsableCommand {
 		}
 	}
 
+	// macOS-only: the `--via-pdf` path exports the page to PDF via WebKit and
+	// segments it with Vision (PDFKit + ImageIO). Unavailable off macOS.
+	#if os(macOS)
 	private func processPDF(at url: URL) async throws -> String {
 		guard let pdfDocument = PDFDocument(url: url) else {
 			throw ValidationError("Could not open PDF file: \(url.path)")
@@ -532,6 +572,7 @@ struct HTML: AsyncParsableCommand {
 
 		return (combinedBlocks, ImageLookup(storage: lookupStorage))
 	}
+	#endif
 
 	private func writeOutputIfNeeded(_ contents: String) throws {
 		if let outputPath {
@@ -777,6 +818,9 @@ struct Keynote: AsyncParsableCommand {
 	}
 }
 
+// Overlay is macOS-only: it detects structure with Vision and rasterizes the
+// overlay through CoreGraphics/ImageIO (OverlayRenderer). No cross-platform path.
+#if os(macOS)
 @available(macOS 10.15, macCatalyst 13, iOS 13, tvOS 13, watchOS 6, *)
 struct Overlay: AsyncParsableCommand {
 	static let configuration = CommandConfiguration(
@@ -912,18 +956,17 @@ struct Overlay: AsyncParsableCommand {
 		return base.deletingLastPathComponent().appendingPathComponent(filename).appendingPathExtension(defaultExtension)
 	}
 }
+#endif
 
 private func resolvedURL(from path: String) -> URL {
-	let expanded = (path as NSString).expandingTildeInPath
-
-	if expanded.hasPrefix("/") {
-		return URL(fileURLWithPath: expanded)
-	} else {
-		let currentDirectory = FileManager.default.currentDirectoryPath
-		return URL(fileURLWithPath: currentDirectory).appendingPathComponent(expanded)
-	}
+	// URL(fileURLWithPath:) resolves relative paths against the current directory
+	// and recognizes platform-native absolute paths — POSIX "/…" as well as Windows
+	// "C:\…" / UNC "\\…", which a `hasPrefix("/")` check would misclassify.
+	URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
 }
 
+// Shared by the macOS-only OCR/HTML Vision segmentation paths.
+#if os(macOS)
 private struct ImageLookup {
 	var storage: [String: [String]]
 
@@ -936,7 +979,6 @@ private struct ImageLookup {
 	}
 }
 
-#if canImport(Vision)
 @available(iOS 26.0, tvOS 26.0, macOS 26.0, visionOS 26.0, *)
 private extension Overlay {
 	func reconstructedBlocks(for image: CGImage, textLines: [TextLine]) async throws -> [DocumentBlock] {
@@ -950,20 +992,3 @@ private extension Overlay {
 	}
 }
 #endif
-
-#else // !os(macOS)
-
-// SwiftTextCLI is a macOS-only command-line tool. This stub satisfies the
-// Swift compiler when the package manifest includes the executable target
-// (because Package.swift is evaluated on a macOS host, making #if os(macOS)
-// true in the manifest even when cross-compiling for iOS/tvOS/watchOS).
-import Foundation
-
-@main
-enum SwiftTextCLIStub {
-	static func main() {
-		fatalError("SwiftTextCLI is a macOS-only tool and cannot run on this platform.")
-	}
-}
-
-#endif // os(macOS)

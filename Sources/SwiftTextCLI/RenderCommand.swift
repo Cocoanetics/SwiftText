@@ -5,12 +5,12 @@
 //  Created by Oliver Drobnik on 24.02.26.
 //
 
-#if os(macOS)
 import ArgumentParser
 import Foundation
 import SwiftTextDOCX
 import SwiftTextHTML
 import SwiftTextPages
+import SwiftTextRender
 
 enum RenderOutputFormat: String, ExpressibleByArgument, CaseIterable {
 	case html
@@ -55,10 +55,19 @@ struct Render: AsyncParsableCommand {
 	@Flag(name: .long, help: "For Pages output, write a directory-package bundle instead of a single file.")
 	var package: Bool = false
 
+	@Option(name: .long, help: "For PDF output, the rendering engine: webkit (macOS only, full CSS) or swift (cross-platform, no WebKit). Defaults to webkit on macOS, swift elsewhere.")
+	var engine: RenderEngine = .platformDefault
+
 	func run() async throws {
+		#if os(macOS)
 		guard #available(macOS 12.0, *) else {
-			throw ValidationError("The markdown command requires macOS 12 or newer.")
+			throw ValidationError("The render command requires macOS 12 or newer.")
 		}
+		#else
+		if engine == .webkit {
+			throw ValidationError("The webkit engine is only available on macOS; use --engine swift.")
+		}
+		#endif
 
 		let markdownText: String
 		let baseURL: URL?
@@ -145,12 +154,9 @@ struct Render: AsyncParsableCommand {
 	}
 
 	private func resolvedFileURL(_ path: String) -> URL {
-		let expanded = (path as NSString).expandingTildeInPath
-		if expanded.hasPrefix("/") {
-			return URL(fileURLWithPath: expanded)
-		}
-		return URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-			.appendingPathComponent(expanded)
+		// Resolves relative paths against the current directory and recognizes
+		// platform-native absolute paths (POSIX "/…" and Windows "C:\…" / UNC).
+		URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
 	}
 
 	private func readAllStdin() -> String {
@@ -176,17 +182,24 @@ struct Render: AsyncParsableCommand {
 		}
 	}
 
+	#if os(macOS)
 	private func pageSize() -> CGSize {
 		let size = paper.pointSize
 		if landscape {
 			return CGSize(width: size.height, height: size.width)
 		}
-		return size
+		return CGSize(width: size.width, height: size.height)
 	}
+	#endif
 
 	@MainActor
 	@available(macOS 12.0, *)
 	private func renderPDF(html: String, baseURL: URL?, outputURL: URL) async throws {
+		if engine == .swift {
+			try await renderPDFSwift(html: html, outputURL: outputURL)
+			return
+		}
+		#if os(macOS)
 		// If we have a baseURL (file input), write HTML next to source so local images can load.
 		// Otherwise, render from an HTML string.
 		if let baseURL {
@@ -208,6 +221,22 @@ struct Render: AsyncParsableCommand {
 			let pdfData = try await browser.exportPaginatedPDFData(paperSize: pageSize())
 			try writeData(pdfData, to: outputURL)
 		}
+		#else
+		throw ValidationError("The webkit engine is only available on macOS; use --engine swift.")
+		#endif
+	}
+
+	/// Renders the print HTML to a PDF via the cross-platform SwiftTextRender engine.
+	@available(macOS 12.0, *)
+	private func renderPDFSwift(html: String, outputURL: URL) async throws {
+		let size = paper.pointSize
+		let widthPoints = landscape ? size.height : size.width
+		let heightPoints = landscape ? size.width : size.height
+		var options = RenderOptions()
+		options.pageWidthPx = widthPoints / 0.75 // points → CSS pixels
+		options.pageHeightPx = heightPoints / 0.75
+		let data = try await HTMLRenderer.renderPDF(html: html, options: options)
+		try writeData(data, to: outputURL)
 	}
 
 	private func writeData(_ data: Data, to url: URL) throws {
@@ -216,5 +245,3 @@ struct Render: AsyncParsableCommand {
 		try data.write(to: url)
 	}
 }
-
-#endif

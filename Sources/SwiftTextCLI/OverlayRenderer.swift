@@ -5,13 +5,16 @@
 //  Created by OpenAI Codex on 13.12.24.
 //
 
+// macOS-only: renders detection overlays via CoreGraphics/ImageIO for the
+// `overlay` subcommand, over the Vision-backed SwiftTextOCR. Excluded off macOS
+// (no CoreGraphics/ImageIO, and SwiftTextOCR is only a CLI dependency on macOS).
+#if os(macOS)
 import CoreGraphics
 import Foundation
 import ImageIO
 import SwiftTextOCR
 import UniformTypeIdentifiers
 
-#if canImport(Vision)
 @available(macOS 11.0, macCatalyst 14.0, iOS 14.0, tvOS 14.0, watchOS 7.0, *)
 enum OverlayRenderer {
 	static func overlayImage(

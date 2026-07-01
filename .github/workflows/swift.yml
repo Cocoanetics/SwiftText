@@ -21,62 +21,106 @@ jobs:
 
   build-macos:
     runs-on: macos-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v6
-      - name: Select Xcode 26.0
+      # SwiftTextOCR uses the macOS 26 Vision document-recognition APIs
+      # (RecognizeDocumentsRequest / NormalizedRegion), so build with a full Xcode
+      # that ships the macOS 26 SDK — a swift.org toolchain layered on an older SDK
+      # can't see those symbols. latest-stable's Swift is 6.2.x, which the package's
+      # single-trait manifest conditions build on fine (they're valid on 6.2 and 6.3).
+      - name: Select newest Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: "26.0"
+          xcode-version: latest-stable
       - name: Verify Swift version
         run: swift --version
-      - name: Build & Test (macOS)
-        run: swift test -v
+      - name: Build (macOS)
+        run: swift build --build-tests -v
+      - name: Test (macOS)
+        run: swift test -v --skip-build
+      - name: Build & smoke-test the CLI (macOS)
+        run: |
+          swift build -c release --product swifttext
+          BIN="$(swift build -c release --product swifttext --show-bin-path)"
+          "$BIN/swifttext" --version
+          printf '# Hello\n\nWorld with **bold**.\n' > smoke.md
+          "$BIN/swifttext" render smoke.md -o smoke.pdf --engine swift
+          test -s smoke.pdf && echo "PDF OK ($(wc -c < smoke.pdf) bytes)"
 
   build-linux:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     container:
       image: swift:6.3-jammy
     steps:
       - uses: actions/checkout@v6
+      # SwiftTextHTML/SwiftTextRender use XMLKit's libxml2-backed HTMLParser.
       - name: Install libxml2 dev
         run: apt-get update && apt-get install -y libxml2-dev pkg-config
       - name: Verify Swift version
         run: swift --version
-      - name: Build & Test (Linux)
-        run: swift test -v
+      - name: Build (Linux)
+        run: swift build --build-tests -v
+      - name: Test (Linux)
+        run: swift test -v --skip-build
+      - name: Build & smoke-test the CLI (Linux, swift engine)
+        run: |
+          swift build -c release --product swifttext
+          BIN="$(swift build -c release --product swifttext --show-bin-path)"
+          "$BIN/swifttext" --version
+          printf '# Hello\n\nWorld with **bold** and a list:\n\n- one\n- two\n' > smoke.md
+          "$BIN/swifttext" render smoke.md -o smoke.pdf --engine swift
+          test -s smoke.pdf && echo "PDF OK ($(wc -c < smoke.pdf) bytes)"
+          "$BIN/swifttext" render smoke.md -o smoke.html
+          test -s smoke.html && echo "HTML OK"
 
+  # iOS proves the library graph compiles for Apple's non-macOS platforms. The
+  # `swifttext` executable is a desktop CLI, so its target compiles to a trivial
+  # `@main` stub here (see SwiftTextCLI.swift) while the reader/render libraries
+  # build for real.
   build-ios:
     runs-on: macos-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v6
-      - name: Select Xcode 26.0
+      # iOS needs Xcode (xcodebuild + the iOS SDK). Select the runner's newest Xcode;
+      # its Swift is 6.3+, matching the other jobs.
+      - name: Select newest Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: "26.0"
+          xcode-version: latest-stable
       - name: Verify Swift version
         run: swift --version
-      - name: Build for iOS Simulator
+      # This Xcode image ships without the iOS SDK preinstalled; fetch it. The
+      # download intermittently flakes on the hosted runner, so retry before failing.
+      - name: Install the iOS platform
+        run: |
+          set -o pipefail
+          for i in 1 2 3; do
+            echo "::group::xcodebuild -downloadPlatform iOS (attempt $i)"
+            if xcodebuild -downloadPlatform iOS; then echo "::endgroup::"; exit 0; fi
+            echo "::endgroup::"
+            echo "attempt $i failed; retrying in 20s…"; sleep 20
+          done
+          echo "::error::Could not download the iOS platform after 3 attempts"; exit 1
+      # Generic device destination (no simulator runtime needed). CODE_SIGNING_ALLOWED=NO:
+      # the runner has no provisioning profiles and a library build doesn't need signing.
+      # -skipPackagePluginValidation: don't prompt to trust the VersionGeneratorPlugin.
+      - name: Build for iOS (generic device)
         run: |
           xcodebuild build \
             -scheme SwiftText-Package \
-            -destination "generic/platform=iOS Simulator" \
-            -skipPackagePluginValidation
-      - name: Test on iOS Simulator
-        run: |
-          xcodebuild test \
-            -scheme SwiftText-Package \
-            -destination "platform=iOS Simulator,name=iPhone 17,OS=latest" \
-            -skipPackagePluginValidation
+            -destination 'generic/platform=iOS' \
+            -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO
 
-  # Windows job — runs the portable unit tests (Foundation + swift-markdown only).
-  # SWIFTTEXT_PORTABLE_ONLY trims the package to the pure-Swift targets, so the
+  # Windows portable job — runs the pure-Swift unit tests. SWIFTTEXT_PORTABLE_ONLY
+  # trims the package to the Foundation + swift-markdown targets, so the
   # libxml2-backed SwiftTextHTML/SwiftTextRender and the ZIPFoundation-backed
-  # DOCX/Pages targets are absent from the graph — `swift test` builds and runs
-  # only what the Windows toolchain can satisfy with no vcpkg/libxml2 needed.
-  # Production toolchain is Swift 6.3.1 via SwiftyLab/setup-swift.
+  # DOCX/Pages targets are absent — `swift test` builds and runs only what the
+  # Windows toolchain satisfies with no vcpkg/libxml2 needed. (The full CLI build
+  # with vcpkg is the separate build-windows-cli job below.)
   #
   # AttributedString is excluded on Windows only: it compiles, but the toolchain
   # doesn't export the `_FoundationCollections.BigString` symbols backing it
@@ -118,10 +162,72 @@ jobs:
       - name: Build & Test (Android cross-compile, portable targets)
         uses: skiptools/swift-android-action@v2
         with:
-          swift-version: "6.3"
+          swift-version: "6.3.1"
           # Default GitHub Linux runner has ~14 GiB free; SDK + NDK + emulator
           # together push past that without cleanup.
           free-disk-space: true
           # Build the test bundle and run it on the emulator. With the portable
           # subset there's no libxml2/ZIPFoundation for the SDK to choke on.
           run-tests: true
+
+  # Windows job — builds and smoke-tests the full `swifttext` CLI. Unlike the
+  # portable job above, this is a real (non-SWIFTTEXT_PORTABLE_ONLY) build: it
+  # provisions libxml2 via vcpkg so SwiftTextHTML/SwiftTextRender link, and builds
+  # only the `swifttext` product so the AttributedString link gap (swift#88132) is
+  # never in the graph. Off macOS the pdf/render commands default to the pure-Swift
+  # SwiftTextRender engine (no WebKit), which is what the render smoke exercises.
+  build-windows-cli:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+      - name: Setup Swift
+        uses: SwiftyLab/setup-swift@latest
+        with:
+          swift-version: "6.3.1"
+      - name: Install libxml2 + zlib (vcpkg)
+        shell: pwsh
+        run: |
+          # libxml2 backs SwiftTextHTML/SwiftTextRender; zlib backs ZIPFoundation's
+          # CZLib (the DOCX/Pages readers). vcpkg installs zlib's import lib as z.lib,
+          # which is exactly what ZIPFoundation's `.linkedLibrary("z")` resolves to.
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install libxml2:x64-windows zlib:x64-windows
+          $root = "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows"
+          # vcpkg names zlib's import lib z.lib (which ZIPFoundation's
+          # `.linkedLibrary("z")` wants), but libxml2's headers autolink `zlib.lib`
+          # via #pragma comment(lib). Provide both names from the one import lib.
+          Copy-Item "$root\lib\z.lib" "$root\lib\zlib.lib" -Force
+          # Put the DLLs (libxml2.dll, zlib1.dll) on PATH so the CLI loads at run time
+          # (append-safe). Do NOT set INCLUDE/LIB globally here — overwriting them in
+          # this step clobbers the Windows SDK paths (its $env:INCLUDE/$env:LIB are
+          # empty) and breaks even manifest compilation. Header/lib dirs are given to
+          # `swift build` in the next step, where the toolchain env is intact.
+          "$root\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+      - name: Verify Swift version
+        run: swift --version
+      - name: Build & smoke-test the CLI (Windows, swift engine)
+        shell: pwsh
+        run: |
+          $root = "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows"
+          # vcpkg nests libxml2 headers under include\libxml2\libxml\. CHTMLParser's
+          # <libxml2/libxml/*.h> resolves from include\, but those headers then pull
+          # <libxml/*.h>, which needs include\libxml2\ too — so pass both as -Xcc.
+          # Add the vcpkg lib dir with lld-link's canonical `/LIBPATH:` (the `-LIBPATH:`
+          # dash form was ignored earlier). This is additive — it does NOT disturb the
+          # toolchain's own MSVC/SDK lib search (setting $env:LIB clobbered that, since
+          # it's empty in this step).
+          $flags = @(
+            "-Xcc", "-I$root\include",
+            "-Xcc", "-I$root\include\libxml2",
+            "-Xlinker", "/LIBPATH:$root\lib"
+          )
+          swift build -c release --product swifttext @flags
+          if ($LASTEXITCODE -ne 0) { throw "swift build failed ($LASTEXITCODE)" }
+          $bin = (swift build -c release --product swifttext @flags --show-bin-path).Trim()
+          & "$bin\swifttext.exe" --version
+          if ($LASTEXITCODE -ne 0) { throw "swifttext --version failed ($LASTEXITCODE)" }
+          "# Hello`r`n`r`nWorld with **bold** and a list:`r`n`r`n- one`r`n- two" | Out-File -FilePath smoke.md -Encoding utf8
+          & "$bin\swifttext.exe" render smoke.md -o smoke.pdf --engine swift
+          if ($LASTEXITCODE -ne 0) { throw "swifttext render failed ($LASTEXITCODE)" }
+          if (!(Test-Path smoke.pdf)) { throw "no PDF produced" }
+          Write-Host ("PDF OK ({0} bytes)" -f (Get-Item smoke.pdf).Length)
