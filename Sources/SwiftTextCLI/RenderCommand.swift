@@ -154,12 +154,9 @@ struct Render: AsyncParsableCommand {
 	}
 
 	private func resolvedFileURL(_ path: String) -> URL {
-		let expanded = (path as NSString).expandingTildeInPath
-		if expanded.hasPrefix("/") {
-			return URL(fileURLWithPath: expanded)
-		}
-		return URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-			.appendingPathComponent(expanded)
+		// Resolves relative paths against the current directory and recognizes
+		// platform-native absolute paths (POSIX "/…" and Windows "C:\…" / UNC).
+		URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
 	}
 
 	private func readAllStdin() -> String {

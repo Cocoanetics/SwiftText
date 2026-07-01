@@ -959,14 +959,10 @@ struct Overlay: AsyncParsableCommand {
 #endif
 
 private func resolvedURL(from path: String) -> URL {
-	let expanded = (path as NSString).expandingTildeInPath
-
-	if expanded.hasPrefix("/") {
-		return URL(fileURLWithPath: expanded)
-	} else {
-		let currentDirectory = FileManager.default.currentDirectoryPath
-		return URL(fileURLWithPath: currentDirectory).appendingPathComponent(expanded)
-	}
+	// URL(fileURLWithPath:) resolves relative paths against the current directory
+	// and recognizes platform-native absolute paths — POSIX "/…" as well as Windows
+	// "C:\…" / UNC "\\…", which a `hasPrefix("/")` check would misclassify.
+	URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
 }
 
 // Shared by the macOS-only OCR/HTML Vision segmentation paths.
