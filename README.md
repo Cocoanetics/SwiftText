@@ -321,19 +321,36 @@ let imageURLs = try pages.extractImages(to: URL(fileURLWithPath: "./images"))
 
 ### Command Line Tool
 
+The `swifttext` CLI is **cross-platform** — it builds and runs on macOS, Linux, and
+Windows. The document readers (`docx`, `pages`, `numbers`, `keynote`), HTML text/
+Markdown extraction (`html`), and the Markdown/HTML renderers (`pdf`, `render`) are
+available everywhere. Two subcommands are macOS-only because they depend on Apple
+frameworks: `ocr` and `overlay` (Vision), plus the WebKit rendering engine.
+
 Build and run the CLI:
 
 ```bash
 swift build
-swift run swifttext ocr /path/to/document.pdf
+swift run swifttext render notes.md -o notes.pdf   # works on macOS, Linux, Windows
 ```
 
+On Linux/Windows the CLI needs libxml2 for the HTML/render paths (Linux:
+`libxml2-dev` + `pkg-config`; Windows: `libxml2` via vcpkg).
+
 Options:
-- **ocr** `--markdown`/`-m` (Vision segmentation), `--save-images <dir>`, `--output-path <file>`/`-o`
-- **html** `--markdown`/`-m`, `--save-images <dir>`, `--output-path <file>`/`-o`, `--webkit`, `--via-pdf`
+- **ocr** *(macOS only)* `--markdown`/`-m` (Vision segmentation), `--save-images <dir>`, `--output-path <file>`/`-o`
+- **html** `--markdown`/`-m`, `--save-images <dir>`, `--output-path <file>`/`-o`, `--webkit` *(macOS)*, `--via-pdf` *(macOS)*
 - **docx** `--markdown`/`-m` (headings and lists), `--output-path <file>`/`-o`, `--save-images`
 - **pages** `--markdown`/`-m` (inferred headings), `--output-path <file>`/`-o`, `--save-images`
-- **overlay** `--output-path <file>`/`-o`, `--dpi <value>`, `--raw`
+- **numbers** `--markdown`/`-m`, `--html`, `--json`, `--output-path <file>`/`-o`
+- **keynote** `--markdown`/`-m`, `--json`, `--output-path <file>`/`-o`
+- **pdf** `--engine webkit|swift`, `--paper a4|letter`, `--landscape`, `--stdin`, `--output <file>`/`-o`
+- **render** `--format html|pdf|docx|pages`, `--engine webkit|swift`, `--paper`, `--landscape`, `--page-break-before <h1…h6>`, `--package`, `--output <file>`/`-o`
+- **overlay** *(macOS only)* `--output-path <file>`/`-o`, `--dpi <value>`, `--raw`
+
+The `pdf` and `render` commands render via **WebKit** by default on macOS and via
+the pure-Swift **SwiftTextRender** engine everywhere else (`--engine swift` selects
+it on macOS too; `--engine webkit` is rejected off macOS).
 
 Examples:
 
@@ -375,19 +392,28 @@ swifttext pages --markdown ~/Documents/notes.pages
 # Markdown with inline image links, saving the referenced images alongside it
 swifttext pages --markdown --save-images --output-path ./notes.md ~/Documents/notes.pages
 
-# Render an overlay PDF for inspection
+# Extract tables from a Numbers spreadsheet / slide text from a Keynote deck
+swifttext numbers --markdown ~/Documents/budget.numbers
+swifttext keynote --markdown ~/Documents/deck.key
+
+# Render Markdown to PDF with the cross-platform engine (works off macOS)
+swifttext render notes.md -o notes.pdf --engine swift
+
+# Render an overlay PDF for inspection (macOS only)
 swifttext overlay --dpi 300 ~/Documents/report.pdf
 ```
 
 ## Requirements
 
 - Swift 5.9+
-- Platforms: macOS, iOS, tvOS, watchOS (any version that supports PDFKit)
+- Library platforms: macOS, iOS, tvOS, watchOS, Linux, Windows (per module; see each module's notes)
+- `swifttext` CLI: macOS, Linux, and Windows
 
 **Note:** 
 - PDF text extraction (via PDFKit) works on any platform that supports PDFKit
 - OCR fallback requires iOS 13.0+, tvOS 13.0+, or macOS 10.15+ (automatically enabled when available via availability checks)
 - OCR Markdown segmentation requires iOS 26.0+, tvOS 26.0+, or macOS 26.0+
+- The `ocr`/`overlay` CLI subcommands and the WebKit PDF engine are macOS-only; off macOS the `pdf`/`render` commands use the pure-Swift SwiftTextRender engine (needs libxml2 — `libxml2-dev` on Linux, vcpkg on Windows)
 
 ## License
 

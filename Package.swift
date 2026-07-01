@@ -41,17 +41,26 @@ let portableExclude = Set(
 )
 let effectivePortableNames = portableTargetNames.subtracting(portableExclude)
 
-// macOS-only targets (Vision, PDFKit, AppKit, WebKit)
+// Vision/PDFKit/AppKit/WebKit are Apple-only. The OCR and PDF-extraction targets
+// (and their `swifttext` subcommands) exist only on macOS; the `swifttext`
+// executable itself is now cross-platform (see cliTargets/cliProducts below).
+//
+// NOTE: `#if os(macOS)` here is evaluated on the *host* running SwiftPM, not the
+// build target. Cross-compiling to iOS/Linux/Windows *from a Mac* still takes the
+// macOS branch, so the CLI sources gate Apple frameworks internally with their own
+// `#if os(macOS)`. A native Linux/Windows SwiftPM host takes the `!os(macOS)`
+// branch and simply drops the OCR/PDF targets.
 #if !os(macOS)
 let macOSProducts: [Product] = []
 let macOSTargets: [Target] = []
 let swiftTextExtraDeps: [Target.Dependency] = []
 let ocrTestDeps: [Target.Dependency] = []
+// The CLI links the Vision/PDFKit-backed OCR + PDF-extraction targets only on macOS.
+let cliMacOSDeps: [Target.Dependency] = []
 #else
 let macOSProducts: [Product] = [
 	.library(name: "SwiftTextOCR", targets: ["SwiftTextOCR"]),
-	.library(name: "SwiftTextPDF", targets: ["SwiftTextPDF"]),
-	.executable(name: "swifttext", targets: ["SwiftTextCLI"])
+	.library(name: "SwiftTextPDF", targets: ["SwiftTextPDF"])
 ]
 let macOSTargets: [Target] = [
 	.target(
@@ -63,28 +72,6 @@ let macOSTargets: [Target] = [
 		name: "SwiftTextPDF",
 		dependencies: ["SwiftTextOCR"],
 		path: "Sources/SwiftTextPDF"
-	),
-	.executableTarget(
-		name: "SwiftTextCLI",
-		dependencies: [
-			"SwiftTextHTML",
-			"SwiftTextOCR",
-			"SwiftTextPDF",
-			"SwiftTextDOCX",
-			"SwiftTextPages",
-			"SwiftTextNumbers",
-			"SwiftTextKeynote",
-			"SwiftTextRender",
-			.product(name: "ArgumentParser", package: "swift-argument-parser", condition: .when(traits: ["CLI"]))
-		],
-		path: "Sources/SwiftTextCLI",
-		plugins: [
-			.plugin(name: "VersionGeneratorPlugin")
-		]
-	),
-	.plugin(
-		name: "VersionGeneratorPlugin",
-		capability: .buildTool()
 	),
 	.testTarget(
 		name: "SwiftTextOCRTests",
@@ -101,7 +88,40 @@ let swiftTextExtraDeps: [Target.Dependency] = [
 	.target(name: "SwiftTextPDF", condition: .when(traits: ["PDF"]))
 ]
 let ocrTestDeps: [Target.Dependency] = []
+let cliMacOSDeps: [Target.Dependency] = ["SwiftTextOCR", "SwiftTextPDF"]
 #endif
+
+// The cross-platform `swifttext` CLI. It builds on macOS, Linux, and Windows:
+// the OCR/Overlay subcommands and the WebKit PDF engine are gated inside the
+// sources to macOS, and the OCR/PDF target dependencies are added only there
+// (cliMacOSDeps). Off macOS the `pdf`/`render` commands default to the pure-Swift
+// SwiftTextRender engine (no WebKit). SwiftTextHTML/SwiftTextRender need libxml2
+// (Linux: libxml2-dev; Windows: vcpkg), which the CLI trait pulls in transitively.
+let cliProducts: [Product] = [
+	.executable(name: "swifttext", targets: ["SwiftTextCLI"])
+]
+let cliTargets: [Target] = [
+	.executableTarget(
+		name: "SwiftTextCLI",
+		dependencies: [
+			"SwiftTextHTML",
+			"SwiftTextDOCX",
+			"SwiftTextPages",
+			"SwiftTextNumbers",
+			"SwiftTextKeynote",
+			"SwiftTextRender",
+			.product(name: "ArgumentParser", package: "swift-argument-parser", condition: .when(traits: ["CLI"]))
+		] + cliMacOSDeps,
+		path: "Sources/SwiftTextCLI",
+		plugins: [
+			.plugin(name: "VersionGeneratorPlugin")
+		]
+	),
+	.plugin(
+		name: "VersionGeneratorPlugin",
+		capability: .buildTool()
+	)
+]
 
 // HTML parsing comes from XMLKit's HTMLParser module (libxml2-backed,
 // cross-platform — Linux needs libxml2-dev/pkg-config, vcpkg on Windows).
@@ -225,7 +245,7 @@ let packageProducts: [Product] = [
 		name: "SwiftTextRender",
 		targets: ["SwiftTextRender"]
 	)
-] + htmlProducts + macOSProducts
+] + htmlProducts + macOSProducts + cliProducts
 
 let swiftTextDependencies: [Target.Dependency] = [
 	.target(name: "SwiftTextDOCX", condition: .when(traits: ["DOCX"])),
@@ -382,7 +402,7 @@ let packageTargets: [Target] = [
 		dependencies: ["SwiftTextRender", "SwiftTextHTML", "SwiftTextCSS"],
 		path: "Tests/SwiftTextRenderTests"
 	)
-] + htmlTargets + macOSTargets
+] + htmlTargets + macOSTargets + cliTargets
 
 let allTraits: Set<Trait> = [
 	.trait(name: "OCR", description: "Image OCR support"),

@@ -32,6 +32,14 @@ jobs:
         run: swift --version
       - name: Build & Test (macOS)
         run: swift test -v
+      - name: Build & smoke-test the CLI (macOS)
+        run: |
+          swift build -c release --product swifttext
+          BIN="$(swift build -c release --product swifttext --show-bin-path)"
+          "$BIN/swifttext" --version
+          printf '# Hello\n\nWorld with **bold**.\n' > smoke.md
+          "$BIN/swifttext" render smoke.md -o smoke.pdf --engine swift
+          test -s smoke.pdf && echo "PDF OK ($(wc -c < smoke.pdf) bytes)"
 
   build-linux:
     runs-on: ubuntu-latest
@@ -46,6 +54,16 @@ jobs:
         run: swift --version
       - name: Build & Test (Linux)
         run: swift test -v
+      - name: Build & smoke-test the CLI (Linux, swift engine)
+        run: |
+          swift build -c release --product swifttext
+          BIN="$(swift build -c release --product swifttext --show-bin-path)"
+          "$BIN/swifttext" --version
+          printf '# Hello\n\nWorld with **bold** and a list:\n\n- one\n- two\n' > smoke.md
+          "$BIN/swifttext" render smoke.md -o smoke.pdf --engine swift
+          test -s smoke.pdf && echo "PDF OK ($(wc -c < smoke.pdf) bytes)"
+          "$BIN/swifttext" render smoke.md -o smoke.html
+          test -s smoke.html && echo "HTML OK"
 
   build-ios:
     runs-on: macos-latest
@@ -125,3 +143,41 @@ jobs:
           # Build the test bundle and run it on the emulator. With the portable
           # subset there's no libxml2/ZIPFoundation for the SDK to choke on.
           run-tests: true
+
+  # Windows job — builds and smoke-tests the full `swifttext` CLI. Unlike the
+  # portable job above, this is a real (non-SWIFTTEXT_PORTABLE_ONLY) build: it
+  # provisions libxml2 via vcpkg so SwiftTextHTML/SwiftTextRender link, and builds
+  # only the `swifttext` product so the AttributedString link gap (swift#88132) is
+  # never in the graph. Off macOS the pdf/render commands default to the pure-Swift
+  # SwiftTextRender engine (no WebKit), which is what the render smoke exercises.
+  build-windows-cli:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+      - name: Setup Swift
+        uses: SwiftyLab/setup-swift@latest
+        with:
+          swift-version: "6.3.1"
+      - name: Install libxml2 (vcpkg)
+        shell: pwsh
+        run: |
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install libxml2:x64-windows
+          $root = "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows"
+          # CHTMLParser resolves <libxml2/libxml/*.h> from the vcpkg include dir and
+          # links libxml2.lib from lib; the DLL must be on PATH at run time.
+          "INCLUDE=$root\include;$root\include\libxml2;$env:INCLUDE" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "LIB=$root\lib;$env:LIB" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "$root\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+      - name: Verify Swift version
+        run: swift --version
+      - name: Build & smoke-test the CLI (Windows, swift engine)
+        shell: pwsh
+        run: |
+          swift build -c release --product swifttext
+          $bin = swift build -c release --product swifttext --show-bin-path
+          & "$bin\swifttext.exe" --version
+          "# Hello`r`n`r`nWorld with **bold** and a list:`r`n`r`n- one`r`n- two" | Out-File -FilePath smoke.md -Encoding utf8
+          & "$bin\swifttext.exe" render smoke.md -o smoke.pdf --engine swift
+          if (!(Test-Path smoke.pdf)) { throw "no PDF produced" }
+          Write-Host ("PDF OK ({0} bytes)" -f (Get-Item smoke.pdf).Length)

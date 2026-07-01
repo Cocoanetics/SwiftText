@@ -5,13 +5,14 @@
 //  Created by Oliver Drobnik on 18.02.26.
 //
 
-#if os(macOS)
 import ArgumentParser
 import Foundation
 import SwiftTextHTML
 import SwiftTextDOCX
 import SwiftTextRender
+#if os(macOS)
 import WebKit
+#endif
 
 // MARK: - Render engine
 
@@ -21,19 +22,37 @@ enum RenderEngine: String, ExpressibleByArgument, CaseIterable {
 	case webkit
 	/// The cross-platform SwiftTextRender engine (no WebKit).
 	case swift
+
+	/// The default engine for the current platform: WebKit on macOS (full CSS
+	/// fidelity), the pure-Swift SwiftTextRender engine everywhere else — WebKit
+	/// isn't available off macOS.
+	static var platformDefault: RenderEngine {
+		#if os(macOS)
+		return .webkit
+		#else
+		return .swift
+		#endif
+	}
 }
 
 // MARK: - Paper size
+
+/// Page dimensions in PDF points (1/72"), portrait orientation. A pure-Swift
+/// value type, so paper sizing works without CoreGraphics' `CGSize` (Apple-only).
+struct PagePoints {
+	var width: Double
+	var height: Double
+}
 
 enum PaperSize: String, ExpressibleByArgument, CaseIterable {
 	case a4
 	case letter
 
 	/// Page dimensions in points (portrait orientation).
-	var pointSize: CGSize {
+	var pointSize: PagePoints {
 		switch self {
-		case .a4:     return CGSize(width: 595.28, height: 841.89)
-		case .letter: return CGSize(width: 612.0, height: 792.0)
+		case .a4:     return PagePoints(width: 595.28, height: 841.89)
+		case .letter: return PagePoints(width: 612.0, height: 792.0)
 		}
 	}
 
@@ -52,7 +71,7 @@ enum PaperSize: String, ExpressibleByArgument, CaseIterable {
 struct PDF: AsyncParsableCommand {
 	static let configuration = CommandConfiguration(
 		commandName: "pdf",
-		abstract: "Render an HTML, Markdown, DOCX, or EML file (or URL) to PDF via WebKit."
+		abstract: "Render an HTML, Markdown, DOCX, or EML file (or URL) to PDF."
 	)
 
 	@Argument(help: "Path to an .html, .md, .docx, or .eml file, or an http(s) URL. Omit when using --stdin.")
@@ -70,15 +89,21 @@ struct PDF: AsyncParsableCommand {
 	@Flag(name: .long, help: "Use landscape orientation (default: portrait).")
 	var landscape: Bool = false
 
-	@Option(name: .long, help: "Rendering engine: webkit (default, full CSS) or swift (cross-platform, no WebKit).")
-	var engine: RenderEngine = .webkit
+	@Option(name: .long, help: "Rendering engine: webkit (macOS only, full CSS) or swift (cross-platform, no WebKit). Defaults to webkit on macOS, swift elsewhere.")
+	var engine: RenderEngine = .platformDefault
 
 	// MARK: - Run
 
 	func run() async throws {
+		#if os(macOS)
 		guard #available(macOS 12.0, *) else {
 			throw ValidationError("The pdf command requires macOS 12 or newer.")
 		}
+		#else
+		if engine == .webkit {
+			throw ValidationError("The webkit engine is only available on macOS; use --engine swift.")
+		}
+		#endif
 
 		if stdin {
 			guard input == nil else {
@@ -162,23 +187,9 @@ struct PDF: AsyncParsableCommand {
 		}
 	}
 
-	// MARK: - WebKit rendering
+	// MARK: - Rendering
 
-	/// Builds a `WKPDFConfiguration` whose rect matches the chosen paper size and orientation.
-	@MainActor
-	@available(macOS 12.0, *)
-	private func pdfConfiguration() -> WKPDFConfiguration {
-		let config = WKPDFConfiguration()
-		let size = paper.pointSize
-		if landscape {
-			config.rect = CGRect(origin: .zero, size: CGSize(width: size.height, height: size.width))
-		} else {
-			config.rect = CGRect(origin: .zero, size: size)
-		}
-		return config
-	}
-
-	/// Renders an HTMLSource to a PDF file using WebKit.
+	/// Renders an HTMLSource to a PDF file (swift engine everywhere; WebKit on macOS).
 	@MainActor
 	@available(macOS 12.0, *)
 	private func render(_ source: HTMLSource, to outputURL: URL) async throws {
@@ -187,6 +198,7 @@ struct PDF: AsyncParsableCommand {
 			try await renderSwift(html: html, baseURL: baseURL, to: outputURL)
 			return
 		}
+		#if os(macOS)
 		var tempFileToCleanup: URL?
 		defer {
 			if let temp = tempFileToCleanup {
@@ -211,9 +223,12 @@ struct PDF: AsyncParsableCommand {
 		await browser.waitForLoadCompletion()
 		let pdfData = try await browser.exportPaginatedPDFData(paperSize: pageSize())
 		try writeData(pdfData, to: outputURL)
+		#else
+		throw ValidationError("The webkit engine is only available on macOS; use --engine swift.")
+		#endif
 	}
 
-	/// Renders an HTML string to a PDF file using WebKit.
+	/// Renders an HTML string to a PDF file (swift engine everywhere; WebKit on macOS).
 	@MainActor
 	@available(macOS 12.0, *)
 	private func renderHTML(_ html: String, sourceURL: URL?, to outputURL: URL) async throws {
@@ -221,27 +236,36 @@ struct PDF: AsyncParsableCommand {
 			try await renderSwift(html: html, baseURL: sourceURL, to: outputURL)
 			return
 		}
+		#if os(macOS)
 		let browser = WebKitBrowser(htmlString: html, baseURL: sourceURL)
 		browser.frameSize = pageSize()
 		browser.preserveFrameHeight = true
 		await browser.waitForLoadCompletion()
 		let pdfData = try await browser.exportPaginatedPDFData(paperSize: pageSize())
 		try writeData(pdfData, to: outputURL)
+		#else
+		throw ValidationError("The webkit engine is only available on macOS; use --engine swift.")
+		#endif
 	}
 
-	/// Loads a URL in WebKit and renders the result to a PDF file.
+	/// Loads an http(s) URL and renders the result to a PDF file. WebKit only —
+	/// the swift engine can't fetch/execute pages.
 	@MainActor
 	@available(macOS 12.0, *)
 	private func renderURL(_ url: URL, to outputURL: URL) async throws {
 		if engine == .swift {
 			throw ValidationError("--engine swift cannot load http(s) URLs; save the page to an .html file first.")
 		}
+		#if os(macOS)
 		let browser = WebKitBrowser(url: url)
 		browser.frameSize = pageSize()
 		browser.preserveFrameHeight = true
 		await browser.waitForLoadCompletion()
 		let pdfData = try await browser.exportPaginatedPDFData(paperSize: pageSize())
 		try writeData(pdfData, to: outputURL)
+		#else
+		throw ValidationError("The webkit engine is only available on macOS; use --engine swift.")
+		#endif
 	}
 
 	/// Renders HTML to a PDF file using the cross-platform SwiftTextRender engine.
@@ -251,8 +275,8 @@ struct PDF: AsyncParsableCommand {
 		let widthPoints = landscape ? size.height : size.width
 		let heightPoints = landscape ? size.width : size.height
 		var options = RenderOptions()
-		options.pageWidthPx = Double(widthPoints) / 0.75 // points → CSS pixels
-		options.pageHeightPx = Double(heightPoints) / 0.75
+		options.pageWidthPx = widthPoints / 0.75 // points → CSS pixels
+		options.pageHeightPx = heightPoints / 0.75
 		let data = try await HTMLRenderer.renderPDF(html: html, options: options)
 		try writeData(data, to: outputURL)
 	}
@@ -267,14 +291,16 @@ struct PDF: AsyncParsableCommand {
 		}
 	}
 
-	/// Returns the page size in points, respecting orientation.
+	#if os(macOS)
+	/// Returns the page size in points, respecting orientation (WebKit path).
 	private func pageSize() -> CGSize {
 		let size = paper.pointSize
 		if landscape {
 			return CGSize(width: size.height, height: size.width)
 		}
-		return size
+		return CGSize(width: size.width, height: size.height)
 	}
+	#endif
 
 	// MARK: - Output URL helpers
 
@@ -655,5 +681,3 @@ private func decodeQuotedPrintable(_ text: String) -> String {
 	}
 	return result
 }
-
-#endif
