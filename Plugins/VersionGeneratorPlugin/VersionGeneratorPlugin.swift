@@ -15,34 +15,25 @@ struct VersionGeneratorPlugin: BuildToolPlugin {
 		let outputURL = context.pluginWorkDirectoryURL.appending(path: "GeneratedVersion.swift")
 
 		#if os(Windows)
-		// cmd.exe batch is too fragile for paths (a trailing `\` before a quote
-		// escapes it). Use PowerShell driven by a base64 `-EncodedCommand`, which
-		// sidesteps all shell quoting. The script always writes the file and exits 0,
-		// so a shallow checkout with no tags degrades to "0.0.0" rather than failing.
+		// The SwiftPM plugin sandbox blocks PowerShell from loading (it fails with
+		// 0x8009001d, "Loading managed Windows PowerShell failed"), but the lighter
+		// cmd.exe runs fine. Use a cmd batch with delayed expansion (/v:on): default
+		// to "0.0.0", then prefer a `.version` file, then the latest git tag. The two
+		// `echo` redirects always run, so the output file is always written and the
+		// last command's success makes the prebuild step exit 0. windowsPath() strips
+		// any trailing backslash so `git -C "…\SwiftText"` can't escape its quote.
 		let root = ProcessInfo.processInfo.environment["SystemRoot"] ?? "C:\\Windows"
-		let executable = URL(filePath: "\(root)\\System32\\WindowsPowerShell\\v1.0\\powershell.exe")
+		let executable = URL(filePath: "\(root)\\System32\\cmd.exe")
 		let pkg = windowsPath(context.package.directoryURL)
 		let out = windowsPath(outputURL)
-		let psScript = """
-		$ErrorActionPreference = 'SilentlyContinue'
-		$pkg = '\(pkg)'
-		$out = '\(out)'
-		$v = '0.0.0'
-		try {
-		  $verFile = Join-Path $pkg '.version'
-		  if (Test-Path $verFile) {
-		    $t = (Get-Content -Raw $verFile).Trim()
-		    if ($t) { $v = $t }
-		  } else {
-		    $t = (& git -C $pkg describe --tags --abbrev=0 2>$null | Out-String).Trim()
-		    if ($t) { $v = ($t -replace '^v','') }
-		  }
-		} catch { }
-		Set-Content -Path $out -Encoding utf8 -Value ('// Auto-generated from git tag or .version file - do not edit' + [Environment]::NewLine + 'public let swiftTextVersion = "' + $v + '"')
-		exit 0
+		let script = """
+		set "VER=0.0.0" & \
+		if exist "\(pkg)\\.version" ( set /p VER=<"\(pkg)\\.version" ) \
+		else ( for /f "usebackq delims=" %A in (`git -C "\(pkg)" describe --tags --abbrev=0 2^>nul`) do set "VER=%A" ) & \
+		> "\(out)" echo // Auto-generated from git tag or .version file - do not edit & \
+		>> "\(out)" echo public let swiftTextVersion = "!VER!"
 		"""
-		let encoded = (psScript.data(using: .utf16LittleEndian) ?? Data()).base64EncodedString()
-		let arguments = ["-NoProfile", "-NonInteractive", "-EncodedCommand", encoded]
+		let arguments = ["/v:on", "/c", script]
 		#else
 		let executable = URL(filePath: "/bin/sh")
 		let pkg = context.package.directoryURL.path()

@@ -181,9 +181,12 @@ jobs:
           $incflag = "-I$root\include"
           $libflag = "-LIBPATH:$root\lib"
           swift build -c release --product swifttext -Xcc $incflag -Xlinker $libflag
-          $bin = swift build -c release --product swifttext -Xcc $incflag -Xlinker $libflag --show-bin-path
+          if ($LASTEXITCODE -ne 0) { throw "swift build failed ($LASTEXITCODE)" }
+          $bin = (swift build -c release --product swifttext -Xcc $incflag -Xlinker $libflag --show-bin-path).Trim()
           & "$bin\swifttext.exe" --version
+          if ($LASTEXITCODE -ne 0) { throw "swifttext --version failed ($LASTEXITCODE)" }
           "# Hello`r`n`r`nWorld with **bold** and a list:`r`n`r`n- one`r`n- two" | Out-File -FilePath smoke.md -Encoding utf8
           & "$bin\swifttext.exe" render smoke.md -o smoke.pdf --engine swift
+          if ($LASTEXITCODE -ne 0) { throw "swifttext render failed ($LASTEXITCODE)" }
           if (!(Test-Path smoke.pdf)) { throw "no PDF produced" }
           Write-Host ("PDF OK ({0} bytes)" -f (Get-Item smoke.pdf).Length)
