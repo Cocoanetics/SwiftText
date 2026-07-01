@@ -7,6 +7,11 @@
 
 import ArgumentParser
 import Foundation
+// URLSession lives in FoundationNetworking on Linux/Windows (the `html` command
+// fetches remote pages); it's part of Foundation on Apple platforms.
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 import SwiftTextHTML
 import SwiftTextDOCX
 import SwiftTextPages
