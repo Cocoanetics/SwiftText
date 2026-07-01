@@ -212,14 +212,15 @@ jobs:
           # vcpkg nests libxml2 headers under include\libxml2\libxml\. CHTMLParser's
           # <libxml2/libxml/*.h> resolves from include\, but those headers then pull
           # <libxml/*.h>, which needs include\libxml2\ too — so pass both as -Xcc.
+          # Add the vcpkg lib dir with lld-link's canonical `/LIBPATH:` (the `-LIBPATH:`
+          # dash form was ignored earlier). This is additive — it does NOT disturb the
+          # toolchain's own MSVC/SDK lib search (setting $env:LIB clobbered that, since
+          # it's empty in this step).
           $flags = @(
             "-Xcc", "-I$root\include",
-            "-Xcc", "-I$root\include\libxml2"
+            "-Xcc", "-I$root\include\libxml2",
+            "-Xlinker", "/LIBPATH:$root\lib"
           )
-          # lld-link ignored -Xlinker -LIBPATH:, but it honors the LIB env var. Append
-          # (don't clobber) the vcpkg lib dir here in the build step, where the
-          # toolchain's own LIB (swiftCore.lib, the Windows SDK, …) is already set.
-          $env:LIB = "$root\lib;$env:LIB"
           swift build -c release --product swifttext @flags
           if ($LASTEXITCODE -ne 0) { throw "swift build failed ($LASTEXITCODE)" }
           $bin = (swift build -c release --product swifttext @flags --show-bin-path).Trim()
