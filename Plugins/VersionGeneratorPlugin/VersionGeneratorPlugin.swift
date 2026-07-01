@@ -15,20 +15,34 @@ struct VersionGeneratorPlugin: BuildToolPlugin {
 		let outputURL = context.pluginWorkDirectoryURL.appending(path: "GeneratedVersion.swift")
 
 		#if os(Windows)
-		let executable = URL(filePath: windowsCmdPath())
+		// cmd.exe batch is too fragile for paths (a trailing `\` before a quote
+		// escapes it). Use PowerShell driven by a base64 `-EncodedCommand`, which
+		// sidesteps all shell quoting. The script always writes the file and exits 0,
+		// so a shallow checkout with no tags degrades to "0.0.0" rather than failing.
+		let root = ProcessInfo.processInfo.environment["SystemRoot"] ?? "C:\\Windows"
+		let executable = URL(filePath: "\(root)\\System32\\WindowsPowerShell\\v1.0\\powershell.exe")
 		let pkg = windowsPath(context.package.directoryURL)
 		let out = windowsPath(outputURL)
-		// One-liner cmd script with delayed expansion (/v:on): prefer `.version`,
-		// then the latest git tag, then "0.0.0"; write the two-line Swift source.
-		let script = """
-		set "VER=" & \
-		if exist "\(pkg)\\.version" ( set /p VER=<"\(pkg)\\.version" ) \
-		else ( for /f "usebackq delims=" %A in (`git -C "\(pkg)" describe --tags --abbrev=0 2^>nul`) do set "VER=%A" ) & \
-		if not defined VER set "VER=0.0.0" & \
-		> "\(out)" echo // Auto-generated from git tag or .version file - do not edit & \
-		>> "\(out)" echo public let swiftTextVersion = "!VER!"
+		let psScript = """
+		$ErrorActionPreference = 'SilentlyContinue'
+		$pkg = '\(pkg)'
+		$out = '\(out)'
+		$v = '0.0.0'
+		try {
+		  $verFile = Join-Path $pkg '.version'
+		  if (Test-Path $verFile) {
+		    $t = (Get-Content -Raw $verFile).Trim()
+		    if ($t) { $v = $t }
+		  } else {
+		    $t = (& git -C $pkg describe --tags --abbrev=0 2>$null | Out-String).Trim()
+		    if ($t) { $v = ($t -replace '^v','') }
+		  }
+		} catch { }
+		Set-Content -Path $out -Encoding utf8 -Value ('// Auto-generated from git tag or .version file - do not edit' + [Environment]::NewLine + 'public let swiftTextVersion = "' + $v + '"')
+		exit 0
 		"""
-		let arguments = ["/v:on", "/c", script]
+		let encoded = (psScript.data(using: .utf16LittleEndian) ?? Data()).base64EncodedString()
+		let arguments = ["-NoProfile", "-NonInteractive", "-EncodedCommand", encoded]
 		#else
 		let executable = URL(filePath: "/bin/sh")
 		let pkg = context.package.directoryURL.path()
@@ -60,17 +74,14 @@ struct VersionGeneratorPlugin: BuildToolPlugin {
 }
 
 #if os(Windows)
-/// Resolves cmd.exe via %SystemRoot% (falls back to the conventional location).
-private func windowsCmdPath() -> String {
-	let root = ProcessInfo.processInfo.environment["SystemRoot"] ?? "C:\\Windows"
-	return "\(root)\\System32\\cmd.exe"
-}
-
-/// Converts a file URL to a native Windows path (backslashes, no leading slash),
-/// tolerating the `/C:/…` and `C:/…` forms Foundation may hand back.
+/// Converts a file URL to a native Windows path (backslashes, no leading slash,
+/// no trailing slash), tolerating the `/C:/…` and `C:/…` forms Foundation may
+/// hand back for a directory URL.
 private func windowsPath(_ url: URL) -> String {
 	var path = url.path()
 	if path.hasPrefix("/") { path.removeFirst() }
-	return path.replacingOccurrences(of: "/", with: "\\")
+	path = path.replacingOccurrences(of: "/", with: "\\")
+	while path.hasSuffix("\\") { path.removeLast() }
+	return path
 }
 #endif
