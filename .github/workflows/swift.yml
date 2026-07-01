@@ -193,11 +193,15 @@ jobs:
           # which is exactly what ZIPFoundation's `.linkedLibrary("z")` resolves to.
           & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install libxml2:x64-windows zlib:x64-windows
           $root = "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows"
+          # vcpkg names zlib's import lib z.lib (which ZIPFoundation's
+          # `.linkedLibrary("z")` wants), but libxml2's headers autolink `zlib.lib`
+          # via #pragma comment(lib). Provide both names from the one import lib.
+          Copy-Item "$root\lib\z.lib" "$root\lib\zlib.lib" -Force
           # Put the DLLs (libxml2.dll, zlib1.dll) on PATH so the CLI loads at run time
-          # (append-safe). Do NOT set INCLUDE/LIB globally — overwriting them clobbers
-          # the Windows SDK header/lib paths and breaks even manifest compilation
-          # (errno.h not found). The vcpkg header/lib dirs are passed to `swift build`
-          # as flags in the next step instead.
+          # (append-safe). Do NOT set INCLUDE/LIB globally here — overwriting them in
+          # this step clobbers the Windows SDK paths (its $env:INCLUDE/$env:LIB are
+          # empty) and breaks even manifest compilation. Header/lib dirs are given to
+          # `swift build` in the next step, where the toolchain env is intact.
           "$root\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
       - name: Verify Swift version
         run: swift --version
@@ -207,14 +211,15 @@ jobs:
           $root = "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows"
           # vcpkg nests libxml2 headers under include\libxml2\libxml\. CHTMLParser's
           # <libxml2/libxml/*.h> resolves from include\, but those headers then pull
-          # <libxml/*.h>, which needs include\libxml2\ on the search path — so pass
-          # both. Pass them (and the lib dir) as build flags so the toolchain's own
-          # header/lib search (errno.h, swiftCore.lib, …) is left untouched.
+          # <libxml/*.h>, which needs include\libxml2\ too — so pass both as -Xcc.
           $flags = @(
             "-Xcc", "-I$root\include",
-            "-Xcc", "-I$root\include\libxml2",
-            "-Xlinker", "-LIBPATH:$root\lib"
+            "-Xcc", "-I$root\include\libxml2"
           )
+          # lld-link ignored -Xlinker -LIBPATH:, but it honors the LIB env var. Append
+          # (don't clobber) the vcpkg lib dir here in the build step, where the
+          # toolchain's own LIB (swiftCore.lib, the Windows SDK, …) is already set.
+          $env:LIB = "$root\lib;$env:LIB"
           swift build -c release --product swifttext @flags
           if ($LASTEXITCODE -ne 0) { throw "swift build failed ($LASTEXITCODE)" }
           $bin = (swift build -c release --product swifttext @flags --show-bin-path).Trim()
