@@ -24,19 +24,17 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v6
-      # Install the swift.org 6.3.1 toolchain directly (it layers on the runner's
-      # Xcode for the SDK) rather than pinning an Xcode version. This keeps macOS on
-      # the same Swift as Linux/Windows/Android — which matters here because the
-      # package manifest's trait conditions resolve differently under Swift 6.2 vs
-      # 6.3 (single-trait AND vs any-of), so all jobs must agree on 6.3.
-      - name: Install Swift 6.3
-        uses: SwiftyLab/setup-swift@latest
+      # SwiftTextOCR uses the macOS 26 Vision document-recognition APIs
+      # (RecognizeDocumentsRequest / NormalizedRegion), so build with a full Xcode
+      # that ships the macOS 26 SDK — a swift.org toolchain layered on an older SDK
+      # can't see those symbols. latest-stable's Swift is 6.2.x, which the package's
+      # single-trait manifest conditions build on fine (they're valid on 6.2 and 6.3).
+      - name: Select newest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
         with:
-          swift-version: "6.3.1"
+          xcode-version: latest-stable
       - name: Verify Swift version
-        run: |
-          swift --version
-          swift --version | grep -qE "Swift version 6\.3" || { echo "::error::Expected Swift 6.3 (TOOLCHAINS=$TOOLCHAINS)"; exit 1; }
+        run: swift --version
       - name: Build (macOS)
         run: swift build --build-tests -v
       - name: Test (macOS)
@@ -194,9 +192,13 @@ jobs:
           # CZLib (the DOCX/Pages readers).
           & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install libxml2:x64-windows zlib:x64-windows
           $root = "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows"
+          Write-Host "vcpkg lib dir:"; Get-ChildItem "$root\lib" -Filter *.lib | Select-Object -ExpandProperty Name
           # ZIPFoundation's CZLib does `.linkedLibrary("z")` -> z.lib, but vcpkg ships
-          # zlib as zlib.lib; provide the expected name.
-          Copy-Item "$root\lib\zlib.lib" "$root\lib\z.lib" -Force
+          # zlib under its own name (zlib.lib / zlib1.lib / …); copy whichever it is.
+          $zlib = Get-ChildItem "$root\lib" -Filter "*.lib" | Where-Object { $_.Name -match '^zlib' } | Select-Object -First 1
+          if (-not $zlib) { throw "no zlib import lib found in $root\lib" }
+          Copy-Item $zlib.FullName "$root\lib\z.lib" -Force
+          Write-Host "copied $($zlib.Name) -> z.lib"
           # Put the DLLs (libxml2.dll, zlib1.dll) on PATH so the CLI loads at run time
           # (append-safe). Do NOT set INCLUDE/LIB globally — overwriting them clobbers
           # the Windows SDK header/lib paths and breaks even manifest compilation
