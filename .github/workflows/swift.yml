@@ -187,16 +187,22 @@ jobs:
         uses: SwiftyLab/setup-swift@latest
         with:
           swift-version: "6.3.1"
-      - name: Install libxml2 (vcpkg)
+      - name: Install libxml2 + zlib (vcpkg)
         shell: pwsh
         run: |
-          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install libxml2:x64-windows
-          # Put libxml2.dll on PATH so the smoke-test can load it at run time
-          # (append-safe). Do NOT set INCLUDE/LIB globally — overwriting them
-          # clobbers the Windows SDK header/lib paths and breaks even manifest
-          # compilation (errno.h not found). The vcpkg header/lib dirs are passed
-          # to `swift build` as flags in the next step instead.
-          "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+          # libxml2 backs SwiftTextHTML/SwiftTextRender; zlib backs ZIPFoundation's
+          # CZLib (the DOCX/Pages readers).
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install libxml2:x64-windows zlib:x64-windows
+          $root = "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows"
+          # ZIPFoundation's CZLib does `.linkedLibrary("z")` -> z.lib, but vcpkg ships
+          # zlib as zlib.lib; provide the expected name.
+          Copy-Item "$root\lib\zlib.lib" "$root\lib\z.lib" -Force
+          # Put the DLLs (libxml2.dll, zlib1.dll) on PATH so the CLI loads at run time
+          # (append-safe). Do NOT set INCLUDE/LIB globally — overwriting them clobbers
+          # the Windows SDK header/lib paths and breaks even manifest compilation
+          # (errno.h not found). The vcpkg header/lib dirs are passed to `swift build`
+          # as flags in the next step instead.
+          "$root\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
       - name: Verify Swift version
         run: swift --version
       - name: Build & smoke-test the CLI (Windows, swift engine)

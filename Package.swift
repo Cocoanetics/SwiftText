@@ -424,7 +424,12 @@ let allTraits: Set<Trait> = [
 
 let allDependencies: [Package.Dependency] = [
 	.package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0"),
-	.package(url: "https://github.com/weichsel/ZIPFoundation.git", from: "0.9.12"),
+	// Pinned to the `development` HEAD for its Windows/Android import fix (the zlib
+	// shim's `#import` → `#include`; weichsel/ZIPFoundation#380). No tagged release
+	// includes it yet, and without it the DOCX/Pages readers can't build on Windows
+	// (clang there rejects `#import` as an MSVC COM directive). Bump back to a
+	// version tag once ZIPFoundation ships a release with the fix.
+	.package(url: "https://github.com/weichsel/ZIPFoundation.git", revision: "187ee77287ea4b23df4d7de32771ec38bbafb840"),
 	.package(url: "https://github.com/swiftlang/swift-markdown.git", from: "0.8.0"),
 	.package(url: "https://github.com/Cocoanetics/XMLKit.git", from: "1.0.0")
 ]
