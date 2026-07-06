@@ -5,6 +5,10 @@
 //  XML well-formedness check used across the EPUB tests.
 
 import Foundation
+// On non-Apple platforms XMLParser lives in the separate FoundationXML module.
+#if canImport(FoundationXML)
+import FoundationXML
+#endif
 import Testing
 @testable import SwiftTextEPUB
 

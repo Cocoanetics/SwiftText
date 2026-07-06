@@ -85,15 +85,14 @@ struct RenderPDFTests {
 		// in the output exactly once. Before slice-culling, the painter emitted
 		// the entire document's draw operators into every page's content stream
 		// (relying on the clip to hide them), so this marker appeared once per
-		// page and output size grew quadratically. Base-14 text is drawn as a
-		// literal `(…)` string in an uncompressed stream, so a raw byte scan
-		// counts how many times it was actually painted.
+		// page and output size grew quadratically. Render uncompressed so base-14
+		// text stays a literal `(…)` string a raw byte scan can count.
 		var html = "<body><p>UNIQUEMARKERWORD sits at the very top.</p>"
 		for index in 0 ..< 400 {
 			html += "<p>Filler paragraph number \(index) to force pagination across many pages.</p>"
 		}
 		html += "</body>"
-		let data = try await HTMLRenderer.renderPDF(html: html)
+		let data = try await HTMLRenderer.renderPDF(html: html, options: RenderOptions(compressStreams: false))
 
 		#if canImport(PDFKit)
 		#expect(try #require(PDFDocument(data: data)).pageCount > 5)
