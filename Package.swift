@@ -106,6 +106,7 @@ let cliTargets: [Target] = [
 		dependencies: [
 			"SwiftTextHTML",
 			"SwiftTextDOCX",
+			"SwiftTextEPUB",
 			"SwiftTextPages",
 			"SwiftTextNumbers",
 			"SwiftTextKeynote",
@@ -202,6 +203,10 @@ let packageProducts: [Product] = [
 		targets: ["SwiftTextDOCX"]
 	),
 	.library(
+		name: "SwiftTextEPUB",
+		targets: ["SwiftTextEPUB"]
+	),
+	.library(
 		name: "SwiftTextPages",
 		targets: ["SwiftTextPages"]
 	),
@@ -279,6 +284,20 @@ let packageTargets: [Target] = [
 		],
 		path: "Sources/SwiftTextDOCX"
 	),
+	.target(
+		name: "SwiftTextEPUB",
+		dependencies: [
+			"SwiftTextMarkdown",
+			.product(name: "Markdown", package: "swift-markdown"),
+			// Same single-trait ZIPFoundation gating as SwiftTextDOCX/SwiftTextPages:
+			// the EPUB container is a Zip archive. The CLI default trait enables EPUB
+			// transitively for a plain `swift build`.
+			.product(name: "ZIPFoundation", package: "ZIPFoundation", condition: .when(traits: ["EPUB"])),
+			// Shared dependency-free utilities (ImageDimensions); see SwiftTextDOCX.
+			"SwiftTextCore"
+		],
+		path: "Sources/SwiftTextEPUB"
+	),
 	// Shared iWork (IWA) read core. Snappy and Protocol Buffers decoding are
 	// implemented in-target; ZIPFoundation (the .iwa container is a Zip archive)
 	// is the only external dependency, gated by PAGES with the same single-trait
@@ -327,6 +346,11 @@ let packageTargets: [Target] = [
 		resources: [
 			.process("Resources")
 		]
+	),
+	.testTarget(
+		name: "SwiftTextEPUBTests",
+		dependencies: ["SwiftTextEPUB", "SwiftTextMarkdown"],
+		path: "Tests/SwiftTextEPUBTests"
 	),
 	.testTarget(
 		name: "SwiftTextPagesTests",
@@ -409,11 +433,12 @@ let allTraits: Set<Trait> = [
 	.trait(name: "HTML", description: "HTML parsing"),
 	.trait(name: "PDF", description: "PDF text extraction", enabledTraits: ["OCR"]),
 	.trait(name: "DOCX", description: "DOCX extraction"),
+	.trait(name: "EPUB", description: "EPUB generation"),
 	.trait(name: "PAGES", description: "Pages (iWork) extraction"),
 	// CLI enables DOCX, PAGES, and HTML because SwiftTextCLI links
 	// SwiftTextDOCX, SwiftTextPages, and SwiftTextHTML, whose external products
 	// (ZIPFoundation, XMLKit's HTMLParser) are guarded by those traits.
-	.trait(name: "CLI", description: "swifttext command-line tool dependencies", enabledTraits: ["DOCX", "PAGES", "HTML"]),
+	.trait(name: "CLI", description: "swifttext command-line tool dependencies", enabledTraits: ["DOCX", "EPUB", "PAGES", "HTML"]),
 	// "CLI" must be a default trait: the SwiftTextCLI and SwiftTextDOCX targets are
 	// always part of the manifest, so a plain `swift build` needs their external
 	// products (ArgumentParser, ZIPFoundation) active to compile. Consumers that

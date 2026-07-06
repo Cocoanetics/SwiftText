@@ -50,6 +50,15 @@ Features:
 - Markdown output with headings, emphasis (bold/italic/strikethrough), lists, and
   footnotes
 
+### SwiftTextEPUB
+
+Builds a valid **EPUB 3** publication from a Markdown manuscript, cover image,
+and metadata — the native equivalent of `pandoc -o book.epub` (output validates
+under `epubcheck`). Splits chapters at a configurable heading level, generates
+the OPF package, EPUB 3 nav + legacy NCX, a title page, and an aspect-fit cover
+page, and packages them with `mimetype` stored first as the OCF spec requires.
+See [Docs/EPUB.md](Docs/EPUB.md).
+
 ### SwiftTextPages
 
 Extracts text and structure from Apple Pages (iWork) documents. The modern
@@ -345,7 +354,7 @@ Options:
 - **numbers** `--markdown`/`-m`, `--html`, `--json`, `--output-path <file>`/`-o`
 - **keynote** `--markdown`/`-m`, `--json`, `--output-path <file>`/`-o`
 - **pdf** `--engine webkit|swift`, `--paper a4|letter`, `--landscape`, `--stdin`, `--output <file>`/`-o`
-- **render** `--format html|pdf|docx|pages`, `--engine webkit|swift`, `--paper`, `--landscape`, `--page-break-before <h1…h6>`, `--package`, `--output <file>`/`-o`
+- **render** `--format html|pdf|docx|pages|epub`, `--engine webkit|swift`, `--paper`, `--landscape`, `--page-break-before <h1…h6>`, `--package`, `--output <file>`/`-o`; EPUB & shared: `--css <file>` (html/pdf/epub), `--cover <image>`, `--title`, `--author` (repeatable), `--language`, `--chapter-level <h1…h6>`
 - **overlay** *(macOS only)* `--output-path <file>`/`-o`, `--dpi <value>`, `--raw`
 
 The `pdf` and `render` commands render via **WebKit** by default on macOS and via
@@ -398,6 +407,14 @@ swifttext keynote --markdown ~/Documents/deck.key
 
 # Render Markdown to PDF with the cross-platform engine (works off macOS)
 swifttext render notes.md -o notes.pdf --engine swift
+
+# Build an EPUB 3 from a Markdown manuscript, with a cover and metadata
+swifttext render book.md -o book.epub \
+  --title "The Shattered Skies" --author "Elise Kummer" \
+  --chapter-level h2 --cover cover.jpg
+
+# Apply a custom stylesheet across HTML, PDF, and EPUB output
+swifttext render book.md -o book.epub --css book.css
 
 # Render an overlay PDF for inspection (macOS only)
 swifttext overlay --dpi 300 ~/Documents/report.pdf

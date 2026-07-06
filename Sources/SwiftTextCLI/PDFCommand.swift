@@ -362,7 +362,7 @@ struct PDF: AsyncParsableCommand {
 
 /// Converts a Markdown string to a self-contained HTML document
 /// styled for print output and with CSS `@page` size directives.
-func markdownToHTML(_ markdown: String, paper: PaperSize, landscape: Bool, pageBreakBefore: HeadingBreakLevel? = nil) -> String {
+func markdownToHTML(_ markdown: String, paper: PaperSize, landscape: Bool, pageBreakBefore: HeadingBreakLevel? = nil, extraCSS: String? = nil) -> String {
 	let orientation = landscape ? "landscape" : "portrait"
 	let pageCSS = "\(paper.cssName) \(orientation)"
 	let body = MarkdownToHTML.convert(markdown)
@@ -512,6 +512,7 @@ func markdownToHTML(_ markdown: String, paper: PaperSize, landscape: Bool, pageB
 	}
 	.footnote-definition p { margin: 0.4em 0; }
 	\(headingBreakCSS)
+	\(extraCSS.map { "\n/* User stylesheet */\n" + $0 } ?? "")
 	</style>
 	</head>
 	<body>
