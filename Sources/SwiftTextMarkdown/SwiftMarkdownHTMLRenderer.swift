@@ -38,6 +38,13 @@ public enum SwiftMarkdownHTMLRenderer {
 		/// `<details>`. cmark calls this mode "unsafe": only use it when the
 		/// output is sanitized or displayed without script execution.
 		public static let passThroughRawHTML = Options(rawValue: 1 << 0)
+
+		/// Emits XHTML-serializable markup: void elements are self-closed
+		/// (`<hr />`, `<br />`, `<img … />`) and boolean attributes take their
+		/// XHTML form (`disabled="disabled"`). Use this when the fragment must be
+		/// well-formed XML — e.g. EPUB content documents, which reading systems
+		/// parse as XHTML rather than lenient HTML5.
+		public static let xhtml = Options(rawValue: 1 << 1)
 	}
 
 	public static func convert(_ markdown: String, options: Options = []) -> String {
@@ -66,6 +73,9 @@ private struct HTMLRenderer: MarkupVisitor {
 
 	private var output: String = ""
 	private var alignmentStack: [[Table.ColumnAlignment?]] = []
+
+	/// The close for a void element: `" />"` in XHTML mode, `">"` otherwise.
+	private var voidClose: String { options.contains(.xhtml) ? " />" : ">" }
 
 	mutating func flush() -> String {
 		while output.hasSuffix("\n") { output.removeLast() }
@@ -164,7 +174,7 @@ private struct HTMLRenderer: MarkupVisitor {
 		// (e.g. `![*diagram*](img.png)` or `![link [label]](...)`) is
 		// preserved rather than silently dropped.
 		let alt = swiftMarkdownPlainText(of: image)
-		output += "<img src=\"\(escapeAttribute(src))\" alt=\"\(escapeAttribute(alt))\">"
+		output += "<img src=\"\(escapeAttribute(src))\" alt=\"\(escapeAttribute(alt))\"\(voidClose)"
 	}
 
 	mutating func visitCodeBlock(_ codeBlock: CodeBlock) {
@@ -174,14 +184,14 @@ private struct HTMLRenderer: MarkupVisitor {
 		// simpler escape policy. Smart-punct is also irrelevant inside code.
 		let escaped = escapeHTMLNotQuote(code)
 		if let language = codeBlock.language, !language.isEmpty {
-			output += "<pre><code class=\"language-\(language)\">\(escaped)</code></pre>"
+			output += "<pre><code class=\"language-\(escapeAttribute(language))\">\(escaped)</code></pre>"
 		} else {
 			output += "<pre><code>\(escaped)</code></pre>"
 		}
 	}
 
 	mutating func visitThematicBreak(_ thematicBreak: ThematicBreak) {
-		output += "<hr>"
+		output += "<hr\(voidClose)"
 	}
 
 	mutating func visitUnorderedList(_ unorderedList: UnorderedList) {
@@ -199,9 +209,15 @@ private struct HTMLRenderer: MarkupVisitor {
 	mutating func visitListItem(_ listItem: ListItem) {
 		switch listItem.checkbox {
 		case .checked:
-			output += #"<li class="task-list-item"><input type="checkbox" disabled checked> "#
+			let input = options.contains(.xhtml)
+				? #"<input type="checkbox" disabled="disabled" checked="checked" />"#
+				: #"<input type="checkbox" disabled checked>"#
+			output += #"<li class="task-list-item">"# + input + " "
 		case .unchecked:
-			output += #"<li class="task-list-item"><input type="checkbox" disabled> "#
+			let input = options.contains(.xhtml)
+				? #"<input type="checkbox" disabled="disabled" />"#
+				: #"<input type="checkbox" disabled>"#
+			output += #"<li class="task-list-item">"# + input + " "
 		case .none:
 			output += "<li>"
 		}
@@ -231,7 +247,7 @@ private struct HTMLRenderer: MarkupVisitor {
 	}
 
 	mutating func visitLineBreak(_ lineBreak: LineBreak) {
-		output += "<br>"
+		output += "<br\(voidClose)"
 	}
 
 	// MARK: - Tables

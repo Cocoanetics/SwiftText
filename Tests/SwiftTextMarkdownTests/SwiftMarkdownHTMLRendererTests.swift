@@ -191,4 +191,32 @@ struct SwiftMarkdownHTMLRendererTests {
 		let html = SwiftMarkdownHTMLRenderer.convert(#"a -- b --- c ... "quoted""#)
 		#expect(html == ##"<p>a -- b --- c ... "quoted"</p>"##)
 	}
+
+	@Test func xhtmlModeSelfClosesVoidElements() {
+		// EPUB content documents are parsed as XHTML, so void elements must be
+		// self-closed and boolean attributes given their XHTML form.
+		let hr = SwiftMarkdownHTMLRenderer.convert("a\n\n---\n\nb", options: .xhtml)
+		#expect(hr.contains("<hr />"))
+		let br = SwiftMarkdownHTMLRenderer.convert("a\\\nb", options: .xhtml)
+		#expect(br.contains("<br />"))
+		let img = SwiftMarkdownHTMLRenderer.convert("![alt](x.png)", options: .xhtml)
+		#expect(img.contains("<img src=\"x.png\" alt=\"alt\" />"))
+		let task = SwiftMarkdownHTMLRenderer.convert("- [x] done\n- [ ] todo", options: .xhtml)
+		#expect(task.contains(#"<input type="checkbox" disabled="disabled" checked="checked" />"#))
+		#expect(task.contains(#"<input type="checkbox" disabled="disabled" />"#))
+	}
+
+	@Test func defaultModeKeepsHTML5VoidElements() {
+		// Without the option, output is unchanged (HTML5 void-element shape).
+		#expect(SwiftMarkdownHTMLRenderer.convert("a\n\n---\n\nb").contains("<hr>"))
+		#expect(SwiftMarkdownHTMLRenderer.convert("![alt](x.png)").contains("<img src=\"x.png\" alt=\"alt\">"))
+	}
+
+	@Test func codeBlockLanguageIsAttributeEscaped() {
+		// A code-fence info string with XML-special characters must be escaped in
+		// the class attribute, or the fragment isn't well-formed XHTML.
+		let html = SwiftMarkdownHTMLRenderer.convert("```xml&<\"bad\ncode\n```")
+		#expect(html.contains("class=\"language-xml&amp;&lt;&quot;bad\""))
+		#expect(!html.contains("language-xml&<"))
+	}
 }

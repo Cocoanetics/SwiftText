@@ -79,6 +79,36 @@ struct RenderPDFTests {
 		#endif
 	}
 
+	@Test("Each page paints only its own slice, not the whole document (O(n²) guard)")
+	func pagesDoNotDuplicateWholeDocument() async throws {
+		// A word painted near the top of a long, multi-page document must appear
+		// in the output exactly once. Before slice-culling, the painter emitted
+		// the entire document's draw operators into every page's content stream
+		// (relying on the clip to hide them), so this marker appeared once per
+		// page and output size grew quadratically. Render uncompressed so base-14
+		// text stays a literal `(…)` string a raw byte scan can count.
+		var html = "<body><p>UNIQUEMARKERWORD sits at the very top.</p>"
+		for index in 0 ..< 400 {
+			html += "<p>Filler paragraph number \(index) to force pagination across many pages.</p>"
+		}
+		html += "</body>"
+		let data = try await HTMLRenderer.renderPDF(html: html, options: RenderOptions(compressStreams: false))
+
+		#if canImport(PDFKit)
+		#expect(try #require(PDFDocument(data: data)).pageCount > 5)
+		#endif
+
+		let needle = Array("UNIQUEMARKERWORD".utf8)
+		let haystack = [UInt8](data)
+		var count = 0
+		if needle.count <= haystack.count {
+			for start in 0 ... (haystack.count - needle.count) where Array(haystack[start ..< start + needle.count]) == needle {
+				count += 1
+			}
+		}
+		#expect(count == 1)
+	}
+
 	#if os(macOS)
 	@Test("Registered OpenType fonts are embedded (CIDFontType2)")
 	func embedsOpenTypeFont() async throws {
