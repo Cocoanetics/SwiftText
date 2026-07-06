@@ -17,9 +17,12 @@ import Markdown
 /// - GitHub alert syntax (`> [!NOTE]`) is detected after parsing by inspecting
 ///   the first inline of each `BlockQuote`. swift-markdown's `Aside` node is
 ///   DocC-style only, so we detect the bracket-bang form ourselves.
-/// - cmark-gfm enables smart punctuation by default. We reverse the smart
-///   characters (curly quotes, en/em dashes, ellipsis) on the way out so the
-///   output matches the literal source — same policy as the legacy parser.
+/// - cmark-gfm enables smart punctuation by default (typed `--`/`---`/`...`/
+///   straight quotes become dashes/ellipsis/curly quotes). We parse with
+///   `.disableSmartOpts` so that conversion never happens, matching the
+///   legacy parser's policy of literal source fidelity — and, unlike
+///   reversing the substitution after the fact, this also leaves any
+///   typographic characters already present in the source untouched.
 /// - Output is the inline HTML fragment — no `<html>`/`<body>` wrapper.
 public enum SwiftMarkdownHTMLRenderer {
 
@@ -38,7 +41,7 @@ public enum SwiftMarkdownHTMLRenderer {
 	}
 
 	public static func convert(_ markdown: String, options: Options = []) -> String {
-		let document = Document(parsing: markdown, options: [])
+		let document = Document(parsing: markdown, options: [.disableSmartOpts])
 		return convert(document: document, options: options)
 	}
 
@@ -99,7 +102,7 @@ private struct HTMLRenderer: MarkupVisitor {
 	mutating func visitText(_ text: Text) {
 		// Body text uses the same escape policy as the legacy parser (only
 		// `&<>`). The full `&<>"` policy is reserved for attribute values.
-		output += escapeHTMLNotQuote(reverseSmartPunctuation(text.string))
+		output += escapeHTMLNotQuote(text.string)
 	}
 
 	mutating func visitEmphasis(_ emphasis: Emphasis) {
@@ -160,7 +163,7 @@ private struct HTMLRenderer: MarkupVisitor {
 		// Walk all descendants so alt text from nested inline formatting
 		// (e.g. `![*diagram*](img.png)` or `![link [label]](...)`) is
 		// preserved rather than silently dropped.
-		let alt = reverseSmartPunctuation(swiftMarkdownPlainText(of: image))
+		let alt = swiftMarkdownPlainText(of: image)
 		output += "<img src=\"\(escapeAttribute(src))\" alt=\"\(escapeAttribute(alt))\">"
 	}
 
@@ -374,7 +377,7 @@ private struct HTMLRenderer: MarkupVisitor {
 						output += "</p>"
 					} else {
 						output += "<p>"
-						output += escapeHTMLNotQuote(reverseSmartPunctuation(stripped))
+						output += escapeHTMLNotQuote(stripped)
 						for tail in inlineChildren.dropFirst() { visit(tail) }
 						output += "</p>"
 					}
@@ -429,33 +432,4 @@ private struct HTMLRenderer: MarkupVisitor {
 		escapeHTML(string)
 	}
 
-	/// Undoes cmark-gfm's smart-punctuation transformations so output matches
-	/// the literal source. The legacy parser doesn't perform any typographic
-	/// substitution; we keep that behavior.
-	private func reverseSmartPunctuation(_ string: String) -> String {
-		guard string.contains(where: { isSmartCharacter($0) }) else { return string }
-		var result = ""
-		result.reserveCapacity(string.count)
-		for character in string {
-			switch character {
-			case "\u{2018}", "\u{2019}": result.append("'")  // ‘ ’
-			case "\u{201C}", "\u{201D}": result.append("\"") // “ ”
-			case "\u{2013}": result.append("--")              // –
-			case "\u{2014}": result.append("---")             // —
-			case "\u{2026}": result.append("...")             // …
-			default: result.append(character)
-			}
-		}
-		return result
-	}
-
-	private func isSmartCharacter(_ character: Character) -> Bool {
-		switch character {
-		case "\u{2018}", "\u{2019}", "\u{201C}", "\u{201D}",
-			 "\u{2013}", "\u{2014}", "\u{2026}":
-			return true
-		default:
-			return false
-		}
-	}
 }

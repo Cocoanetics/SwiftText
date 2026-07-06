@@ -65,7 +65,7 @@ enum MarkdownDocxBuilder {
 	}
 
 	private static func blocks(from markdown: String, resolver: MarkdownFootnoteResolver?) -> [DocxWriter.Block] {
-		let document = Document(parsing: markdown, options: [])
+		let document = Document(parsing: markdown, options: [.disableSmartOpts])
 		var visitor = BlockVisitor(resolver: resolver)
 		visitor.visit(document)
 		return visitor.blocks
@@ -74,7 +74,7 @@ enum MarkdownDocxBuilder {
 	/// Parses inline Markdown into a flat run list. Treats the input as the
 	/// inline content of a paragraph — block-level constructs are ignored.
 	static func runs(fromInline text: String) -> [DocxWriter.Run] {
-		let document = Document(parsing: text, options: [])
+		let document = Document(parsing: text, options: [.disableSmartOpts])
 		guard let firstParagraph = document.child(at: 0) as? Paragraph else { return [] }
 		return runs(from: firstParagraph, resolver: nil)
 	}
@@ -145,7 +145,7 @@ private struct RunCollector {
 			// descendants so alt text from nested inline formatting is
 			// preserved (e.g. `![*logo*](...)` keeps "logo" instead of
 			// falling through to the `[image]` placeholder).
-			let alt = reverseSmartPunct(swiftMarkdownPlainText(of: image))
+			let alt = swiftMarkdownPlainText(of: image)
 			let display = alt.isEmpty ? "[image]" : alt
 			runs.append(DocxWriter.Run(text: display, italic: true))
 		case let inlineHTML as InlineHTML:
@@ -175,13 +175,13 @@ private struct RunCollector {
 	/// runs. Without a resolver this is just `append(text:)`.
 	private mutating func appendResolvingFootnotes(in string: String) {
 		guard let resolver else {
-			append(text: reverseSmartPunct(string))
+			append(text: string)
 			return
 		}
 		for segment in resolver.resolve(string) {
 			switch segment {
 			case .text(let value):
-				if !value.isEmpty { append(text: reverseSmartPunct(value)) }
+				if !value.isEmpty { append(text: value) }
 			case .reference(let number):
 				runs.append(DocxWriter.Run(text: "", footnoteRef: number))
 			}
@@ -225,7 +225,7 @@ private struct BlockVisitor: MarkupVisitor {
 		let children = Array(paragraph.children)
 		if children.count == 1, let image = children.first as? Image,
 		   let source = image.source, !source.isEmpty {
-			let alt = reverseSmartPunct(swiftMarkdownPlainText(of: image))
+			let alt = swiftMarkdownPlainText(of: image)
 			blocks.append(.image(source: source, alt: alt))
 			return
 		}
@@ -317,33 +317,4 @@ private struct BlockVisitor: MarkupVisitor {
 	// HTML blocks aren't representable in our DocxWriter block model — the
 	// legacy parser dropped them silently. Match that.
 	mutating func visitHTMLBlock(_ htmlBlock: HTMLBlock) {}
-}
-
-// MARK: - Smart-punct reversal
-
-private func reverseSmartPunct(_ string: String) -> String {
-	guard string.contains(where: isSmartCharacter) else { return string }
-	var result = ""
-	result.reserveCapacity(string.count)
-	for character in string {
-		switch character {
-		case "\u{2018}", "\u{2019}": result.append("'")
-		case "\u{201C}", "\u{201D}": result.append("\"")
-		case "\u{2013}": result.append("--")
-		case "\u{2014}": result.append("---")
-		case "\u{2026}": result.append("...")
-		default: result.append(character)
-		}
-	}
-	return result
-}
-
-private func isSmartCharacter(_ character: Character) -> Bool {
-	switch character {
-	case "\u{2018}", "\u{2019}", "\u{201C}", "\u{201D}",
-		 "\u{2013}", "\u{2014}", "\u{2026}":
-		return true
-	default:
-		return false
-	}
 }

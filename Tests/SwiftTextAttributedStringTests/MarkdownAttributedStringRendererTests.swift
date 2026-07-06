@@ -304,7 +304,7 @@ struct MarkdownAttributedStringRendererTests {
 
 	// MARK: Smart punctuation
 
-	@Test func smartPunctuationReversedByDefault() {
+	@Test func smartPunctuationNotAppliedByDefault() {
 		let string = wholeString(render("\"q\" a---b"))
 		#expect(!string.contains("\u{201C}"))
 		#expect(!string.contains("\u{2014}"))
@@ -315,6 +315,13 @@ struct MarkdownAttributedStringRendererTests {
 	@Test func smartPunctuationPreservedWithOption() {
 		let string = wholeString(render("\"q\"", .preserveSmartPunctuation))
 		#expect(string.contains("\u{201C}") || string.contains("\u{201D}"))
+	}
+
+	@Test func literalTypographicCharactersSurviveByDefault() {
+		// Real Unicode em/en dashes, ellipsis, and curly quotes already present in
+		// the source must not be mangled into their ASCII spellings (issue #38).
+		let string = wholeString(render("a — b – c… “quoted” ‘single’"))
+		#expect(string == "a — b – c… “quoted” ‘single’")
 	}
 
 	// MARK: Entry points

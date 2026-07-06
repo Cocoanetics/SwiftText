@@ -82,7 +82,7 @@ extension PagesDocument {
 	/// block). Multiple blocks (shouldn't occur for one paragraph) join with soft breaks.
 	static func inlineChildren(parsing markdown: String) -> [InlineMarkup] {
 		guard !markdown.isEmpty else { return [] }
-		let document = Document(parsing: markdown, options: [])
+		let document = Document(parsing: markdown, options: [.disableSmartOpts])
 		var result = [InlineMarkup]()
 		for block in document.children {
 			let inlines = block.children.compactMap { $0 as? InlineMarkup }

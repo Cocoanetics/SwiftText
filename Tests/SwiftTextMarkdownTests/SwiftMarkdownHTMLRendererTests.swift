@@ -176,4 +176,19 @@ struct SwiftMarkdownHTMLRendererTests {
 		#expect(mixed.contains("a &lt; b"))
 		#expect(mixed.contains("<sub>x</sub>"))
 	}
+
+	@Test func literalTypographicCharactersSurviveUnchanged() {
+		// Real Unicode em/en dashes, ellipsis, and curly quotes already present in
+		// the source must not be mangled into their ASCII spellings (issue #38).
+		let html = SwiftMarkdownHTMLRenderer.convert("a — b – c… “quoted” ‘single’")
+		#expect(html == "<p>a — b – c… “quoted” ‘single’</p>")
+	}
+
+	@Test func asciiSmartPunctuationConventionsStayLiteral() {
+		// cmark-gfm's smart-punctuation substitution is disabled, so typed `--`/
+		// `---`/`...`/straight quotes are left exactly as typed rather than being
+		// smart-substituted and reversed.
+		let html = SwiftMarkdownHTMLRenderer.convert(#"a -- b --- c ... "quoted""#)
+		#expect(html == ##"<p>a -- b --- c ... "quoted"</p>"##)
+	}
 }
