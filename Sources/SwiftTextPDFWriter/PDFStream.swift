@@ -2,8 +2,9 @@
 //  SwiftTextPDFWriter
 //
 //  PDF stream objects and the content-stream operators used to paint pages.
-//  Ported from pydyf's `Stream`. Compression is intentionally not implemented
-//  yet (it would require a cross-platform zlib); streams are written verbatim.
+//  Ported from pydyf's `Stream`. Streams are written verbatim by default; set
+//  ``PDFStream/compressed`` to deflate the payload with `/Filter /FlateDecode`
+//  using the vendored cross-platform ``Deflate`` encoder.
 
 import Foundation
 
@@ -15,6 +16,13 @@ import Foundation
 public final class PDFStream: PDFObject {
 	/// The ordered tokens composing the stream body, joined by newlines.
 	public var stream: [PDFValue]
+
+	/// When `true`, the assembled payload is deflated and emitted with
+	/// `/Filter /FlateDecode`. Off by default so streams stay byte-for-byte
+	/// verbatim (tests can assert on literal operators). Compression is skipped
+	/// automatically when the stream already declares a `/Filter` (e.g. images),
+	/// or when deflating would not actually shrink the payload.
+	public var compressed: Bool = false
 
 	private var extraKeys: [String] = []
 	private var extraStorage: [String: PDFValue] = [:]
@@ -48,11 +56,23 @@ public final class PDFStream: PDFObject {
 		for key in extraKeys {
 			extra[key] = extraStorage[key]
 		}
-		extra["Length"] = content.count
+
+		// Deflate the payload when asked — but never on a stream that already
+		// declares a filter (its bytes are pre-encoded, e.g. DCTDecode/FlateDecode
+		// image data), and only if it genuinely shrinks the output.
+		var body = content
+		if compressed && extraStorage["Filter"] == nil {
+			let deflated = Deflate.zlib(content)
+			if deflated.count < content.count {
+				body = deflated
+				extra["Filter"] = "/FlateDecode"
+			}
+		}
+		extra["Length"] = body.count
 
 		var result = extra.data
 		result.append(contentsOf: "\nstream\n".utf8)
-		result.append(content)
+		result.append(body)
 		result.append(contentsOf: "\nendstream".utf8)
 		return result
 	}
