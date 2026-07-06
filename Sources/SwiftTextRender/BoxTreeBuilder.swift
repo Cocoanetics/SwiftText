@@ -68,7 +68,9 @@ public enum BoxTreeBuilder {
 		return ordinal
 	}
 
-	private static func formatOrdinal(_ number: Int, as type: ListStyleType) -> String {
+	/// Format a 1-based ordinal per a `list-style-type`-like keyword. Also used
+	/// to render `@page` margin-box `counter(page, <style>)` values.
+	static func formatOrdinal(_ number: Int, as type: ListStyleType) -> String {
 		switch type {
 		case .lowerAlpha: return alphabetic(number, uppercase: false)
 		case .upperAlpha: return alphabetic(number, uppercase: true)
