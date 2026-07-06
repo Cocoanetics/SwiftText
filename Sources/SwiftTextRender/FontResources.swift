@@ -12,6 +12,8 @@ import SwiftTextPDFWriter
 
 public final class FontResourceBuilder {
 	private let pdf: PDF
+	/// Whether embedded font programs and CMaps are deflated with `/FlateDecode`.
+	private let compress: Bool
 	/// The shared `/Resources` dictionary referenced by every page.
 	private let resourcesDict: PDFDictionary
 	private let fontSubdictionary = PDFDictionary()
@@ -23,8 +25,9 @@ public final class FontResourceBuilder {
 	private var usedGlyphs: [String: [Int: Unicode.Scalar]] = [:] // key → glyph → a scalar
 	private var imageNames: [ObjectIdentifier: String] = [:]   // image stream → /Im#
 
-	init(pdf: PDF) {
+	init(pdf: PDF, compress: Bool = true) {
 		self.pdf = pdf
+		self.compress = compress
 		resourcesDict = PDFDictionary([("Font", fontSubdictionary), ("XObject", xobjectSubdictionary)])
 		pdf.addObject(resourcesDict)
 	}
@@ -88,6 +91,9 @@ public final class FontResourceBuilder {
 		// Encoding a FontFile2 stream that is actually CFF produces invalid text.
 		let cff = font.hasCFFOutlines
 		let fontFile = PDFStream(stream: [font.data])
+		// Deflate the embedded font program. `/Length1` stays the *decoded* size,
+		// so it is still correct once the stream carries a `/FlateDecode` filter.
+		fontFile.compressed = compress
 		if cff {
 			fontFile.setExtra("Subtype", PDFName("OpenType"))
 		} else {
@@ -183,6 +189,8 @@ public final class FontResourceBuilder {
 			index += 100
 		}
 		body += "\nendcmap\nCMapName currentdict /CMap defineresource pop\nend\nend"
-		return PDFStream(stream: [Data(body.utf8)])
+		let stream = PDFStream(stream: [Data(body.utf8)])
+		stream.compressed = compress // a repetitive PostScript CMap; compresses well
+		return stream
 	}
 }

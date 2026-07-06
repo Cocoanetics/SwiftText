@@ -36,6 +36,31 @@ struct RenderPDFTests {
 		#endif
 	}
 
+	@Test("FlateDecode shrinks text-heavy PDFs several-fold")
+	func compressionShrinksOutput() async throws {
+		// A long, text-heavy document — the case the swift engine bloated on.
+		var html = "<body>"
+		for index in 0 ..< 400 {
+			html += "<p>Paragraph number \(index): the quick brown fox jumps over the lazy dog, again and again to fill the line.</p>"
+		}
+		html += "</body>"
+
+		let compressed = try await HTMLRenderer.renderPDF(html: html)
+		let uncompressed = try await HTMLRenderer.renderPDF(html: html, options: RenderOptions(compressStreams: false))
+
+		// The default (compressed) output declares the FlateDecode filter and is a
+		// fraction of the verbatim size.
+		#expect(compressed.range(of: Data("/FlateDecode".utf8)) != nil)
+		#expect(uncompressed.range(of: Data("/FlateDecode".utf8)) == nil)
+		#expect(compressed.count < uncompressed.count / 2)
+
+		#if canImport(PDFKit)
+		// Still valid and text still extractable.
+		let document = try #require(PDFDocument(data: compressed))
+		#expect((document.string ?? "").contains("quick brown fox"))
+		#endif
+	}
+
 	@Test("A tall document is paginated across multiple pages")
 	func paginatesTallDocument() async throws {
 		var html = "<body>"
@@ -382,7 +407,10 @@ struct RenderPDFTests {
 		let spacedWidth = try #require(spacedBlock.lines.first?.fragments.first?.width)
 		#expect(abs((spacedWidth - plainWidth) - 25) < 0.5) // "hello" is 5 chars × 5px
 
-		let data = try await HTMLRenderer.renderPDF(html: "<p style=\"letter-spacing:2px\">hi</p>")
+		// Render uncompressed so the content-stream operators are greppable.
+		let data = try await HTMLRenderer.renderPDF(
+			html: "<p style=\"letter-spacing:2px\">hi</p>",
+			options: RenderOptions(compressStreams: false))
 		#expect(data.range(of: Data(" Tc".utf8)) != nil)
 	}
 

@@ -33,12 +33,18 @@ public struct RenderOptions {
 	/// The document base direction. `.auto` (default) detects RTL from content,
 	/// which is what makes Markdown (no `dir` markup) render RTL automatically.
 	public var baseDirection: BaseDirection
+	/// Deflate page content streams (and embedded fonts / CMaps) with
+	/// `/FlateDecode`. On by default — it shrinks text-heavy PDFs several-fold.
+	/// Disable it to get verbatim, greppable content streams (e.g. in tests that
+	/// assert on literal operator bytes).
+	public var compressStreams: Bool
 
-	public init(pageWidthPx: Double = 816, pageHeightPx: Double? = 1056, pageMarginPx: Double = 32, baseDirection: BaseDirection = .auto) {
+	public init(pageWidthPx: Double = 816, pageHeightPx: Double? = 1056, pageMarginPx: Double = 32, baseDirection: BaseDirection = .auto, compressStreams: Bool = true) {
 		self.pageWidthPx = pageWidthPx
 		self.pageHeightPx = pageHeightPx
 		self.pageMarginPx = pageMarginPx
 		self.baseDirection = baseDirection
+		self.compressStreams = compressStreams
 	}
 }
 
@@ -96,13 +102,13 @@ public enum HTMLRenderer {
 		let slices = paginate(rootBox, columnHeight: columnHeight, pageHeightPx: pageHeightPx, margin: margin)
 
 		let pdf = PDF()
-		let fontBuilder = FontResourceBuilder(pdf: pdf)
+		let fontBuilder = FontResourceBuilder(pdf: pdf, compress: options.compressStreams)
 		var pageObjects: [PDFDictionary] = []
 		let totalPages = slices.count
 		for (pageIndex, slice) in slices.enumerated() {
 			let geometry = PageGeometry(pageWidthPx: options.pageWidthPx, pageHeightPx: pageHeightPx,
 			                            marginPx: margin, columnTop: slice.top, sliceHeightPx: slice.bottom - slice.top)
-			let painter = Painter(geometry: geometry, fonts: fonts, builder: fontBuilder)
+			let painter = Painter(geometry: geometry, fonts: fonts, builder: fontBuilder, compress: options.compressStreams)
 			painter.paint(rootBox)
 			if !pageRules.isEmpty {
 				let marginBoxes = resolveMarginBoxes(pageRules, pageIndex: pageIndex, totalPages: totalPages,

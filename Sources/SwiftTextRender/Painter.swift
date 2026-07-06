@@ -41,10 +41,13 @@ public final class Painter {
 	private let builder: FontResourceBuilder
 	private var linkAnnotations: [PDFDictionary] = []
 
-	public init(geometry: PageGeometry, fonts: FontBook, builder: FontResourceBuilder) {
+	public init(geometry: PageGeometry, fonts: FontBook, builder: FontResourceBuilder, compress: Bool = true) {
 		self.geometry = geometry
 		self.fonts = fonts
 		self.builder = builder
+		// Page content streams are glyph-drawing operators — highly repetitive
+		// and several times larger uncompressed. Deflate them (/FlateDecode).
+		stream.compressed = compress
 		// Map CSS px (y-down) to PDF pt (y-up) for the whole page.
 		stream.setMatrix(pxToPt, 0, 0, pxToPt, 0, 0)
 		// Save this (unclipped) state so margin-box painting can later restore
