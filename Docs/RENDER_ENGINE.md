@@ -98,10 +98,16 @@ metrics — no embedding needed.
 - `text-decoration` underline / line-through.
 - Lists (`<ul>`/`<ol>` markers), clickable links (`<a href>` → PDF annotations).
 - Pagination to a fixed page size; embedded `<style>` and caller CSS.
+- `@page { size; margin }`, plus CSS Paged Media margin boxes: `@top-left/
+  -center/-right` and `@bottom-left/-center/-right` for running headers/
+  footers, with `content` as a literal string or `counter(page)`/
+  `counter(pages)` (optionally styled, e.g. `counter(page, upper-roman)`), and
+  the `:first`/`:left`/`:right` page selectors (e.g. to suppress a header on
+  the title page via `@page :first { @top-center { content: normal } }`).
 
 ## Not yet (roadmap)
 
 Images (`<img>`), tables, fl/grid, floats, positioned boxes, parent/child margin
 collapsing, transforms, gradients, SVG, bidi/complex-script shaping, hyphenation,
-`@page` rules, bookmarks/outline. See the layout source for the simplifications
-called out in comments.
+bookmarks/outline. See the layout source for the simplifications called out in
+comments.

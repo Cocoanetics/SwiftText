@@ -47,6 +47,10 @@ public final class Painter {
 		self.builder = builder
 		// Map CSS px (y-down) to PDF pt (y-up) for the whole page.
 		stream.setMatrix(pxToPt, 0, 0, pxToPt, 0, 0)
+		// Save this (unclipped) state so margin-box painting can later restore
+		// it: the clip below must not apply there, since margin boxes live
+		// outside the content slice, in the page's margin area.
+		stream.pushState()
 		// Clip to this page's content slice so other pages don't bleed in.
 		let contentWidth = geometry.pageWidthPx - 2 * geometry.marginPx
 		stream.rectangle(geometry.marginPx,
@@ -152,6 +156,55 @@ public final class Painter {
 			stream.fill()
 		}
 		stream.popState()
+	}
+
+	// MARK: - @page margin boxes
+
+	/// Paint resolved `@page` margin-box content (running headers/footers,
+	/// page-number counters) directly in page space, independent of the
+	/// column-to-slice mapping used for body content: margin boxes sit in the
+	/// fixed page-margin strip, not on the scrolling column.
+	func paintMarginBoxes(_ boxes: [ResolvedMarginBox]) {
+		guard !boxes.isEmpty else { return }
+		// Restore the state saved in `init`, before the content-slice clip.
+		stream.popState()
+		for box in boxes {
+			let font = fonts.font(for: box.style)
+			let resource = builder.resourceName(for: font)
+			let textWidth = font.width(of: box.text, size: box.style.fontSize)
+			let ascent = font.ascent(size: box.style.fontSize)
+			let descent = font.descent(size: box.style.fontSize)
+
+			let contentWidth = geometry.pageWidthPx - 2 * geometry.marginPx
+			let extra = max(0, contentWidth - textWidth)
+			let rtl = box.style.direction == .rtl
+			let x: Double
+			switch box.style.textAlign {
+			case .center: x = geometry.marginPx + extra / 2
+			case .right: x = geometry.marginPx + extra
+			case .left: x = geometry.marginPx
+			case .end: x = geometry.marginPx + (rtl ? 0 : extra)
+			case .start: x = geometry.marginPx + (rtl ? extra : 0)
+			case .justify: x = geometry.marginPx
+			}
+
+			// Center the text vertically within its margin strip (top strip is
+			// [0, marginPx]; bottom strip is [pageHeightPx - marginPx, pageHeightPx]).
+			let stripTop = box.area.isTop ? 0 : geometry.pageHeightPx - geometry.marginPx
+			let baselineY = stripTop + (geometry.marginPx + ascent - descent) / 2
+
+			stream.beginText()
+			stream.setColorRGB(box.style.color.red, box.style.color.green, box.style.color.blue)
+			stream.setFontSize(resource, box.style.fontSize)
+			stream.moveTextTo(x, geometry.pageHeightPx - baselineY)
+			switch font {
+			case .standard:
+				stream.showRawString(encodeWinAnsi(box.text))
+			case .embedded(let embedded):
+				stream.showHexString(encodeGlyphs(box.text, font: embedded, fontKey: font.key))
+			}
+			stream.endText()
+		}
 	}
 
 	// MARK: - Text

@@ -155,6 +155,36 @@ public final class StyleResolver {
 	}
 }
 
+/// Resolve a flat declaration list (no selector cascade — the last declared
+/// longhand wins) against a `ComputedStyle` that inherits from `parent`.
+///
+/// Used where a style is needed without an element to cascade for, e.g. CSS
+/// Paged Media `@page` margin boxes (running headers/footers, page numbers).
+public func applyDeclarations(_ declarations: [Declaration], inheriting parent: ComputedStyle, rootFontSize: Double) -> ComputedStyle {
+	var style = ComputedStyle.inheriting(from: parent)
+	var winners: [String: [ComponentValue]] = [:]
+	for declaration in declarations {
+		for longhand in expand(declaration) {
+			winners[longhand.name] = longhand.value
+		}
+	}
+
+	// font-size first: em/ex units in other properties resolve against it.
+	if let value = winners["font-size"] {
+		applyLonghand("font-size", value, to: &style, parent: parent, rootFontSize: rootFontSize)
+	}
+	// color next: `currentColor` in other properties resolves to it.
+	if let value = winners["color"] {
+		applyLonghand("color", value, to: &style, parent: parent, rootFontSize: rootFontSize)
+	}
+	style.borderColor = Edges(style.color)
+
+	for (name, value) in winners where name != "font-size" && name != "color" {
+		applyLonghand(name, value, to: &style, parent: parent, rootFontSize: rootFontSize)
+	}
+	return style
+}
+
 // MARK: - Shorthand expansion
 
 private func significant(_ value: [ComponentValue]) -> [ComponentValue] {

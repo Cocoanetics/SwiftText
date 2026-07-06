@@ -567,6 +567,109 @@ struct RenderPDFTests {
 		#endif
 	}
 
+	// MARK: - @page margin boxes
+
+	@Test("@top-center content renders as a running header")
+	func marginBoxContent() async throws {
+		let html = """
+		<style>@page { @top-center { content: "The Shattered Skies"; font-style: italic; font-size: 8.5pt } }</style>
+		<p>Body text.</p>
+		"""
+		let data = try await HTMLRenderer.renderPDF(html: html)
+		#if canImport(PDFKit)
+		let document = try #require(PDFDocument(data: data))
+		let text = document.page(at: 0)?.string ?? ""
+		#expect(text.contains("The Shattered Skies"))
+		#endif
+	}
+
+	@Test("counter(page)/counter(pages) number every page")
+	func marginBoxPageCounters() async throws {
+		var html = "<style>@page { @bottom-center { content: \"Page \" counter(page) \" of \" counter(pages) } }</style><body>"
+		for index in 0 ..< 120 {
+			html += "<p>Paragraph number \(index): a line of text to fill the page.</p>"
+		}
+		html += "</body>"
+		let data = try await HTMLRenderer.renderPDF(html: html)
+		#if canImport(PDFKit)
+		let document = try #require(PDFDocument(data: data))
+		let pageCount = document.pageCount
+		#expect(pageCount > 1)
+		let firstText = document.page(at: 0)?.string ?? ""
+		#expect(firstText.contains("Page 1 of \(pageCount)"))
+		let lastText = document.page(at: pageCount - 1)?.string ?? ""
+		#expect(lastText.contains("Page \(pageCount) of \(pageCount)"))
+		#endif
+	}
+
+	#if canImport(AppKit) && canImport(PDFKit)
+	@Test("Margin-box content actually paints (regression: must escape the content-area clip)")
+	func marginBoxIsNotClipped() async throws {
+		// A large, distinctive header: text-presence checks alone wouldn't catch
+		// the margin box being silently clipped away by the content-slice clip
+		// that `Painter.init` sets up for body painting (margin boxes live
+		// outside that slice, in the page's margin area) — only the rendered
+		// raster can. Regression test for that bug.
+		let pdf = try await HTMLRenderer.renderPDF(html: """
+		<style>@page { margin: 100px; @top-center { content: "HEADERTEXT"; font-size: 40px } }</style>
+		<p>Body</p>
+		""")
+		let document = try #require(PDFDocument(data: pdf))
+		let page = try #require(document.page(at: 0))
+		let bounds = page.bounds(for: .mediaBox)
+
+		let image = NSImage(size: bounds.size)
+		image.lockFocus()
+		NSColor.white.setFill()
+		NSRect(origin: .zero, size: bounds.size).fill()
+		if let ctx = NSGraphicsContext.current?.cgContext {
+			page.draw(with: .mediaBox, to: ctx)
+		}
+		image.unlockFocus()
+		let tiff = try #require(image.tiffRepresentation)
+		let bitmap = try #require(NSBitmapImageRep(data: tiff))
+
+		// The margin (100px == 75pt) strip is the top ~75pt of the page, in a
+		// top-left-origin, y-down bitmap. Scan a band well inside it for any
+		// non-white pixel — the header glyphs, if not clipped away.
+		var foundInk = false
+		for y in 10 ... min(60, Int(bounds.height) - 1) where !foundInk {
+			for x in stride(from: 0, to: Int(bounds.width), by: 2) {
+				guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else { continue }
+				if color.redComponent < 0.9 || color.greenComponent < 0.9 || color.blueComponent < 0.9 {
+					foundInk = true
+					break
+				}
+			}
+		}
+		#expect(foundInk)
+	}
+	#endif
+
+	@Test("@page :first suppresses the running header on page one only")
+	func marginBoxFirstPageOverride() async throws {
+		var html = """
+		<style>
+		@page { @top-center { content: "Running Title" } }
+		@page :first { @top-center { content: normal } }
+		</style>
+		<body>
+		"""
+		for index in 0 ..< 120 {
+			html += "<p>Paragraph number \(index): a line of text to fill the page.</p>"
+		}
+		html += "</body>"
+		let data = try await HTMLRenderer.renderPDF(html: html)
+		#if canImport(PDFKit)
+		let document = try #require(PDFDocument(data: data))
+		#expect(document.pageCount > 1)
+		let firstText = document.page(at: 0)?.string ?? ""
+		#expect(!firstText.contains("Running Title"))
+		let secondText = document.page(at: 1)?.string ?? ""
+		#expect(secondText.contains("Running Title"))
+		#endif
+	}
+
 	// MARK: - Sample artifact
 
 	@Test("Generates a sample PDF artifact")

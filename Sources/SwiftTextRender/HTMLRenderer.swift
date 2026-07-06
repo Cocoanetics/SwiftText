@@ -72,6 +72,7 @@ public enum HTMLRenderer {
 		// @page rules in the document override the page geometry.
 		var options = options
 		applyAtPageRules(documentSheets + css, to: &options)
+		let pageRules = parsePageRules(documentSheets + css)
 
 		// Resolve the base direction (auto-detect from content for Markdown etc.).
 		let baseDirection: Direction
@@ -97,11 +98,17 @@ public enum HTMLRenderer {
 		let pdf = PDF()
 		let fontBuilder = FontResourceBuilder(pdf: pdf)
 		var pageObjects: [PDFDictionary] = []
-		for slice in slices {
+		let totalPages = slices.count
+		for (pageIndex, slice) in slices.enumerated() {
 			let geometry = PageGeometry(pageWidthPx: options.pageWidthPx, pageHeightPx: pageHeightPx,
 			                            marginPx: margin, columnTop: slice.top, sliceHeightPx: slice.bottom - slice.top)
 			let painter = Painter(geometry: geometry, fonts: fonts, builder: fontBuilder)
 			painter.paint(rootBox)
+			if !pageRules.isEmpty {
+				let marginBoxes = resolveMarginBoxes(pageRules, pageIndex: pageIndex, totalPages: totalPages,
+				                                     rootStyle: rootBox.style, rootFontSize: rootBox.style.fontSize)
+				painter.paintMarginBoxes(marginBoxes)
+			}
 			pdf.addObject(painter.stream)
 			let page = PDFDictionary([
 				("Type", "/Page"),
