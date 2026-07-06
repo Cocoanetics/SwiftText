@@ -63,6 +63,28 @@ public final class Painter {
 		stream.endPath()
 	}
 
+	/// The column-coordinate range this page shows (y-down).
+	private var sliceTop: Double { geometry.columnTop }
+	private var sliceBottom: Double { geometry.columnTop + geometry.sliceHeightPx }
+
+	/// Whether a box occupying column rows `[top, top + height]` is at least
+	/// partly on this page — used to prune whole subtrees (and their draw
+	/// operators) that fall outside the slice. Without this, every page's content
+	/// stream would carry the entire document's drawing, making a paginated
+	/// render O(pages × document) in both time and output size.
+	private func blockIntersectsSlice(top: Double, height: Double) -> Bool {
+		top + height >= sliceTop - 0.5 && top <= sliceBottom + 0.5
+	}
+
+	/// Whether a line whose top sits at column `top` belongs to this page.
+	/// Pagination breaks at line boundaries, so each line has exactly one home
+	/// page: the slice whose half-open `[top, bottom)` range contains its top.
+	/// Keying on the top (rather than an inclusive overlap) avoids painting a
+	/// boundary line as a clipped sliver on the preceding page too.
+	private func lineOnThisPage(_ top: Double) -> Bool {
+		top >= sliceTop - 0.5 && top < sliceBottom - 0.5
+	}
+
 	/// Page y (from page top) for a column y-coordinate.
 	private func pageY(_ columnY: Double) -> Double {
 		geometry.marginPx + (columnY - geometry.columnTop)
@@ -76,12 +98,16 @@ public final class Painter {
 	/// Paint the box tree onto this page.
 	public func paint(_ box: Box) {
 		if let block = box as? BlockBox {
+			// Skip boxes (and their subtrees) that lie entirely off this page. In
+			// normal flow a child's extent is contained by its parent's, so pruning
+			// a non-intersecting block can't drop visible descendants.
+			guard blockIntersectsSlice(top: block.y, height: block.height) else { return }
 			paintBackground(block)
 			paintBorders(block)
 			if let image = block.image {
 				paintImage(block, image: image)
 			} else if block.establishesInlineContext {
-				for line in block.lines {
+				for line in block.lines where lineOnThisPage(line.y) {
 					for fragment in line.fragments {
 						paintText(fragment)
 					}
