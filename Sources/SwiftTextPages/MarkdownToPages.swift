@@ -57,7 +57,7 @@ enum MarkdownPagesBuilder {
 		// Footnote definitions (`[^id]: …`) aren't parsed by swift-markdown — extract them
 		// (and strip them from the source) so `[^id]` references can become real footnotes.
 		let (cleaned, definitions) = extractFootnoteDefinitions(markdown)
-		let document = Document(parsing: cleaned, options: [])
+		let document = Document(parsing: cleaned, options: [.disableSmartOpts])
 		var visitor = BlockVisitor()
 		visitor.footnoteDefinitions = definitions
 		visitor.visit(document)
@@ -123,7 +123,7 @@ private struct InlineCollector {
 	private mutating func visit(_ markup: Markup) {
 		switch markup {
 		case let text as Text:
-			appendText(reverseSmartPunct(text.string))
+			appendText(text.string)
 		case let emphasis as Emphasis:
 			withStyle({ $0.italic = true }) { $0.collect(from: emphasis) }
 		case let strong as Strong:
@@ -145,7 +145,7 @@ private struct InlineCollector {
 			}
 		case let image as Image:
 			// Match the DOCX writer: images become italic placeholder text.
-			let alt = reverseSmartPunct(swiftMarkdownPlainText(of: image))
+			let alt = swiftMarkdownPlainText(of: image)
 			var imageStyle = style
 			imageStyle.italic = true
 			append(alt.isEmpty ? "[image]" : alt, style: imageStyle)
@@ -229,7 +229,7 @@ private struct BlockVisitor: MarkupVisitor {
 			paragraphs.append(BodyParagraph(
 				text: "\u{FFFC}",
 				paragraphStyle: PagesStyleID.body,
-				image: BodyParagraph.ImageRef(source: source, alt: reverseSmartPunct(swiftMarkdownPlainText(of: image)))
+				image: BodyParagraph.ImageRef(source: source, alt: swiftMarkdownPlainText(of: image))
 			))
 			return
 		}
@@ -402,30 +402,3 @@ private struct BlockVisitor: MarkupVisitor {
 	}
 }
 
-// MARK: - Smart-punctuation reversal (cmark forces it on; undo to match source)
-
-private func reverseSmartPunct(_ string: String) -> String {
-	guard string.contains(where: isSmartCharacter) else { return string }
-	var result = ""
-	result.reserveCapacity(string.count)
-	for character in string {
-		switch character {
-		case "\u{2018}", "\u{2019}": result.append("'")
-		case "\u{201C}", "\u{201D}": result.append("\"")
-		case "\u{2013}": result.append("--")
-		case "\u{2014}": result.append("---")
-		case "\u{2026}": result.append("...")
-		default: result.append(character)
-		}
-	}
-	return result
-}
-
-private func isSmartCharacter(_ character: Character) -> Bool {
-	switch character {
-	case "\u{2018}", "\u{2019}", "\u{201C}", "\u{201D}", "\u{2013}", "\u{2014}", "\u{2026}":
-		return true
-	default:
-		return false
-	}
-}

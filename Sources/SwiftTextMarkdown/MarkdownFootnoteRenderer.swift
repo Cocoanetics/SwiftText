@@ -44,7 +44,7 @@ public enum MarkdownFootnoteRenderer {
 		let state = FootnoteState(definitionIDs: definitions.map { $0.id })
 
 		// Rewrite references in the main body.
-		let bodyDocument = Document(parsing: cleaned, options: [])
+		let bodyDocument = Document(parsing: cleaned, options: [.disableSmartOpts])
 		var bodyRewriter = FootnoteReferenceRewriter(state: state)
 		let rewrittenBody = bodyRewriter.visit(bodyDocument) as? Document ?? bodyDocument
 		let bodyHTML = SwiftMarkdownHTMLRenderer.convert(document: rewrittenBody, options: options)
@@ -64,7 +64,7 @@ public enum MarkdownFootnoteRenderer {
 					// Definition not referenced (yet) — skip it.
 					continue
 				}
-				let defDocument = Document(parsing: definition.body, options: [])
+				let defDocument = Document(parsing: definition.body, options: [.disableSmartOpts])
 				var defRewriter = FootnoteReferenceRewriter(state: state)
 				let rewrittenDef = defRewriter.visit(defDocument) as? Document ?? defDocument
 				let defBodyHTML = SwiftMarkdownHTMLRenderer.convert(document: rewrittenDef, options: options)

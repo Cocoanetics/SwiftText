@@ -323,4 +323,15 @@ struct MarkdownToPagesTests {
 		let urlField = hyperlinks.first.flatMap { ProtobufMessage($0.payload).bytes(2) }
 		#expect(urlField.map { String(decoding: $0, as: UTF8.self) } == "https://www.cocoanetics.com")
 	}
+
+	@Test("Literal typographic characters already in the source survive unchanged (issue #38)")
+	func literalTypographicCharactersSurvive() throws {
+		let url = FileManager.default.temporaryDirectory
+			.appendingPathComponent("swifttext-smartpunct-\(UUID().uuidString).pages")
+		defer { try? FileManager.default.removeItem(at: url) }
+		try MarkdownToPages.convert("a — b – c… “quoted” ‘single’", to: url)
+
+		let text = try PagesFile(url: url).plainText()
+		#expect(text.contains("a — b – c… “quoted” ‘single’"))
+	}
 }

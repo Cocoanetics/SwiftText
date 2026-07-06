@@ -31,8 +31,9 @@ public enum MarkdownAttributedStringRenderer {
 		public let rawValue: Int
 		public init(rawValue: Int) { self.rawValue = rawValue }
 
-		/// Keep cmark-gfm's smart typographic characters instead of reversing
-		/// them to their literal source spelling (`"`, `'`, `--`, `---`, `...`).
+		/// Let cmark-gfm smart-substitute typed `--`/`---`/`...`/straight quotes
+		/// into dashes/ellipsis/curly quotes, instead of parsing with
+		/// `.disableSmartOpts` (the default) to keep literal source spelling.
 		public static let preserveSmartPunctuation = Options(rawValue: 1 << 0)
 	}
 
@@ -41,9 +42,11 @@ public enum MarkdownAttributedStringRenderer {
 	public static func convert(_ markdown: String, options: Options = []) -> AttributedString {
 		let (cleaned, definitions) = MarkdownFootnoteParser.extractDefinitions(from: markdown)
 
+		let parseOptions: ParseOptions = options.contains(.preserveSmartPunctuation) ? [] : [.disableSmartOpts]
+
 		guard !definitions.isEmpty else {
 			let builder = Builder(options: options, resolver: nil)
-			builder.emitBlocks(Document(parsing: cleaned, options: []).children, EmitContext())
+			builder.emitBlocks(Document(parsing: cleaned, options: parseOptions).children, EmitContext())
 			return builder.result
 		}
 
@@ -51,7 +54,7 @@ public enum MarkdownAttributedStringRenderer {
 		let builder = Builder(options: options, resolver: resolver)
 
 		// Body first so footnote numbers are assigned in source order.
-		builder.emitBlocks(Document(parsing: cleaned, options: []).children, EmitContext())
+		builder.emitBlocks(Document(parsing: cleaned, options: parseOptions).children, EmitContext())
 		// Then the trailing definitions block (resolves references nested in
 		// definition bodies too).
 		builder.emitFootnoteDefinitions(definitions)
@@ -291,7 +294,8 @@ private final class Builder {
 	private func emitFootnoteDefinition(_ body: String, number: Int) {
 		var context = EmitContext()
 		context.footnoteDefinition = number
-		let blocks = Array(Document(parsing: body, options: []).children)
+		let parseOptions: ParseOptions = preserveSmartPunctuation ? [] : [.disableSmartOpts]
+		let blocks = Array(Document(parsing: body, options: parseOptions).children)
 
 		guard !blocks.isEmpty else {
 			append("\(number). ", block: leaf(.paragraph, context), style: .stronglyEmphasized, context)
@@ -341,7 +345,7 @@ private final class Builder {
 			nested.link = (link.destination).flatMap(URL.init(string:)) ?? accumulator.link
 			for child in link.children { emitInline(child, nested, block: block, context) }
 		case let image as Image:
-			let alt = reverseSmart(swiftMarkdownPlainText(of: image))
+			let alt = swiftMarkdownPlainText(of: image)
 			append(alt, block: block, style: accumulator.style, link: accumulator.link, context, imageSource: image.source)
 		case let inlineHTML as InlineHTML:
 			var style = accumulator.style
@@ -376,13 +380,13 @@ private final class Builder {
 		block: [MarkdownBlock.Component]?, _ context: EmitContext
 	) {
 		guard let resolver else {
-			append(reverseSmart(string), block: block, style: accumulator.style, link: accumulator.link, context)
+			append(string, block: block, style: accumulator.style, link: accumulator.link, context)
 			return
 		}
 		for segment in resolver.resolve(string) {
 			switch segment {
 			case .text(let value):
-				append(reverseSmart(value), block: block, style: accumulator.style, link: accumulator.link, context)
+				append(value, block: block, style: accumulator.style, link: accumulator.link, context)
 			case .reference(let number):
 				append("\(number)", block: block, style: accumulator.style, link: accumulator.link, context, footnoteReference: number)
 			}
@@ -422,10 +426,6 @@ private final class Builder {
 		#endif
 
 		result.append(AttributedString(text, attributes: container))
-	}
-
-	private func reverseSmart(_ string: String) -> String {
-		preserveSmartPunctuation ? string : reverseSmartPunctuation(string)
 	}
 
 	/// Foundation uses U+2E3B (THREE-EM DASH) as a thematic-break placeholder.
@@ -537,32 +537,3 @@ extension Builder {
 	}
 }
 #endif
-
-// MARK: - Smart punctuation reversal (shared policy with the HTML renderer)
-
-private func reverseSmartPunctuation(_ string: String) -> String {
-	guard string.contains(where: isSmartCharacter) else { return string }
-	var result = ""
-	result.reserveCapacity(string.count)
-	for character in string {
-		switch character {
-		case "\u{2018}", "\u{2019}": result.append("'")   // ‘ ’
-		case "\u{201C}", "\u{201D}": result.append("\"")  // “ ”
-		case "\u{2013}": result.append("--")               // –
-		case "\u{2014}": result.append("---")              // —
-		case "\u{2026}": result.append("...")              // …
-		default: result.append(character)
-		}
-	}
-	return result
-}
-
-private func isSmartCharacter(_ character: Character) -> Bool {
-	switch character {
-	case "\u{2018}", "\u{2019}", "\u{201C}", "\u{201D}",
-		 "\u{2013}", "\u{2014}", "\u{2026}":
-		return true
-	default:
-		return false
-	}
-}

@@ -133,6 +133,13 @@ struct DocxWriterTests {
 		#expect(runs[5].code == true)
 	}
 
+	@Test("Literal typographic characters already in the source survive unchanged (issue #38)")
+	func inlineParserPreservesLiteralTypographicCharacters() {
+		let runs = MarkdownToDocx.parseInline("a — b – c… “quoted” ‘single’")
+		#expect(runs.count == 1)
+		#expect(runs[0].text == "a — b – c… “quoted” ‘single’")
+	}
+
 	@Test("Inline parser handles links")
 	func inlineParserLinks() {
 		let runs = MarkdownToDocx.parseInline("See [here](https://example.com) for details")
