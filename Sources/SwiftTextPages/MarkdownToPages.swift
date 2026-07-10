@@ -209,6 +209,7 @@ private struct BlockVisitor: MarkupVisitor {
 	var paragraphs: [BodyParagraph] = []
 	var footnoteDefinitions: [String: String] = [:]
 	private var listDepth = 0
+	private var nextListInstance = 1
 	private var blockQuoteDepth = 0
 
 	mutating func defaultVisit(_ markup: Markup) {
@@ -282,22 +283,24 @@ private struct BlockVisitor: MarkupVisitor {
 	}
 
 	mutating func visitUnorderedList(_ unorderedList: UnorderedList) {
-		emitListItems(in: unorderedList, ordered: false)
+		emitListItems(in: unorderedList, ordered: false, listInstance: nil)
 	}
 
 	mutating func visitOrderedList(_ orderedList: OrderedList) {
-		emitListItems(in: orderedList, ordered: true)
+		let listInstance = nextListInstance
+		nextListInstance += 1
+		emitListItems(in: orderedList, ordered: true, listInstance: listInstance)
 	}
 
-	private mutating func emitListItems(in list: ListItemContainer, ordered: Bool) {
+	private mutating func emitListItems(in list: ListItemContainer, ordered: Bool, listInstance: Int?) {
 		let level = listDepth
 		for child in list.children {
 			guard let item = child as? ListItem else { continue }
-			emit(listItem: item, ordered: ordered, level: level)
+			emit(listItem: item, ordered: ordered, level: level, listInstance: listInstance)
 		}
 	}
 
-	private mutating func emit(listItem: ListItem, ordered: Bool, level: Int) {
+	private mutating func emit(listItem: ListItem, ordered: Bool, level: Int, listInstance: Int?) {
 		var inlineParagraphs: [Paragraph] = []
 		var nestedLists: [Markup] = []
 		for child in listItem.children {
@@ -318,6 +321,7 @@ private struct BlockVisitor: MarkupVisitor {
 			paragraphStyle: PagesStyleID.body,
 			listStyle: ordered ? PagesStyleID.numberedList : PagesStyleID.bulletList,
 			listLevel: level,
+			listInstance: ordered ? listInstance : nil,
 			runs: collector.runs,
 			links: collector.links
 		))

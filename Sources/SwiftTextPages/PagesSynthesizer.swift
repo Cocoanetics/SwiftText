@@ -35,7 +35,7 @@ public final class PagesSynthesizer {
 		guard let bodyStorageID = bodyStorageIdentifier() else { throw PagesWriteError.bodyStorageNotFound }
 		guard let templatePayload = payload(of: bodyStorageID) else { throw PagesWriteError.bodyStorageNotFound }
 
-		let registry = CharacterStyleRegistry()
+		let registry = BodyObjectRegistry()
 		let newBody = PagesBodySerializer.body(from: paragraphs, templatePayload: templatePayload, registry: registry)
 		graph.replacePayload(of: bodyStorageID, type: 2001, with: newBody)
 

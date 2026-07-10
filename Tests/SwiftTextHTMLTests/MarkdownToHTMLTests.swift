@@ -77,6 +77,27 @@ struct MarkdownToHTMLTests {
 		#expect(html.contains("<li>First</li>"))
 	}
 
+	@Test func separatedOrderedListsRenderAsSeparateElements() {
+		let input = """
+		### Term A
+
+		Definition A
+
+		1. collocation A1
+		2. collocation A2
+
+		### Term B
+
+		Definition B
+
+		1. collocation B1
+		2. collocation B2
+		"""
+		let html = MarkdownToHTML.convert(input)
+		#expect(html.components(separatedBy: "<ol>").count - 1 == 2)
+		#expect(!html.contains("<ol start"))
+	}
+
 	@Test func fencedCodeBlock() {
 		let input = "```\nlet x = 1\n```"
 		let html = MarkdownToHTML.convert(input)

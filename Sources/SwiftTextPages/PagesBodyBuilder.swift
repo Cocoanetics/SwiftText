@@ -76,6 +76,9 @@ struct BodyParagraph {
 	var listStyle: UInt64?
 	/// Nesting depth for list items (0-based); ignored when not a list.
 	var listLevel: Int = 0
+	/// Logical ordered-list container identity, used to keep one Markdown list on
+	/// one Pages list instance even when nested lists interrupt its item stream.
+	var listInstance: Int?
 	/// Whether the paragraph is block-quoted (rendered indented + italic).
 	var blockQuote: Bool = false
 	/// For an attachment paragraph (a single `U+FFFC`), the drawable-attachment
@@ -122,10 +125,9 @@ struct BodyParagraph {
 	}
 }
 
-/// Resolves `InlineStyle` combinations to character-style object ids, synthesizing
-/// new `TSWP.CharacterStyleArchive` objects for combinations the template lacks
-/// (anything beyond a single built-in bold/italic/strikethrough).
-final class CharacterStyleRegistry {
+/// Allocates body-scoped objects referenced from run tables: synthesized
+/// character styles, hyperlink smart fields, and anonymous list styles.
+final class BodyObjectRegistry {
 	private var nextID = PagesStyleID.synthesizedBase
 	private var cache: [InlineStyle: UInt64] = [:]
 	private(set) var synthesizedObjects: [IWAObject] = []
@@ -166,6 +168,20 @@ final class CharacterStyleRegistry {
 		return id
 	}
 
+	/// A fresh numbered-list style inheriting the captured template's numbered
+	/// style. Pages treats the style object identity as the list instance, so
+	/// separate Markdown lists need separate anonymous styles to restart at 1.
+	func numberedListStyleInstance() -> UInt64 {
+		let id = nextID
+		nextID += 1
+		synthesizedObjects.append(IWAObject(
+			identifier: id,
+			type: 2023,
+			payload: Self.inheritedListStylePayload(parent: PagesStyleID.numberedList)
+		))
+		return id
+	}
+
 	private static func hyperlinkPayload(url: String) -> [UInt8] {
 		// #1 = { #1: a unique smart-field UUID }, #2 = the destination URL.
 		var fieldIdentifier = ProtobufWriter()
@@ -173,6 +189,18 @@ final class CharacterStyleRegistry {
 		var archive = ProtobufWriter()
 		archive.messageField(1, fieldIdentifier.bytes)
 		archive.stringField(2, url)
+		return archive.bytes
+	}
+
+	private static func inheritedListStylePayload(parent parentID: UInt64) -> [UInt8] {
+		var parentReference = ProtobufWriter()
+		parentReference.varintField(1, parentID)
+
+		var styleSuper = ProtobufWriter()
+		styleSuper.messageField(3, parentReference.bytes)     // TSS.StyleArchive.parent
+
+		var archive = ProtobufWriter()
+		archive.messageField(1, styleSuper.bytes)             // TSWP.ListStyleArchive.super
 		return archive.bytes
 	}
 
@@ -188,7 +216,7 @@ final class CharacterStyleRegistry {
 		parentReference.varintField(1, PagesStyleID.stylesheet)
 		var styleSuper = ProtobufWriter()
 		styleSuper.stringField(1, styleName(for: style))    // TSS.StyleArchive.name
-		styleSuper.messageField(5, parentReference.bytes)   // TSS.StyleArchive.parent
+		styleSuper.messageField(5, parentReference.bytes)   // TSS.StyleArchive.stylesheet
 
 		var charProperties = ProtobufWriter()
 		if style.bold { charProperties.varintField(1, 1) }
@@ -233,7 +261,7 @@ enum PagesBodySerializer {
 	/// The paragraph separator iWork uses inside a storage's text.
 	static let paragraphSeparator = "\u{2029}"
 
-	static func body(from paragraphs: [BodyParagraph], templatePayload: [UInt8], registry: CharacterStyleRegistry, footnoteMarkIDs: [UInt64] = [], footnoteCharStyleID: UInt64? = nil) -> [UInt8] {
+	static func body(from paragraphs: [BodyParagraph], templatePayload: [UInt8], registry: BodyObjectRegistry, footnoteMarkIDs: [UInt64] = [], footnoteCharStyleID: UInt64? = nil) -> [UInt8] {
 		// 1. Assemble the full text and each paragraph's UTF-16 start offset.
 		var fullText = ""
 		var paragraphStarts = [Int]()
@@ -252,12 +280,29 @@ enum PagesBodySerializer {
 		var paragraphStyleEntries = [(index: Int, styleID: UInt64?)]()
 		var paragraphDataEntries = [(index: Int, level: Int)]()
 		var listStyleEntries = [(index: Int, styleID: UInt64?)]()
+		var numberedListStylesByInstance = [Int: UInt64]()
+		var activeOrderedListStyle: UInt64?
 		for (index, paragraph) in paragraphs.enumerated() {
 			let start = paragraphStarts[index]
 			let styleID = paragraph.blockQuote ? PagesStyleID.blockQuote : paragraph.paragraphStyle
 			paragraphStyleEntries.append((start, styleID))
 			paragraphDataEntries.append((start, paragraph.listLevel))
-			listStyleEntries.append((start, paragraph.listStyle ?? PagesStyleID.listNone))
+			let listStyle = paragraph.listStyle ?? PagesStyleID.listNone
+			if listStyle == PagesStyleID.numberedList {
+				if let listInstance = paragraph.listInstance {
+					let instanceStyle = numberedListStylesByInstance[listInstance] ?? registry.numberedListStyleInstance()
+					numberedListStylesByInstance[listInstance] = instanceStyle
+					listStyleEntries.append((start, instanceStyle))
+				} else {
+					if activeOrderedListStyle == nil {
+						activeOrderedListStyle = registry.numberedListStyleInstance()
+					}
+					listStyleEntries.append((start, activeOrderedListStyle))
+				}
+			} else {
+				activeOrderedListStyle = nil
+				listStyleEntries.append((start, listStyle))
+			}
 		}
 
 		// 3. Character-style run table (#8). Pages writes this as a partition that
