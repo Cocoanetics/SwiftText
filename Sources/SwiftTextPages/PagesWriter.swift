@@ -36,7 +36,7 @@ public final class PagesWriter {
 	/// paragraph style, list membership, and inline style runs).
 	func write(paragraphs inputParagraphs: [BodyParagraph], baseURL: URL? = nil, to url: URL) throws {
 		let identity = DocumentIdentity.fresh()
-		let registry = CharacterStyleRegistry()
+		let registry = BodyObjectRegistry()
 
 		// Native tables: build the object set for every table paragraph and inject it
 		// into the captured components (the grid lives in `Index/Tables/*`, the model
@@ -106,7 +106,7 @@ public final class PagesWriter {
 				                         footnoteCharStyleID: footnoteArtifacts?.charStyleID)
 			case "Index/DocumentStylesheet.iwa":
 				data = try applyingStylesheet(to: data)
-			case "Index/Metadata.iwa" where tableArtifacts != nil || imageArtifacts != nil || footnoteArtifacts != nil:
+			case "Index/Metadata.iwa" where registry.didSynthesize || tableArtifacts != nil || imageArtifacts != nil || footnoteArtifacts != nil:
 				// Document.iwa is processed earlier in this loop, so `registry` already
 				// reflects any synthesized objects by the time Metadata is written.
 				let synthesizedMax = registry.didSynthesize ? registry.maxIdentifier : 0
@@ -119,9 +119,9 @@ public final class PagesWriter {
 						styleComponentRefs: tableArtifacts.styleComponentRefs
 					)
 				}
-				if imageArtifacts != nil || footnoteArtifacts != nil {
+				if registry.didSynthesize || imageArtifacts != nil || footnoteArtifacts != nil {
 					// Register embedded image media (DataInfo #4) + raise the object-id mark
-					// to cover the appended image/footnote objects.
+					// to cover the appended body/image/footnote objects.
 					data = try addingImageMetadata(to: data, dataInfos: imageArtifacts?.dataInfos ?? [],
 					                                highWaterMark: newMax)
 				}
@@ -203,7 +203,7 @@ public final class PagesWriter {
 	private func buildDocument(
 		from documentIWA: [UInt8],
 		paragraphs: [BodyParagraph],
-		registry: CharacterStyleRegistry,
+		registry: BodyObjectRegistry,
 		extraObjects: [IWAObject] = [],
 		footnoteMarkIDs: [UInt64] = [],
 		footnoteCharStyleID: UInt64? = nil

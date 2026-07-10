@@ -255,6 +255,90 @@ struct MarkdownToPagesTests {
 		#expect(try PagesFile(url: url).markdown().contains("**bold**"))
 	}
 
+	@Test("Separated ordered Markdown lists use separate Pages list instances")
+	func separatedOrderedListsUseSeparateNumberingStyles() throws {
+		let url = FileManager.default.temporaryDirectory
+			.appendingPathComponent("swifttext-lists-\(UUID().uuidString).pages")
+		defer { try? FileManager.default.removeItem(at: url) }
+		let markdown = """
+		### Term A
+
+		Definition A
+
+		1. collocation A1
+		2. collocation A2
+		3. collocation A3
+
+		### Term B
+
+		Definition B
+
+		1. collocation B1
+		2. collocation B2
+		3. collocation B3
+		"""
+		try MarkdownToPages.convert(markdown, to: url)
+
+		let store = try objectStore(at: url)
+		let body = try #require(store.objects(ofType: 2001).first {
+			(ProtobufMessage($0.payload).bytes(3).map { String(decoding: $0, as: UTF8.self) } ?? "")
+				.contains("collocation A1")
+		})
+		let listStyleIDs = ProtobufMessage(body.payload)
+			.message(7)?
+			.messages(1)
+			.compactMap { $0.message(2)?.varint(1) }
+			.filter { $0 != PagesStyleID.listNone } ?? []
+
+		#expect(listStyleIDs.count == 6)
+		let firstListIDs = Array(listStyleIDs.prefix(3))
+		let secondListIDs = Array(listStyleIDs.suffix(3))
+		let firstStyle = try #require(firstListIDs.first)
+		let secondStyle = try #require(secondListIDs.first)
+		#expect(firstStyle != secondStyle)
+		#expect(firstListIDs.allSatisfy { $0 == firstStyle })
+		#expect(secondListIDs.allSatisfy { $0 == secondStyle })
+
+		for styleID in [firstStyle, secondStyle] {
+			let object = try #require(store.object(styleID))
+			#expect(object.type == 2023)
+			let parent = ProtobufMessage(object.payload).message(1)?.message(3)?.varint(1)
+			#expect(parent == PagesStyleID.numberedList)
+		}
+
+		let metadata = try #require(store.objects(ofType: 11006).first)
+		let highWaterMark = ProtobufMessage(metadata.payload).varint(1) ?? 0
+		#expect(highWaterMark >= (listStyleIDs.max() ?? 0))
+	}
+
+	@Test("Nested unordered lists do not restart the parent ordered list instance")
+	func nestedUnorderedListKeepsParentNumberingStyle() throws {
+		let url = FileManager.default.temporaryDirectory
+			.appendingPathComponent("swifttext-mixed-list-\(UUID().uuidString).pages")
+		defer { try? FileManager.default.removeItem(at: url) }
+		let markdown = """
+		1. One
+		   - detail
+		2. Two
+		"""
+		try MarkdownToPages.convert(markdown, to: url)
+
+		let store = try objectStore(at: url)
+		let body = try #require(store.objects(ofType: 2001).first {
+			(ProtobufMessage($0.payload).bytes(3).map { String(decoding: $0, as: UTF8.self) } ?? "")
+				.contains("detail")
+		})
+		let orderedStyleIDs = ProtobufMessage(body.payload)
+			.message(7)?
+			.messages(1)
+			.compactMap { $0.message(2)?.varint(1) }
+			.filter { $0 != PagesStyleID.listNone && $0 != PagesStyleID.bulletList } ?? []
+
+		#expect(orderedStyleIDs.count == 2)
+		let firstStyle = try #require(orderedStyleIDs.first)
+		#expect(orderedStyleIDs.allSatisfy { $0 == firstStyle })
+	}
+
 	/// Loads every `Index/*.iwa` object from a written `.pages` into one store.
 	private func objectStore(at url: URL) throws -> IWAObjectStore {
 		var store = IWAObjectStore()

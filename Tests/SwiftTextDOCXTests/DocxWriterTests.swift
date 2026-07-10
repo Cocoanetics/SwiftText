@@ -94,6 +94,40 @@ struct DocxWriterTests {
 		#expect(xml.contains("rLink1"))
 	}
 
+	@Test("Separated Markdown ordered lists use distinct DOCX numbering instances")
+	func separatedOrderedListsUseDistinctNumberingInstances() throws {
+		let markdown = """
+		### Term A
+
+		Definition A
+
+		1. collocation A1
+		2. collocation A2
+
+		### Term B
+
+		Definition B
+
+		1. collocation B1
+		2. collocation B2
+		"""
+
+		let url = FileManager.default.temporaryDirectory
+			.appendingPathComponent("md-list-restart-\(UUID().uuidString).docx")
+		defer { try? FileManager.default.removeItem(at: url) }
+
+		try MarkdownToDocx.convert(markdown, to: url)
+
+		let archive = try #require(Archive(url: url, accessMode: .read))
+		var documentData = Data()
+		let entry = try #require(archive["word/document.xml"])
+		_ = try archive.extract(entry) { documentData.append($0) }
+		let xml = String(data: documentData, encoding: .utf8)!
+
+		#expect(xml.components(separatedBy: #"<w:numId w:val="1"/>"#).count - 1 == 2)
+		#expect(xml.components(separatedBy: #"<w:numId w:val="2"/>"#).count - 1 == 2)
+	}
+
 	@Test("Markdown table headers preserve strikethrough")
 	func markdownTableHeaderStrikethrough() throws {
 		let markdown = """
