@@ -551,22 +551,41 @@ final class PagesParser {
 	/// Reconstructs a rich cell's Markdown: the cell-storage text with each
 	/// character-emphasis run wrapped in `**`/`*`/`~~` — reusing the body's emphasis
 	/// machinery so inline bold/italic/strikethrough round-trip out of a table cell.
-	/// The cell's own paragraph style is the baseline the character runs override.
-	private func cellMarkdown(_ storage: IWAObject, store: IWAObjectStore) -> String {
+	/// The paragraph style active at each offset is the baseline the character
+	/// runs override — merged positionally, the way `makeParagraphs` does for body
+	/// text, so a multi-paragraph cell whose styles differ keeps each one.
+	/// Internal (not private) so tests can drive it with a synthesized storage.
+	func cellMarkdown(_ storage: IWAObject, store: IWAObjectStore) -> String {
 		let text = storageText(storage)
-		let base = paragraphStyleRuns(storage).first(where: { $0.styleID != nil })?.styleID
-			.map { resolvedCharFlags(forStyle: $0, store: store) } ?? CharStyleFlags()
-		var spans = characterRuns(storage, store: store).map {
-			PagesDocument.Paragraph.EmphasisSpan(
-				start: $0.index,
-				bold: $0.flags.bold ?? base.bold ?? false,
-				italic: $0.flags.italic ?? base.italic ?? false,
-				strike: $0.flags.strike ?? base.strike ?? false
-			)
-		}
-		// A cell styled entirely through its paragraph style has no character runs.
-		if spans.isEmpty, base.bold == true || base.italic == true || base.strike == true {
-			spans = [.init(start: 0, bold: base.bold ?? false, italic: base.italic ?? false, strike: base.strike ?? false)]
+		let paraRuns = paragraphStyleRuns(storage)
+		let charRuns = characterRuns(storage, store: store)
+
+		var boundaries: Set<Int> = [0]
+		boundaries.formUnion(paraRuns.map(\.index))
+		boundaries.formUnion(charRuns.map(\.index))
+
+		var base = CharStyleFlags()
+		var overrides = CharStyleFlags()
+		var paraIndex = 0
+		var charIndex = 0
+		var spans = [PagesDocument.Paragraph.EmphasisSpan]()
+		for start in boundaries.sorted() {
+			while paraIndex < paraRuns.count, paraRuns[paraIndex].index <= start {
+				if let styleID = paraRuns[paraIndex].styleID {
+					base = resolvedCharFlags(forStyle: styleID, store: store)
+				}
+				paraIndex += 1
+			}
+			while charIndex < charRuns.count, charRuns[charIndex].index <= start {
+				overrides = charRuns[charIndex].flags
+				charIndex += 1
+			}
+			spans.append(.init(
+				start: start,
+				bold: overrides.bold ?? base.bold ?? false,
+				italic: overrides.italic ?? base.italic ?? false,
+				strike: overrides.strike ?? base.strike ?? false
+			))
 		}
 		let paragraph = PagesDocument.Paragraph(text: text, emphasis: spans)
 		return paragraph.renderedText(inliningImages: false, applyingEmphasis: true)

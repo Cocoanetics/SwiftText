@@ -2,6 +2,7 @@ import Foundation
 import Testing
 
 @testable import SwiftTextPages
+import SwiftTextIWA
 
 /// Exercises the reverse-engineered run tables end-to-end (parser → Markdown):
 /// the character-style table (bold/italic) and the list tables (level +
@@ -224,6 +225,28 @@ struct PagesFormattingTests {
 		let markdown = try PagesFile(url: url).markdown()
 		#expect(markdown.hasPrefix("## Section"))
 		#expect(!markdown.contains("**"))
+	}
+
+	@Test("A rich cell keeps distinct paragraph styles across its paragraphs")
+	func cellWithMixedParagraphStyles() throws {
+		// "Plain" in a regular paragraph style, "Bold" in a bold one at offset 6,
+		// with an italic-only character run over it — the paragraph baseline and
+		// the character override must combine per offset, not from one shared base.
+		let text = "Plain\nBold"
+		let paraTable = runTable(5, [(0, 200), (6, 201)])
+		var charTable = [UInt8]()
+		charTable += IWAWriter.bytesField(1, IWAWriter.varintField(1, 0))
+		charTable += IWAWriter.bytesField(1, IWAWriter.varintField(1, 6) + IWAWriter.bytesField(2, IWAWriter.varintField(1, 202)))
+		let payload = IWAWriter.varintField(1, 0) + IWAWriter.stringField(3, text)
+			+ paraTable + IWAWriter.bytesField(8, charTable)
+
+		var store = IWAObjectStore()
+		store.add(IWAObject(identifier: 200, type: 2022, payload: IWAWriter.bytesField(11, IWAWriter.varintField(1, 0))))
+		store.add(IWAObject(identifier: 201, type: 2022, payload: IWAWriter.bytesField(11, IWAWriter.varintField(1, 1))))
+		store.add(IWAObject(identifier: 202, type: 2021, payload: IWAWriter.bytesField(11, IWAWriter.varintField(2, 1))))
+		let cell = IWAObject(identifier: 10, type: 2001, payload: payload)
+
+		#expect(PagesParser().cellMarkdown(cell, store: store) == "Plain\n***Bold***")
 	}
 
 	@Test("Numbered list with an anonymous style inheriting its marker from a parent")
