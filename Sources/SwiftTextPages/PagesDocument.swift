@@ -181,7 +181,23 @@ public struct PagesDocument {
 		/// surrounding whitespace is trimmed. When `applyingEmphasis` is set, runs
 		/// are wrapped in `**`/`*`/`***`; when `inliningImages` is set, image
 		/// anchors become `![](reference)` (both off for plain text).
-		func renderedText(inliningImages: Bool, applyingEmphasis: Bool) -> String {
+		/// `suppressingUniformEmphasis` drops any emphasis that covers the entire
+		/// paragraph uniformly — that styling restates the paragraph's own style
+		/// (a bold heading style, say) rather than marking up a span within it, so
+		/// headings render as `## Section`, not `## **Section**`; spans that
+		/// differ from the rest still get their markers.
+		func renderedText(inliningImages: Bool, applyingEmphasis: Bool, suppressingUniformEmphasis: Bool = false) -> String {
+			var suppressBold = false
+			var suppressItalic = false
+			var suppressStrike = false
+			var suppressCode = false
+			if suppressingUniformEmphasis, let first = emphasis.first, first.start <= 0 {
+				suppressBold = emphasis.allSatisfy(\.bold)
+				suppressItalic = emphasis.allSatisfy(\.italic)
+				suppressStrike = emphasis.allSatisfy(\.strike)
+				suppressCode = emphasis.allSatisfy(\.code)
+			}
+
 			var output = ""
 			var runText = ""
 			var runBold = false
@@ -206,7 +222,15 @@ public struct PagesDocument {
 
 			func flushRun() {
 				guard !runText.isEmpty else { return }
-				output += applyingEmphasis ? PagesDocument.markedUp(runText, bold: runBold, italic: runItalic, strike: runStrike, code: runCode) : runText
+				output += applyingEmphasis
+					? PagesDocument.markedUp(
+						runText,
+						bold: runBold && !suppressBold,
+						italic: runItalic && !suppressItalic,
+						strike: runStrike && !suppressStrike,
+						code: runCode && !suppressCode
+					)
+					: runText
 				runText = ""
 			}
 
@@ -331,9 +355,32 @@ public struct PagesDocument {
 		return leading + core + trailing
 	}
 
-	/// Returns the normalized text of each non-empty paragraph.
+	/// Returns the normalized text of each non-empty paragraph. List items keep
+	/// their visible marker — the number or bullet Pages draws is document
+	/// content, so plain-text extraction would otherwise silently drop it
+	/// ("Topics: 1. Offer 2. Acceptance" must not flatten into bare lines).
+	/// Numbering follows the same counter rules as `markdown()`.
 	public func plainTextParagraphs() -> [String] {
-		paragraphs.map { $0.normalizedText() }.filter { !$0.isEmpty }
+		var out = [String]()
+		var counters = [Int: Int]()
+		for paragraph in paragraphs {
+			let text = paragraph.normalizedText()
+			guard !text.isEmpty else { continue }
+			guard let level = paragraph.listLevel else {
+				counters.removeAll()
+				out.append(text)
+				continue
+			}
+			let indent = String(repeating: "    ", count: max(level, 0))
+			for deeper in counters.keys where deeper > level { counters[deeper] = nil }
+			if paragraph.listOrdered {
+				counters[level, default: 0] += 1
+				out.append(indent + "\(counters[level]!). " + text)
+			} else {
+				out.append(indent + "• " + text)
+			}
+		}
+		return out
 	}
 
 	/// Returns the document as plain text, paragraphs separated by blank lines.
@@ -399,7 +446,8 @@ public struct PagesDocument {
 				counters.removeAll()
 				let plain = paragraph.normalizedText()
 				if let level = headingLevel(for: paragraph, text: plain, bodySize: bodySize) {
-					lines.append(String(repeating: "#", count: level) + " " + rendered)
+					let heading = paragraph.renderedText(inliningImages: true, applyingEmphasis: true, suppressingUniformEmphasis: true)
+					lines.append(String(repeating: "#", count: level) + " " + heading)
 				} else {
 					lines.append(rendered)
 				}

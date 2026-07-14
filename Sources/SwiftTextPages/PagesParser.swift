@@ -40,9 +40,13 @@ final class PagesParser {
 		/// Char/paragraph `…StyleArchive.char_properties`.
 		static let charPropertiesField = 11
 		/// Within a paragraph/character style: the `super` TSS.StyleArchive (field 1),
-		/// which carries `name` (field 1) and the stable `style_identifier` (field 2).
+		/// which carries `name` (field 1), the stable `style_identifier` (field 2),
+		/// and the `parent` style reference (field 3) that property lookup falls
+		/// back to — anonymous styles ("Body + bold") override a field or two and
+		/// inherit the rest from the named style they were derived from.
 		static let styleSuperField = 1
 		static let styleIdentifierField = 2
+		static let styleParentField = 3
 		/// Within char properties: bold, italic, strikethrough, and font size.
 		static let boldField = 1
 		static let italicField = 2
@@ -123,6 +127,91 @@ final class PagesParser {
 		case none
 		case bullet
 		case ordered
+	}
+
+	/// The character-level properties a style resolves to. Each field is `nil`
+	/// when neither the style nor any ancestor sets it — for a character style
+	/// that means "inherit from the paragraph"; for a paragraph style it means
+	/// the document default applies.
+	private struct CharStyleFlags {
+		var bold: Bool?
+		var italic: Bool?
+		var strike: Bool?
+		var fontSize: Double?
+		var fontName: String?
+
+		var isComplete: Bool {
+			bold != nil && italic != nil && strike != nil && fontSize != nil && fontName != nil
+		}
+
+		/// Fills any still-unset field from the given `char_properties` message.
+		/// Called walking from the style outward through its ancestors, so the
+		/// nearest style that sets a field wins (proto2 presence semantics: an
+		/// absent field inherits, an explicit 0 overrides).
+		mutating func fill(from properties: ProtobufMessage) {
+			if bold == nil, let value = properties.varint(IWork.boldField) { bold = value != 0 }
+			if italic == nil, let value = properties.varint(IWork.italicField) { italic = value != 0 }
+			if strike == nil, let value = properties.varint(IWork.strikethroughField) { strike = value != 0 }
+			if fontSize == nil, let value = properties.float(IWork.fontSizeField) { fontSize = Double(value) }
+			if fontName == nil, let bytes = properties.bytes(IWork.fontNameField) { fontName = String(decoding: bytes, as: UTF8.self) }
+		}
+	}
+
+	/// Per-document caches for style resolution — the same handful of styles is
+	/// referenced by every run entry, so resolve each chain once.
+	private var charFlagsCache = [UInt64: CharStyleFlags]()
+	private var identifierTraitsCache = [UInt64: (headingLevel: Int?, isCodeBlock: Bool)]()
+
+	/// Resolves the character properties a style defines, following its parent
+	/// chain (`super.parent`) so an anonymous style derived from a named one
+	/// inherits every field it doesn't override itself.
+	private func resolvedCharFlags(forStyle styleID: UInt64, store: IWAObjectStore) -> CharStyleFlags {
+		if let cached = charFlagsCache[styleID] { return cached }
+		var flags = CharStyleFlags()
+		var currentID: UInt64? = styleID
+		var depth = 0
+		var visited = Set<UInt64>()
+		while let id = currentID, depth < 8, !flags.isComplete, visited.insert(id).inserted, let object = store.object(id) {
+			let style = ProtobufMessage(object.payload)
+			if let properties = style.message(IWork.charPropertiesField) {
+				flags.fill(from: properties)
+			}
+			currentID = style.message(IWork.styleSuperField)?
+				.message(IWork.styleParentField)?
+				.varint(IWork.referenceIdentifierField)
+			depth += 1
+		}
+		charFlagsCache[styleID] = flags
+		return flags
+	}
+
+	/// Resolves what a paragraph style's stable `style_identifier` says about the
+	/// paragraph — an explicit heading level or the preformatted code-block style.
+	/// An anonymous style (no identifier of its own — the "Heading 2 + tweaks"
+	/// overrides Pages writes) defers to its parent chain; a style that carries an
+	/// identifier is authoritative, so a named style merely *derived* from a
+	/// heading doesn't become one.
+	private func identifierTraits(forStyle styleID: UInt64, store: IWAObjectStore) -> (headingLevel: Int?, isCodeBlock: Bool) {
+		if let cached = identifierTraitsCache[styleID] { return cached }
+		var traits: (headingLevel: Int?, isCodeBlock: Bool) = (nil, false)
+		var currentID: UInt64? = styleID
+		var depth = 0
+		var visited = Set<UInt64>()
+		while let id = currentID, depth < 8, visited.insert(id).inserted, let object = store.object(id) {
+			let superStyle = ProtobufMessage(object.payload).message(IWork.styleSuperField)
+			if let identifier = superStyle?.bytes(IWork.styleIdentifierField).map({ String(decoding: $0, as: UTF8.self) }) {
+				if identifier == PagesStyleIdentifier.codeBlock {
+					traits = (nil, true)
+				} else if let level = Self.headingLevel(forStyleIdentifier: identifier) {
+					traits = (level, false)
+				}
+				break
+			}
+			currentID = superStyle?.message(IWork.styleParentField)?.varint(IWork.referenceIdentifierField)
+			depth += 1
+		}
+		identifierTraitsCache[styleID] = traits
+		return traits
 	}
 
 	func readDocument(from url: URL) throws -> PagesDocument {
@@ -252,18 +341,24 @@ final class PagesParser {
 		var paragraphStartUTF16 = 0
 		var utf16Offset = 0
 
+		// The paragraph style active at the current offset. Its resolved character
+		// properties are the paragraph's baseline formatting — a paragraph whose
+		// *style* is bold is bold even with no character-style run over it.
+		var paraRunIndex = 0
+		var activeParaStyleID: UInt64?
+		var paragraphBase = CharStyleFlags()
+
 		// Character emphasis carries forward across paragraphs; advance through the
-		// global run table as the offset grows.
+		// global run table as the offset grows. Character styles override only the
+		// fields they set — anything unset falls through to the paragraph baseline.
 		var charRunIndex = 0
-		var activeBold = false
-		var activeItalic = false
-		var activeStrike = false
-		var activeCode = false
+		var activeCharFlags = CharStyleFlags()
+		var activeCharCode = false
 		let linkSpans = self.linkRuns(storage, store: store)
 
 		func flush() {
 			let paragraphText = String(current)
-			let style = resolvedStyle(atUTF16: paragraphStartUTF16, runs: runs, store: store)
+			let style = paragraphStyleInfo(activeParaStyleID, base: paragraphBase, store: store)
 			let (listLevel, listOrdered) = listMembership(atUTF16: paragraphStartUTF16, levels: levels, listStyles: listStyles, store: store)
 			// Clip the global hyperlink spans to this paragraph and rebase to paragraph-
 			// relative UTF-16 offsets.
@@ -295,13 +390,26 @@ final class PagesParser {
 		}
 
 		for scalar in text.unicodeScalars {
+			while paraRunIndex < runs.count, runs[paraRunIndex].index <= utf16Offset {
+				if let styleID = runs[paraRunIndex].styleID, styleID != activeParaStyleID {
+					activeParaStyleID = styleID
+					paragraphBase = resolvedCharFlags(forStyle: styleID, store: store)
+				}
+				paraRunIndex += 1
+			}
 			while charRunIndex < charRuns.count, charRuns[charRunIndex].index <= utf16Offset {
-				activeBold = charRuns[charRunIndex].bold
-				activeItalic = charRuns[charRunIndex].italic
-				activeStrike = charRuns[charRunIndex].strike
-				activeCode = charRuns[charRunIndex].code
+				activeCharFlags = charRuns[charRunIndex].flags
+				activeCharCode = charRuns[charRunIndex].flags.fontName.map(Self.isMonospaceFont) ?? false
 				charRunIndex += 1
 			}
+			// The formatting in effect here: character-style overrides where set,
+			// the paragraph style's own properties otherwise. Monospace (inline
+			// code) is only ever taken from a character style — a document whose
+			// paragraph styles are monospace is typeset that way, not code.
+			let activeBold = activeCharFlags.bold ?? paragraphBase.bold ?? false
+			let activeItalic = activeCharFlags.italic ?? paragraphBase.italic ?? false
+			let activeStrike = activeCharFlags.strike ?? paragraphBase.strike ?? false
+			let activeCode = activeCharCode
 			// Footnote reference marks sit at a character index (no text character);
 			// number them in reading order and record their definitions.
 			while footnoteIndex < footnoteRefs.count, footnoteRefs[footnoteIndex].index <= utf16Offset {
@@ -443,10 +551,22 @@ final class PagesParser {
 	/// Reconstructs a rich cell's Markdown: the cell-storage text with each
 	/// character-emphasis run wrapped in `**`/`*`/`~~` — reusing the body's emphasis
 	/// machinery so inline bold/italic/strikethrough round-trip out of a table cell.
+	/// The cell's own paragraph style is the baseline the character runs override.
 	private func cellMarkdown(_ storage: IWAObject, store: IWAObjectStore) -> String {
 		let text = storageText(storage)
-		let spans = characterRuns(storage, store: store).map {
-			PagesDocument.Paragraph.EmphasisSpan(start: $0.index, bold: $0.bold, italic: $0.italic, strike: $0.strike)
+		let base = paragraphStyleRuns(storage).first(where: { $0.styleID != nil })?.styleID
+			.map { resolvedCharFlags(forStyle: $0, store: store) } ?? CharStyleFlags()
+		var spans = characterRuns(storage, store: store).map {
+			PagesDocument.Paragraph.EmphasisSpan(
+				start: $0.index,
+				bold: $0.flags.bold ?? base.bold ?? false,
+				italic: $0.flags.italic ?? base.italic ?? false,
+				strike: $0.flags.strike ?? base.strike ?? false
+			)
+		}
+		// A cell styled entirely through its paragraph style has no character runs.
+		if spans.isEmpty, base.bold == true || base.italic == true || base.strike == true {
+			spans = [.init(start: 0, bold: base.bold ?? false, italic: base.italic ?? false, strike: base.strike ?? false)]
 		}
 		let paragraph = PagesDocument.Paragraph(text: text, emphasis: spans)
 		return paragraph.renderedText(inliningImages: false, applyingEmphasis: true)
@@ -485,33 +605,15 @@ final class PagesParser {
 		return runs
 	}
 
-	/// Finds the style active at a character index, then resolves its font size,
-	/// bold flag, and — for a faithful Markdown round-trip — an explicit heading
-	/// level read from the paragraph style's stable `style_identifier`.
-	private func resolvedStyle(atUTF16 index: Int, runs: [(index: Int, styleID: UInt64?)], store: IWAObjectStore) -> (fontSize: Double?, bold: Bool, headingLevel: Int?, isCodeBlock: Bool) {
-		var activeStyleID: UInt64?
-		for run in runs {
-			guard run.index <= index else { break }
-			if let styleID = run.styleID { activeStyleID = styleID }
-		}
-		guard let activeStyleID, let styleObject = store.object(activeStyleID) else {
-			return (nil, false, nil, false)
-		}
-		let style = ProtobufMessage(styleObject.payload)
-		// The paragraph style's `super` (TSS.StyleArchive, field 1) carries the stable,
-		// non-localized `style_identifier` (field 2), e.g. "…-paragraphstyle-Heading 2"
-		// or our own "swifttext-code-block" for the preformatted style.
-		let identifier = style.message(IWork.styleSuperField)
-			.flatMap { $0.bytes(IWork.styleIdentifierField) }
-			.map { String(decoding: $0, as: UTF8.self) }
-		let level = identifier.flatMap(Self.headingLevel(forStyleIdentifier:))
-		let isCodeBlock = identifier == PagesStyleIdentifier.codeBlock
-		guard let charProperties = style.message(IWork.charPropertiesField) else {
-			return (nil, false, level, isCodeBlock)
-		}
-		let bold = (charProperties.varint(IWork.boldField) ?? 0) != 0
-		let fontSize = charProperties.float(IWork.fontSizeField).map(Double.init)
-		return (fontSize, bold, level, isCodeBlock)
+	/// The paragraph-level attributes of the style a paragraph is set in: its
+	/// resolved font size and bold flag (both may be inherited through the parent
+	/// chain), plus — for a faithful Markdown round-trip — an explicit heading
+	/// level or code-block marker read from a stable `style_identifier` anywhere
+	/// in the chain.
+	private func paragraphStyleInfo(_ styleID: UInt64?, base: CharStyleFlags, store: IWAObjectStore) -> (fontSize: Double?, bold: Bool, headingLevel: Int?, isCodeBlock: Bool) {
+		guard let styleID else { return (nil, false, nil, false) }
+		let traits = identifierTraits(forStyle: styleID, store: store)
+		return (base.fontSize, base.bold ?? false, traits.headingLevel, traits.isCodeBlock)
 	}
 
 	/// Maps a paragraph style's `style_identifier` to a Markdown heading level so
@@ -529,29 +631,20 @@ final class PagesParser {
 	}
 
 	/// Reads the character-style run table, resolving each run's referenced
-	/// character style to its bold/italic/strikethrough flags and whether it is set
-	/// in a monospace font (which we surface as inline `code`).
-	private func characterRuns(_ storage: IWAObject, store: IWAObjectStore) -> [(index: Int, bold: Bool, italic: Bool, strike: Bool, code: Bool)] {
+	/// character style (through its parent chain) to the flags it sets. A run
+	/// without a reference — or a style that sets nothing — leaves every field
+	/// `nil`, meaning the paragraph style's formatting shows through.
+	private func characterRuns(_ storage: IWAObject, store: IWAObjectStore) -> [(index: Int, flags: CharStyleFlags)] {
 		guard let table = ProtobufMessage(storage.payload).message(IWork.charStyleTableField) else { return [] }
-		var runs = [(index: Int, bold: Bool, italic: Bool, strike: Bool, code: Bool)]()
+		var runs = [(index: Int, flags: CharStyleFlags)]()
 		for entry in table.messages(IWork.runEntryField) {
 			guard let index = entry.varint(IWork.runCharIndexField) else { continue }
-			var bold = false
-			var italic = false
-			var strike = false
-			var code = false
+			var flags = CharStyleFlags()
 			if let reference = entry.message(IWork.runStyleRefField),
-			   let styleID = reference.varint(IWork.referenceIdentifierField),
-			   let styleObject = store.object(styleID),
-			   let charProperties = ProtobufMessage(styleObject.payload).message(IWork.charPropertiesField) {
-				bold = (charProperties.varint(IWork.boldField) ?? 0) != 0
-				italic = (charProperties.varint(IWork.italicField) ?? 0) != 0
-				strike = (charProperties.varint(IWork.strikethroughField) ?? 0) != 0
-				if let font = charProperties.bytes(IWork.fontNameField).map({ String(decoding: $0, as: UTF8.self) }) {
-					code = Self.isMonospaceFont(font)
-				}
+			   let styleID = reference.varint(IWork.referenceIdentifierField) {
+				flags = resolvedCharFlags(forStyle: styleID, store: store)
 			}
-			runs.append((index: Int(index), bold: bold, italic: italic, strike: strike, code: code))
+			runs.append((index: Int(index), flags: flags))
 		}
 		runs.sort { $0.index < $1.index }
 		return runs

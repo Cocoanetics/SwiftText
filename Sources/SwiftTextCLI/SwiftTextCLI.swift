@@ -683,7 +683,12 @@ struct Pages: AsyncParsableCommand {
 		}
 
 		let pages = try PagesFile(url: fileURL)
-		let output = markdown ? pages.markdown() : pages.plainText()
+		// Writing to a .md file implies Markdown, matching how `render` infers its
+		// format from the -o extension — plain text into report.md is never intended.
+		let extensionImpliesMarkdown = outputPath.map {
+			["md", "markdown"].contains(URL(fileURLWithPath: $0).pathExtension.lowercased())
+		} ?? false
+		let output = markdown || extensionImpliesMarkdown ? pages.markdown() : pages.plainText()
 		if !output.isEmpty {
 			try writeOutputIfNeeded(output)
 		}

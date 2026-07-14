@@ -59,7 +59,8 @@ struct PagesFormattingTests {
 		defer { try? FileManager.default.removeItem(at: url) }
 		let pages = try PagesFile(url: url)
 		#expect(pages.markdown() == "Hello **world**\n\n- Item")
-		#expect(pages.plainText() == "Hello world\n\nItem")
+		// Plain text keeps the visible list marker (the bullet Pages draws).
+		#expect(pages.plainText() == "Hello world\n\n• Item")
 	}
 
 	@Test("Strikethrough from the character-style table")
@@ -96,6 +97,135 @@ struct PagesFormattingTests {
 		#expect(try PagesFile(url: url).markdown() == "Claim[^1]\n\n[^1]: the note")
 	}
 
+	@Test("A bold paragraph style renders the whole paragraph bold")
+	func paragraphStyleBold() throws {
+		let text = "Headline\nBody text here."  // second paragraph at offset 9
+
+		let paraTable = runTable(5, [(0, 90), (9, 91)])
+		let body = IWAWriter.varintField(1, 0) + IWAWriter.stringField(3, text) + paraTable
+
+		let objects: [IWAWriter.Object] = [
+			.init(identifier: 10, type: 2001, payload: body),
+			// Paragraph styles: char_properties (field 11) carrying the bold flag —
+			// no character-style runs at all, like a document styled per paragraph.
+			.init(identifier: 90, type: 2022, payload: IWAWriter.bytesField(11, IWAWriter.varintField(1, 1))),
+			.init(identifier: 91, type: 2022, payload: IWAWriter.bytesField(11, IWAWriter.varintField(1, 0)))
+		]
+
+		let url = try bundle(documentObjects: objects)
+		defer { try? FileManager.default.removeItem(at: url) }
+		let pages = try PagesFile(url: url)
+		#expect(pages.markdown() == "**Headline**\n\nBody text here.")
+		#expect(pages.plainText() == "Headline\n\nBody text here.")
+	}
+
+	@Test("An anonymous paragraph style inherits bold and font size from its parent")
+	func paragraphStyleInheritance() throws {
+		let text = "Warning\nBody text long enough to dominate.\nMore body text at the same size."
+
+		let paraTable = runTable(5, [(0, 92), (8, 91)])
+		let body = IWAWriter.varintField(1, 0) + IWAWriter.stringField(3, text) + paraTable
+
+		// 92 sets nothing itself; its super (field 1) points via parent (field 3)
+		// at 93, which is bold and 28pt — the pattern Pages writes when a user
+		// restyles a paragraph ("Body + tweaks" anonymous styles).
+		let anonymous = IWAWriter.bytesField(1, IWAWriter.bytesField(3, IWAWriter.varintField(1, 93)))
+		let parent = IWAWriter.bytesField(11, IWAWriter.varintField(1, 1) + IWAWriter.floatField(3, 28))
+		let bodyStyle = IWAWriter.bytesField(11, IWAWriter.varintField(1, 0) + IWAWriter.floatField(3, 12))
+
+		let objects: [IWAWriter.Object] = [
+			.init(identifier: 10, type: 2001, payload: body),
+			.init(identifier: 92, type: 2022, payload: anonymous),
+			.init(identifier: 93, type: 2022, payload: parent),
+			.init(identifier: 91, type: 2022, payload: bodyStyle)
+		]
+
+		let url = try bundle(documentObjects: objects)
+		defer { try? FileManager.default.removeItem(at: url) }
+		let markdown = try PagesFile(url: url).markdown()
+		// The inherited 28pt (vs. 12pt body) promotes the paragraph to a heading,
+		// and the inherited bold is suppressed there — not `# **Warning**`.
+		#expect(markdown.hasPrefix("# Warning"))
+		#expect(!markdown.contains("**"))
+	}
+
+	@Test("Character runs override only the fields they set on a bold paragraph")
+	func characterOverridesOnBoldParagraph() throws {
+		let text = "AAAA BBBB CCCC"
+
+		let paraTable = runTable(5, [(0, 90)])
+		// Char runs: inherit, explicitly not-bold at "BBBB", inherit again — the
+		// unreferenced entries fall through to the paragraph's bold.
+		var charTable = [UInt8]()
+		charTable += IWAWriter.bytesField(1, IWAWriter.varintField(1, 0))
+		charTable += IWAWriter.bytesField(1, IWAWriter.varintField(1, 5) + IWAWriter.bytesField(2, IWAWriter.varintField(1, 94)))
+		charTable += IWAWriter.bytesField(1, IWAWriter.varintField(1, 10))
+		let body = IWAWriter.varintField(1, 0) + IWAWriter.stringField(3, text)
+			+ paraTable + IWAWriter.bytesField(8, charTable)
+
+		let objects: [IWAWriter.Object] = [
+			.init(identifier: 10, type: 2001, payload: body),
+			.init(identifier: 90, type: 2022, payload: IWAWriter.bytesField(11, IWAWriter.varintField(1, 1))),
+			// An explicit bold = 0 override (present field wins over the paragraph).
+			.init(identifier: 94, type: 2021, payload: IWAWriter.bytesField(11, IWAWriter.varintField(1, 0)))
+		]
+
+		let url = try bundle(documentObjects: objects)
+		defer { try? FileManager.default.removeItem(at: url) }
+		#expect(try PagesFile(url: url).markdown() == "**AAAA** BBBB **CCCC**")
+	}
+
+	@Test("An italic character run on a bold paragraph combines to bold italic")
+	func italicRunOnBoldParagraph() throws {
+		let text = "AAAA BBBB CCCC"
+
+		let paraTable = runTable(5, [(0, 90)])
+		var charTable = [UInt8]()
+		charTable += IWAWriter.bytesField(1, IWAWriter.varintField(1, 0))
+		charTable += IWAWriter.bytesField(1, IWAWriter.varintField(1, 5) + IWAWriter.bytesField(2, IWAWriter.varintField(1, 95)))
+		charTable += IWAWriter.bytesField(1, IWAWriter.varintField(1, 10))
+		let body = IWAWriter.varintField(1, 0) + IWAWriter.stringField(3, text)
+			+ paraTable + IWAWriter.bytesField(8, charTable)
+
+		let objects: [IWAWriter.Object] = [
+			.init(identifier: 10, type: 2001, payload: body),
+			.init(identifier: 90, type: 2022, payload: IWAWriter.bytesField(11, IWAWriter.varintField(1, 1))),
+			// Sets only italic — bold is absent, so the paragraph's bold shows through.
+			.init(identifier: 95, type: 2021, payload: IWAWriter.bytesField(11, IWAWriter.varintField(2, 1)))
+		]
+
+		let url = try bundle(documentObjects: objects)
+		defer { try? FileManager.default.removeItem(at: url) }
+		#expect(try PagesFile(url: url).markdown() == "**AAAA** ***BBBB*** **CCCC**")
+	}
+
+	@Test("A tweaked (anonymous) heading style still maps to a heading via its parent")
+	func headingIdentifierThroughParent() throws {
+		let text = "Section\nBody."
+
+		let paraTable = runTable(5, [(0, 96), (8, 91)])
+		let body = IWAWriter.varintField(1, 0) + IWAWriter.stringField(3, text) + paraTable
+
+		// 96: anonymous, bold tweak, parent 97. 97 carries the stable heading identifier.
+		let anonymous = IWAWriter.bytesField(1, IWAWriter.bytesField(3, IWAWriter.varintField(1, 97)))
+			+ IWAWriter.bytesField(11, IWAWriter.varintField(1, 1))
+		let heading = IWAWriter.bytesField(1, IWAWriter.stringField(2, "text-1-paragraphstyle-Heading 2"))
+			+ IWAWriter.bytesField(11, IWAWriter.varintField(1, 1))
+
+		let objects: [IWAWriter.Object] = [
+			.init(identifier: 10, type: 2001, payload: body),
+			.init(identifier: 96, type: 2022, payload: anonymous),
+			.init(identifier: 97, type: 2022, payload: heading),
+			.init(identifier: 91, type: 2022, payload: [])
+		]
+
+		let url = try bundle(documentObjects: objects)
+		defer { try? FileManager.default.removeItem(at: url) }
+		let markdown = try PagesFile(url: url).markdown()
+		#expect(markdown.hasPrefix("## Section"))
+		#expect(!markdown.contains("**"))
+	}
+
 	@Test("Numbered list with an anonymous style inheriting its marker from a parent")
 	func numberedListWithInheritance() throws {
 		let text = "One\nTwo"  // "Two" at offset 4
@@ -118,6 +248,9 @@ struct PagesFormattingTests {
 
 		let url = try bundle(documentObjects: objects)
 		defer { try? FileManager.default.removeItem(at: url) }
-		#expect(try PagesFile(url: url).markdown() == "1. One\n2. Two")
+		let pages = try PagesFile(url: url)
+		#expect(pages.markdown() == "1. One\n2. Two")
+		// Plain text keeps the visible numbering too.
+		#expect(pages.plainText() == "1. One\n\n2. Two")
 	}
 }

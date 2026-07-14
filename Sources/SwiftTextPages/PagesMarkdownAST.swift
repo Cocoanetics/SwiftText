@@ -50,9 +50,10 @@ extension PagesDocument {
 				continue
 			}
 
-			let inlines = Self.inlineMarkup(of: paragraph)
+			let level = headingLevel(for: paragraph, text: paragraph.normalizedText(), bodySize: bodySize)
+			let inlines = Self.inlineMarkup(of: paragraph, suppressingUniformEmphasis: level != nil)
 			if !inlines.isEmpty {
-				if let level = headingLevel(for: paragraph, text: paragraph.normalizedText(), bodySize: bodySize) {
+				if let level {
 					blocks.append(Heading(level: level, inlines))
 				} else {
 					blocks.append(Markdown.Paragraph(inlines))
@@ -74,8 +75,13 @@ extension PagesDocument {
 	/// The paragraph's inline content as AST nodes. We render the paragraph's inline
 	/// Markdown (text + emphasis/code/link/image/footnote runs) and parse it back, so
 	/// the emphasis nesting and link/image shapes are produced by cmark itself.
-	static func inlineMarkup(of paragraph: Paragraph) -> [InlineMarkup] {
-		inlineChildren(parsing: paragraph.renderedText(inliningImages: true, applyingEmphasis: true))
+	/// Headings pass `suppressingUniformEmphasis` so a bold heading *style* doesn't
+	/// render redundant `**` markers inside the heading.
+	static func inlineMarkup(of paragraph: Paragraph, suppressingUniformEmphasis: Bool = false) -> [InlineMarkup] {
+		inlineChildren(parsing: paragraph.renderedText(
+			inliningImages: true, applyingEmphasis: true,
+			suppressingUniformEmphasis: suppressingUniformEmphasis
+		))
 	}
 
 	/// Parses a fragment of inline Markdown into inline nodes (the children of the first
