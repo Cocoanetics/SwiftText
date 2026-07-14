@@ -104,6 +104,26 @@ struct PagesDocumentTests {
 		""")
 	}
 
+	@Test("Plain text keeps list markers: numbering, bullets, nesting, and resets")
+	func plainTextListMarkers() {
+		let document = PagesDocument(paragraphs: [
+			.init(text: "First", listLevel: 0, listOrdered: true),
+			.init(text: "Second", listLevel: 0, listOrdered: true),
+			.init(text: "Nested", listLevel: 1, listOrdered: false),
+			.init(text: "Third", listLevel: 0, listOrdered: true),
+			.init(text: "Body paragraph."),
+			.init(text: "Restarted", listLevel: 0, listOrdered: true)
+		])
+		#expect(document.plainTextParagraphs() == [
+			"1. First",
+			"2. Second",
+			"    • Nested",
+			"3. Third",
+			"Body paragraph.",
+			"1. Restarted"
+		])
+	}
+
 	@Test("Drops empty paragraphs from output")
 	func dropsEmptyParagraphs() {
 		let document = PagesDocument(paragraphs: [
