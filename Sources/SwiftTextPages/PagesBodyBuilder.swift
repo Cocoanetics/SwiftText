@@ -59,11 +59,12 @@ enum PagesStyleIdentifier {
 struct InlineStyle: Hashable {
 	var bold = false
 	var italic = false
+	var underline = false
 	var strikethrough = false
 	var code = false
 	var link = false
 
-	var isPlain: Bool { !bold && !italic && !strikethrough && !code && !link }
+	var isPlain: Bool { !bold && !italic && !underline && !strikethrough && !code && !link }
 }
 
 /// One paragraph of body content destined for the document's text storage.
@@ -139,11 +140,11 @@ final class BodyObjectRegistry {
 
 		// Reuse a built-in style for a single property.
 		let builtIn: UInt64?
-		switch (style.bold, style.italic, style.strikethrough, style.code, style.link) {
-		case (true, false, false, false, false): builtIn = PagesStyleID.boldChar
-		case (false, true, false, false, false): builtIn = PagesStyleID.italicChar
-		case (false, false, true, false, false): builtIn = PagesStyleID.strikethroughChar
-		case (false, false, false, false, true): builtIn = PagesStyleID.linkChar
+		switch (style.bold, style.italic, style.underline, style.strikethrough, style.code, style.link) {
+		case (true, false, false, false, false, false): builtIn = PagesStyleID.boldChar
+		case (false, true, false, false, false, false): builtIn = PagesStyleID.italicChar
+		case (false, false, false, true, false, false): builtIn = PagesStyleID.strikethroughChar
+		case (false, false, false, false, false, true): builtIn = PagesStyleID.linkChar
 		default: builtIn = nil
 		}
 		if let builtIn {
@@ -221,7 +222,7 @@ final class BodyObjectRegistry {
 		var charProperties = ProtobufWriter()
 		if style.bold { charProperties.varintField(1, 1) }
 		if style.italic { charProperties.varintField(2, 1) }
-		if style.link { charProperties.varintField(11, 1) }              // underline
+		if style.underline || style.link { charProperties.varintField(11, 1) }
 		if style.strikethrough { charProperties.varintField(12, 1) }
 		if style.code {
 			charProperties.stringField(5, "Menlo-Regular")              // monospace font
@@ -246,6 +247,7 @@ final class BodyObjectRegistry {
 		var parts = [String]()
 		if style.bold { parts.append("Bold") }
 		if style.italic { parts.append("Italic") }
+		if style.underline { parts.append("Underline") }
 		if style.strikethrough { parts.append("Strikethrough") }
 		if style.code { parts.append("Code") }
 		if style.link { parts.append("Link") }

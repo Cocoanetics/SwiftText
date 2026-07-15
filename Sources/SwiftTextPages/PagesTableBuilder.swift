@@ -495,7 +495,7 @@ enum PagesTableBuilder {
 		if style.bold { charProperties.varintField(1, 1) }
 		if style.italic { charProperties.varintField(2, 1) }
 		if style.code { charProperties.stringField(5, "Menlo-Regular") }
-		if style.link { charProperties.varintField(11, 1) }
+		if style.underline || style.link { charProperties.varintField(11, 1) }
 		if style.strikethrough { charProperties.varintField(12, 1) }
 		var w = ProtobufWriter()
 		w.bytesField(1, styleSuper.bytes)
