@@ -80,6 +80,27 @@ struct PagesDocumentTests {
 		#expect(PagesDocument(paragraphs: [strikeOnly]).plainText() == "xYz")
 	}
 
+	@Test("Preserves underline as inline HTML")
+	func underline() {
+		let paragraph = PagesDocument.Paragraph(text: "plain under bold", emphasis: [
+			.init(start: 0, bold: false, italic: false),
+			.init(start: 6, bold: false, italic: false, underline: true),
+			.init(start: 12, bold: true, italic: false, underline: true)
+		])
+		#expect(PagesDocument(paragraphs: [paragraph]).markdown() == "plain <u>under</u> <u>**bold**</u>")
+		#expect(PagesDocument(paragraphs: [paragraph]).plainText() == "plain under bold")
+	}
+
+	@Test("Does not add redundant underline markup to links")
+	func underlinedLink() {
+		let paragraph = PagesDocument.Paragraph(
+			text: "linked",
+			emphasis: [.init(start: 0, bold: false, italic: false, underline: true)],
+			links: [.init(start: 0, end: 6, url: "https://example.com")]
+		)
+		#expect(PagesDocument(paragraphs: [paragraph]).markdown() == "[linked](https://example.com)")
+	}
+
 	@Test("Renders bullet and numbered lists with nesting, counters, and tight spacing")
 	func listRendering() {
 		let document = PagesDocument(paragraphs: [

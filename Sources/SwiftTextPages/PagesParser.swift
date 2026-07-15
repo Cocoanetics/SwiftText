@@ -47,9 +47,10 @@ final class PagesParser {
 		static let styleSuperField = 1
 		static let styleIdentifierField = 2
 		static let styleParentField = 3
-		/// Within char properties: bold, italic, strikethrough, and font size.
+		/// Within char properties: bold, italic, underline, strikethrough, and font size.
 		static let boldField = 1
 		static let italicField = 2
+		static let underlineField = 11
 		static let strikethroughField = 12
 		static let fontSizeField = 3
 		static let fontNameField = 5
@@ -136,12 +137,13 @@ final class PagesParser {
 	private struct CharStyleFlags {
 		var bold: Bool?
 		var italic: Bool?
+		var underline: Bool?
 		var strike: Bool?
 		var fontSize: Double?
 		var fontName: String?
 
 		var isComplete: Bool {
-			bold != nil && italic != nil && strike != nil && fontSize != nil && fontName != nil
+			bold != nil && italic != nil && underline != nil && strike != nil && fontSize != nil && fontName != nil
 		}
 
 		/// Fills any still-unset field from the given `char_properties` message.
@@ -151,6 +153,7 @@ final class PagesParser {
 		mutating func fill(from properties: ProtobufMessage) {
 			if bold == nil, let value = properties.varint(IWork.boldField) { bold = value != 0 }
 			if italic == nil, let value = properties.varint(IWork.italicField) { italic = value != 0 }
+			if underline == nil, let value = properties.varint(IWork.underlineField) { underline = value != 0 }
 			if strike == nil, let value = properties.varint(IWork.strikethroughField) { strike = value != 0 }
 			if fontSize == nil, let value = properties.float(IWork.fontSizeField) { fontSize = Double(value) }
 			if fontName == nil, let bytes = properties.bytes(IWork.fontNameField) { fontName = String(decoding: bytes, as: UTF8.self) }
@@ -312,7 +315,7 @@ final class PagesParser {
 	}
 
 	/// Splits a storage's text into paragraphs, resolving each paragraph's font
-	/// size, inline bold/italic spans, list membership, and the image (if any)
+	/// size, inline bold/italic/underline spans, list membership, and the image (if any)
 	/// behind each inline-attachment anchor.
 	private func makeParagraphs(
 		in text: String, storage: IWAObject, store: IWAObjectStore, catalog: PagesImageCatalog,
@@ -408,6 +411,7 @@ final class PagesParser {
 			// paragraph styles are monospace is typeset that way, not code.
 			let activeBold = activeCharFlags.bold ?? paragraphBase.bold ?? false
 			let activeItalic = activeCharFlags.italic ?? paragraphBase.italic ?? false
+			let activeUnderline = activeCharFlags.underline ?? paragraphBase.underline ?? false
 			let activeStrike = activeCharFlags.strike ?? paragraphBase.strike ?? false
 			let activeCode = activeCharCode
 			// Footnote reference marks sit at a character index (no text character);
@@ -430,9 +434,10 @@ final class PagesParser {
 					if let grid = anchorTables[utf16Offset] { currentTables.append(grid) }
 				}
 				if currentEmphasis.isEmpty || currentEmphasis.last?.bold != activeBold
-					|| currentEmphasis.last?.italic != activeItalic || currentEmphasis.last?.strike != activeStrike
+					|| currentEmphasis.last?.italic != activeItalic || currentEmphasis.last?.underline != activeUnderline
+					|| currentEmphasis.last?.strike != activeStrike
 					|| currentEmphasis.last?.code != activeCode {
-					currentEmphasis.append(.init(start: utf16Offset - paragraphStartUTF16, bold: activeBold, italic: activeItalic, strike: activeStrike, code: activeCode))
+					currentEmphasis.append(.init(start: utf16Offset - paragraphStartUTF16, bold: activeBold, italic: activeItalic, underline: activeUnderline, strike: activeStrike, code: activeCode))
 				}
 				current.append(scalar)
 				utf16Offset += width
@@ -549,8 +554,8 @@ final class PagesParser {
 	}
 
 	/// Reconstructs a rich cell's Markdown: the cell-storage text with each
-	/// character-emphasis run wrapped in `**`/`*`/`~~` — reusing the body's emphasis
-	/// machinery so inline bold/italic/strikethrough round-trip out of a table cell.
+	/// character-emphasis run wrapped in `**`/`*`/`<u>`/`~~` — reusing the body's
+	/// emphasis machinery so rich formatting round-trips out of a table cell.
 	/// The paragraph style active at each offset is the baseline the character
 	/// runs override — merged positionally, the way `makeParagraphs` does for body
 	/// text, so a multi-paragraph cell whose styles differ keeps each one.
@@ -584,6 +589,7 @@ final class PagesParser {
 				start: start,
 				bold: overrides.bold ?? base.bold ?? false,
 				italic: overrides.italic ?? base.italic ?? false,
+				underline: overrides.underline ?? base.underline ?? false,
 				strike: overrides.strike ?? base.strike ?? false
 			))
 		}

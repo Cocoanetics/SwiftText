@@ -80,6 +80,21 @@ struct PagesFormattingTests {
 		#expect(try PagesFile(url: url).markdown() == "hi ~~struck~~")
 	}
 
+	@Test("Underline from the character-style table")
+	func underlineFromCharStyle() throws {
+		let text = "plain under plain"
+		let charTable = runTable(8, [(0, 60), (6, 62), (11, 60)])
+		let body = IWAWriter.varintField(1, 0) + IWAWriter.stringField(3, text) + charTable
+		let objects: [IWAWriter.Object] = [
+			.init(identifier: 10, type: 2001, payload: body),
+			.init(identifier: 60, type: 2021, payload: IWAWriter.bytesField(11, IWAWriter.varintField(11, 0))),
+			.init(identifier: 62, type: 2021, payload: IWAWriter.bytesField(11, IWAWriter.varintField(11, 1)))
+		]
+		let url = try bundle(documentObjects: objects)
+		defer { try? FileManager.default.removeItem(at: url) }
+		#expect(try PagesFile(url: url).markdown() == "plain <u>under</u> plain")
+	}
+
 	@Test("Footnote references become [^N] with definitions appended")
 	func footnotes() throws {
 		// Body "Claim" with a footnote mark at offset 5 (end), referencing a
