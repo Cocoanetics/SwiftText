@@ -103,6 +103,7 @@ private struct InlineCollector {
 	private(set) var links: [BodyParagraph.LinkSpan] = []
 	private(set) var footnoteRefs: [BodyParagraph.FootnoteRef] = []
 	private var style: InlineStyle
+	private var underlineDepth = 0
 	/// `[^id]: …` definitions; a `[^id]` reference to a defined id becomes a footnote.
 	private let footnoteDefinitions: [String: String]
 
@@ -150,7 +151,16 @@ private struct InlineCollector {
 			imageStyle.italic = true
 			append(alt.isEmpty ? "[image]" : alt, style: imageStyle)
 		case let inlineHTML as InlineHTML:
-			append(inlineHTML.rawHTML, style: style)
+			switch inlineHTML.rawHTML.lowercased() {
+			case "<u>":
+				underlineDepth += 1
+				style.underline = true
+			case "</u>":
+				underlineDepth = max(underlineDepth - 1, 0)
+				style.underline = underlineDepth > 0
+			default:
+				append(inlineHTML.rawHTML, style: style)
+			}
 		case is SoftBreak:
 			append(" ", style: style)          // join soft-wrapped lines with a space
 		case is LineBreak:

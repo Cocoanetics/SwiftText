@@ -150,13 +150,15 @@ public struct PagesDocument {
 			public var start: Int
 			public var bold: Bool
 			public var italic: Bool
+			public var underline: Bool
 			public var strike: Bool
 			public var code: Bool
 
-			public init(start: Int, bold: Bool, italic: Bool, strike: Bool = false, code: Bool = false) {
+			public init(start: Int, bold: Bool, italic: Bool, underline: Bool = false, strike: Bool = false, code: Bool = false) {
 				self.start = start
 				self.bold = bold
 				self.italic = italic
+				self.underline = underline
 				self.strike = strike
 				self.code = code
 			}
@@ -179,7 +181,7 @@ public struct PagesDocument {
 
 		/// Renders the paragraph text: soft line breaks become newlines and
 		/// surrounding whitespace is trimmed. When `applyingEmphasis` is set, runs
-		/// are wrapped in `**`/`*`/`***`; when `inliningImages` is set, image
+		/// are wrapped in `**`/`*`/`***`/`<u>`; when `inliningImages` is set, image
 		/// anchors become `![](reference)` (both off for plain text).
 		/// `suppressingUniformEmphasis` drops any emphasis that covers the entire
 		/// paragraph uniformly — that styling restates the paragraph's own style
@@ -202,6 +204,7 @@ public struct PagesDocument {
 			var runText = ""
 			var runBold = false
 			var runItalic = false
+			var runUnderline = false
 			var runStrike = false
 			var runCode = false
 			var anchorIndex = 0
@@ -210,6 +213,7 @@ public struct PagesDocument {
 			var footnoteIndex = 0
 			var activeBold = false
 			var activeItalic = false
+			var activeUnderline = false
 			var activeStrike = false
 			var activeCode = false
 
@@ -227,6 +231,9 @@ public struct PagesDocument {
 						runText,
 						bold: runBold && !suppressBold,
 						italic: runItalic && !suppressItalic,
+						// A Markdown link already preserves its Pages underline semantically;
+						// avoid redundant `[<u>text</u>](url)` output for link styles.
+						underline: runUnderline && activeLinkEnd == nil,
 						strike: runStrike && !suppressStrike,
 						code: runCode && !suppressCode
 					)
@@ -248,6 +255,7 @@ public struct PagesDocument {
 				while spanIndex < emphasis.count, emphasis[spanIndex].start <= relativeOffset {
 					activeBold = emphasis[spanIndex].bold
 					activeItalic = emphasis[spanIndex].italic
+					activeUnderline = emphasis[spanIndex].underline
 					activeStrike = emphasis[spanIndex].strike
 					activeCode = emphasis[spanIndex].code
 					spanIndex += 1
@@ -286,10 +294,11 @@ public struct PagesDocument {
 					}
 					anchorIndex += 1
 				default:
-					if applyingEmphasis, activeBold != runBold || activeItalic != runItalic || activeStrike != runStrike || activeCode != runCode {
+					if applyingEmphasis, activeBold != runBold || activeItalic != runItalic || activeUnderline != runUnderline || activeStrike != runStrike || activeCode != runCode {
 						flushRun()
 						runBold = activeBold
 						runItalic = activeItalic
+						runUnderline = activeUnderline
 						runStrike = activeStrike
 						runCode = activeCode
 					}
@@ -322,9 +331,10 @@ public struct PagesDocument {
 
 	/// Wraps `text`'s non-whitespace core in the Markdown emphasis markers for the
 	/// given styling, keeping leading/trailing whitespace outside the markers.
-	/// Strikethrough (`~~`) wraps any bold/italic markers.
-	static func markedUp(_ text: String, bold: Bool, italic: Bool, strike: Bool, code: Bool = false) -> String {
-		guard bold || italic || strike || code else { return text }
+	/// Strikethrough (`~~`) wraps any bold/italic markers; underline uses inline
+	/// HTML because Markdown has no native underline syntax.
+	static func markedUp(_ text: String, bold: Bool, italic: Bool, underline: Bool = false, strike: Bool, code: Bool = false) -> String {
+		guard bold || italic || underline || strike || code else { return text }
 		let scalars = Array(text.unicodeScalars)
 		var start = 0
 		while start < scalars.count, CharacterSet.whitespacesAndNewlines.contains(scalars[start]) {
@@ -349,6 +359,9 @@ public struct PagesDocument {
 		}
 		if strike {
 			core = "~~\(core)~~"
+		}
+		if underline {
+			core = "<u>\(core)</u>"
 		}
 		let leading = String(String.UnicodeScalarView(scalars[..<start]))
 		let trailing = String(String.UnicodeScalarView(scalars[end...]))

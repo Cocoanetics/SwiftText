@@ -66,6 +66,26 @@ struct MarkdownToPagesTests {
 		#expect(markdown.contains("Pears"))
 	}
 
+	@Test("Extracted underline Markdown re-imports as Pages formatting")
+	func underlineReimports() throws {
+		let source = PagesDocument(paragraphs: [
+			.init(text: "plain under bold", emphasis: [
+				.init(start: 0, bold: false, italic: false),
+				.init(start: 6, bold: false, italic: false, underline: true),
+				.init(start: 12, bold: true, italic: false, underline: true)
+			])
+		])
+		let markdown = source.markdown()
+		#expect(markdown == "plain <u>under</u> <u>**bold**</u>")
+
+		let url = FileManager.default.temporaryDirectory
+			.appendingPathComponent("swifttext-underline-\(UUID().uuidString).pages")
+		defer { try? FileManager.default.removeItem(at: url) }
+		try MarkdownToPages.convert(markdown, to: url)
+
+		#expect(try PagesFile(url: url).markdown() == markdown)
+	}
+
 	@Test("A Markdown table becomes a native iWork table grid that round-trips")
 	func tableProducesNativeGrid() throws {
 		let url = FileManager.default.temporaryDirectory
