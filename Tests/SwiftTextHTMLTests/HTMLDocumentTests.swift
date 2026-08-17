@@ -91,6 +91,16 @@ func webKitBrowserReportsNavigationFailure() async throws {
 		Issue.record("expected .loadFailed, got \(error)")
 		return
 	}
+
+	// Every export reports the real cause, not a vague "no HTML". `exportHTML`
+	// used to swallow it and throw `.missingHTML` instead.
+	let destination = FileManager.default.temporaryDirectory
+		.appendingPathComponent("swifttext-export-\(UUID().uuidString).html")
+	defer { try? FileManager.default.removeItem(at: destination) }
+	await #expect(throws: WebKitBrowserError.self) {
+		try await browser.exportHTML(to: destination)
+	}
+	#expect(!FileManager.default.fileExists(atPath: destination.path))
 }
 
 /// The Swift-side backstop fires even when the page itself is fine — proving it

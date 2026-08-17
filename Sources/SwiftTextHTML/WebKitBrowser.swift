@@ -104,14 +104,20 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate {
 		}
 	}
 
-	/// Waits for the load and rethrows whatever ended it badly, so an export
-	/// never silently operates on a blank page.
+	/// Waits for the load and rethrows whatever ended it badly, so no export
+	/// silently operates on a blank page — or reports a vague "no HTML" when the
+	/// real cause was a refused connection or a timeout.
 	@MainActor
-	private func loadedWebView() async throws -> WKWebView {
+	private func ensureLoaded() async throws {
 		await waitForLoadCompletion()
 		if let loadError {
 			throw loadError
 		}
+	}
+
+	@MainActor
+	private func loadedWebView() async throws -> WKWebView {
+		try await ensureLoaded()
 		return webView
 	}
 
@@ -174,7 +180,8 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate {
 
 	@MainActor
 	public func exportHTML(to outputURL: URL) async throws {
-		guard let html = await html() else {
+		try await ensureLoaded()
+		guard let html = htmlResult else {
 			throw WebKitBrowserError.missingHTML
 		}
 		try html.write(to: outputURL, atomically: true, encoding: .utf8)
@@ -233,7 +240,12 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate {
 	private func finish(error: Error?) {
 		guard !isFinished else { return }
 		isFinished = true
-		loadError = error
+		// Capturing the page *is* the successful outcome. The frame resize that
+		// follows is cosmetic, so a watchdog or a dying web content process
+		// during that window must not retroactively fail a load whose HTML we
+		// already hold. This keeps the invariant every accessor relies on:
+		// `loadError` is non-nil exactly when there is no HTML.
+		loadError = didLoad ? nil : error
 
 		timeoutTask?.cancel()
 		timeoutTask = nil
@@ -336,6 +348,11 @@ extension WebKitBrowser: WKScriptMessageHandler {
 
 		didLoad = true
 		htmlResult = html
+		// Disarm the watchdog here rather than in `finish(error:)`: the resize
+		// below is an `await`, and the timeout could otherwise fire mid-way and
+		// report a timeout for a page that had in fact loaded.
+		timeoutTask?.cancel()
+		timeoutTask = nil
 
 		Task { @MainActor in
 			// A failed resize is not a failed load — we already have the HTML.
