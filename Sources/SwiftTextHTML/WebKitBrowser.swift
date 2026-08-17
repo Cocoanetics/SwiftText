@@ -1,13 +1,21 @@
-#if os(macOS)
+// WebKit exists on macOS, iOS and Mac Catalyst. The HTML-acquisition path — a
+// WKWebView, the settling heuristic, and the captured post-JavaScript DOM — is
+// identical API on all of them. Only the paginated PDF export is macOS-only,
+// because `NSPrintOperation` has no UIKit twin (tracked separately in #55).
+#if os(macOS) || os(iOS)
+#if canImport(UIKit)
+import UIKit
+#else
 import AppKit
+#endif
 import Foundation
 import WebKit
 
-@available(macOS 10.15, *)
-public class WebKitBrowser: NSObject, WKNavigationDelegate {
-	// MARK: - Public Properties
+@available(macOS 10.15, iOS 13.0, *)
+package class WebKitBrowser: NSObject, WKNavigationDelegate {
+	// MARK: - Package Properties
 
-	public let url: URL
+	package let url: URL
 
 	// MARK: - Internal Properties
 	private static let messageName = "pageLoaded"
@@ -30,7 +38,7 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate {
 	/// Why the load ended without capturing HTML, or `nil` if it succeeded.
 	/// Set before ``waitForLoadCompletion()`` returns, and rethrown by the export
 	/// methods.
-	public private(set) var loadError: Error?
+	package private(set) var loadError: Error?
 
 	/// How long to wait for the page to settle before giving up, in seconds.
 	/// Set to `0` to wait indefinitely.
@@ -41,19 +49,19 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate {
 	/// for a navigation that fails outright, or for a web content process that
 	/// is suspended or killed (which is what happens when an iOS app is
 	/// backgrounded) before the script is ever injected.
-	public var timeout: TimeInterval = 30
+	package var timeout: TimeInterval = 30
 
 	/// Optional frame size override. When set, the WKWebView is created
 	/// with this size so content reflows to the target width (e.g. A4).
-	public var frameSize: CGSize?
+	package var frameSize: CGSize?
 
 	/// When `true`, the webview frame is NOT resized to the scroll height
 	/// after loading. This lets WebKit paginate content for PDF export.
-	public var preserveFrameHeight = false
+	package var preserveFrameHeight = false
 
-	// MARK: - Public Interface
+	// MARK: - Package Interface
 
-	public init(url: URL) {
+	package init(url: URL) {
 		self.url = url
 		self.htmlStringToLoad = nil
 		self.fileURLToLoad = nil
@@ -65,7 +73,7 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate {
 	/// - Parameters:
 	///   - htmlString: The HTML content to render.
 	///   - baseURL: Optional base URL used to resolve relative resources.
-	public init(htmlString: String, baseURL: URL? = nil) {
+	package init(htmlString: String, baseURL: URL? = nil) {
 		self.url = baseURL ?? URL(string: "about:blank")!
 		self.htmlStringToLoad = htmlString
 		self.fileURLToLoad = nil
@@ -77,7 +85,7 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate {
 	/// - Parameters:
 	///   - fileURL: The file URL to the HTML file.
 	///   - readAccessRoot: The directory to grant read access to (for local images/assets).
-	public init(fileURL: URL, readAccessRoot: URL) {
+	package init(fileURL: URL, readAccessRoot: URL) {
 		self.url = fileURL
 		self.htmlStringToLoad = nil
 		self.fileURLToLoad = fileURL
@@ -90,7 +98,7 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate {
 	/// Always returns — see ``timeout``. Inspect ``loadError`` to tell a capture
 	/// from a failure; the export methods do that for you.
 	@MainActor
-	public func waitForLoadCompletion() async {
+	package func waitForLoadCompletion() async {
 		guard !isFinished else {
 			return
 		}
@@ -122,8 +130,8 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate {
 	}
 
 	@MainActor
-	@available(macOS 12.0, *)
-	public func exportPDF(to outputURL: URL) async throws {
+	@available(macOS 12.0, iOS 14.0, *)
+	package func exportPDF(to outputURL: URL) async throws {
 		let webView = try await loadedWebView()
 		let data = try await webView.pdf()
 		try data.write(to: outputURL)
@@ -134,12 +142,13 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate {
 	/// - Parameter configuration: Optional `WKPDFConfiguration`; defaults to capturing the full page.
 	/// - Returns: PDF data for the rendered content.
 	@MainActor
-	@available(macOS 12.0, *)
-	public func exportPDFData(configuration: WKPDFConfiguration = WKPDFConfiguration()) async throws -> Data {
+	@available(macOS 12.0, iOS 14.0, *)
+	package func exportPDFData(configuration: WKPDFConfiguration = WKPDFConfiguration()) async throws -> Data {
 		let webView = try await loadedWebView()
 		return try await webView.pdf(configuration: configuration)
 	}
 
+	#if os(macOS)
 	/// Exports the rendered page as paginated PDF data using NSPrintOperation.
 	///
 	/// Unlike `exportPDFData` (which produces a single continuous page),
@@ -150,7 +159,7 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate {
 	/// - Returns: Paginated PDF data.
 	@MainActor
 	@available(macOS 11.0, *)
-	public func exportPaginatedPDFData(paperSize: CGSize) async throws -> Data {
+	package func exportPaginatedPDFData(paperSize: CGSize) async throws -> Data {
 		let webView = try await loadedWebView()
 
 		let tempURL = FileManager.default.temporaryDirectory
@@ -177,9 +186,10 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate {
 		let helper = PrintOperationHelper()
 		return try await helper.run(printOperation, outputURL: tempURL)
 	}
+	#endif
 
 	@MainActor
-	public func exportHTML(to outputURL: URL) async throws {
+	package func exportHTML(to outputURL: URL) async throws {
 		try await ensureLoaded()
 		guard let html = htmlResult else {
 			throw WebKitBrowserError.missingHTML
@@ -267,11 +277,15 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate {
 	private func updateWebView(size: CGSize) {
 		let width = frameSize?.width ?? 800
 		self.webView.frame = CGRect(x: 0, y: 0, width: width, height: size.height)
+		#if canImport(UIKit)
+		self.webView.layoutIfNeeded()
+		#else
 		self.webView.layout()
+		#endif
 	}
 
 	// MARK: - WKNavigationDelegate
-	public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+	package func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
 		let js = """
 		(function() {
 			var observer = new MutationObserver(function(mutations) {
@@ -306,20 +320,20 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate {
 
 	/// A navigation that started and then failed. Without this the injected
 	/// script never runs, so nothing would ever resume the waiters.
-	public func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+	package func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
 		finish(error: WebKitBrowserError.loadFailed(underlying: error))
 	}
 
 	/// A navigation that never started — bad host, no network, refused
 	/// connection. The common failure, and the one that used to hang forever.
-	public func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+	package func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
 		finish(error: WebKitBrowserError.loadFailed(underlying: error))
 	}
 
 	/// The web content process died — out-of-memory, a crash, or the system
 	/// reclaiming it (which is what a backgrounded iOS app's process gets). The
 	/// page is gone and no further callback is coming.
-	public func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+	package func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
 		finish(error: WebKitBrowserError.webContentProcessTerminated)
 	}
 }
@@ -327,7 +341,7 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate {
 /// Registered with the user-content controller in place of the browser itself,
 /// so WebKit's strong reference to its message handler cannot close a cycle
 /// back onto the browser. See the comment in `load()`.
-@available(macOS 10.15, *)
+@available(macOS 10.15, iOS 13.0, *)
 private final class ScriptMessageProxy: NSObject, WKScriptMessageHandler {
 	weak var target: WebKitBrowser?
 
@@ -336,9 +350,9 @@ private final class ScriptMessageProxy: NSObject, WKScriptMessageHandler {
 	}
 }
 
-@available(macOS 10.15, *)
+@available(macOS 10.15, iOS 13.0, *)
 extension WebKitBrowser: WKScriptMessageHandler {
-	@objc public func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+	@objc package func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
 		guard message.name == Self.messageName, let html = message.body as? String else {
 			return
 		}
@@ -364,15 +378,15 @@ extension WebKitBrowser: WKScriptMessageHandler {
 	}
 }
 
-@available(macOS 10.15, *)
+@available(macOS 10.15, iOS 13.0, *)
 extension WebKitBrowser {
-	public func html() async -> String? {
+	package func html() async -> String? {
 		await waitForLoadCompletion()
 		return htmlResult
 	}
 }
 
-@available(macOS 10.15, *)
+@available(macOS 10.15, iOS 13.0, *)
 extension WKWebView {
 	func getMaxScrollSize() async throws -> CGSize {
 		let jsGetMaxScrollSize = """
@@ -463,7 +477,9 @@ public enum WebKitBrowserError: Error, LocalizedError {
 
 // MARK: - Print Operation Helper
 
-/// Bridges NSPrintOperation's delegate callback to async/await.
+#if os(macOS)
+/// Bridges NSPrintOperation's delegate callback to async/await. macOS-only:
+/// there is no UIKit counterpart, and paginated export on iOS is tracked in #55.
 @available(macOS 10.15, *)
 private class PrintOperationHelper: NSObject {
 	private var continuation: CheckedContinuation<Data, Error>?
@@ -505,5 +521,7 @@ private class PrintOperationHelper: NSObject {
 		}
 	}
 }
+
+#endif
 
 #endif

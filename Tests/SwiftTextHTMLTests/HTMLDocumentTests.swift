@@ -59,6 +59,73 @@ func skippedInlineTagDoesNotSplitParagraph() async throws {
 	#expect(document.markdown() == "Helloworld")
 }
 
+// The convenience initializer is available wherever WebKit is, so these are not
+// macOS-only the way the `WebKitBrowser` tests below are — they compile and run
+// on iOS, which is what proves the port. Their `@available(iOS 16.0, *)` is the
+// price of the `.timeLimit` hang guard: the trait takes a `Duration`, which is
+// iOS 16, one version above the package floor. Better a guard that sits out iOS
+// 15 than a suite that can hang on every platform.
+#if os(macOS) || os(iOS)
+/// A page whose body only exists after its scripts have run. Parsing the raw
+/// source yields `LOADING`; parsing the settled DOM yields the heading. Using a
+/// fixture where the two differ is the point — a real page whose text is already
+/// in the server HTML passes whether or not JavaScript ever executed.
+private func writeHydratingFixture() throws -> URL {
+	let html = """
+	<html><body><div id="root">LOADING</div>
+	<script>
+		document.addEventListener('DOMContentLoaded', function () {
+			document.getElementById('root').innerHTML = '<h1>Hydrated</h1><p>Written by <b>JavaScript</b>.</p>';
+		});
+	</script>
+	</body></html>
+	"""
+	let fileURL = FileManager.default.temporaryDirectory
+		.appendingPathComponent("swifttext-hydration-\(UUID().uuidString).html")
+	try html.write(to: fileURL, atomically: true, encoding: .utf8)
+	return fileURL
+}
+
+/// The headline of #52: one call from a URL to Markdown, with the page's own
+/// scripts having run first.
+@available(iOS 16.0, *)
+@Test(.timeLimit(.minutes(1)))
+func htmlDocumentExecutesJavaScript() async throws {
+	let fileURL = try writeHydratingFixture()
+	defer { try? FileManager.default.removeItem(at: fileURL) }
+
+	let markdown = try await HTMLDocument(url: fileURL, executingJavaScript: true).markdown()
+	#expect(markdown.contains("# Hydrated"))
+	#expect(markdown.contains("Written by **JavaScript**."))
+	#expect(!markdown.contains("LOADING"), "the pre-hydration DOM was captured")
+}
+
+/// `executingJavaScript: false` must skip WebKit entirely and fetch directly —
+/// the cheap path for server-rendered pages. Same fixture, opposite result.
+@available(iOS 16.0, *)
+@Test(.timeLimit(.minutes(1)))
+func htmlDocumentWithoutJavaScriptFetchesDirectly() async throws {
+	let fileURL = try writeHydratingFixture()
+	defer { try? FileManager.default.removeItem(at: fileURL) }
+
+	let markdown = try await HTMLDocument(url: fileURL, executingJavaScript: false).markdown()
+	#expect(markdown.contains("LOADING"))
+	#expect(!markdown.contains("Hydrated"), "scripts ran on the no-JavaScript path")
+}
+
+/// A load failure has to reach the caller as an error rather than an empty
+/// document — the initializer is the only thing an app-side caller sees.
+@available(iOS 16.0, *)
+@Test(.timeLimit(.minutes(1)))
+func htmlDocumentReportsJavaScriptLoadFailure() async throws {
+	let missing = FileManager.default.temporaryDirectory
+		.appendingPathComponent("swifttext-missing-\(UUID().uuidString).html")
+	await #expect(throws: WebKitBrowserError.self) {
+		_ = try await HTMLDocument(url: missing, executingJavaScript: true)
+	}
+}
+#endif
+
 #if os(macOS)
 @Test
 @MainActor
@@ -103,14 +170,24 @@ func webKitBrowserReportsNavigationFailure() async throws {
 	#expect(!FileManager.default.fileExists(atPath: destination.path))
 }
 
-/// The Swift-side backstop fires even when the page itself is fine — proving it
-/// doesn't depend on WebKit calling back at all. The injected script debounces
-/// for 500 ms before posting, so a 50 ms budget always expires first.
+/// The Swift-side backstop fires even when WebKit never calls back at all.
+///
+/// The page busy-waits, which blocks the web content process's main thread, so
+/// the navigation cannot finish and the capture script is never injected — the
+/// watchdog is the only thing that can end this load. Racing a short timeout
+/// against the injected script's 500 ms debounce instead would be flaky: under a
+/// loaded machine `Task.sleep` overshoots, and the script's message can land
+/// first. The block is bounded so the process doesn't spin past the test.
 @Test(.timeLimit(.minutes(1)))
 @MainActor
 func webKitBrowserTimesOut() async throws {
-	let browser = WebKitBrowser(htmlString: "<html><body><p>Hello</p></body></html>")
-	browser.timeout = 0.05
+	let stalling = """
+	<html><body><p>Hello</p>
+	<script>var end = Date.now() + 3000; while (Date.now() < end) {}</script>
+	</body></html>
+	"""
+	let browser = WebKitBrowser(htmlString: stalling)
+	browser.timeout = 0.3
 	await browser.waitForLoadCompletion()
 
 	let error = try #require(browser.loadError as? WebKitBrowserError)
