@@ -63,17 +63,23 @@ public enum ZipContainerWriter {
 	/// Writes `entries` to a ZIP archive at `url`, in the given order, replacing
 	/// anything already there.
 	public static func write(_ entries: [ZipContainerEntry], to url: URL) throws {
-		try FileManager.default.createDirectory(
-			at: url.deletingLastPathComponent(),
-			withIntermediateDirectories: true
-		)
-		// Build beside the destination and move into place, so a failure part-way
-		// through can't leave a half-written container behind.
-		let staging = url.deletingLastPathComponent()
-			.appendingPathComponent(".\(url.lastPathComponent).\(UUID().uuidString).tmp")
-		defer { try? FileManager.default.removeItem(at: staging) }
+		let manager = FileManager.default
+		let directory = url.deletingLastPathComponent()
+		try manager.createDirectory(at: directory, withIntermediateDirectories: true)
+
+		// libarchive streams straight to disk. Build beside the destination and
+		// rename into place, so a failure part-way through can't leave a
+		// half-written container behind — and so the finished archive is never
+		// read back into memory just to be written out again. Staging as a sibling
+		// keeps it on the same volume, making the swap a rename rather than a copy.
+		let staging = directory.appendingPathComponent(".\(url.lastPathComponent).\(UUID().uuidString).tmp")
+		defer { try? manager.removeItem(at: staging) }
 		try writeArchive(entries, toPath: staging.path)
-		try Data(contentsOf: staging).write(to: url, options: .atomic)
+		if manager.fileExists(atPath: url.path) {
+			_ = try manager.replaceItemAt(url, withItemAt: staging)
+		} else {
+			try manager.moveItem(at: staging, to: url)
+		}
 	}
 
 	/// Builds the archive and returns its bytes, for callers that want the
