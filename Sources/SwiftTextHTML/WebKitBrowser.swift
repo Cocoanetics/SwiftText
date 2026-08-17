@@ -10,14 +10,38 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate {
 	public let url: URL
 
 	// MARK: - Internal Properties
+	private static let messageName = "pageLoaded"
+
 	private var webView: WKWebView!
 	private var htmlResult: String?
 	private var didLoad = false
-	private var continuation: CheckedContinuation<String?, Never>?
-	private var loadContinuation: CheckedContinuation<Void, Never>?
+	/// Whether the load reached a terminal state — captured, failed, or timed out.
+	/// Distinct from ``didLoad``, which means the HTML was actually captured.
+	private var isFinished = false
+	/// Every awaiting `waitForLoadCompletion()` call. A single stored continuation
+	/// would be overwritten by a second caller, stranding the first forever.
+	private var loadContinuations: [CheckedContinuation<Void, Never>] = []
+	private var timeoutTask: Task<Void, Never>?
+	private var messageProxy: ScriptMessageProxy?
 	private var htmlStringToLoad: String?
 	private var fileURLToLoad: URL?
 	private var readAccessRoot: URL?
+
+	/// Why the load ended without capturing HTML, or `nil` if it succeeded.
+	/// Set before ``waitForLoadCompletion()`` returns, and rethrown by the export
+	/// methods.
+	public private(set) var loadError: Error?
+
+	/// How long to wait for the page to settle before giving up, in seconds.
+	/// Set to `0` to wait indefinitely.
+	///
+	/// This backstop is what makes the class safe to use in a long-lived app.
+	/// The 3 s cap inside the injected script is a JS `setTimeout`, so it only
+	/// fires if the page got far enough to *run* that script — it does nothing
+	/// for a navigation that fails outright, or for a web content process that
+	/// is suspended or killed (which is what happens when an iOS app is
+	/// backgrounded) before the script is ever injected.
+	public var timeout: TimeInterval = 30
 
 	/// Optional frame size override. When set, the WKWebView is created
 	/// with this size so content reflows to the target width (e.g. A4).
@@ -61,25 +85,40 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate {
 		super.init()
 	}
 
+	/// Waits until the page has settled, failed, or timed out.
+	///
+	/// Always returns — see ``timeout``. Inspect ``loadError`` to tell a capture
+	/// from a failure; the export methods do that for you.
 	@MainActor
 	public func waitForLoadCompletion() async {
-		guard !didLoad else {
+		guard !isFinished else {
 			return
 		}
 
 		await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-			loadContinuation = continuation
-			self.load()
+			loadContinuations.append(continuation)
+			// Only the first caller starts the load; later ones just queue up.
+			if loadContinuations.count == 1 {
+				self.load()
+			}
 		}
+	}
+
+	/// Waits for the load and rethrows whatever ended it badly, so an export
+	/// never silently operates on a blank page.
+	@MainActor
+	private func loadedWebView() async throws -> WKWebView {
+		await waitForLoadCompletion()
+		if let loadError {
+			throw loadError
+		}
+		return webView
 	}
 
 	@MainActor
 	@available(macOS 12.0, *)
 	public func exportPDF(to outputURL: URL) async throws {
-		if !didLoad {
-			await waitForLoadCompletion()
-		}
-
+		let webView = try await loadedWebView()
 		let data = try await webView.pdf()
 		try data.write(to: outputURL)
 	}
@@ -91,10 +130,7 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate {
 	@MainActor
 	@available(macOS 12.0, *)
 	public func exportPDFData(configuration: WKPDFConfiguration = WKPDFConfiguration()) async throws -> Data {
-		if !didLoad {
-			await waitForLoadCompletion()
-		}
-
+		let webView = try await loadedWebView()
 		return try await webView.pdf(configuration: configuration)
 	}
 
@@ -109,9 +145,7 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate {
 	@MainActor
 	@available(macOS 11.0, *)
 	public func exportPaginatedPDFData(paperSize: CGSize) async throws -> Data {
-		if !didLoad {
-			await waitForLoadCompletion()
-		}
+		let webView = try await loadedWebView()
 
 		let tempURL = FileManager.default.temporaryDirectory
 			.appendingPathComponent(UUID().uuidString)
@@ -151,8 +185,19 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate {
 	private func load() {
 		let config = WKWebViewConfiguration()
 		let contentController = WKUserContentController()
-		contentController.add(self, name: "pageLoaded")
+		// Register a weak proxy rather than `self`. A user-content controller
+		// retains its message handlers, and this object owns the web view that
+		// owns the configuration that owns the controller — handing it `self`
+		// closes that loop, so the browser (and its web content process) is never
+		// released. Harmless in a CLI that exits; an app doing repeated loads
+		// leaks a process per instance.
+		let proxy = ScriptMessageProxy()
+		proxy.target = self
+		messageProxy = proxy
+		contentController.add(proxy, name: Self.messageName)
 		config.userContentController = contentController
+
+		startTimeoutIfNeeded()
 
 		let initialSize = frameSize ?? CGSize(width: 800, height: 600)
 		webView = WKWebView(frame: CGRect(origin: .zero, size: initialSize), configuration: config)
@@ -165,6 +210,44 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate {
 		} else {
 			let urlRequest = URLRequest(url: url)
 			webView.load(urlRequest)
+		}
+	}
+
+	/// Arms the Swift-side backstop that guarantees `waitForLoadCompletion()`
+	/// returns even if WebKit never calls back at all.
+	@MainActor
+	private func startTimeoutIfNeeded() {
+		guard timeout > 0 else { return }
+		let seconds = timeout
+		timeoutTask = Task { @MainActor [weak self] in
+			try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+			guard let self, !Task.isCancelled else { return }
+			self.finish(error: WebKitBrowserError.timedOut(seconds: seconds))
+		}
+	}
+
+	/// The single exit point for a load. Idempotent: whichever of capture,
+	/// navigation failure, process termination, or timeout happens first wins,
+	/// and the rest become no-ops.
+	@MainActor
+	private func finish(error: Error?) {
+		guard !isFinished else { return }
+		isFinished = true
+		loadError = error
+
+		timeoutTask?.cancel()
+		timeoutTask = nil
+
+		// Drop the message handler as soon as the page is captured: it is the one
+		// strong reference WebKit holds on our behalf, and nothing more arrives.
+		webView?.configuration.userContentController.removeScriptMessageHandler(forName: Self.messageName)
+		messageProxy?.target = nil
+		messageProxy = nil
+
+		let waiting = loadContinuations
+		loadContinuations.removeAll()
+		for continuation in waiting {
+			continuation.resume()
 		}
 	}
 
@@ -208,46 +291,65 @@ public class WebKitBrowser: NSObject, WKNavigationDelegate {
 			}
 		}
 	}
+
+	/// A navigation that started and then failed. Without this the injected
+	/// script never runs, so nothing would ever resume the waiters.
+	public func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+		finish(error: WebKitBrowserError.loadFailed(underlying: error))
+	}
+
+	/// A navigation that never started — bad host, no network, refused
+	/// connection. The common failure, and the one that used to hang forever.
+	public func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+		finish(error: WebKitBrowserError.loadFailed(underlying: error))
+	}
+
+	/// The web content process died — out-of-memory, a crash, or the system
+	/// reclaiming it (which is what a backgrounded iOS app's process gets). The
+	/// page is gone and no further callback is coming.
+	public func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+		finish(error: WebKitBrowserError.webContentProcessTerminated)
+	}
+}
+
+/// Registered with the user-content controller in place of the browser itself,
+/// so WebKit's strong reference to its message handler cannot close a cycle
+/// back onto the browser. See the comment in `load()`.
+@available(macOS 10.15, *)
+private final class ScriptMessageProxy: NSObject, WKScriptMessageHandler {
+	weak var target: WebKitBrowser?
+
+	func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+		target?.userContentController(userContentController, didReceive: message)
+	}
 }
 
 @available(macOS 10.15, *)
 extension WebKitBrowser: WKScriptMessageHandler {
 	@objc public func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-		guard message.name == "pageLoaded", let html = message.body as? String else {
+		guard message.name == Self.messageName, let html = message.body as? String else {
+			return
+		}
+		guard !isFinished else {
 			return
 		}
 
 		didLoad = true
 		htmlResult = html
 
-		Task {
-			do {
-				if !preserveFrameHeight {
-					let maxSize = try await webView.getMaxScrollSize()
-					self.updateWebView(size: maxSize)
-				}
-
-				self.loadContinuation?.resume()
-				self.loadContinuation = nil
-
-			} catch {
-				self.loadContinuation?.resume()
-				self.loadContinuation = nil
+		Task { @MainActor in
+			// A failed resize is not a failed load — we already have the HTML.
+			if !self.preserveFrameHeight, let maxSize = try? await self.webView.getMaxScrollSize() {
+				self.updateWebView(size: maxSize)
 			}
+			self.finish(error: nil)
 		}
-
-		continuation?.resume(returning: html)
-		continuation = nil
 	}
 }
 
 @available(macOS 10.15, *)
 extension WebKitBrowser {
 	public func html() async -> String? {
-		if didLoad {
-			return htmlResult
-		}
-
 		await waitForLoadCompletion()
 		return htmlResult
 	}
@@ -316,9 +418,30 @@ extension WKWebView {
 	}
 }
 
-public enum WebKitBrowserError: Error {
+public enum WebKitBrowserError: Error, LocalizedError {
 	case missingHTML
 	case printFailed
+	/// WebKit reported a navigation failure; `underlying` is its error.
+	case loadFailed(underlying: Error)
+	/// The page never settled within ``WebKitBrowser/timeout``.
+	case timedOut(seconds: TimeInterval)
+	/// The web content process died before the page could be captured.
+	case webContentProcessTerminated
+
+	public var errorDescription: String? {
+		switch self {
+		case .missingHTML:
+			return "The page produced no HTML"
+		case .printFailed:
+			return "The print operation did not produce a PDF"
+		case .loadFailed(let underlying):
+			return "The page failed to load: \(underlying.localizedDescription)"
+		case .timedOut(let seconds):
+			return "The page did not finish loading within \(Int(seconds)) seconds"
+		case .webContentProcessTerminated:
+			return "The web content process terminated before the page was captured"
+		}
+	}
 }
 
 // MARK: - Print Operation Helper
