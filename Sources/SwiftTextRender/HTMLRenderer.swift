@@ -98,8 +98,13 @@ public enum HTMLRenderer {
 		let columnHeight = engine.layout(root: rootBox, contentWidth: contentWidth, originX: margin, originY: 0)
 
 		// Page height: fixed (paginated) or just enough for the whole column.
+		// With no fixed height there is no page boundary for a break to land on,
+		// so fragmentation is skipped entirely — the contract for `pageHeightPx:
+		// nil` is a single auto-height page.
 		let pageHeightPx = options.pageHeightPx ?? (columnHeight + 2 * margin)
-		let slices = paginate(rootBox, columnHeight: columnHeight, pageHeightPx: pageHeightPx, margin: margin)
+		let slices = options.pageHeightPx == nil
+			? [(top: 0.0, bottom: columnHeight)]
+			: paginate(rootBox, columnHeight: columnHeight, pageHeightPx: pageHeightPx, margin: margin)
 
 		let pdf = PDF()
 		let fontBuilder = FontResourceBuilder(pdf: pdf, compress: options.compressStreams)
@@ -391,6 +396,14 @@ public enum HTMLRenderer {
 		return slices.isEmpty ? [(0, columnHeight)] : slices
 	}
 
+	/// Whether this box draws anything of its own — a background or a visible
+	/// border — independently of its contents.
+	private static func paintsDecoration(_ block: BlockBox) -> Bool {
+		if let background = block.style.backgroundColor, background.alpha > 0 { return true }
+		let border = block.usedBorder
+		return border.top > 0 || border.right > 0 || border.bottom > 0 || border.left > 0
+	}
+
 	/// Walk the laid-out tree collecting break candidates and the fragmentation
 	/// preferences declared on each block.
 	private static func collectBreaks(_ box: Box, into points: inout BreakPoints) {
@@ -415,6 +428,13 @@ public enum HTMLRenderer {
 		}
 
 		if block.image != nil {
+			points.noteContent(top: top, bottom: bottom)
+		} else if block.children.isEmpty, block.lines.isEmpty, block.height > 0, paintsDecoration(block) {
+			// A box with nothing in it but a background or border still fills its
+			// page, so a break after it is not a blank-page break. The emptiness
+			// test matters: a background on a box that *contains* the content is
+			// decoration around it, not content itself, and counting it would let
+			// any `body { background: … }` defeat blank-page suppression.
 			points.noteContent(top: top, bottom: bottom)
 		}
 

@@ -203,6 +203,13 @@ private func expand(_ declaration: Declaration) -> [(name: String, value: [Compo
 		return expandBox(prefix: "border", suffix: "-" + suffix, value: value)
 	case "border", "border-top", "border-right", "border-bottom", "border-left":
 		return expandBorder(name: name, value: value)
+	case "page-break-before", "page-break-after", "page-break-inside":
+		// Fold the legacy spelling onto the modern property so both compete for a
+		// single cascade slot. Keyed separately they would each survive as a
+		// winner and be applied in dictionary order, letting a lower-priority
+		// declaration overwrite a higher-priority one at random. This is a pure
+		// rename — `parseBreak` accepts the legacy `always` keyword too.
+		return [(String(name.dropFirst("page-".count)), value)]
 	case "background":
 		// Minimal: pull out a color if present.
 		if let color = significant(value).first(where: { parseColor($0) != nil }) {
@@ -355,11 +362,12 @@ private func applyLonghand(_ name: String, _ value: [ComponentValue], to style: 
 				style.wordSpacing = pixels
 			}
 		}
-	case "break-before", "page-break-before":
+	// The `page-break-*` aliases are folded onto these names during expansion.
+	case "break-before":
 		if let value = parseBreak(value, inside: false) { style.breakBefore = value }
-	case "break-after", "page-break-after":
+	case "break-after":
 		if let value = parseBreak(value, inside: false) { style.breakAfter = value }
-	case "break-inside", "page-break-inside":
+	case "break-inside":
 		if let value = parseBreak(value, inside: true) { style.breakInside = value }
 	case "list-style-type":
 		if let token = significant(value).first, case .ident(let ident) = token.token,
@@ -500,9 +508,9 @@ private func copyLonghand(_ name: String, from source: ComputedStyle, into style
 	case "direction": style.direction = source.direction
 	case "width": style.width = source.width
 	case "height": style.height = source.height
-	case "break-before", "page-break-before": style.breakBefore = source.breakBefore
-	case "break-after", "page-break-after": style.breakAfter = source.breakAfter
-	case "break-inside", "page-break-inside": style.breakInside = source.breakInside
+	case "break-before": style.breakBefore = source.breakBefore
+	case "break-after": style.breakAfter = source.breakAfter
+	case "break-inside": style.breakInside = source.breakInside
 	case "margin-top", "margin-right", "margin-bottom", "margin-left": setEdge(&style.margin, name, edgeValue(source.margin, name))
 	case "padding-top", "padding-right", "padding-bottom", "padding-left": setEdge(&style.padding, name, edgeValue(source.padding, name))
 	case "border-top-width", "border-right-width", "border-bottom-width", "border-left-width": setEdge(&style.borderWidth, name, edgeValue(source.borderWidth, name))

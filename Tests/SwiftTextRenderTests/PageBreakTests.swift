@@ -186,6 +186,56 @@ struct PageBreakTests {
 		#expect(style("break-before: nonsense").breakBefore == .auto)
 	}
 
+	@Test("An auto-height render stays on one page despite forced breaks")
+	func autoHeightIgnoresForcedBreaks() async throws {
+		// `pageHeightPx: nil` means "one page, as tall as the content" — there is
+		// no page boundary for a break to land on.
+		let options = RenderOptions(pageHeightPx: nil)
+		let data = try await HTMLRenderer.renderPDF(html: threeSections, options: options)
+		#expect(pageCount(data) == 1)
+	}
+
+	@Test("An empty block that paints only a background still counts as content")
+	func backgroundOnlyBlockCountsAsContent() async throws {
+		// The banner paints, so the break after it is not a leading blank page.
+		let html = """
+		<style>.banner { height: 20px; background: #c00; break-after: page; }</style>
+		<div class="banner"></div>
+		<p>Text below the banner.</p>
+		"""
+		let data = try await HTMLRenderer.renderPDF(html: html)
+		#expect(pageCount(data) == 2)
+	}
+
+	@Test("A decorative wrapper around the content does not defeat blank-page suppression")
+	func wrapperBackgroundDoesNotCountAsContent() async throws {
+		// A background on an element that *contains* the content is not itself
+		// content; the leading blank page must still be suppressed.
+		let html = threeSections.replacingOccurrences(
+			of: "<style>", with: "<style>body { background: #eee; }\n")
+		let data = try await HTMLRenderer.renderPDF(html: html)
+		#expect(pageCount(data) == 3)
+	}
+
+	@Test("Modern and legacy spellings cascade as one property, in source order")
+	func aliasesCascadeTogether() async throws {
+		// Both spellings target the same property, so the later declaration wins
+		// regardless of which spelling it uses. Keying them separately would make
+		// the outcome depend on dictionary iteration order.
+		let legacyThenModern = """
+		<style>h1 { page-break-before: always; break-before: auto; }</style>
+		<h1>Alpha</h1><p>First.</p>
+		<h1>Beta</h1><p>Second.</p>
+		"""
+		let modernThenLegacy = """
+		<style>h1 { break-before: auto; page-break-before: always; }</style>
+		<h1>Alpha</h1><p>First.</p>
+		<h1>Beta</h1><p>Second.</p>
+		"""
+		#expect(pageCount(try await HTMLRenderer.renderPDF(html: legacyThenModern)) == 1)
+		#expect(pageCount(try await HTMLRenderer.renderPDF(html: modernThenLegacy)) == 2)
+	}
+
 	@Test("Fragmentation properties are not inherited")
 	func notInherited() {
 		var parent = ComputedStyle.initial
