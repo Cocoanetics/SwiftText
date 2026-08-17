@@ -98,6 +98,12 @@ metrics — no embedding needed.
 - `text-decoration` underline / line-through.
 - Lists (`<ul>`/`<ol>` markers), clickable links (`<a href>` → PDF annotations).
 - Pagination to a fixed page size; embedded `<style>` and caller CSS.
+- CSS Fragmentation: `break-before`, `break-after` and `break-inside` (plus the
+  legacy `page-break-*` aliases). Forced breaks are mandatory; `avoid` is
+  honoured when an alternative exists — a block taller than the page is split
+  regardless. A forced break with nothing painted before or after it is dropped
+  rather than emitting a blank page, which is how WeasyPrint behaves and is a
+  deliberate difference from the WebKit engine (it emits the leading blank).
 - `@page { size; margin }`, plus CSS Paged Media margin boxes: `@top-left/
   -center/-right` and `@bottom-left/-center/-right` for running headers/
   footers, with `content` as a literal string or `counter(page)`/

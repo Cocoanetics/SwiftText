@@ -141,6 +141,22 @@ public enum LineHeight: Equatable, Sendable {
 	}
 }
 
+/// A CSS Fragmentation break preference (`break-before`, `break-after`,
+/// `break-inside`, and their legacy `page-break-*` aliases).
+///
+/// Column and region fragmentation are not modelled — this renderer only
+/// paginates — so `avoid-column` and friends collapse onto the page values.
+public enum Break: Equatable, Sendable {
+	/// No preference; the paginator may break here if it needs to.
+	case auto
+	/// A break is mandatory at this edge.
+	case page
+	/// A break here (or, for `break-inside`, anywhere within) is undesirable.
+	/// Honoured only when an alternative exists — a block taller than the page
+	/// must still be split.
+	case avoid
+}
+
 /// The fully resolved style of one element.
 public struct ComputedStyle: Equatable, Sendable {
 	// Inherited properties.
@@ -179,6 +195,12 @@ public struct ComputedStyle: Equatable, Sendable {
 	public var borderColor: Edges<RGBA>
 	public var width: Length
 	public var height: Length
+	/// Page-break preference immediately before this box (`break-before`).
+	public var breakBefore: Break
+	/// Page-break preference immediately after this box (`break-after`).
+	public var breakAfter: Break
+	/// Whether this box may be split across pages (`break-inside`).
+	public var breakInside: Break
 
 	/// Pixel line height for this style's font size.
 	public func resolvedLineHeight() -> Double {
@@ -216,7 +238,10 @@ public struct ComputedStyle: Equatable, Sendable {
 		borderStyle: Edges(.none),
 		borderColor: Edges(RGBA(0, 0, 0, 1)),
 		width: .auto,
-		height: .auto)
+		height: .auto,
+		breakBefore: .auto,
+		breakAfter: .auto,
+		breakInside: .auto)
 
 	/// A fresh style for a child: inherited properties copied from `parent`,
 	/// non-inherited properties reset to their initial values.

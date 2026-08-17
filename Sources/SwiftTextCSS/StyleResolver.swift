@@ -203,6 +203,13 @@ private func expand(_ declaration: Declaration) -> [(name: String, value: [Compo
 		return expandBox(prefix: "border", suffix: "-" + suffix, value: value)
 	case "border", "border-top", "border-right", "border-bottom", "border-left":
 		return expandBorder(name: name, value: value)
+	case "page-break-before", "page-break-after", "page-break-inside":
+		// Fold the legacy spelling onto the modern property so both compete for a
+		// single cascade slot. Keyed separately they would each survive as a
+		// winner and be applied in dictionary order, letting a lower-priority
+		// declaration overwrite a higher-priority one at random. This is a pure
+		// rename — `parseBreak` accepts the legacy `always` keyword too.
+		return [(String(name.dropFirst("page-".count)), value)]
 	case "background":
 		// Minimal: pull out a color if present.
 		if let color = significant(value).first(where: { parseColor($0) != nil }) {
@@ -355,6 +362,13 @@ private func applyLonghand(_ name: String, _ value: [ComponentValue], to style: 
 				style.wordSpacing = pixels
 			}
 		}
+	// The `page-break-*` aliases are folded onto these names during expansion.
+	case "break-before":
+		if let value = parseBreak(value, inside: false) { style.breakBefore = value }
+	case "break-after":
+		if let value = parseBreak(value, inside: false) { style.breakAfter = value }
+	case "break-inside":
+		if let value = parseBreak(value, inside: true) { style.breakInside = value }
 	case "list-style-type":
 		if let token = significant(value).first, case .ident(let ident) = token.token,
 		   let type = parseListStyleType(ident.asciiLowercased) {
@@ -429,6 +443,28 @@ private let inheritedProperties: Set<String> = [
 	"text-indent", "direction"
 ]
 
+/// Parse a fragmentation keyword for `break-before` / `break-after` (and their
+/// `page-break-*` aliases), or for `break-inside` when `inside` is true.
+///
+/// The two property families accept different keyword sets, so a value that is
+/// only valid for the other one is rejected rather than silently coerced.
+/// Column and region variants map onto their page equivalents — this renderer
+/// has no columns or regions, and treating `avoid-column` as `avoid` is closer
+/// to the author's intent than ignoring it.
+private func parseBreak(_ value: [ComponentValue], inside: Bool) -> Break? {
+	guard let token = significant(value).first, case .ident(let ident) = token.token else { return nil }
+	switch ident.asciiLowercased {
+	case "auto": return .auto
+	case "avoid", "avoid-page", "avoid-column", "avoid-region": return .avoid
+	// Forced-break keywords are meaningless on break-inside.
+	// `left`/`right`/`recto`/`verso` request a *specific* next page; with no
+	// left/right page model they degrade to a plain page break.
+	case "page", "always", "all", "left", "right", "recto", "verso", "column":
+		return inside ? nil : .page
+	default: return nil
+	}
+}
+
 /// Map a CSS `list-style-type` keyword (including latin aliases) to the enum.
 private func parseListStyleType(_ name: String) -> ListStyleType? {
 	switch name {
@@ -472,6 +508,9 @@ private func copyLonghand(_ name: String, from source: ComputedStyle, into style
 	case "direction": style.direction = source.direction
 	case "width": style.width = source.width
 	case "height": style.height = source.height
+	case "break-before": style.breakBefore = source.breakBefore
+	case "break-after": style.breakAfter = source.breakAfter
+	case "break-inside": style.breakInside = source.breakInside
 	case "margin-top", "margin-right", "margin-bottom", "margin-left": setEdge(&style.margin, name, edgeValue(source.margin, name))
 	case "padding-top", "padding-right", "padding-bottom", "padding-left": setEdge(&style.padding, name, edgeValue(source.padding, name))
 	case "border-top-width", "border-right-width", "border-bottom-width", "border-left-width": setEdge(&style.borderWidth, name, edgeValue(source.borderWidth, name))
