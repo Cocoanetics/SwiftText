@@ -345,17 +345,33 @@ struct HTML: AsyncParsableCommand {
 			#endif
 		}
 
-		let (data, baseURL) = try await loadHTMLData(from: source)
-		let forcedEncoding: String.Encoding?
-		if let charset {
-			forcedEncoding = stringEncoding(for: charset)
-			if forcedEncoding == nil {
-				throw ValidationError("Unknown/unsupported charset: \(charset)")
-			}
+		let document: HTMLDocument
+		if webkit {
+			#if os(macOS)
+			// The same path `HTMLDocument(url:executingJavaScript:)` gives library
+			// callers — not a second implementation of the settling heuristic.
+			// `resolveWebKitURL` returns the load URL as its own base, which is what
+			// that initializer uses, so relative links resolve exactly as before.
+			// The explicit timeout preserves the CLI's existing 30 s budget rather
+			// than taking the initializer's app-oriented 10 s default.
+			let (url, _) = try await resolveWebKitURL(from: source)
+			document = try await HTMLDocument(url: url, executingJavaScript: true, timeout: 30)
+			#else
+			throw ValidationError("WebKit loading is only available on macOS.")
+			#endif
 		} else {
-			forcedEncoding = nil
+			let (data, baseURL) = try await loadHTMLData(from: source)
+			let forcedEncoding: String.Encoding?
+			if let charset {
+				forcedEncoding = stringEncoding(for: charset)
+				if forcedEncoding == nil {
+					throw ValidationError("Unknown/unsupported charset: \(charset)")
+				}
+			} else {
+				forcedEncoding = nil
+			}
+			document = try await HTMLDocument(data: data, baseURL: baseURL, encoding: forcedEncoding)
 		}
-		let document = try await HTMLDocument(data: data, baseURL: baseURL, encoding: forcedEncoding)
 		let output: String
 		if markdown {
 			let folderURL = resolveOutputDirectory(from: saveImages)
@@ -367,14 +383,6 @@ struct HTML: AsyncParsableCommand {
 	}
 
 	private func loadHTMLData(from source: String) async throws -> (Data, URL?) {
-		if webkit {
-			#if os(macOS)
-			return try await loadHTMLDataViaWebKit(from: source)
-			#else
-			throw ValidationError("WebKit loading is only available on macOS.")
-			#endif
-		}
-
 		if let url = URL(string: source), let scheme = url.scheme?.lowercased() {
 			if scheme == "http" || scheme == "https" {
 				let data = try await fetchData(from: url)
@@ -394,21 +402,6 @@ struct HTML: AsyncParsableCommand {
 	}
 
 	#if os(macOS)
-	@MainActor
-	private func loadHTMLDataViaWebKit(from source: String) async throws -> (Data, URL?) {
-		let (url, baseURL) = try await resolveWebKitURL(from: source)
-
-		let browser = WebKitBrowser(url: url)
-		await browser.waitForLoadCompletion()
-		guard let html = await browser.html() else {
-			throw ValidationError("WebKit did not return any HTML.")
-		}
-		guard let data = html.data(using: .utf8) else {
-			throw ValidationError("Failed to encode WebKit HTML as UTF-8.")
-		}
-		return (data, baseURL)
-	}
-
 	@MainActor
 	private func loadPDFViaWebKit(from source: String) async throws -> URL {
 		guard #available(macOS 12.0, *) else {

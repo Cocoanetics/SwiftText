@@ -4,8 +4,8 @@
 HTML + CSS into a PDF **without WebKit** — a Swift port of the core
 [WeasyPrint](https://weasyprint.org) pipeline. It runs anywhere Swift +
 Foundation run (macOS, iOS, Linux, Windows), so it covers the platforms where
-the WebKit/`NSPrintOperation` path (`SwiftTextHTML.WebKitBrowser`) is
-unavailable, and can be used everywhere as a dependency-light alternative.
+the WebKit/`NSPrintOperation` paginated-PDF path is unavailable, and can be used
+everywhere as a dependency-light alternative.
 
 ## Why a port (and what is *not* ported)
 

@@ -16,6 +16,24 @@ Extracts text or Markdown from HTML using:
 Features:
 - Plain text extraction
 - Markdown conversion (links, lists, tables, code)
+- **JavaScript execution** on Apple platforms (macOS, iOS, Mac Catalyst): load a
+  URL through WebKit and parse the *rendered* DOM, so a client-rendered page
+  yields its actual content rather than an empty `<div id="root">`
+
+```swift
+// Server-rendered: a plain fetch, no WebKit involved.
+let article = try await HTMLDocument(url: url, executingJavaScript: false)
+
+// Client-rendered: runs the page's scripts and waits for the DOM to settle.
+let app = try await HTMLDocument(url: url, executingJavaScript: true)
+print(app.markdown())
+```
+
+Waiting for `didFinish` is not enough for a single-page app — it fires before
+hydration — so the loader watches for DOM mutations to stop arriving, with a
+`timeout` (default 10 s) bounding the wait. Useful for share extensions,
+clipping articles, and feeding pages to an LLM, where Markdown costs several
+times fewer tokens than raw HTML.
 
 ### SwiftTextOCR
 
