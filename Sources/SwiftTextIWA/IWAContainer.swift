@@ -1,5 +1,5 @@
 import Foundation
-import ZIPFoundation
+import Archive
 
 /// An error reading an iWork document container.
 public enum IWAContainerError: Error, LocalizedError {
@@ -79,12 +79,7 @@ public enum IWAContainer {
 			guard FileManager.default.fileExists(atPath: fileURL.path) else { return nil }
 			return try? Data(contentsOf: fileURL)
 		}
-		guard let archive = try? Archive(url: url, accessMode: .read), let entry = archive[name] else {
-			return nil
-		}
-		var data = Data()
-		guard (try? archive.extract(entry, consumer: { data.append($0) })) != nil else { return nil }
-		return data
+		return try? archiveEntries(at: url) { $0 == name }.first?.data
 	}
 
 	private static func directoryEntries(at url: URL, prefix: String, suffix: String) -> [Entry] {
@@ -105,18 +100,27 @@ public enum IWAContainer {
 	}
 
 	private static func archiveEntries(at url: URL, prefix: String, suffix: String) throws -> [Entry] {
-		let archive: Archive
+		try archiveEntries(at: url) { $0.hasPrefix(prefix) && $0.hasSuffix(suffix) }
+	}
+
+	/// Streams the Zip at `url` once, keeping the regular-file entries whose path
+	/// `isWanted` accepts. libarchive is a sequential reader — there is no random
+	/// access by name — so every lookup is a single pass in stored order.
+	private static func archiveEntries(at url: URL, where isWanted: (String) -> Bool) throws -> [Entry] {
+		let reader: ArchiveReader
 		do {
-			archive = try Archive(url: url, accessMode: .read)
+			reader = try ArchiveReader(path: url.path)
 		} catch {
 			throw IWAContainerError.unreadableArchive(url, error)
 		}
 		var entries = [Entry]()
-		for entry in archive {
-			guard entry.path.hasPrefix(prefix), entry.path.hasSuffix(suffix), !entry.path.hasSuffix("/") else { continue }
-			var data = Data()
-			_ = try archive.extract(entry) { data.append($0) }
-			entries.append(Entry(path: entry.path, data: data))
+		do {
+			try reader.forEachEntry { entry, reader in
+				guard entry.fileType == .regular, isWanted(entry.pathname) else { return }
+				entries.append(Entry(path: entry.pathname, data: try reader.readData()))
+			}
+		} catch {
+			throw IWAContainerError.unreadableArchive(url, error)
 		}
 		return entries
 	}

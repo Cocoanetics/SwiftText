@@ -8,7 +8,7 @@
 //  else is deflated, except already-compressed cover images, which are stored.
 
 import Foundation
-import ZIPFoundation
+import SwiftTextZip
 
 /// How a single packaged file is stored in the container.
 enum EpubCompression {
@@ -27,38 +27,21 @@ enum EpubArchiveWriter {
 
 	/// Writes `files` to a new EPUB archive at `url`, in the given order. The
 	/// caller is responsible for placing `mimetype` first with `.stored`
-	/// compression. `modificationDate` stamps every entry so the same input
-	/// yields byte-identical output.
-	static func write(_ files: [EpubFile], to url: URL, modificationDate: Date) throws {
-		let directory = url.deletingLastPathComponent()
-		try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-		if FileManager.default.fileExists(atPath: url.path) {
-			try FileManager.default.removeItem(at: url)
-		}
-
-		let archive = try Archive(url: url, accessMode: .create)
-		for file in files {
-			let method: CompressionMethod = file.compression == .stored ? .none : .deflate
-			let data = file.data
-			try archive.addEntry(
-				with: file.path,
-				type: .file,
-				uncompressedSize: Int64(data.count),
-				modificationDate: modificationDate,
-				compressionMethod: method
-			) { position, size in
-				data.subdata(in: Data.Index(position) ..< Data.Index(position) + size)
-			}
-		}
+	/// compression.
+	static func write(_ files: [EpubFile], to url: URL) throws {
+		try ZipContainerWriter.write(entries(for: files), to: url)
 	}
 
-	/// Builds the archive in a temporary file and returns its bytes. Useful for
-	/// callers (and tests) that want the EPUB as `Data` rather than on disk.
-	static func makeData(_ files: [EpubFile], modificationDate: Date) throws -> Data {
-		let temporary = FileManager.default.temporaryDirectory
-			.appendingPathComponent("swifttext-epub-\(UUID().uuidString).epub")
-		defer { try? FileManager.default.removeItem(at: temporary) }
-		try write(files, to: temporary, modificationDate: modificationDate)
-		return try Data(contentsOf: temporary)
+	/// Builds the archive and returns its bytes. Useful for callers (and tests)
+	/// that want the EPUB as `Data` rather than on disk.
+	static func makeData(_ files: [EpubFile]) throws -> Data {
+		try ZipContainerWriter.makeData(entries(for: files))
+	}
+
+	/// No ZIP entry carries a timestamp, so the same input always yields
+	/// byte-identical output — see ``ZipContainerWriter``. The publication date
+	/// lives in the OPF's `dcterms:modified`, which is the one EPUB readers show.
+	private static func entries(for files: [EpubFile]) -> [ZipContainerEntry] {
+		files.map { ZipContainerEntry(path: $0.path, data: $0.data, stored: $0.compression == .stored) }
 	}
 }

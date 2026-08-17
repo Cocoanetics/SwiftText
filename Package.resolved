@@ -1,6 +1,15 @@
 {
-  "originHash" : "bcc9b9f962dd28aad051a848fe48a2a01a9dfe870397e11ec5aea7ce8523ffcb",
+  "originHash" : "67c4a003c583ea9abab170211764736e9223d7c6e07809adde408c55e6bea945",
   "pins" : [
+    {
+      "identity" : "swift-archive",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/marcprux/swift-archive.git",
+      "state" : {
+        "revision" : "48fddd77a1d8301ce04e0d7c093fcf0867fa1ff8",
+        "version" : "3.8.9"
+      }
+    },
     {
       "identity" : "swift-argument-parser",
       "kind" : "remoteSourceControl",
@@ -35,14 +44,6 @@
       "state" : {
         "revision" : "af0be5973bae9a20f4ea2ed3e39401e22a4212cb",
         "version" : "1.0.0"
-      }
-    },
-    {
-      "identity" : "zipfoundation",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/weichsel/ZIPFoundation.git",
-      "state" : {
-        "revision" : "187ee77287ea4b23df4d7de32771ec38bbafb840"
       }
     }
   ],

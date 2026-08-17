@@ -35,7 +35,13 @@ struct EpubTests {
 		let extraLen = Int(UInt16(bytes[28]) | UInt16(bytes[29]) << 8)
 		let name = String(decoding: bytes[30 ..< 30 + nameLen], as: UTF8.self)
 		#expect(name == "mimetype")
+		// OCF: "there MUST NOT be an extra field" on the mimetype entry, which is
+		// what puts the media type at the fixed offset 38 that readers sniff.
+		// libarchive emits a `UT` extra block for any entry carrying a timestamp,
+		// so the writer stamps every entry *except* this one — hence the assertion.
+		#expect(extraLen == 0)
 		let payloadStart = 30 + nameLen + extraLen
+		#expect(payloadStart == 38)
 		let payload = String(decoding: bytes[payloadStart ..< payloadStart + 20], as: UTF8.self)
 		#expect(payload == "application/epub+zip")
 	}
@@ -205,5 +211,44 @@ struct EpubTests {
 		let a = try MarkdownToEpub.makeData(markdown, metadata: metadata, options: EpubOptions())
 		let b = try MarkdownToEpub.makeData(markdown, metadata: metadata, options: EpubOptions())
 		#expect(a == b)
+	}
+
+	@Test("no entry carries a timestamp, so output can't vary by machine timezone")
+	func noEntryTimestamps() throws {
+		// Comparing two runs in one process can't catch timezone dependence, so
+		// assert it structurally: libarchive derives the MS-DOS timestamp with
+		// `localtime()` and adds a `UT` extra block whenever an entry has an mtime.
+		// Unstamped entries show the 1980 ZIP epoch and no extra field anywhere.
+		let bytes = [UInt8](try MarkdownToEpub.makeData("# One\n\naa", metadata: fixedMetadata(), options: EpubOptions()))
+		func u16(_ offset: Int) -> Int { Int(bytes[offset]) | Int(bytes[offset + 1]) << 8 }
+		func u32(_ offset: Int) -> Int {
+			Int(bytes[offset]) | Int(bytes[offset + 1]) << 8
+				| Int(bytes[offset + 2]) << 16 | Int(bytes[offset + 3]) << 24
+		}
+
+		// Entries are streamed (sizes live in a trailing data descriptor), so the
+		// local section can't be walked forwards — go through the central directory,
+		// which is authoritative and points at each local header.
+		let eocd = bytes.count - 22
+		#expect(u32(eocd) == 0x0605_4b50)
+		let count = u16(eocd + 10)
+		#expect(count > 1)
+
+		var position = u32(eocd + 16)
+		for _ in 0 ..< count {
+			#expect(u32(position) == 0x0201_4b50)
+			let nameLength = u16(position + 28)
+			let name = String(decoding: bytes[position + 46 ..< position + 46 + nameLength], as: UTF8.self)
+			#expect(u16(position + 12) == 0, "\(name): central header has a DOS time")
+			#expect(u16(position + 14) == 0x21, "\(name): central header is not dated 1980-01-01")
+			#expect(u16(position + 30) == 0, "\(name): central header has an extra field")
+
+			let local = u32(position + 42)
+			#expect(u16(local + 10) == 0, "\(name): local header has a DOS time")
+			#expect(u16(local + 12) == 0x21, "\(name): local header is not dated 1980-01-01")
+			#expect(u16(local + 28) == 0, "\(name): local header has an extra field")
+
+			position += 46 + nameLength + u16(position + 30) + u16(position + 32)
+		}
 	}
 }

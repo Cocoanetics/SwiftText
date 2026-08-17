@@ -1,10 +1,10 @@
-// swift-tools-version:6.1
+// swift-tools-version:6.3
 import PackageDescription
 import Foundation
 
 // When SWIFTTEXT_PORTABLE_ONLY=1, the manifest is trimmed to the pure-Swift,
 // Foundation-only targets and their tests — the surface with no libxml2
-// (SwiftTextHTML / SwiftTextRender) and no ZIPFoundation (SwiftTextDOCX /
+// (SwiftTextHTML / SwiftTextRender) and no libarchive (SwiftTextDOCX /
 // SwiftTextPages) dependency. This lets CI *run* the portable unit tests on
 // platforms where those native dependencies aren't readily available — Windows
 // and the Android cross-compile SDK — instead of only build-checking the
@@ -140,9 +140,8 @@ let htmlTargets: [Target] = [
 	.target(
 		name: "SwiftTextHTML",
 		dependencies: [
-			// Single-trait condition, same reasoning as ZIPFoundation below. HTML
-			// must be active wherever SwiftTextHTML compiles; the CLI default trait
-			// transitively enables it for plain `swift build`.
+			// HTML must be active wherever SwiftTextHTML compiles; the CLI default
+			// trait transitively enables it for plain `swift build`.
 			.product(name: "HTMLParser", package: "XMLKit", condition: .when(traits: ["HTML"])),
 			"SwiftTextMarkdown",
 			// The HTML→Markdown path builds a swift-markdown AST from the DOM and
@@ -273,11 +272,11 @@ let packageTargets: [Target] = [
 		name: "SwiftTextDOCX",
 		dependencies: [
 			"SwiftTextMarkdown",
-			// Single-trait condition on purpose: Swift 6.2's SwiftPM requires ALL listed
-			// traits to be enabled (6.3 changed this to any-of), so an OR-set like
-			// ["DOCX", "CLI"] would drop ZIPFoundation on 6.2 toolchains. The CLI case
-			// is covered by the CLI trait transitively enabling DOCX instead.
-			.product(name: "ZIPFoundation", package: "ZIPFoundation", condition: .when(traits: ["DOCX"])),
+			// DOCX must be active wherever SwiftTextDOCX compiles; the CLI trait
+			// transitively enables it, so listing CLI here would be redundant.
+			.product(name: "Archive", package: "swift-archive", condition: .when(traits: ["DOCX"])),
+			// The libarchive-backed container writer, shared with SwiftTextEPUB.
+			"SwiftTextZip",
 			// Shared dependency-free utilities (ImageDimensions). No external product,
 			// so no trait condition is needed.
 			"SwiftTextCore"
@@ -289,23 +288,34 @@ let packageTargets: [Target] = [
 		dependencies: [
 			"SwiftTextMarkdown",
 			.product(name: "Markdown", package: "swift-markdown"),
-			// Same single-trait ZIPFoundation gating as SwiftTextDOCX/SwiftTextPages:
-			// the EPUB container is a Zip archive. The CLI default trait enables EPUB
-			// transitively for a plain `swift build`.
-			.product(name: "ZIPFoundation", package: "ZIPFoundation", condition: .when(traits: ["EPUB"])),
+			// The libarchive-backed container writer, shared with SwiftTextDOCX.
+			"SwiftTextZip",
 			// Shared dependency-free utilities (ImageDimensions); see SwiftTextDOCX.
 			"SwiftTextCore"
 		],
 		path: "Sources/SwiftTextEPUB"
 	),
+	// ZIP container *writing* for `.docx` (OPC) and `.epub` (OCF), over libarchive.
+	// Shared by SwiftTextDOCX and SwiftTextEPUB, so the condition lists both traits
+	// — `.when(traits:)` is any-of as of the 6.3 tools version, so either one alone
+	// pulls libarchive in. (iWork writing does not use this: `.pages` needs
+	// byte-exact stored entries, which libarchive's always-streaming ZIP writer
+	// cannot emit — see SwiftTextPages/StoredZipWriter.)
+	.target(
+		name: "SwiftTextZip",
+		dependencies: [
+			.product(name: "Archive", package: "swift-archive", condition: .when(traits: ["DOCX", "EPUB"]))
+		],
+		path: "Sources/SwiftTextZip"
+	),
 	// Shared iWork (IWA) read core. Snappy and Protocol Buffers decoding are
-	// implemented in-target; ZIPFoundation (the .iwa container is a Zip archive)
-	// is the only external dependency, gated by PAGES with the same single-trait
-	// reasoning as SwiftTextDOCX — the CLI default trait enables PAGES transitively.
+	// implemented in-target; libarchive (the .iwa container is a Zip archive)
+	// is the only external dependency, gated by PAGES on the same reasoning as
+	// SwiftTextDOCX — the CLI default trait enables PAGES transitively.
 	.target(
 		name: "SwiftTextIWA",
 		dependencies: [
-			.product(name: "ZIPFoundation", package: "ZIPFoundation", condition: .when(traits: ["PAGES"]))
+			.product(name: "Archive", package: "swift-archive", condition: .when(traits: ["PAGES"]))
 		],
 		path: "Sources/SwiftTextIWA"
 	),
@@ -313,7 +323,7 @@ let packageTargets: [Target] = [
 		name: "SwiftTextPages",
 		dependencies: [
 			// The shared IWA read core (Snappy/Protobuf/container/object store/TST
-			// table decoder), which also carries the ZIPFoundation dependency.
+			// table decoder), which also carries the libarchive dependency.
 			"SwiftTextIWA",
 			// Markdown → Pages writing parses with swift-markdown and reuses the
 			// shared plain-text helper. Both are platform-agnostic and always
@@ -341,7 +351,13 @@ let packageTargets: [Target] = [
 	),
 	.testTarget(
 		name: "SwiftTextDOCXTests",
-		dependencies: ["SwiftTextDOCX"],
+		// The tests read written `.docx` files back through libarchive to assert on
+		// their parts, so they link the Archive product directly (same DOCX gating).
+		dependencies: [
+			"SwiftTextDOCX",
+			"SwiftTextZip",
+			.product(name: "Archive", package: "swift-archive", condition: .when(traits: ["DOCX"]))
+		],
 		path: "Tests/SwiftTextDOCXTests",
 		resources: [
 			.process("Resources")
@@ -437,11 +453,11 @@ let allTraits: Set<Trait> = [
 	.trait(name: "PAGES", description: "Pages (iWork) extraction"),
 	// CLI enables DOCX, PAGES, and HTML because SwiftTextCLI links
 	// SwiftTextDOCX, SwiftTextPages, and SwiftTextHTML, whose external products
-	// (ZIPFoundation, XMLKit's HTMLParser) are guarded by those traits.
+	// (libarchive's Archive, XMLKit's HTMLParser) are guarded by those traits.
 	.trait(name: "CLI", description: "swifttext command-line tool dependencies", enabledTraits: ["DOCX", "EPUB", "PAGES", "HTML"]),
 	// "CLI" must be a default trait: the SwiftTextCLI and SwiftTextDOCX targets are
 	// always part of the manifest, so a plain `swift build` needs their external
-	// products (ArgumentParser, ZIPFoundation) active to compile. Consumers that
+	// products (ArgumentParser, Archive) active to compile. Consumers that
 	// specify explicit traits (e.g. ["HTML"]) drop the defaults, which lets SwiftPM
 	// prune both packages from their dependency resolution.
 	.default(enabledTraits: ["OCR", "CLI"])
@@ -449,29 +465,35 @@ let allTraits: Set<Trait> = [
 
 let allDependencies: [Package.Dependency] = [
 	.package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0"),
-	// Pinned to the `development` HEAD for its Windows/Android import fix (the zlib
-	// shim's `#import` → `#include`; weichsel/ZIPFoundation#380). No tagged release
-	// includes it yet, and without it the DOCX/Pages readers can't build on Windows
-	// (clang there rejects `#import` as an MSVC COM directive). Bump back to a
-	// version tag once ZIPFoundation ships a release with the fix.
-	.package(url: "https://github.com/weichsel/ZIPFoundation.git", revision: "187ee77287ea4b23df4d7de32771ec38bbafb840"),
+	// libarchive (vendored as C sources, not a system library) behind a thin Swift
+	// wrapper — the Zip *reader* for the DOCX/EPUB/iWork containers. Replaces
+	// ZIPFoundation, which had to be pinned to an untagged `development` HEAD to
+	// build on Windows (weichsel/ZIPFoundation#380). `GzipSupport` is off by
+	// default upstream but is required here: without zlib, libarchive can't
+	// inflate DEFLATE entries, and every real `.docx`/`.epub` is deflated.
+	.package(url: "https://github.com/marcprux/swift-archive.git", from: "3.8.9", traits: ["GzipSupport"]),
 	.package(url: "https://github.com/swiftlang/swift-markdown.git", from: "0.8.0"),
 	.package(url: "https://github.com/Cocoanetics/XMLKit.git", from: "1.0.0")
 ]
 
 // The portable subset needs only swift-markdown; dropping the others keeps the
-// dependency graph clean on platforms without libxml2 / ZIPFoundation toolchains.
+// dependency graph clean on platforms without libxml2 / zlib toolchains.
 let portableDependencies: [Package.Dependency] = [
 	.package(url: "https://github.com/swiftlang/swift-markdown.git", from: "0.8.0")
 ]
 
 let package = Package(
 	name: "SwiftText",
+	// Raised from macOS 12 / iOS 13 / tvOS 13 / watchOS 6 by the swift-archive
+	// (libarchive) dependency, whose own floor is macOS 13 / iOS 15 / tvOS 15 /
+	// watchOS 10. SwiftPM requires a package to be at least as new as any product
+	// it links, and `platforms:` is package-wide, so the pure-Swift targets inherit
+	// the same floor even though they don't link libarchive themselves.
 	platforms: [
-		.macOS(.v12),
-		.iOS(.v13),
-		.tvOS(.v13),
-		.watchOS(.v6)
+		.macOS(.v13),
+		.iOS(.v15),
+		.tvOS(.v15),
+		.watchOS(.v10)
 	],
 	products: portableOnly ? packageProducts.filter { effectivePortableNames.contains($0.name) } : packageProducts,
 	traits: portableOnly ? [] : allTraits,

@@ -27,8 +27,8 @@ jobs:
       # SwiftTextOCR uses the macOS 26 Vision document-recognition APIs
       # (RecognizeDocumentsRequest / NormalizedRegion), so build with a full Xcode
       # that ships the macOS 26 SDK — a swift.org toolchain layered on an older SDK
-      # can't see those symbols. latest-stable's Swift is 6.2.x, which the package's
-      # single-trait manifest conditions build on fine (they're valid on 6.2 and 6.3).
+      # can't see those symbols. latest-stable currently carries Swift 6.3.x, which
+      # the manifest requires (`swift-tools-version:6.3`, for any-of trait conditions).
       - name: Select newest Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
@@ -56,8 +56,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       # SwiftTextHTML/SwiftTextRender use XMLKit's libxml2-backed HTMLParser.
-      - name: Install libxml2 dev
-        run: apt-get update && apt-get install -y libxml2-dev pkg-config
+      # zlib1g-dev + libssl-dev back swift-archive's vendored libarchive: the
+      # GzipSupport trait links `-lz` (needed to inflate DEFLATE zip entries, i.e.
+      # every real .docx/.pages) and CArchive links `-lcrypto` on Linux.
+      - name: Install libxml2 + zlib dev
+        run: apt-get update && apt-get install -y libxml2-dev zlib1g-dev libssl-dev pkg-config
       - name: Verify Swift version
         run: swift --version
       - name: Build (Linux)
@@ -117,7 +120,7 @@ jobs:
 
   # Windows portable job — runs the pure-Swift unit tests. SWIFTTEXT_PORTABLE_ONLY
   # trims the package to the Foundation + swift-markdown targets, so the
-  # libxml2-backed SwiftTextHTML/SwiftTextRender and the ZIPFoundation-backed
+  # libxml2-backed SwiftTextHTML/SwiftTextRender and the libarchive-backed
   # DOCX/Pages targets are absent — `swift test` builds and runs only what the
   # Windows toolchain satisfies with no vcpkg/libxml2 needed. (The full CLI build
   # with vcpkg is the separate build-windows-cli job below.)
@@ -149,7 +152,7 @@ jobs:
   # Android job — runs the portable unit tests on an x86_64 emulator via
   # skiptools/swift-android-action, which provisions the Swift Android SDK.
   # SWIFTTEXT_PORTABLE_ONLY trims the package to the pure-Swift targets (no
-  # libxml2/ZIPFoundation, which the Android SDK doesn't provide), so the action
+  # libxml2/libarchive, which the Android SDK doesn't provide), so the action
   # can build the test bundle and actually run it under the emulator — proving
   # the Markdown/AttributedString/CSS/OpenType/PDF-writer core works on bionic.
   test-android-portable:
@@ -167,7 +170,7 @@ jobs:
           # together push past that without cleanup.
           free-disk-space: true
           # Build the test bundle and run it on the emulator. With the portable
-          # subset there's no libxml2/ZIPFoundation for the SDK to choke on.
+          # subset there's no libxml2/libarchive for the SDK to choke on.
           run-tests: true
 
   # Windows job — builds and smoke-tests the full `swifttext` CLI. Unlike the
@@ -188,12 +191,13 @@ jobs:
       - name: Install libxml2 + zlib (vcpkg)
         shell: pwsh
         run: |
-          # libxml2 backs SwiftTextHTML/SwiftTextRender; zlib backs ZIPFoundation's
-          # CZLib (the DOCX/Pages readers). vcpkg installs zlib's import lib as z.lib,
-          # which is exactly what ZIPFoundation's `.linkedLibrary("z")` resolves to.
+          # libxml2 backs SwiftTextHTML/SwiftTextRender; zlib backs swift-archive's
+          # vendored libarchive under the GzipSupport trait (the DOCX/Pages readers
+          # need it to inflate DEFLATE zip entries). vcpkg installs zlib's import lib
+          # as z.lib, which is exactly what CArchive's `.linkedLibrary("z")` resolves to.
           & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install libxml2:x64-windows zlib:x64-windows
           $root = "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows"
-          # vcpkg names zlib's import lib z.lib (which ZIPFoundation's
+          # vcpkg names zlib's import lib z.lib (which CArchive's
           # `.linkedLibrary("z")` wants), but libxml2's headers autolink `zlib.lib`
           # via #pragma comment(lib). Provide both names from the one import lib.
           Copy-Item "$root\lib\z.lib" "$root\lib\zlib.lib" -Force
