@@ -1,4 +1,4 @@
-// swift-tools-version:6.1
+// swift-tools-version:6.3
 import PackageDescription
 import Foundation
 
@@ -140,9 +140,8 @@ let htmlTargets: [Target] = [
 	.target(
 		name: "SwiftTextHTML",
 		dependencies: [
-			// Single-trait condition, same reasoning as libarchive below. HTML
-			// must be active wherever SwiftTextHTML compiles; the CLI default trait
-			// transitively enables it for plain `swift build`.
+			// HTML must be active wherever SwiftTextHTML compiles; the CLI default
+			// trait transitively enables it for plain `swift build`.
 			.product(name: "HTMLParser", package: "XMLKit", condition: .when(traits: ["HTML"])),
 			"SwiftTextMarkdown",
 			// The HTML→Markdown path builds a swift-markdown AST from the DOM and
@@ -273,10 +272,8 @@ let packageTargets: [Target] = [
 		name: "SwiftTextDOCX",
 		dependencies: [
 			"SwiftTextMarkdown",
-			// Single-trait condition on purpose: Swift 6.2's SwiftPM requires ALL listed
-			// traits to be enabled (6.3 changed this to any-of), so an OR-set like
-			// ["DOCX", "CLI"] would drop libarchive on 6.2 toolchains. The CLI case
-			// is covered by the CLI trait transitively enabling DOCX instead.
+			// DOCX must be active wherever SwiftTextDOCX compiles; the CLI trait
+			// transitively enables it, so listing CLI here would be redundant.
 			.product(name: "Archive", package: "swift-archive", condition: .when(traits: ["DOCX"])),
 			// The libarchive-backed container writer, shared with SwiftTextEPUB.
 			"SwiftTextZip",
@@ -299,24 +296,22 @@ let packageTargets: [Target] = [
 		path: "Sources/SwiftTextEPUB"
 	),
 	// ZIP container *writing* for `.docx` (OPC) and `.epub` (OCF), over libarchive.
-	// Shared by SwiftTextDOCX and SwiftTextEPUB, hence the two conditional entries
-	// for the same product: Swift 6.2's SwiftPM requires ALL traits in one
-	// `.when(traits:)` to be enabled, so OR semantics are spelled as separate
-	// dependencies — either trait alone pulls libarchive in. (iWork writing does
-	// not use this: `.pages` needs byte-exact stored entries, which libarchive's
-	// always-streaming ZIP writer cannot emit — see SwiftTextPages/StoredZipWriter.)
+	// Shared by SwiftTextDOCX and SwiftTextEPUB, so the condition lists both traits
+	// — `.when(traits:)` is any-of as of the 6.3 tools version, so either one alone
+	// pulls libarchive in. (iWork writing does not use this: `.pages` needs
+	// byte-exact stored entries, which libarchive's always-streaming ZIP writer
+	// cannot emit — see SwiftTextPages/StoredZipWriter.)
 	.target(
 		name: "SwiftTextZip",
 		dependencies: [
-			.product(name: "Archive", package: "swift-archive", condition: .when(traits: ["DOCX"])),
-			.product(name: "Archive", package: "swift-archive", condition: .when(traits: ["EPUB"]))
+			.product(name: "Archive", package: "swift-archive", condition: .when(traits: ["DOCX", "EPUB"]))
 		],
 		path: "Sources/SwiftTextZip"
 	),
 	// Shared iWork (IWA) read core. Snappy and Protocol Buffers decoding are
 	// implemented in-target; libarchive (the .iwa container is a Zip archive)
-	// is the only external dependency, gated by PAGES with the same single-trait
-	// reasoning as SwiftTextDOCX — the CLI default trait enables PAGES transitively.
+	// is the only external dependency, gated by PAGES on the same reasoning as
+	// SwiftTextDOCX — the CLI default trait enables PAGES transitively.
 	.target(
 		name: "SwiftTextIWA",
 		dependencies: [

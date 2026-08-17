@@ -424,8 +424,8 @@ swifttext overlay --dpi 300 ~/Documents/report.pdf
 
 ## Requirements
 
-- Swift 6.1+ (the manifest declares `swift-tools-version:6.1`; older toolchains
-  can't parse it). CI builds on 6.3
+- Swift 6.3+ (the manifest declares `swift-tools-version:6.3`; older toolchains
+  can't parse it)
 - Minimum deployment targets: **macOS 13 / iOS 15 / tvOS 15 / watchOS 10**, set by
   the libarchive-backed Zip support the DOCX/EPUB/iWork modules link. `platforms:`
   is package-wide, so it applies even to the pure-Swift modules
