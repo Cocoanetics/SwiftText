@@ -1,6 +1,6 @@
 import Foundation
+import SwiftTextZip
 import Testing
-import ZIPFoundation
 
 @testable import SwiftTextDOCX
 
@@ -44,9 +44,6 @@ struct DocxFootnoteTests {
 
 	/// Builds a minimal `.docx` Zip from the given part paths/contents.
 	private func makeDocx(parts: [String: String]) throws -> URL {
-		let build = FileManager.default.temporaryDirectory
-			.appendingPathComponent("docx-build-\(UUID().uuidString)", isDirectory: true)
-		defer { try? FileManager.default.removeItem(at: build) }
 		let contentTypes = """
 		<?xml version="1.0" encoding="UTF-8"?>
 		<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">\
@@ -56,14 +53,11 @@ struct DocxFootnoteTests {
 		"""
 		var all = parts
 		all["[Content_Types].xml"] = contentTypes
-		for (path, contents) in all {
-			let fileURL = build.appendingPathComponent(path)
-			try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-			try Data(contents.utf8).write(to: fileURL)
-		}
+		let entries = all.sorted(by: { $0.key < $1.key })
+			.map { ZipContainerEntry(path: $0.key, data: Data($0.value.utf8)) }
 		let url = FileManager.default.temporaryDirectory
 			.appendingPathComponent("footnotes-\(UUID().uuidString).docx")
-		try FileManager.default.zipItem(at: build, to: url, shouldKeepParent: false, compressionMethod: .deflate)
+		try ZipContainerWriter.write(entries, to: url)
 		return url
 	}
 }

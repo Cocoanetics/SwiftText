@@ -1,6 +1,6 @@
 import Foundation
 import SwiftTextCore
-import ZIPFoundation
+import SwiftTextZip
 
 /// Page configuration for DOCX output.
 public struct DocxPageSetup: Sendable {
@@ -185,49 +185,40 @@ public final class DocxWriter {
 		let settingsXML = generateSettings()
 		let fontTableXML = generateFontTable()
 
-		// Create ZIP archive (remove existing file first)
-		let dir = url.deletingLastPathComponent()
-		try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-		if FileManager.default.fileExists(atPath: url.path) {
-			try FileManager.default.removeItem(at: url)
-		}
+		// Assemble the OPC parts, then hand the whole container to libarchive.
+		var entries = [
+			xmlPart("[Content_Types].xml", contentTypes),
+			xmlPart("_rels/.rels", rels),
+			xmlPart("word/_rels/document.xml.rels", documentRels),
+			xmlPart("word/document.xml", documentXML),
+			xmlPart("word/styles.xml", stylesXML),
+			xmlPart("word/numbering.xml", numberingXML),
+			xmlPart("word/settings.xml", settingsXML),
+			xmlPart("word/fontTable.xml", fontTableXML)
+		]
 
-		let archive: Archive
-		do {
-			archive = try Archive(url: url, accessMode: .create)
-		} catch {
-			throw DocxWriterError.archiveCreationFailed
-		}
-
-		try addEntry(archive, path: "[Content_Types].xml", content: contentTypes)
-		try addEntry(archive, path: "_rels/.rels", content: rels)
-		try addEntry(archive, path: "word/_rels/document.xml.rels", content: documentRels)
-		try addEntry(archive, path: "word/document.xml", content: documentXML)
-		try addEntry(archive, path: "word/styles.xml", content: stylesXML)
-		try addEntry(archive, path: "word/numbering.xml", content: numberingXML)
-		try addEntry(archive, path: "word/settings.xml", content: settingsXML)
-		try addEntry(archive, path: "word/fontTable.xml", content: fontTableXML)
-
-		// Embedded image media parts (word/media/imageN.ext).
+		// Embedded image media parts (word/media/imageN.ext). Already-compressed
+		// formats (PNG/JPEG) are stored rather than re-deflated.
 		for media in mediaFiles {
-			try addEntry(archive, path: media.path, data: media.data)
+			entries.append(ZipContainerEntry(path: media.path, data: media.data, stored: true))
 		}
 
 		if !footnotes.isEmpty {
-			try addEntry(archive, path: "word/footnotes.xml", content: generateFootnotes())
+			entries.append(xmlPart("word/footnotes.xml", generateFootnotes()))
+		}
+
+		do {
+			try ZipContainerWriter.write(entries, to: url)
+		} catch {
+			throw DocxWriterError.archiveCreationFailed
 		}
 	}
 
 	// MARK: - Archive Helpers
 
-	private func addEntry(_ archive: Archive, path: String, content: String) throws {
-		try addEntry(archive, path: path, data: Data(content.utf8))
-	}
-
-	private func addEntry(_ archive: Archive, path: String, data: Data) throws {
-		try archive.addEntry(with: path, type: .file, uncompressedSize: Int64(data.count)) { position, size in
-			data[Int(position)..<(Int(position) + size)]
-		}
+	/// An XML part. OPC parts are text, so they always deflate.
+	private func xmlPart(_ path: String, _ content: String) -> ZipContainerEntry {
+		ZipContainerEntry(path: path, data: Data(content.utf8))
 	}
 
 	// MARK: - Body Generation

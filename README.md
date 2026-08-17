@@ -42,7 +42,8 @@ Features:
 ### SwiftTextDOCX
 
 Extracts text and basic structure from DOCX archives using:
-- **ZIPFoundation** to read the Word archive
+- **libarchive** (via [swift-archive](https://github.com/marcprux/swift-archive))
+  to read and write the Word archive
 - **XMLParser** to parse document, styles, and numbering
 
 Features:
@@ -66,7 +67,7 @@ Extracts text and structure from Apple Pages (iWork) documents. The modern
 module decodes them entirely on its own — **no Pages.app, no `textutil`, and no
 Apple frameworks are required**, so it runs on every platform:
 
-- **ZIPFoundation** to read the `.pages` archive (the only external dependency,
+- **libarchive** to read the `.pages` archive (the only external dependency,
   already shared with SwiftTextDOCX)
 - **Snappy** block decompression — implemented in-module
 - **Protocol Buffers** wire decoding — implemented in-module
@@ -133,8 +134,9 @@ Supported features:
 - Smart-punctuation reversal by default (pass `.preserveSmartPunctuation` to keep
   cmark's curly quotes/dashes)
 
-Requires macOS 12 / iOS 15 / tvOS 15 / watchOS 8 (where `AttributedString` is
-available), or any Linux/Windows toolchain bundling swift-foundation.
+Requires `AttributedString`, so it needs macOS 13 / iOS 15 / tvOS 15 / watchOS 10
+(the package floor, which already clears it), or any Linux/Windows toolchain
+bundling swift-foundation.
 
 ```swift
 import SwiftTextAttributedString
@@ -213,7 +215,7 @@ SwiftText defaults to `OCR` plus `CLI` (the dependencies of the bundled `swiftte
 traits: [.defaults, "HTML", "PDF", "DOCX", "PAGES"]
 ```
 
-Listing traits explicitly (without `.defaults`) keeps dependency resolution lean: SwiftPM only fetches the packages the enabled traits actually need. For example, `traits: ["HTML"]` resolves just swift-markdown — neither swift-argument-parser nor ZIPFoundation is fetched or pinned.
+Listing traits explicitly (without `.defaults`) keeps dependency resolution lean: SwiftPM only fetches the packages the enabled traits actually need. For example, `traits: ["HTML"]` resolves just swift-markdown — neither swift-argument-parser nor swift-archive is fetched or pinned.
 
 ## Usage
 
@@ -423,6 +425,9 @@ swifttext overlay --dpi 300 ~/Documents/report.pdf
 ## Requirements
 
 - Swift 5.9+
+- Minimum deployment targets: **macOS 13 / iOS 15 / tvOS 15 / watchOS 10**, set by
+  the libarchive-backed Zip support the DOCX/EPUB/iWork modules link. `platforms:`
+  is package-wide, so it applies even to the pure-Swift modules
 - Library platforms: macOS, iOS, tvOS, watchOS, Linux, Windows (per module; see each module's notes)
 - `swifttext` CLI: macOS, Linux, and Windows
 

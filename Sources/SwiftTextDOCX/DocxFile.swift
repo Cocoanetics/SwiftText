@@ -1,5 +1,5 @@
 import Foundation
-import ZIPFoundation
+import Archive
 
 /// A parsed DOCX file with convenience helpers for plain text or Markdown output.
 public final class DocxFile {
@@ -56,9 +56,15 @@ public final class DocxFile {
 		guard FileManager.default.fileExists(atPath: url.path) else {
 			throw DocxFileError.fileNotFound(url)
 		}
-		let archive: Archive
+		let media: [(name: String, data: Data)]
 		do {
-			archive = try Archive(url: url, accessMode: .read)
+			let reader = try ArchiveReader(path: url.path)
+			var found = [(name: String, data: Data)]()
+			try reader.forEachEntry { entry, reader in
+				guard entry.fileType == .regular, entry.pathname.hasPrefix("word/media/") else { return }
+				found.append((URL(fileURLWithPath: entry.pathname).lastPathComponent, try reader.readData()))
+			}
+			media = found
 		} catch {
 			throw DocxFileError.unreadableArchive(url, error)
 		}
@@ -68,15 +74,11 @@ public final class DocxFile {
 
 		var extracted = [URL]()
 		var seenNames: [String: URL] = [:]
-		for entry in archive {
-			guard entry.path.hasPrefix("word/media/"), !entry.path.hasSuffix("/") else { continue }
-			let fileName = URL(fileURLWithPath: entry.path).lastPathComponent
+		for (fileName, data) in media {
 			if let existing = seenNames[fileName] {
 				extracted.append(existing)
 				continue
 			}
-			var data = Data()
-			_ = try archive.extract(entry) { data.append($0) }
 			let outputURL = uniqueDestinationURL(for: fileName, in: destination)
 			try data.write(to: outputURL, options: .atomic)
 			seenNames[fileName] = outputURL

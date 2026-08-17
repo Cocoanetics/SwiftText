@@ -1,6 +1,6 @@
 import Foundation
+import SwiftTextZip
 import Testing
-import ZIPFoundation
 
 @testable import SwiftTextDOCX
 
@@ -25,12 +25,6 @@ struct DocxStrikethroughTests {
 	/// Builds a minimal `.docx` (a Zip with `[Content_Types].xml` and the given
 	/// `word/document.xml`).
 	private func makeDocx(documentXML: String) throws -> URL {
-		let build = FileManager.default.temporaryDirectory
-			.appendingPathComponent("docx-build-\(UUID().uuidString)", isDirectory: true)
-		let wordDir = build.appendingPathComponent("word", isDirectory: true)
-		try FileManager.default.createDirectory(at: wordDir, withIntermediateDirectories: true)
-		defer { try? FileManager.default.removeItem(at: build) }
-
 		let contentTypes = """
 		<?xml version="1.0" encoding="UTF-8"?>
 		<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">\
@@ -38,12 +32,12 @@ struct DocxStrikethroughTests {
 		<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>\
 		</Types>
 		"""
-		try Data(contentTypes.utf8).write(to: build.appendingPathComponent("[Content_Types].xml"))
-		try Data(documentXML.utf8).write(to: wordDir.appendingPathComponent("document.xml"))
-
 		let url = FileManager.default.temporaryDirectory
 			.appendingPathComponent("strike-\(UUID().uuidString).docx")
-		try FileManager.default.zipItem(at: build, to: url, shouldKeepParent: false, compressionMethod: .deflate)
+		try ZipContainerWriter.write([
+			ZipContainerEntry(path: "[Content_Types].xml", data: Data(contentTypes.utf8)),
+			ZipContainerEntry(path: "word/document.xml", data: Data(documentXML.utf8))
+		], to: url)
 		return url
 	}
 }

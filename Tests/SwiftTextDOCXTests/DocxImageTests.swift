@@ -1,7 +1,6 @@
 import Foundation
 import SwiftTextDOCX
 import Testing
-import ZIPFoundation
 
 @Suite("DOCX Images")
 struct DocxImageTests {
@@ -17,15 +16,6 @@ struct DocxImageTests {
 		return dir
 	}
 
-	private static func text(of path: String, in archive: Archive) throws -> String {
-		guard let entry = archive[path] else {
-			throw DocxImageTestError.missingEntry(path)
-		}
-		var data = Data()
-		_ = try archive.extract(entry) { data.append($0) }
-		return String(decoding: data, as: UTF8.self)
-	}
-
 	@Test("Embeds a referenced PNG as an inline image")
 	func embedsReferencedPNG() throws {
 		let dir = try Self.makeTempDir()
@@ -38,18 +28,15 @@ struct DocxImageTests {
 		let docxURL = dir.appendingPathComponent("out.docx")
 		try MarkdownToDocx.convert(markdown, to: docxURL, baseURL: dir)
 
-		let archive = try #require(Archive(url: docxURL, accessMode: .read))
+		let archive = try DocxArchive(contentsOf: docxURL)
 
 		// A media part for the embedded image exists, byte-identical to the source.
-		let mediaPaths = archive.map(\.path).filter { $0.hasPrefix("word/media/") }
+		let mediaPaths = archive.paths.filter { $0.hasPrefix("word/media/") }
 		#expect(mediaPaths.count == 1)
-		let mediaEntry = try #require(archive[mediaPaths[0]])
-		var mediaData = Data()
-		_ = try archive.extract(mediaEntry) { mediaData.append($0) }
-		#expect(mediaData == pngData)
+		#expect(try archive.data(mediaPaths[0]) == pngData)
 
 		// document.xml carries the inline drawing referencing the embedded blip.
-		let document = try Self.text(of: "word/document.xml", in: archive)
+		let document = try archive.text("word/document.xml")
 		#expect(document.contains("<w:drawing>"))
 		#expect(document.contains("<a:blip r:embed="))
 		#expect(document.contains("<pic:pic>"))
@@ -58,10 +45,10 @@ struct DocxImageTests {
 		#expect(document.contains("cy=\"9525\""))
 
 		// Content type + relationship are wired up.
-		let contentTypes = try Self.text(of: "[Content_Types].xml", in: archive)
+		let contentTypes = try archive.text("[Content_Types].xml")
 		#expect(contentTypes.contains("<Default Extension=\"png\" ContentType=\"image/png\"/>"))
 
-		let rels = try Self.text(of: "word/_rels/document.xml.rels", in: archive)
+		let rels = try archive.text("word/_rels/document.xml.rels")
 		#expect(rels.contains("/relationships/image"))
 		#expect(rels.contains("Target=\"media/image1.png\""))
 	}
@@ -75,10 +62,10 @@ struct DocxImageTests {
 		let docxURL = dir.appendingPathComponent("out.docx")
 		try MarkdownToDocx.convert(markdown, to: docxURL, baseURL: dir)
 
-		let archive = try #require(Archive(url: docxURL, accessMode: .read))
-		#expect(!archive.map(\.path).contains { $0.hasPrefix("word/media/") })
+		let archive = try DocxArchive(contentsOf: docxURL)
+		#expect(!archive.paths.contains { $0.hasPrefix("word/media/") })
 
-		let document = try Self.text(of: "word/document.xml", in: archive)
+		let document = try archive.text("word/document.xml")
 		#expect(!document.contains("<w:drawing>"))
 		#expect(document.contains("banner alt"))
 		#expect(document.contains("<w:i/>")) // italic placeholder
@@ -93,13 +80,9 @@ struct DocxImageTests {
 		let docxURL = dir.appendingPathComponent("out.docx")
 		try MarkdownToDocx.convert(markdown, to: docxURL) // no baseURL
 
-		let archive = try #require(Archive(url: docxURL, accessMode: .read))
-		#expect(!archive.map(\.path).contains { $0.hasPrefix("word/media/") })
-		let document = try Self.text(of: "word/document.xml", in: archive)
+		let archive = try DocxArchive(contentsOf: docxURL)
+		#expect(!archive.paths.contains { $0.hasPrefix("word/media/") })
+		let document = try archive.text("word/document.xml")
 		#expect(document.contains("just text"))
 	}
-}
-
-private enum DocxImageTestError: Error {
-	case missingEntry(String)
 }

@@ -1,7 +1,6 @@
 import Foundation
 import SwiftTextDOCX
 import Testing
-import ZIPFoundation
 
 @Suite("DOCX Writer")
 struct DocxWriterTests {
@@ -30,18 +29,15 @@ struct DocxWriterTests {
 		try writer.write(to: url)
 
 		// Verify it's a valid ZIP with the expected OOXML parts
-		let archive = try #require(Archive(url: url, accessMode: .read))
-		let paths = archive.map(\.path)
+		let archive = try DocxArchive(contentsOf: url)
+		let paths = archive.paths
 		#expect(paths.contains("[Content_Types].xml"))
 		#expect(paths.contains("word/document.xml"))
 		#expect(paths.contains("word/styles.xml"))
 		#expect(paths.contains("word/numbering.xml"))
 
 		// Extract document.xml and verify content
-		var documentData = Data()
-		let entry = try #require(archive["word/document.xml"])
-		_ = try archive.extract(entry) { documentData.append($0) }
-		let xml = String(data: documentData, encoding: .utf8)!
+		let xml = try archive.text("word/document.xml")
 		#expect(xml.contains("Test Heading"))
 		#expect(xml.contains("<w:b/>"))
 		#expect(xml.contains("<w:i/>"))
@@ -78,11 +74,8 @@ struct DocxWriterTests {
 
 		try MarkdownToDocx.convert(markdown, to: url)
 
-		let archive = try #require(Archive(url: url, accessMode: .read))
-		var documentData = Data()
-		let entry = try #require(archive["word/document.xml"])
-		_ = try archive.extract(entry) { documentData.append($0) }
-		let xml = String(data: documentData, encoding: .utf8)!
+		let archive = try DocxArchive(contentsOf: url)
+		let xml = try archive.text("word/document.xml")
 
 		#expect(xml.contains("Hello World"))
 		#expect(xml.contains("Heading1"))
@@ -118,11 +111,8 @@ struct DocxWriterTests {
 
 		try MarkdownToDocx.convert(markdown, to: url)
 
-		let archive = try #require(Archive(url: url, accessMode: .read))
-		var documentData = Data()
-		let entry = try #require(archive["word/document.xml"])
-		_ = try archive.extract(entry) { documentData.append($0) }
-		let xml = String(data: documentData, encoding: .utf8)!
+		let archive = try DocxArchive(contentsOf: url)
+		let xml = try archive.text("word/document.xml")
 
 		#expect(xml.components(separatedBy: #"<w:numId w:val="1"/>"#).count - 1 == 2)
 		#expect(xml.components(separatedBy: #"<w:numId w:val="2"/>"#).count - 1 == 2)
@@ -142,11 +132,8 @@ struct DocxWriterTests {
 
 		try MarkdownToDocx.convert(markdown, to: url)
 
-		let archive = try #require(Archive(url: url, accessMode: .read))
-		var documentData = Data()
-		let entry = try #require(archive["word/document.xml"])
-		_ = try archive.extract(entry) { documentData.append($0) }
-		let xml = String(data: documentData, encoding: .utf8)!
+		let archive = try DocxArchive(contentsOf: url)
+		let xml = try archive.text("word/document.xml")
 
 		#expect(xml.contains("Old"))
 		#expect(xml.contains("<w:strike/>"))

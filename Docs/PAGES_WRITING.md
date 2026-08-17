@@ -169,7 +169,7 @@ matches after injection) or add a `ComponentInfo` per new `Tables/` file + bump 
 | Protobuf **encode** | ❌ | — |
 | Real IWA **writer** (uses `Snappy.compress`, multi-chunk) | ❌ | — |
 | `PackageMetadata` rebuild | ❌ | — |
-| Zip **write** + `Metadata/` generation | ❌ | (ZIPFoundation can write) |
+| Zip **write** + `Metadata/` generation | ✅ | `StoredZipWriter.swift` |
 
 `IWATestSupport.IWAWriter` already proves the framing math; it is the seed for a
 real writer, but it emits a single all-literal Snappy block and lives in tests.
@@ -394,8 +394,11 @@ styles by ID) → re-encode **only the changed `.iwa` files** → re-zip, **carr
   know any `TP.*` type number or rebuild `PackageMetadata` for text-only edits.
 - **−** Ships a binary blob; output styling is the template's, not arbitrary.
 - **Zip quirk:** iWork's zip is **STORED (no deflate), no Zip64**; the `.iwa`
-  entries (and any nested `Index.zip`) must be stored, not compressed. ZIPFoundation
-  supports `.none` compression — use it.
+  entries (and any nested `Index.zip`) must be stored, not compressed — and the
+  sizes/CRC live in the local header, which libarchive's always-streaming ZIP
+  writer cannot emit. Hence the hand-rolled `StoredZipWriter`, which also
+  preserves each entry's byte-affecting header fields so a re-written package
+  matches Apple's exactly.
 - Self-sufficiency: the blob is data, needs no new SwiftPM product.
 
 ### B. Synthesize from scratch

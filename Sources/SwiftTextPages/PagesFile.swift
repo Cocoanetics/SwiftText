@@ -7,7 +7,7 @@ import Markdown
 ///
 /// Pages files are Zip archives containing an `Index/` folder of iWork Archive
 /// (`.iwa`) objects. Everything needed to read them — Zip access (via
-/// ZIPFoundation), Snappy decompression, and Protocol Buffers decoding — is
+/// libarchive), Snappy decompression, and Protocol Buffers decoding — is
 /// implemented in this module, so no external tooling or Apple frameworks are
 /// required and the same code runs on every platform.
 public final class PagesFile {

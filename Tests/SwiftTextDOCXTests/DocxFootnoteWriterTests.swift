@@ -1,7 +1,6 @@
 import Foundation
 import SwiftTextDOCX
 import Testing
-import ZIPFoundation
 
 @Suite("DOCX footnote writer")
 struct DocxFootnoteWriterTests {
@@ -20,13 +19,10 @@ struct DocxFootnoteWriterTests {
 
 		try MarkdownToDocx.convert(markdown, to: url)
 
-		let archive = try #require(Archive(url: url, accessMode: .read))
+		let archive = try DocxArchive(contentsOf: url)
 
 		func part(_ path: String) throws -> String {
-			let entry = try #require(archive[path], "missing part \(path)")
-			var data = Data()
-			_ = try archive.extract(entry) { data.append($0) }
-			return String(decoding: data, as: UTF8.self)
+			try archive.text(path)
 		}
 
 		// The footnotes part exists and holds the note body plus the required
@@ -94,13 +90,9 @@ struct DocxFootnoteWriterTests {
 
 		try MarkdownToDocx.convert("Just a plain paragraph.", to: url)
 
-		let archive = try #require(Archive(url: url, accessMode: .read))
-		#expect(archive["word/footnotes.xml"] == nil)
-
-		var data = Data()
-		let entry = try #require(archive["[Content_Types].xml"])
-		_ = try archive.extract(entry) { data.append($0) }
-		#expect(!String(decoding: data, as: UTF8.self).contains("footnotes"))
+		let archive = try DocxArchive(contentsOf: url)
+		#expect(!archive.contains("word/footnotes.xml"))
+		#expect(!(try archive.text("[Content_Types].xml").contains("footnotes")))
 	}
 
 	@Test("A footnote reference inside a table header cell is rendered, not dropped")
@@ -119,7 +111,7 @@ struct DocxFootnoteWriterTests {
 
 		try MarkdownToDocx.convert(markdown, to: url)
 
-		let archive = try #require(Archive(url: url, accessMode: .read))
+		let archive = try DocxArchive(contentsOf: url)
 		// The only reference is in the header cell, so its presence proves the
 		// header path renders footnote runs (it now goes through renderRuns).
 		#expect(try part("word/document.xml", from: archive).contains("<w:footnoteReference w:id=\"1\"/>"))
@@ -140,18 +132,15 @@ struct DocxFootnoteWriterTests {
 		defer { try? FileManager.default.removeItem(at: url) }
 		try writer.write(to: url)
 
-		let archive = try #require(Archive(url: url, accessMode: .read))
-		#expect(archive["word/footnotes.xml"] == nil)
+		let archive = try DocxArchive(contentsOf: url)
+		#expect(!archive.contains("word/footnotes.xml"))
 		let document = try part("word/document.xml", from: archive)
 		#expect(!document.contains("<w:footnoteReference"))
 		#expect(document.contains("[^1]"))  // reference stays literal
 	}
 
 	/// Reads a part out of a `.docx` archive as a UTF-8 string.
-	private func part(_ path: String, from archive: Archive) throws -> String {
-		let entry = try #require(archive[path], "missing part \(path)")
-		var data = Data()
-		_ = try archive.extract(entry) { data.append($0) }
-		return String(decoding: data, as: UTF8.self)
+	private func part(_ path: String, from archive: DocxArchive) throws -> String {
+		try archive.text(path)
 	}
 }

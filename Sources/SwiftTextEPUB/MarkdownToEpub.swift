@@ -37,13 +37,13 @@ public enum MarkdownToEpub {
 	/// Writes an EPUB for `markdown` to `url`.
 	public static func convert(_ markdown: String, to url: URL, metadata: EpubMetadata, options: EpubOptions = EpubOptions()) throws {
 		let files = makeFiles(markdown, metadata: metadata, options: options)
-		try EpubArchiveWriter.write(files, to: url, modificationDate: metadata.modified)
+		try EpubArchiveWriter.write(files, to: url)
 	}
 
 	/// Builds an EPUB for `markdown` and returns its bytes.
 	public static func makeData(_ markdown: String, metadata: EpubMetadata, options: EpubOptions = EpubOptions()) throws -> Data {
 		let files = makeFiles(markdown, metadata: metadata, options: options)
-		return try EpubArchiveWriter.makeData(files, modificationDate: metadata.modified)
+		return try EpubArchiveWriter.makeData(files)
 	}
 
 	/// Builds the ordered container file list (pre-zip). Exposed internally so

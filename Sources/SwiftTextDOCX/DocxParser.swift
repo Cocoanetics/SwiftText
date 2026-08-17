@@ -1,5 +1,5 @@
 import Foundation
-import ZIPFoundation
+import Archive
 #if canImport(FoundationXML)
 // On Linux, XMLParser/XMLParserDelegate live in FoundationXML, not Foundation.
 import FoundationXML
@@ -10,19 +10,27 @@ final class DocxParser {
 		guard FileManager.default.fileExists(atPath: url.path) else {
 			throw DocxFileError.fileNotFound(url)
 		}
-		let archive: Archive
+		// libarchive reads sequentially, so collect every part we might need in a
+		// single pass rather than seeking to each one by name.
+		let wanted: Set<String> = [
+			"word/document.xml", "word/styles.xml", "word/numbering.xml", "word/footnotes.xml"
+		]
+		var parts = [String: Data]()
 		do {
-			archive = try Archive(url: url, accessMode: .read)
+			let reader = try ArchiveReader(path: url.path)
+			try reader.forEachEntry { entry, reader in
+				guard wanted.contains(entry.pathname) else { return }
+				parts[entry.pathname] = try reader.readData()
+			}
 		} catch {
 			throw DocxFileError.unreadableArchive(url, error)
 		}
-		guard let documentEntry = archive["word/document.xml"] else {
+		guard let documentData = parts["word/document.xml"] else {
 			throw DocxFileError.missingDocumentXML
 		}
-		let documentData = try data(for: documentEntry, in: archive)
-		let stylesData = try dataIfAvailable(named: "word/styles.xml", in: archive)
-		let numberingData = try dataIfAvailable(named: "word/numbering.xml", in: archive)
-		let footnotesData = try dataIfAvailable(named: "word/footnotes.xml", in: archive)
+		let stylesData = parts["word/styles.xml"]
+		let numberingData = parts["word/numbering.xml"]
+		let footnotesData = parts["word/footnotes.xml"]
 		return try parseDocumentXML(
 			from: documentData,
 			stylesData: stylesData,
@@ -91,19 +99,6 @@ final class DocxParser {
 			throw DocxFileError.numberingParsingFailed(parser.parserError)
 		}
 		return extractor.catalog
-	}
-
-	private func data(for entry: Entry, in archive: Archive) throws -> Data {
-		var data = Data()
-		_ = try archive.extract(entry) { data.append($0) }
-		return data
-	}
-
-	private func dataIfAvailable(named name: String, in archive: Archive) throws -> Data? {
-		guard let entry = archive[name] else {
-			return nil
-		}
-		return try data(for: entry, in: archive)
 	}
 }
 
