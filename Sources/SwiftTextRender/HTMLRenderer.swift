@@ -290,48 +290,144 @@ public enum HTMLRenderer {
 		return words.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
 	}
 
-	/// Split the laid-out column into page slices, breaking only at line and
-	/// block boundaries where possible.
+	/// Page-break information gathered from the laid-out box tree, in column
+	/// coordinates.
+	private struct BreakPoints {
+		/// Where a break is mandatory (`break-before` / `break-after: page`).
+		var forced: Set<Double> = []
+		/// Where a break is possible without splitting a line: block and line edges.
+		var candidates: Set<Double> = []
+		/// Candidates the author asked us to steer clear of
+		/// (`break-before` / `break-after: avoid`).
+		var discouraged: Set<Double> = []
+		/// Ranges that should not be split (`break-inside: avoid`).
+		var atomic: [(top: Double, bottom: Double)] = []
+		/// Top of the first thing that actually paints — a non-empty line box or a
+		/// replaced image. Used to recognise a forced break that has nothing above
+		/// it. `.infinity` when the document renders nothing at all.
+		var firstContentY: Double = .infinity
+		/// Bottom of the last thing that actually paints. Used to recognise a
+		/// forced break with nothing below it.
+		var lastContentY: Double = -.infinity
+
+		mutating func noteContent(top: Double, bottom: Double) {
+			firstContentY = min(firstContentY, top)
+			lastContentY = max(lastContentY, bottom)
+		}
+	}
+
+	/// Tolerance for comparing column coordinates, in CSS pixels. Also the floor
+	/// on slice height, which keeps the pagination loop moving.
+	private static let breakEpsilon = 0.5
+
+	/// Split the laid-out column into page slices, honouring CSS fragmentation
+	/// properties and otherwise breaking at line and block boundaries.
 	private static func paginate(_ root: BlockBox, columnHeight: Double, pageHeightPx: Double, margin: Double) -> [(top: Double, bottom: Double)] {
 		let contentHeight = max(1, pageHeightPx - 2 * margin)
-		guard columnHeight > contentHeight + 0.5 else {
+		let epsilon = breakEpsilon
+
+		var points = BreakPoints()
+		collectBreaks(root, into: &points)
+
+		// Drop breaks that would only produce a blank page — one with nothing
+		// painted above it (the common `h1 { break-before: page }` on a document
+		// that opens with an h1) or nothing below it (`break-after` on the last
+		// element). Both tests are against painted content rather than against
+		// 0 and `columnHeight`, because the body's margins sit outside both.
+		//
+		// Suppressing the leading blank is a deliberate divergence from the WebKit
+		// engine, which emits it. WeasyPrint — which this engine ports —
+		// suppresses it, and a blank first page is not what an author asking for
+		// "start each chapter on a new page" means.
+		let forced = points.forced
+			.filter { $0 > points.firstContentY + epsilon && $0 < points.lastContentY - epsilon }
+			.sorted()
+
+		// Short documents still need pagination if they carry a forced break.
+		guard columnHeight > contentHeight + epsilon || !forced.isEmpty else {
 			return [(0, columnHeight)]
 		}
 
-		var breaks: Set<Double> = []
-		collectBreaks(root, into: &breaks)
-		let sortedBreaks = breaks.sorted()
+		// `break-inside: avoid` can only be honoured for blocks that would fit on
+		// a page at all; a taller one has to be split regardless.
+		let atomic = points.atomic.filter { $0.bottom - $0.top <= contentHeight + epsilon }
+		let candidates = points.candidates.sorted()
+
+		func splitsAtomicBlock(_ y: Double) -> Bool {
+			atomic.contains { y > $0.top + epsilon && y < $0.bottom - epsilon }
+		}
 
 		var slices: [(top: Double, bottom: Double)] = []
 		var top = 0.0
-		while top < columnHeight - 0.5 {
+		while top < columnHeight - epsilon {
 			let target = top + contentHeight
+
+			// A mandatory break outranks everything, even when it leaves most of
+			// the page empty. The *earliest* one wins: we cannot page past it.
+			if let forcedBreak = forced.first(where: { $0 > top + epsilon && $0 <= target + epsilon }) {
+				slices.append((top, forcedBreak))
+				top = forcedBreak
+				continue
+			}
+
 			if target >= columnHeight {
 				slices.append((top, columnHeight))
 				break
 			}
-			// The furthest break strictly inside (top, target]; force a hard break
-			// if a single line/block is taller than the page.
-			let candidate = sortedBreaks.last { $0 > top + 0.5 && $0 <= target + 0.5 }
-			let bottom = (candidate ?? target) > top ? (candidate ?? target) : target
+
+			// Otherwise take the furthest legal break that fits, relaxing the
+			// author's preferences one at a time rather than giving up on them
+			// together. The final fallback slices mid-line, which is what has to
+			// happen when a single line is taller than the page.
+			let reachable = candidates.filter { $0 > top + epsilon && $0 <= target + epsilon }
+			let bottom = reachable.last { !splitsAtomicBlock($0) && !points.discouraged.contains($0) }
+				?? reachable.last { !splitsAtomicBlock($0) }
+				?? reachable.last
+				?? target
+
 			slices.append((top, bottom))
 			top = bottom
 		}
 		return slices.isEmpty ? [(0, columnHeight)] : slices
 	}
 
-	/// Collect candidate page-break y-coordinates: line and block edges.
-	private static func collectBreaks(_ box: Box, into ys: inout Set<Double>) {
+	/// Walk the laid-out tree collecting break candidates and the fragmentation
+	/// preferences declared on each block.
+	private static func collectBreaks(_ box: Box, into points: inout BreakPoints) {
 		guard let block = box as? BlockBox else { return }
-		ys.insert(block.y)
-		ys.insert(block.y + block.height)
+		let top = block.y
+		let bottom = block.y + block.height
+		points.candidates.insert(top)
+		points.candidates.insert(bottom)
+
+		switch block.style.breakBefore {
+		case .page: points.forced.insert(top)
+		case .avoid: points.discouraged.insert(top)
+		case .auto: break
+		}
+		switch block.style.breakAfter {
+		case .page: points.forced.insert(bottom)
+		case .avoid: points.discouraged.insert(bottom)
+		case .auto: break
+		}
+		if block.style.breakInside == .avoid, block.height > 0 {
+			points.atomic.append((top, bottom))
+		}
+
+		if block.image != nil {
+			points.noteContent(top: top, bottom: bottom)
+		}
+
 		if block.establishesInlineContext {
 			for line in block.lines {
-				ys.insert(line.y)
-				ys.insert(line.y + line.height)
+				points.candidates.insert(line.y)
+				points.candidates.insert(line.y + line.height)
+				if !line.fragments.isEmpty {
+					points.noteContent(top: line.y, bottom: line.y + line.height)
+				}
 			}
 		} else {
-			for child in block.children { collectBreaks(child, into: &ys) }
+			for child in block.children { collectBreaks(child, into: &points) }
 		}
 	}
 
