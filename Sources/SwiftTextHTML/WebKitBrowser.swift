@@ -148,12 +148,18 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 		return try await webView.pdf(configuration: configuration)
 	}
 
-	#if os(macOS)
-	/// Exports the rendered page as paginated PDF data using NSPrintOperation.
+	/// Exports the rendered page as paginated PDF data, through the platform's
+	/// print pipeline.
 	///
 	/// Unlike `exportPDFData` (which produces a single continuous page),
 	/// this method uses the print pipeline and respects CSS `@page` rules
 	/// for page size, margins, and page breaks.
+	///
+	/// macOS drives that pipeline with `NSPrintOperation` and iOS with
+	/// `UIPrintPageRenderer`. They are different APIs onto the *same* WebKit
+	/// paginator, so the page counts match — measured, not assumed: see
+	/// `webKitBrowserPaginatesForcedPageBreaks`, which asserts the same numbers
+	/// on both platforms.
 	///
 	/// - Parameter paperSize: The paper size in points (e.g. 595.28×841.89 for A4).
 	/// - Returns: Paginated PDF data.
@@ -161,7 +167,58 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 	@available(macOS 11.0, *)
 	package func exportPaginatedPDFData(paperSize: CGSize) async throws -> Data {
 		let webView = try await loadedWebView()
+		#if canImport(UIKit)
+		return try Self.paginatedPDFData(from: webView, paperSize: paperSize)
+		#else
+		return try await Self.paginatedPDFData(from: webView, paperSize: paperSize)
+		#endif
+	}
 
+	#if canImport(UIKit)
+	/// Renders the loaded page through UIKit's print pipeline.
+	///
+	/// `UIPrintPageRenderer` is the paginator `UIPrintInteractionController` runs
+	/// when a user prints, and `viewPrintFormatter()` is WebKit's own print
+	/// formatter — so this reaches the same machinery, and honours the same CSS
+	/// fragmentation rules, as the `NSPrintOperation` path on macOS.
+	///
+	/// Simpler than the macOS side, in fact: no delegate callback to bridge to
+	/// async, and no temp file, so there is no iOS counterpart to
+	/// `PrintOperationHelper`.
+	@MainActor
+	private static func paginatedPDFData(from webView: WKWebView, paperSize: CGSize) throws -> Data {
+		let pageRenderer = UIPrintPageRenderer()
+		pageRenderer.addPrintFormatter(webView.viewPrintFormatter(), startingAtPageAt: 0)
+
+		// `paperRect` and `printableRect` are read-only, so KVC is the only way to
+		// set them. Universally done, but not a documented API contract — these two
+		// lines are the ones that would break if UIKit stopped backing them with
+		// KVC, and the `guard` below is what would turn that into a clear error
+		// rather than a zero-page PDF.
+		let paperRect = CGRect(origin: .zero, size: paperSize)
+		pageRenderer.setValue(NSValue(cgRect: paperRect), forKey: "paperRect")
+		pageRenderer.setValue(NSValue(cgRect: paperRect), forKey: "printableRect")
+
+		// Reading `numberOfPages` is what runs pagination.
+		let pageCount = pageRenderer.numberOfPages
+		guard pageCount > 0 else {
+			throw WebKitBrowserError.printFailed
+		}
+
+		// `UIGraphicsPDFRenderer` rather than `UIGraphicsBeginPDFContextToData`:
+		// same output, non-legacy API.
+		let pdfRenderer = UIGraphicsPDFRenderer(bounds: paperRect)
+		return pdfRenderer.pdfData { context in
+			for page in 0 ..< pageCount {
+				context.beginPage()
+				pageRenderer.drawPage(at: page, in: pageRenderer.paperRect)
+			}
+		}
+	}
+	#else
+	/// Renders the loaded page through AppKit's print pipeline.
+	@MainActor
+	private static func paginatedPDFData(from webView: WKWebView, paperSize: CGSize) async throws -> Data {
 		let tempURL = FileManager.default.temporaryDirectory
 			.appendingPathComponent(UUID().uuidString)
 			.appendingPathExtension("pdf")
@@ -477,9 +534,10 @@ public enum WebKitBrowserError: Error, LocalizedError {
 
 // MARK: - Print Operation Helper
 
-#if os(macOS)
-/// Bridges NSPrintOperation's delegate callback to async/await. macOS-only:
-/// there is no UIKit counterpart, and paginated export on iOS is tracked in #55.
+#if !canImport(UIKit)
+/// Bridges NSPrintOperation's delegate callback to async/await. AppKit-only:
+/// the UIKit pipeline needs no such bridge — `UIPrintPageRenderer` paginates
+/// synchronously and draws straight into a PDF context.
 @available(macOS 10.15, *)
 private class PrintOperationHelper: NSObject {
 	private var continuation: CheckedContinuation<Data, Error>?
