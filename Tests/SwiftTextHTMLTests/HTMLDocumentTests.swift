@@ -172,18 +172,29 @@ func webKitBrowserReportsNavigationFailure() async throws {
 
 /// The Swift-side backstop fires even when WebKit never calls back at all.
 ///
-/// The page busy-waits, which blocks the web content process's main thread, so
-/// the navigation cannot finish and the capture script is never injected — the
-/// watchdog is the only thing that can end this load. Racing a short timeout
-/// against the injected script's 500 ms debounce instead would be flaky: under a
-/// loaded machine `Task.sleep` overshoots, and the script's message can land
-/// first. The block is bounded so the process doesn't spin past the test.
+/// The page busy-waits, blocking the web content process's main thread, so the
+/// navigation cannot finish and the capture script is never injected — leaving
+/// the watchdog as the only thing that can end this load.
+///
+/// The block outlasts the test's own time limit deliberately. Anything shorter
+/// is a race between the watchdog and the page finishing, and that race is
+/// losable: under a loaded machine `Task.sleep` overshoots badly, and a 3 s
+/// block against a 0.3 s timeout still failed roughly one run in three here
+/// (never with `--no-parallel`, which is what identified starvation rather than
+/// the fixture as the cause). Since the page cannot possibly complete while
+/// this test is alive, no amount of starvation can change the outcome — only
+/// how long the watchdog takes to report it.
+///
+/// It stays bounded rather than `while (true)` so that a web view which somehow
+/// outlived its test cannot spin a core indefinitely; WebKit tears the content
+/// process down with the view, so in practice the loop ends within the second
+/// the test takes.
 @Test(.timeLimit(.minutes(1)))
 @MainActor
 func webKitBrowserTimesOut() async throws {
 	let stalling = """
 	<html><body><p>Hello</p>
-	<script>var end = Date.now() + 3000; while (Date.now() < end) {}</script>
+	<script>var end = Date.now() + 60000; while (Date.now() < end) {}</script>
 	</body></html>
 	"""
 	let browser = WebKitBrowser(htmlString: stalling)
