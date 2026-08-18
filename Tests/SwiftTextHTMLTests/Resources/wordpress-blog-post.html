@@ -1,0 +1,821 @@
+
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<title>  SwiftText | Cocoanetics</title>
+<meta name="description" content="Over the course of the last year, I&#8217;ve had quite a few side projects that required some way to get text from a variety of sources, with code and frameworks found in a number of private repos. A while ago, I felt an inkling to start pulling those together into an open source project. So this will be my Christmas gift for you this year. SwiftText collects various ways of getting text — or, if possible, Markdown — from a variety of sources and places. Update: &#8230; now Images, PDFs, Word DOCX and also HTML pages or URLs. One such use case was to get pure text from bank statements for my investment portfolio, so that I could parse the text and construct a CSV file to upload my holdings to Yahoo Finance. Reading PDFs For the most part these statements were normal PDFs that had been programmatically created. The advantage of those is that you can get the actual text from selection ranges, just like when you select the text and then copy it to the pasteboard. This is the one sort of PDFs you might find with vector data. Essentially those files are just a record of drawing information into a vector context. But there was a problem, because some of those statements were scanned from paper. This is the other — less useful — sort of PDFs: those are essentially collections of bitmap images, one per page. But thankfully we do have quite capable OCR capabilities on Mac and iOS in the form of the Vision framework. With both PDF selection ranges as well as text fragments from Vision you get rectangles with text. So I made it such that you only have to ask a PDFPage for its textLines(). It will first attempt to get the text from the selection ranges and if it fails it will render the page into a 300 DPI bitmap and then OCR it, to still give you more or less the same result. Those text lines are comprised of those fragments that are likely forming a line, even though there might be tabs or whitespace between them. This was the state of this private framework for the longest time. It saw a lot more usage in a receipt scanner I am building for myself and also when I was asked by a friend to translate several PDFs, it was extremely lucky that I had a quick way to get the raw text from those PDFs to feed into ChatGPT. This opened my mind for the possibility that this might be quite useful in agentic scenarios where agents need to get to the text of things. So the idea for SwiftText was born: it should be an open source project that collects various forms of getting text — or, if possible, Markdown — from a variety of sources and places. Reading DOCX For PDFs I had already covered both types of PDF files, extracting the OCR for bitmap images was a simple exercise. There was a case where I had to get the pure text from a Word document (DOCX) instead of PDF. Granted, I could just copy the text out of that, but my goal is to have that in a form — a tool — that I could use to automate such work in the future. I had a look at how DOCX files are constructed: they are just a ZIP archive of a couple of XML files. At the heart there is a document.xml which contains the actual document text. So I gave this task to Codex and with nearly no extra input from me it was able to create a utility that would output the pure text from such a Word doc. Behind the scenes it uses XMLParser, so the only external dependency for that is ZIPFoundation, because to my knowledge there is no first-party ZIP reading capability that fits this use case across Apple&#8217;s platforms. Markdown has a slight edge over pure text because it marks emphasis on specific terms, tells us about headlines of different levels, and also clearly structures lists — numbered or bulleted. But my Codex agent also had no problem pulling out this style information from the DOCX contents. SwiftText comes with a demo CLI app that lets you perform OCR. This gives you Markdown for a Word file: For PDF or bitmaps you do: For the latter I do have experimental Markdown support, but it&#8217;s been very challenging to get semantic information from those kinds of sources. I have the beginnings of a semantic parser — again from Vision — which promises proper paragraphs, tables, and lists. But unfortunately at this time it seems that I couldn&#8217;t get it to work reliably. The problem with tables is that Vision seems to [&#8230;]" />
+<meta name="keywords" content="," /><meta name="robots" content="index,follow" />
+<link rel="stylesheet" href="https://www.cocoanetics.com/wp-content/themes/cocoanetics/style.css" type="text/css" media="screen,projection" />
+<link rel="stylesheet" href="https://www.cocoanetics.com/wp-content/themes/cocoanetics/css/print.css" type="text/css" media="print" />
+<link rel="shortcut icon" href="https://www.cocoanetics.com/wp-content/themes/cocoanetics/images/favicon.ico" />
+<link rel="pingback" href="https://www.cocoanetics.com/xmlrpc.php" />
+<link rel="apple-touch-icon-precomposed" href="https://www.cocoanetics.com/wp-content/themes/cocoanetics/images/touch-icon-iphone.png" />
+<link rel="apple-touch-icon-precomposed" sizes="72x72" href="https://www.cocoanetics.com/wp-content/themes/cocoanetics/images/touch-icon-ipad.png" />
+<link rel="apple-touch-icon-precomposed" sizes="114x114" href="https://www.cocoanetics.com/wp-content/themes/cocoanetics/images/touch-icon-iphone4.png" />
+
+<meta name='robots' content='max-image-preview:large' />
+<link rel='dns-prefetch' href='//www.cocoanetics.com' />
+<link rel='dns-prefetch' href='//secure.gravatar.com' />
+<link rel='dns-prefetch' href='//stats.wp.com' />
+<link rel='dns-prefetch' href='//v0.wordpress.com' />
+<link rel='dns-prefetch' href='//jetpack.wordpress.com' />
+<link rel='dns-prefetch' href='//s0.wp.com' />
+<link rel='dns-prefetch' href='//public-api.wordpress.com' />
+<link rel='dns-prefetch' href='//0.gravatar.com' />
+<link rel='dns-prefetch' href='//1.gravatar.com' />
+<link rel='dns-prefetch' href='//2.gravatar.com' />
+<link rel='dns-prefetch' href='//widgets.wp.com' />
+<link rel='preconnect' href='//i0.wp.com' />
+<link rel="alternate" title="oEmbed (JSON)" type="application/json+oembed" href="https://www.cocoanetics.com/wp-json/oembed/1.0/embed?url=https%3A%2F%2Fwww.cocoanetics.com%2F2025%2F12%2Fswifttext%2F" />
+<link rel="alternate" title="oEmbed (XML)" type="text/xml+oembed" href="https://www.cocoanetics.com/wp-json/oembed/1.0/embed?url=https%3A%2F%2Fwww.cocoanetics.com%2F2025%2F12%2Fswifttext%2F&#038;format=xml" />
+<style id='wp-img-auto-sizes-contain-inline-css' type='text/css'>
+img:is([sizes=auto i],[sizes^="auto," i]){contain-intrinsic-size:3000px 1500px}
+/*# sourceURL=wp-img-auto-sizes-contain-inline-css */
+</style>
+<link rel='stylesheet' id='jetpack_related-posts-css' href='https://www.cocoanetics.com/wp-content/plugins/jetpack/modules/related-posts/related-posts.css?ver=20240116' type='text/css' media='all' />
+<style id='wp-block-paragraph-inline-css' type='text/css'>
+.is-small-text{font-size:.875em}.is-regular-text{font-size:1em}.is-large-text{font-size:2.25em}.is-larger-text{font-size:3em}.has-drop-cap:not(:focus):first-letter{float:left;font-size:8.4em;font-style:normal;font-weight:100;line-height:.68;margin:.05em .1em 0 0;text-transform:uppercase}body.rtl .has-drop-cap:not(:focus):first-letter{float:none;margin-left:.1em}p.has-drop-cap.has-background{overflow:hidden}:root :where(p.has-background){padding:1.25em 2.375em}:where(p.has-text-color:not(.has-link-color)) a{color:inherit}p.has-text-align-left[style*="writing-mode:vertical-lr"],p.has-text-align-right[style*="writing-mode:vertical-rl"]{rotate:180deg}
+/*# sourceURL=https://www.cocoanetics.com/wp-includes/blocks/paragraph/style.min.css */
+</style>
+<style id='wp-block-heading-inline-css' type='text/css'>
+h1:where(.wp-block-heading).has-background,h2:where(.wp-block-heading).has-background,h3:where(.wp-block-heading).has-background,h4:where(.wp-block-heading).has-background,h5:where(.wp-block-heading).has-background,h6:where(.wp-block-heading).has-background{padding:1.25em 2.375em}h1.has-text-align-left[style*=writing-mode]:where([style*=vertical-lr]),h1.has-text-align-right[style*=writing-mode]:where([style*=vertical-rl]),h2.has-text-align-left[style*=writing-mode]:where([style*=vertical-lr]),h2.has-text-align-right[style*=writing-mode]:where([style*=vertical-rl]),h3.has-text-align-left[style*=writing-mode]:where([style*=vertical-lr]),h3.has-text-align-right[style*=writing-mode]:where([style*=vertical-rl]),h4.has-text-align-left[style*=writing-mode]:where([style*=vertical-lr]),h4.has-text-align-right[style*=writing-mode]:where([style*=vertical-rl]),h5.has-text-align-left[style*=writing-mode]:where([style*=vertical-lr]),h5.has-text-align-right[style*=writing-mode]:where([style*=vertical-rl]),h6.has-text-align-left[style*=writing-mode]:where([style*=vertical-lr]),h6.has-text-align-right[style*=writing-mode]:where([style*=vertical-rl]){rotate:180deg}
+/*# sourceURL=https://www.cocoanetics.com/wp-includes/blocks/heading/style.min.css */
+</style>
+<style id='wp-emoji-styles-inline-css' type='text/css'>
+
+	img.wp-smiley, img.emoji {
+		display: inline !important;
+		border: none !important;
+		box-shadow: none !important;
+		height: 1em !important;
+		width: 1em !important;
+		margin: 0 0.07em !important;
+		vertical-align: -0.1em !important;
+		background: none !important;
+		padding: 0 !important;
+	}
+/*# sourceURL=wp-emoji-styles-inline-css */
+</style>
+<link rel='stylesheet' id='wp-block-library-css' href='https://www.cocoanetics.com/wp-includes/css/dist/block-library/style.min.css?ver=6.9.7' type='text/css' media='all' />
+
+<style id='wp-block-code-inline-css' type='text/css'>
+.wp-block-code{box-sizing:border-box}.wp-block-code code{
+  /*!rtl:begin:ignore*/direction:ltr;display:block;font-family:inherit;overflow-wrap:break-word;text-align:initial;white-space:pre-wrap
+  /*!rtl:end:ignore*/}
+/*# sourceURL=https://www.cocoanetics.com/wp-includes/blocks/code/style.min.css */
+</style>
+
+<style id='classic-theme-styles-inline-css' type='text/css'>
+/*! This file is auto-generated */
+.wp-block-button__link{color:#fff;background-color:#32373c;border-radius:9999px;box-shadow:none;text-decoration:none;padding:calc(.667em + 2px) calc(1.333em + 2px);font-size:1.125em}.wp-block-file__button{background:#32373c;color:#fff;text-decoration:none}
+/*# sourceURL=/wp-includes/css/classic-themes.min.css */
+</style>
+<style id='global-styles-inline-css' type='text/css'>
+:root{--wp--preset--aspect-ratio--square: 1;--wp--preset--aspect-ratio--4-3: 4/3;--wp--preset--aspect-ratio--3-4: 3/4;--wp--preset--aspect-ratio--3-2: 3/2;--wp--preset--aspect-ratio--2-3: 2/3;--wp--preset--aspect-ratio--16-9: 16/9;--wp--preset--aspect-ratio--9-16: 9/16;--wp--preset--color--black: #000000;--wp--preset--color--cyan-bluish-gray: #abb8c3;--wp--preset--color--white: #ffffff;--wp--preset--color--pale-pink: #f78da7;--wp--preset--color--vivid-red: #cf2e2e;--wp--preset--color--luminous-vivid-orange: #ff6900;--wp--preset--color--luminous-vivid-amber: #fcb900;--wp--preset--color--light-green-cyan: #7bdcb5;--wp--preset--color--vivid-green-cyan: #00d084;--wp--preset--color--pale-cyan-blue: #8ed1fc;--wp--preset--color--vivid-cyan-blue: #0693e3;--wp--preset--color--vivid-purple: #9b51e0;--wp--preset--gradient--vivid-cyan-blue-to-vivid-purple: linear-gradient(135deg,rgb(6,147,227) 0%,rgb(155,81,224) 100%);--wp--preset--gradient--light-green-cyan-to-vivid-green-cyan: linear-gradient(135deg,rgb(122,220,180) 0%,rgb(0,208,130) 100%);--wp--preset--gradient--luminous-vivid-amber-to-luminous-vivid-orange: linear-gradient(135deg,rgb(252,185,0) 0%,rgb(255,105,0) 100%);--wp--preset--gradient--luminous-vivid-orange-to-vivid-red: linear-gradient(135deg,rgb(255,105,0) 0%,rgb(207,46,46) 100%);--wp--preset--gradient--very-light-gray-to-cyan-bluish-gray: linear-gradient(135deg,rgb(238,238,238) 0%,rgb(169,184,195) 100%);--wp--preset--gradient--cool-to-warm-spectrum: linear-gradient(135deg,rgb(74,234,220) 0%,rgb(151,120,209) 20%,rgb(207,42,186) 40%,rgb(238,44,130) 60%,rgb(251,105,98) 80%,rgb(254,248,76) 100%);--wp--preset--gradient--blush-light-purple: linear-gradient(135deg,rgb(255,206,236) 0%,rgb(152,150,240) 100%);--wp--preset--gradient--blush-bordeaux: linear-gradient(135deg,rgb(254,205,165) 0%,rgb(254,45,45) 50%,rgb(107,0,62) 100%);--wp--preset--gradient--luminous-dusk: linear-gradient(135deg,rgb(255,203,112) 0%,rgb(199,81,192) 50%,rgb(65,88,208) 100%);--wp--preset--gradient--pale-ocean: linear-gradient(135deg,rgb(255,245,203) 0%,rgb(182,227,212) 50%,rgb(51,167,181) 100%);--wp--preset--gradient--electric-grass: linear-gradient(135deg,rgb(202,248,128) 0%,rgb(113,206,126) 100%);--wp--preset--gradient--midnight: linear-gradient(135deg,rgb(2,3,129) 0%,rgb(40,116,252) 100%);--wp--preset--font-size--small: 13px;--wp--preset--font-size--medium: 20px;--wp--preset--font-size--large: 36px;--wp--preset--font-size--x-large: 42px;--wp--preset--spacing--20: 0.44rem;--wp--preset--spacing--30: 0.67rem;--wp--preset--spacing--40: 1rem;--wp--preset--spacing--50: 1.5rem;--wp--preset--spacing--60: 2.25rem;--wp--preset--spacing--70: 3.38rem;--wp--preset--spacing--80: 5.06rem;--wp--preset--shadow--natural: 6px 6px 9px rgba(0, 0, 0, 0.2);--wp--preset--shadow--deep: 12px 12px 50px rgba(0, 0, 0, 0.4);--wp--preset--shadow--sharp: 6px 6px 0px rgba(0, 0, 0, 0.2);--wp--preset--shadow--outlined: 6px 6px 0px -3px rgb(255, 255, 255), 6px 6px rgb(0, 0, 0);--wp--preset--shadow--crisp: 6px 6px 0px rgb(0, 0, 0);}:where(.is-layout-flex){gap: 0.5em;}:where(.is-layout-grid){gap: 0.5em;}body .is-layout-flex{display: flex;}.is-layout-flex{flex-wrap: wrap;align-items: center;}.is-layout-flex > :is(*, div){margin: 0;}body .is-layout-grid{display: grid;}.is-layout-grid > :is(*, div){margin: 0;}:where(.wp-block-columns.is-layout-flex){gap: 2em;}:where(.wp-block-columns.is-layout-grid){gap: 2em;}:where(.wp-block-post-template.is-layout-flex){gap: 1.25em;}:where(.wp-block-post-template.is-layout-grid){gap: 1.25em;}.has-black-color{color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-color{color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-color{color: var(--wp--preset--color--white) !important;}.has-pale-pink-color{color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-color{color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-color{color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-color{color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-color{color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-color{color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-color{color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-color{color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-color{color: var(--wp--preset--color--vivid-purple) !important;}.has-black-background-color{background-color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-background-color{background-color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-background-color{background-color: var(--wp--preset--color--white) !important;}.has-pale-pink-background-color{background-color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-background-color{background-color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-background-color{background-color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-background-color{background-color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-background-color{background-color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-background-color{background-color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-background-color{background-color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-background-color{background-color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-background-color{background-color: var(--wp--preset--color--vivid-purple) !important;}.has-black-border-color{border-color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-border-color{border-color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-border-color{border-color: var(--wp--preset--color--white) !important;}.has-pale-pink-border-color{border-color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-border-color{border-color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-border-color{border-color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-border-color{border-color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-border-color{border-color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-border-color{border-color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-border-color{border-color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-border-color{border-color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-border-color{border-color: var(--wp--preset--color--vivid-purple) !important;}.has-vivid-cyan-blue-to-vivid-purple-gradient-background{background: var(--wp--preset--gradient--vivid-cyan-blue-to-vivid-purple) !important;}.has-light-green-cyan-to-vivid-green-cyan-gradient-background{background: var(--wp--preset--gradient--light-green-cyan-to-vivid-green-cyan) !important;}.has-luminous-vivid-amber-to-luminous-vivid-orange-gradient-background{background: var(--wp--preset--gradient--luminous-vivid-amber-to-luminous-vivid-orange) !important;}.has-luminous-vivid-orange-to-vivid-red-gradient-background{background: var(--wp--preset--gradient--luminous-vivid-orange-to-vivid-red) !important;}.has-very-light-gray-to-cyan-bluish-gray-gradient-background{background: var(--wp--preset--gradient--very-light-gray-to-cyan-bluish-gray) !important;}.has-cool-to-warm-spectrum-gradient-background{background: var(--wp--preset--gradient--cool-to-warm-spectrum) !important;}.has-blush-light-purple-gradient-background{background: var(--wp--preset--gradient--blush-light-purple) !important;}.has-blush-bordeaux-gradient-background{background: var(--wp--preset--gradient--blush-bordeaux) !important;}.has-luminous-dusk-gradient-background{background: var(--wp--preset--gradient--luminous-dusk) !important;}.has-pale-ocean-gradient-background{background: var(--wp--preset--gradient--pale-ocean) !important;}.has-electric-grass-gradient-background{background: var(--wp--preset--gradient--electric-grass) !important;}.has-midnight-gradient-background{background: var(--wp--preset--gradient--midnight) !important;}.has-small-font-size{font-size: var(--wp--preset--font-size--small) !important;}.has-medium-font-size{font-size: var(--wp--preset--font-size--medium) !important;}.has-large-font-size{font-size: var(--wp--preset--font-size--large) !important;}.has-x-large-font-size{font-size: var(--wp--preset--font-size--x-large) !important;}
+/*# sourceURL=global-styles-inline-css */
+</style>
+
+<link rel='stylesheet' id='jetpack_likes-css' href='https://www.cocoanetics.com/wp-content/plugins/jetpack/modules/likes/style.css?ver=15.3.1' type='text/css' media='all' />
+<link rel='stylesheet' id='sharedaddy-css' href='https://www.cocoanetics.com/wp-content/plugins/jetpack/modules/sharedaddy/sharing.css?ver=15.3.1' type='text/css' media='all' />
+<link rel='stylesheet' id='social-logos-css' href='https://www.cocoanetics.com/wp-content/plugins/jetpack/_inc/social-logos/social-logos.min.css?ver=15.3.1' type='text/css' media='all' />
+<link rel='stylesheet' id='codebox-css' href='https://www.cocoanetics.com/wp-content/plugins/wp-codebox/css/codebox.css?ver=0.1' type='text/css' media='screen' />
+<script type="text/javascript" id="jetpack_related-posts-js-extra">
+/* <![CDATA[ */
+var related_posts_js_options = {"post_heading":"h4"};
+//# sourceURL=jetpack_related-posts-js-extra
+/* ]]> */
+</script>
+<script type="text/javascript" src="https://www.cocoanetics.com/wp-content/plugins/jetpack/_inc/build/related-posts/related-posts.min.js?ver=20240116" id="jetpack_related-posts-js"></script>
+<script type="text/javascript" src="https://www.cocoanetics.com/wp-includes/js/jquery/jquery.min.js?ver=3.7.1" id="jquery-core-js"></script>
+<script type="text/javascript" src="https://www.cocoanetics.com/wp-includes/js/jquery/jquery-migrate.min.js?ver=3.4.1" id="jquery-migrate-js"></script>
+<script type="text/javascript" src="https://www.cocoanetics.com/wp-content/themes/cocoanetics/js/superfish.js?ver=1.2.6" id="superfish-js"></script>
+<script type="text/javascript" src="https://www.cocoanetics.com/wp-content/themes/cocoanetics/js/hoverIntent.js?ver=1.2.6" id="hoverintent-js"></script>
+<script type="text/javascript" src="https://www.cocoanetics.com/wp-content/plugins/wp-codebox/js/codebox.js?ver=0.1" id="codebox-js"></script>
+<link rel="https://api.w.org/" href="https://www.cocoanetics.com/wp-json/" /><link rel="alternate" title="JSON" type="application/json" href="https://www.cocoanetics.com/wp-json/wp/v2/posts/10838" /><link rel="EditURI" type="application/rsd+xml" title="RSD" href="https://www.cocoanetics.com/xmlrpc.php?rsd" />
+<meta name="generator" content="WordPress 6.9.7" />
+<link rel="canonical" href="https://www.cocoanetics.com/2025/12/swifttext/" />
+<link rel='shortlink' href='https://wp.me/p2HLdW-2OO' />
+
+        <!-- BuySellAds.com Ad Code -->
+        <script type="text/javascript">
+        (function(){
+          var bsa = document.createElement('script');
+              bsa.type= 'text/javascript';
+              bsa.async = true;
+              bsa.src='//s3.buysellads.com/ac/bsa.js';
+          (document.getElementsByTagName('head')[0]||document.getElementsByTagName('body')[0]).appendChild(bsa);
+        })();
+        </script>
+        <!-- END BuySellAds.com Ad Code --> 
+                  <script type="text/javascript"><!--
+                                function powerpress_pinw(pinw_url){window.open(pinw_url, 'PowerPressPlayer','toolbar=0,status=0,resizable=1,width=460,height=320');	return false;}
+                //-->
+
+                // tabnab protection
+                window.addEventListener('load', function () {
+                    // make all links have rel="noopener noreferrer"
+                    document.querySelectorAll('a[target="_blank"]').forEach(link => {
+                        link.setAttribute('rel', 'noopener noreferrer');
+                    });
+                });
+            </script>
+            	<style>img#wpstats{display:none}</style>
+		
+<!-- BEGIN recaptcha, injected by plugin wp-recaptcha-integration  -->
+
+<!-- END recaptcha -->
+
+<!-- Jetpack Open Graph Tags -->
+<meta property="og:type" content="article" />
+<meta property="og:title" content="SwiftText" />
+<meta property="og:url" content="https://www.cocoanetics.com/2025/12/swifttext/" />
+<meta property="og:description" content="Over the course of the last year, I&#8217;ve had quite a few side projects that required some way to get text from a variety of sources, with code and frameworks found in a number of private repos.…" />
+<meta property="article:published_time" content="2025-12-23T14:27:57+00:00" />
+<meta property="article:modified_time" content="2025-12-23T21:20:35+00:00" />
+<meta property="og:site_name" content="Cocoanetics" />
+<meta property="og:image" content="https://i0.wp.com/www.cocoanetics.com/files/Generated-Image-December-23-2025-3_23PM-scaled.jpeg?fit=1200%2C1200&#038;ssl=1" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="1200" />
+<meta property="og:image:alt" content="SwiftText Logo" />
+<meta property="og:locale" content="en_US" />
+<meta name="twitter:text:title" content="SwiftText" />
+<meta name="twitter:image" content="https://i0.wp.com/www.cocoanetics.com/files/Generated-Image-December-23-2025-3_23PM-scaled.jpeg?fit=1200%2C1200&#038;ssl=1&#038;w=640" />
+<meta name="twitter:image:alt" content="SwiftText Logo" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<!-- End Jetpack Open Graph Tags -->
+		<style type="text/css" id="wp-custom-css">
+			/*
+Welcome to Custom CSS!
+
+CSS (Cascading Style Sheets) is a kind of code that tells the browser how
+to render a web page. You may delete these comments and get started with
+your customizations.
+
+By default, your stylesheet will be loaded after the theme stylesheets,
+which means that your rules can take precedence and override the theme CSS
+rules. Just write here what you want to change, you don't need to copy all
+your theme's stylesheet content.
+*/		</style>
+		
+<link rel='stylesheet' id='eu-cookie-law-style-css' href='https://www.cocoanetics.com/wp-content/plugins/jetpack/modules/widgets/eu-cookie-law/style.css?ver=15.3.1' type='text/css' media='all' />
+
+</head>
+
+<body class="wp-singular post-template-default single single-post postid-10838 single-format-standard wp-theme-cocoanetics">
+<div id="adblock_header">
+	<!-- Ad code goes here -->
+	<div id="eu_cookie_law_widget-2" class="widget widget_eu_cookie_law_widget">
+<div
+	class="hide-on-scroll"
+	data-hide-timeout="30"
+	data-consent-expiration="180"
+	id="eu-cookie-law"
+>
+	<form method="post" id="jetpack-eu-cookie-law-form">
+		<input type="submit" value="Close and accept" class="accept" />
+	</form>
+
+	Privacy &amp; Cookies: This site uses cookies. By continuing to use this website, you agree to their use.<br />
+<br />
+To find out more, including how to control cookies, see here:
+		<a href="https://automattic.com/cookies/" rel="nofollow">
+		Cookie Policy	</a>
+</div>
+</div><div id="custom_html-4" class="widget_text widget widget_custom_html"><h3 class="widgettitle">Ad</h3><div class="textwidget custom-html-widget"><!-- BuySellAds Zone Code -->
+<div id="bsap_1260346" class="bsarocks bsap_fc3166ea4a479e0fdb4251fbe92a1219"></div>
+<!-- End BuySellAds Zone Code --></div></div></div>
+<div id="masthead">
+  <div id="branding">
+        <div id="logo"><a href="https://www.cocoanetics.com/" title="Home">
+      Cocoanetics      </a></div>
+    <div id="description">
+      Our DNA is written in Swift    </div>
+      </div><!--/branding-->
+  <ul id="social_icons">
+  	<li id="youtube"><a href="http://www.youtube.com/mindpower74" title="Youtube">Youtube</a></li>
+	<li id="twitter"><a href="http://www.twitter.com/cocoanetics" title="Twitter">Twitter</a></li>
+	<li id="email_link"><a href="mailto:oliver@cocoanetics.com?subject=Inquiry via Cocoanetics.com" title="Email">Email</a></li>
+	<li id="rss"><a href="https://www.cocoanetics.com/feed/" title="RSS">RSS</a></li>
+  </ul>
+  <form method="get" id="searchform" action="https://www.cocoanetics.com/" autocomplete="off">
+    <input type="text" value="" name="s" id="searchfield" />
+    <input type="image" src="https://www.cocoanetics.com/wp-content/themes/cocoanetics/images/search-icon2.png" id="searchsubmit" alt="search button" />
+  </form>
+</div><!--/masthead-->
+<div id="wrapper">
+<div id="hidden_button_jump"><a href="#copyright_footer">Jump</a></div>
+<div class="top-nav"><ul id="menu-main-menu" class="menu"><li id="menu-item-4425" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-home menu-item-4425"><a href="https://www.cocoanetics.com/">Home</a></li>
+<li id="menu-item-4426" class="menu-item menu-item-type-post_type menu-item-object-page current_page_parent menu-item-4426"><a href="https://www.cocoanetics.com/blog/">Blog</a></li>
+<li id="menu-item-4328" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-4328"><a href="https://www.cocoanetics.com/our-apps/">Our Apps</a></li>
+<li id="menu-item-6728" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-6728"><a href="https://www.cocoanetics.com/advertise/">Advertise</a></li>
+</ul></div><div id="main">
+	<div id="content">
+
+	 	
+		 
+		 <div id="post-10838" class="post-10838 post type-post status-publish format-standard has-post-thumbnail hentry category-projects">
+ 
+   <h1 class="posttitle">SwiftText</h1>
+  
+<!--<p class="postmetadata"><em>by</em> <a href="https://www.cocoanetics.com/author/drops/" title="Posts by Drops" rel="author">Drops</a> <em>on</em> Dec 23, 2025 
+    </p>-->
+	<p class="post_date"><a href="https://www.cocoanetics.com/2025/12/swifttext/" rel="bookmark">Dec 23, 2025</a></p>
+
+
+<div class="entry">
+			<div class="alignright">
+			<img width="300" height="300" src="https://i0.wp.com/www.cocoanetics.com/files/Generated-Image-December-23-2025-3_23PM-scaled.jpeg?fit=300%2C300&amp;ssl=1" class="attachment-post-size size-post-size wp-post-image" alt="SwiftText Logo" decoding="async" fetchpriority="high" srcset="https://i0.wp.com/www.cocoanetics.com/files/Generated-Image-December-23-2025-3_23PM-scaled.jpeg?w=2560&amp;ssl=1 2560w, https://i0.wp.com/www.cocoanetics.com/files/Generated-Image-December-23-2025-3_23PM-scaled.jpeg?resize=300%2C300&amp;ssl=1 300w, https://i0.wp.com/www.cocoanetics.com/files/Generated-Image-December-23-2025-3_23PM-scaled.jpeg?resize=1024%2C1024&amp;ssl=1 1024w, https://i0.wp.com/www.cocoanetics.com/files/Generated-Image-December-23-2025-3_23PM-scaled.jpeg?resize=150%2C150&amp;ssl=1 150w, https://i0.wp.com/www.cocoanetics.com/files/Generated-Image-December-23-2025-3_23PM-scaled.jpeg?resize=768%2C768&amp;ssl=1 768w, https://i0.wp.com/www.cocoanetics.com/files/Generated-Image-December-23-2025-3_23PM-scaled.jpeg?resize=1536%2C1536&amp;ssl=1 1536w, https://i0.wp.com/www.cocoanetics.com/files/Generated-Image-December-23-2025-3_23PM-scaled.jpeg?resize=2048%2C2048&amp;ssl=1 2048w, https://i0.wp.com/www.cocoanetics.com/files/Generated-Image-December-23-2025-3_23PM-scaled.jpeg?resize=220%2C220&amp;ssl=1 220w, https://i0.wp.com/www.cocoanetics.com/files/Generated-Image-December-23-2025-3_23PM-scaled.jpeg?resize=140%2C140&amp;ssl=1 140w" sizes="(max-width: 300px) 100vw, 300px" data-attachment-id="10840" data-permalink="https://www.cocoanetics.com/2025/12/swifttext/generated-image-december-23-2025-3_23pm/" data-orig-file="https://i0.wp.com/www.cocoanetics.com/files/Generated-Image-December-23-2025-3_23PM-scaled.jpeg?fit=2560%2C2560&amp;ssl=1" data-orig-size="2560,2560" data-comments-opened="0" data-image-meta="{&quot;aperture&quot;:&quot;0&quot;,&quot;credit&quot;:&quot;&quot;,&quot;camera&quot;:&quot;&quot;,&quot;caption&quot;:&quot;&quot;,&quot;created_timestamp&quot;:&quot;0&quot;,&quot;copyright&quot;:&quot;&quot;,&quot;focal_length&quot;:&quot;0&quot;,&quot;iso&quot;:&quot;0&quot;,&quot;shutter_speed&quot;:&quot;0&quot;,&quot;title&quot;:&quot;&quot;,&quot;orientation&quot;:&quot;0&quot;}" data-image-title="Generated Image December 23, 2025 &amp;#8211; 3_23PM" data-image-description="" data-image-caption="" data-medium-file="https://i0.wp.com/www.cocoanetics.com/files/Generated-Image-December-23-2025-3_23PM-scaled.jpeg?fit=300%2C300&amp;ssl=1" data-large-file="https://i0.wp.com/www.cocoanetics.com/files/Generated-Image-December-23-2025-3_23PM-scaled.jpeg?fit=1024%2C1024&amp;ssl=1" />		</div>
+
+				
+<p>Over the course of the last year, I&#8217;ve had quite a few side projects that required some way to get text from a variety of sources, with code and frameworks found in a number of private repos. A while ago, I felt an inkling to start pulling those together into an open source project. So this will be my Christmas gift for you this year.</p>
+
+
+
+<p>SwiftText collects various ways of getting text — or, if possible, Markdown — from a variety of sources and places.<br><br><em>Update: &#8230; now Images, PDFs, Word DOCX and also HTML pages or URLs.</em></p>
+
+
+
+<span id="more-10838"></span>
+
+<div id="more-10838"></div><div class="inner_ad_block"></div>
+
+
+
+
+
+<p>One such use case was to get pure text from bank statements for my investment portfolio, so that I could parse the text and construct a CSV file to upload my holdings to Yahoo Finance.</p>
+
+
+
+<h3 class="wp-block-heading">Reading PDFs</h3>
+
+
+
+<p>For the most part these statements were normal PDFs that had been programmatically created. The advantage of those is that you can get the actual text from selection ranges, just like when you select the text and then copy it to the pasteboard. This is the one sort of PDFs you might find with vector data. Essentially those files are just a record of drawing information into a <strong>vector</strong> context.</p>
+
+
+
+<p>But there was a problem, because some of those statements were scanned from paper. This is the other — less useful — sort of PDFs: those are essentially collections of <strong>bitmap</strong> images, one per page. But thankfully we do have quite capable OCR capabilities on Mac and iOS in the form of the Vision framework.</p>
+
+
+
+<p>With both PDF selection ranges as well as text fragments from Vision you get rectangles with text. So I made it such that you only have to ask a <code>PDFPage</code> for its <code>textLines()</code>. It will first attempt to get the text from the selection ranges and if it fails it will render the page into a 300 DPI bitmap and then OCR it, to still give you more or less the same result. Those text lines are comprised of those fragments that are likely forming a line, even though there might be tabs or whitespace between them.</p>
+
+
+
+<p>This was the state of this private framework for the longest time. It saw a lot more usage in a receipt scanner I am building for myself and also when I was asked by a friend to translate several PDFs, it was extremely lucky that I had a quick way to get the raw text from those PDFs to feed into ChatGPT. This opened my mind for the possibility that this might be quite useful in agentic scenarios where agents need to get to the text of things.</p>
+
+
+
+<p>So the idea for SwiftText was born: it should be an open source project that collects various forms of getting text — or, if possible, Markdown — from a variety of sources and places.<br><br></p>
+
+
+
+<h3 class="wp-block-heading">Reading DOCX</h3>
+
+
+
+<p>For PDFs I had already covered both types of PDF files, extracting the OCR for bitmap images was a simple exercise. There was a case where I had to get the pure text from a Word document (DOCX) instead of PDF. Granted, I could just copy the text out of that, but my goal is to have that in a form — a tool — that I could use to automate such work in the future.</p>
+
+
+
+<p>I had a look at how DOCX files are constructed: they are just a ZIP archive of a couple of XML files. At the heart there is a <code>document.xml</code> which contains the actual document text. So I gave this task to Codex and with nearly no extra input from me it was able to create a utility that would output the pure text from such a Word doc. Behind the scenes it uses <code>XMLParser</code>, so the only external dependency for that is <a onclick="javascript:pageTracker._trackPageview('/outgoing/github.com/weichsel/ZIPFoundation');"  href="https://github.com/weichsel/ZIPFoundation">ZIPFoundation</a>, because to my knowledge there is no first-party ZIP reading capability that fits this use case across Apple&#8217;s platforms.</p>
+
+
+
+<p>Markdown has a slight edge over pure text because it marks emphasis on specific terms, tells us about headlines of different levels, and also clearly structures lists — numbered or bulleted. But my Codex agent also had no problem pulling out this style information from the DOCX contents.</p>
+
+
+
+<p>SwiftText comes with a demo CLI app that lets you perform OCR. This gives you Markdown for a Word file:</p>
+
+
+
+<pre class="wp-block-code"><code>swift run swifttext docx file.docx --markdown</code></pre>
+
+
+
+<p>For PDF or bitmaps you do:</p>
+
+
+
+<pre class="wp-block-code"><code>swift run swifttext ocr file</code></pre>
+
+
+
+<p>For the latter I do have experimental Markdown support, but it&#8217;s been very challenging to get semantic information from those kinds of sources. I have the beginnings of a semantic parser — again from Vision — which promises proper paragraphs, tables, and lists. But unfortunately at this time it seems that I couldn&#8217;t get it to work reliably. The problem with tables is that Vision seems to be very easily thrown off by some layouts, detects superfluous columns and what not. The best approach here would probably be to look at lines that have text always at the same x positions and then infer the table structure from that. This is clear future work.</p>
+
+
+
+<p>Of course the easiest would be to just hand your files to ChatGPT — or some local Vision-enabled LLM — and ask for it to just give you the text. But with this decision you leave the area of perfect determinism and structure. And also you start to have costs of those tokens. There is still something to be said for a purely local solution that leverages functionality available natively on Apple platforms. The existence of the Vision framework in particular will make it impossible for this to ever be available on other platforms. But alas, I can live with only being able to support iOS and Mac with SwiftText.</p>
+
+
+
+<h3 class="wp-block-heading">Warning: Traits</h3>
+
+
+
+<p>This package has another first for me: package traits.</p>
+
+
+
+<p>With those — if you use Swift tools 6.1 or higher — you can import <code>SwiftText</code> as an umbrella module which itself contains <code>SwiftTextOCR</code>, <code>SwiftTextPDF</code>, and <code>SwiftTextDOCX</code>.</p>
+
+
+
+<p>If I understand that correctly, at some point in the future SwiftPM will be able to omit external dependencies if they are not needed. Right now they are still being resolved and downloaded, although not compiled if not referenced by code. The one immediate nicety is that you can simply <code>import SwiftText</code> in your code, and the specified traits decide what gets packaged into that for you.</p>
+
+
+
+<p>This is an improvement over the previous method of having separate imports for all targets/products you want: <code>import SwiftTextPDF</code> and <code>import SwiftTextDOCX</code> (and perhaps future traits like — dare I say — HTML).</p>
+
+
+
+<h3 class="wp-block-heading">Quo Vadis?</h3>
+
+
+
+<p>I have a few more private things that I would like to see move into SwiftText. I do have a functioning tool that gets Markdown from HTML, which requires libXML. This is handy for getting an LLM-friendly version of web pages.</p>
+
+
+
+<p>Some web pages build their content with JavaScript — like e.g. OpenAI API documentation. I&#8217;ve got a solution for that as well, leveraging WebKit which works by loading the web page with WebKit and waiting for the DOM to be complete. Then it extracts the DOM&#8217;s HTML and parses that.</p>
+
+
+
+<p>So these will be some of the next additions to this project. Then there&#8217;s of course more document semantics. It would be great to get proper Markdown tables from anywhere. We&#8217;ll see about that. That might come more quickly from Word than from PDFs because XML is orders of magnitude more structured than PDFs.</p>
+
+
+
+<h3 class="wp-block-heading">Conclusion</h3>
+
+
+
+<p>I am excited to share <a onclick="javascript:pageTracker._trackPageview('/outgoing/github.com/cocoanetics/swifttext');"  href="https://github.com/cocoanetics/swifttext">SwiftText</a> with the OSS community because it has proven its worth to me on many occasions. I could have waited until it is even more polished but I was eager to make my work here public. I have some ideas for the future direction of SwiftText and I invite you to get in touch with specific use cases where enhancements might fit with the spirit of SwiftText.</p>
+
+
+
+<p><em>Update, later the same day&#8230;.<br><br>Because Codex is really amazing copying code between projects while integrating it, I was able to add my libXML-based HTMLParser as well as the code to convert HTML to markdown. Enjoy!</em></p>
+
+
+
+<p></p>
+<div class="sharedaddy sd-sharing-enabled"><div class="robots-nocontent sd-block sd-social sd-social-icon sd-sharing"><h3 class="sd-title">Sharing:</h3><div class="sd-content"><ul><li class="share-twitter"><a rel="nofollow noopener noreferrer"
+				data-shared="sharing-twitter-10838"
+				class="share-twitter sd-button share-icon no-text"
+				href="https://www.cocoanetics.com/2025/12/swifttext/?share=twitter"
+				target="_blank"
+				aria-labelledby="sharing-twitter-10838"
+				>
+				<span id="sharing-twitter-10838" hidden>Click to share on X (Opens in new window)</span>
+				<span>X</span>
+			</a></li><li class="share-facebook"><a rel="nofollow noopener noreferrer"
+				data-shared="sharing-facebook-10838"
+				class="share-facebook sd-button share-icon no-text"
+				href="https://www.cocoanetics.com/2025/12/swifttext/?share=facebook"
+				target="_blank"
+				aria-labelledby="sharing-facebook-10838"
+				>
+				<span id="sharing-facebook-10838" hidden>Click to share on Facebook (Opens in new window)</span>
+				<span>Facebook</span>
+			</a></li><li class="share-pocket"><a rel="nofollow noopener noreferrer"
+				data-shared="sharing-pocket-10838"
+				class="share-pocket sd-button share-icon no-text"
+				href="https://www.cocoanetics.com/2025/12/swifttext/?share=pocket"
+				target="_blank"
+				aria-labelledby="sharing-pocket-10838"
+				>
+				<span id="sharing-pocket-10838" hidden>Click to share on Pocket (Opens in new window)</span>
+				<span>Pocket</span>
+			</a></li><li class="share-linkedin"><a rel="nofollow noopener noreferrer"
+				data-shared="sharing-linkedin-10838"
+				class="share-linkedin sd-button share-icon no-text"
+				href="https://www.cocoanetics.com/2025/12/swifttext/?share=linkedin"
+				target="_blank"
+				aria-labelledby="sharing-linkedin-10838"
+				>
+				<span id="sharing-linkedin-10838" hidden>Click to share on LinkedIn (Opens in new window)</span>
+				<span>LinkedIn</span>
+			</a></li><li class="share-reddit"><a rel="nofollow noopener noreferrer"
+				data-shared="sharing-reddit-10838"
+				class="share-reddit sd-button share-icon no-text"
+				href="https://www.cocoanetics.com/2025/12/swifttext/?share=reddit"
+				target="_blank"
+				aria-labelledby="sharing-reddit-10838"
+				>
+				<span id="sharing-reddit-10838" hidden>Click to share on Reddit (Opens in new window)</span>
+				<span>Reddit</span>
+			</a></li><li class="share-email"><a rel="nofollow noopener noreferrer"
+				data-shared="sharing-email-10838"
+				class="share-email sd-button share-icon no-text"
+				href="mailto:?subject=%5BShared%20Post%5D%20SwiftText&#038;body=https%3A%2F%2Fwww.cocoanetics.com%2F2025%2F12%2Fswifttext%2F&#038;share=email"
+				target="_blank"
+				aria-labelledby="sharing-email-10838"
+				data-email-share-error-title="Do you have email set up?" data-email-share-error-text="If you&#039;re having problems sharing via email, you might not have email set up for your browser. You may need to create a new email yourself." data-email-share-nonce="c740c89ad7" data-email-share-track-url="https://www.cocoanetics.com/2025/12/swifttext/?share=email">
+				<span id="sharing-email-10838" hidden>Click to email a link to a friend (Opens in new window)</span>
+				<span>Email</span>
+			</a></li><li class="share-print"><a rel="nofollow noopener noreferrer"
+				data-shared="sharing-print-10838"
+				class="share-print sd-button share-icon no-text"
+				href="https://www.cocoanetics.com/2025/12/swifttext/#print?share=print"
+				target="_blank"
+				aria-labelledby="sharing-print-10838"
+				>
+				<span id="sharing-print-10838" hidden>Click to print (Opens in new window)</span>
+				<span>Print</span>
+			</a></li><li><a href="#" class="sharing-anchor sd-button share-more"><span>More</span></a></li><li class="share-end"></li></ul><div class="sharing-hidden"><div class="inner" style="display: none;"><ul><li class="share-tumblr"><a rel="nofollow noopener noreferrer"
+				data-shared="sharing-tumblr-10838"
+				class="share-tumblr sd-button share-icon no-text"
+				href="https://www.cocoanetics.com/2025/12/swifttext/?share=tumblr"
+				target="_blank"
+				aria-labelledby="sharing-tumblr-10838"
+				>
+				<span id="sharing-tumblr-10838" hidden>Click to share on Tumblr (Opens in new window)</span>
+				<span>Tumblr</span>
+			</a></li><li class="share-pinterest"><a rel="nofollow noopener noreferrer"
+				data-shared="sharing-pinterest-10838"
+				class="share-pinterest sd-button share-icon no-text"
+				href="https://www.cocoanetics.com/2025/12/swifttext/?share=pinterest"
+				target="_blank"
+				aria-labelledby="sharing-pinterest-10838"
+				>
+				<span id="sharing-pinterest-10838" hidden>Click to share on Pinterest (Opens in new window)</span>
+				<span>Pinterest</span>
+			</a></li><li class="share-end"></li></ul></div></div></div></div></div><div class='sharedaddy sd-block sd-like jetpack-likes-widget-wrapper jetpack-likes-widget-unloaded' id='like-post-wrapper-39982308-10838-6a84ca9f7e86e' data-src='https://widgets.wp.com/likes/?ver=15.3.1#blog_id=39982308&amp;post_id=10838&amp;origin=www.cocoanetics.com&amp;obj_id=39982308-10838-6a84ca9f7e86e' data-name='like-post-frame-39982308-10838-6a84ca9f7e86e' data-title='Like or Reblog'><h3 class="sd-title">Like this:</h3><div class='likes-widget-placeholder post-likes-widget-placeholder' style='height: 55px;'><span class='button'><span>Like</span></span> <span class="loading">Loading...</span></div><span class='sd-text-color'></span><a class='sd-link-color'></a></div>
+<div id='jp-relatedposts' class='jp-relatedposts' >
+	<h3 class="jp-relatedposts-headline"><em>Related</em></h3>
+</div>    		  
+	 <hr class="end_of_article" />
+ <div class="clear"></div>
+ <p id="tags"></p>
+ <p id="categories"><strong>Categories: </strong><a href="https://www.cocoanetics.com/category/projects/" rel="category tag">Projects</a></p>
+ <div class="clear"></div>
+
+
+
+
+  
+  
+
+
+ </div><!--/end entry-->
+</div><!--/end post-->
+
+	<div class="clear"></div>
+			<div id="nav-below" class="navigation">
+					<div class="nav-previous"><a href="https://www.cocoanetics.com/2025/10/swiftlego/" rel="prev"><span class="meta-nav">&larr;</span> SwiftLEGO</a></div>
+					<div class="nav-next"><a href="https://www.cocoanetics.com/2026/01/swiftmcp-client/" rel="next">SwiftMCP Client <span class="meta-nav">&rarr;</span></a></div>
+				</div><!-- #nav-below -->
+	<div class="clear"></div>
+<p class="nocomments">
+  Comments are closed.</p>
+	
+	
+</div><!--/content-->
+</div>
+<!--/main-->
+	<div id="copyright_footer">
+		<div id="copyright_left">
+													<ul id="register_login_links">
+					<li><a class="sign_in_link" href="https://www.cocoanetics.com/wp-login.php?redirect_to=https%3A%2F%2Fwww.cocoanetics.com%2F2025%2F12%2Fswifttext%2F">Log In</a></li>
+					<li><a class="register_link" href="https://www.cocoanetics.com/wp-login.php?redirect_to=https%3A%2F%2Fwww.cocoanetics.com%2F2025%2F12%2Fswifttext%2F&action=register">Register</a></li>
+					</ul>
+			 
+		</div>
+		<div id="copyright_right">	&#169; 2026 <span class="url fn org">
+			<a href="http://www.drobnik.com/">Drobnik KG</a>
+			</span>
+		</div>
+	</div>
+</div>
+</div>
+<!--/wrapper-->
+
+<div id="footer">
+<div id="text-4" class="widget widget_text"><h3 class="widgettitle">CC</h3>			<div class="textwidget"><p>License:<br />
+<a href="http://creativecommons.org/licenses/by-nc-nd/3.0/"><img class="alignleft size-full wp-image-4229"  src="/files/cc-image.jpg" alt="" width="88" height="31" /></a></p>
+</div>
+		</div><div id="custom_html-6" class="widget_text widget widget_custom_html"><h3 class="widgettitle">Ad</h3><div class="textwidget custom-html-widget"><!-- BuySellAds Zone Code -->
+<div id="bsap_1259662" class="bsarocks bsap_fc3166ea4a479e0fdb4251fbe92a1219"></div>
+<!-- End BuySellAds Zone Code --></div></div></div>
+<div id="footer_footer"></div>
+<!--/footer-->
+ <script type="speculationrules">
+{"prefetch":[{"source":"document","where":{"and":[{"href_matches":"/*"},{"not":{"href_matches":["/wp-*.php","/wp-admin/*","/files/*","/wp-content/*","/wp-content/plugins/*","/wp-content/themes/cocoanetics/*","/*\\?(.+)"]}},{"not":{"selector_matches":"a[rel~=\"nofollow\"]"}},{"not":{"selector_matches":".no-prefetch, .no-prefetch a"}}]},"eagerness":"conservative"}]}
+</script>
+
+<!-- tracker added by Ultimate Google Analytics plugin v1.6.0: http://www.oratransplant.nl/uga -->
+<script type="text/javascript">
+var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
+document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E"));
+</script>
+<script type="text/javascript">
+var pageTracker = _gat._getTracker("UA-260144-2");
+pageTracker._initData();
+pageTracker._trackPageview();
+</script>
+
+<!-- BEGIN recaptcha, injected by plugin wp-recaptcha-integration  -->
+<script type="text/javascript">
+				function get_form_submits(el){
+					var form,current=el,ui,type,slice = Array.prototype.slice,self=this;
+					this.submits=[];
+					this.form=false;
+
+					this.setEnabled=function(e){
+						for ( var s=0;s<self.submits.length;s++ ) {
+							if (e) self.submits[s].removeAttribute('disabled');
+							else  self.submits[s].setAttribute('disabled','disabled');
+						}
+						return this;
+					};
+					while ( current && current.nodeName != 'BODY' && current.nodeName != 'FORM' ) {
+						current = current.parentNode;
+					}
+					if ( !current || current.nodeName != 'FORM' )
+						return false;
+					this.form=current;
+					ui=slice.call(this.form.getElementsByTagName('input')).concat(slice.call(this.form.getElementsByTagName('button')));
+					for (var i = 0; i < ui.length; i++) if ( (type=ui[i].getAttribute('TYPE')) && type=='submit' ) this.submits.push(ui[i]);
+					return this;
+				}
+				</script><script type="text/javascript">
+		var recaptcha_widgets={};
+		function wp_recaptchaLoadCallback(){
+			try {
+				grecaptcha;
+			} catch(err){
+				return;
+			}
+			var e = document.querySelectorAll ? document.querySelectorAll('.g-recaptcha:not(.wpcf7-form-control)') : document.getElementsByClassName('g-recaptcha'),
+				form_submits;
+
+			for (var i=0;i<e.length;i++) {
+				(function(el){
+					var form_submits = get_form_submits(el).setEnabled(false), wid;
+					// check if captcha element is unrendered
+					if ( ! el.childNodes.length) {
+						wid = grecaptcha.render(el,{
+							'sitekey':'6Le06T0UAAAAAPZHDW2XGA9HvFlrqIhoJmLzDiLh',
+							'theme':el.getAttribute('data-theme') || 'light'
+							,
+							'callback' : function(r){ get_form_submits(el).setEnabled(true); /* enable submit buttons */ }
+						});
+						el.setAttribute('data-widget-id',wid);
+					} else {
+						wid = el.getAttribute('data-widget-id');
+						grecaptcha.reset(wid);
+					}
+				})(e[i]);
+			}
+		}
+
+		// if jquery present re-render jquery/ajax loaded captcha elements
+		if ( typeof jQuery !== 'undefined' )
+			jQuery(document).ajaxComplete( function(evt,xhr,set){
+				if( xhr.responseText && xhr.responseText.indexOf('6Le06T0UAAAAAPZHDW2XGA9HvFlrqIhoJmLzDiLh') !== -1)
+					wp_recaptchaLoadCallback();
+			} );
+
+		</script><script src="https://www.google.com/recaptcha/api.js?onload=wp_recaptchaLoadCallback&#038;render=explicit" async defer></script>
+<!-- END recaptcha -->
+
+	<script type="text/javascript">
+		window.WPCOM_sharing_counts = {"https:\/\/www.cocoanetics.com\/2025\/12\/swifttext\/":10838};
+	</script>
+						<script type="text/javascript" src="https://www.cocoanetics.com/wp-includes/js/comment-reply.min.js?ver=6.9.7" id="comment-reply-js" async="async" data-wp-strategy="async" fetchpriority="low"></script>
+<script type="text/javascript" id="jetpack-stats-js-before">
+/* <![CDATA[ */
+_stq = window._stq || [];
+_stq.push([ "view", JSON.parse("{\"v\":\"ext\",\"blog\":\"39982308\",\"post\":\"10838\",\"tz\":\"2\",\"srv\":\"www.cocoanetics.com\",\"j\":\"1:15.3.1\"}") ]);
+_stq.push([ "clickTrackerInit", "39982308", "10838" ]);
+//# sourceURL=jetpack-stats-js-before
+/* ]]> */
+</script>
+<script type="text/javascript" src="https://stats.wp.com/e-202634.js" id="jetpack-stats-js" defer="defer" data-wp-strategy="defer"></script>
+<script type="text/javascript" src="https://www.cocoanetics.com/wp-content/plugins/jetpack/_inc/build/widgets/eu-cookie-law/eu-cookie-law.min.js?ver=20180522" id="eu-cookie-law-script-js"></script>
+<script type="text/javascript" src="https://www.cocoanetics.com/wp-content/plugins/jetpack/_inc/build/likes/queuehandler.min.js?ver=15.3.1" id="jetpack_likes_queuehandler-js"></script>
+<script type="text/javascript" id="sharing-js-js-extra">
+/* <![CDATA[ */
+var sharing_js_options = {"lang":"en","counts":"1","is_stats_active":"1"};
+//# sourceURL=sharing-js-js-extra
+/* ]]> */
+</script>
+<script type="text/javascript" src="https://www.cocoanetics.com/wp-content/plugins/jetpack/_inc/build/sharedaddy/sharing.min.js?ver=15.3.1" id="sharing-js-js"></script>
+<script type="text/javascript" id="sharing-js-js-after">
+/* <![CDATA[ */
+var windowOpen;
+			( function () {
+				function matches( el, sel ) {
+					return !! (
+						el.matches && el.matches( sel ) ||
+						el.msMatchesSelector && el.msMatchesSelector( sel )
+					);
+				}
+
+				document.body.addEventListener( 'click', function ( event ) {
+					if ( ! event.target ) {
+						return;
+					}
+
+					var el;
+					if ( matches( event.target, 'a.share-twitter' ) ) {
+						el = event.target;
+					} else if ( event.target.parentNode && matches( event.target.parentNode, 'a.share-twitter' ) ) {
+						el = event.target.parentNode;
+					}
+
+					if ( el ) {
+						event.preventDefault();
+
+						// If there's another sharing window open, close it.
+						if ( typeof windowOpen !== 'undefined' ) {
+							windowOpen.close();
+						}
+						windowOpen = window.open( el.getAttribute( 'href' ), 'wpcomtwitter', 'menubar=1,resizable=1,width=600,height=350' );
+						return false;
+					}
+				} );
+			} )();
+var windowOpen;
+			( function () {
+				function matches( el, sel ) {
+					return !! (
+						el.matches && el.matches( sel ) ||
+						el.msMatchesSelector && el.msMatchesSelector( sel )
+					);
+				}
+
+				document.body.addEventListener( 'click', function ( event ) {
+					if ( ! event.target ) {
+						return;
+					}
+
+					var el;
+					if ( matches( event.target, 'a.share-facebook' ) ) {
+						el = event.target;
+					} else if ( event.target.parentNode && matches( event.target.parentNode, 'a.share-facebook' ) ) {
+						el = event.target.parentNode;
+					}
+
+					if ( el ) {
+						event.preventDefault();
+
+						// If there's another sharing window open, close it.
+						if ( typeof windowOpen !== 'undefined' ) {
+							windowOpen.close();
+						}
+						windowOpen = window.open( el.getAttribute( 'href' ), 'wpcomfacebook', 'menubar=1,resizable=1,width=600,height=400' );
+						return false;
+					}
+				} );
+			} )();
+var windowOpen;
+			( function () {
+				function matches( el, sel ) {
+					return !! (
+						el.matches && el.matches( sel ) ||
+						el.msMatchesSelector && el.msMatchesSelector( sel )
+					);
+				}
+
+				document.body.addEventListener( 'click', function ( event ) {
+					if ( ! event.target ) {
+						return;
+					}
+
+					var el;
+					if ( matches( event.target, 'a.share-pocket' ) ) {
+						el = event.target;
+					} else if ( event.target.parentNode && matches( event.target.parentNode, 'a.share-pocket' ) ) {
+						el = event.target.parentNode;
+					}
+
+					if ( el ) {
+						event.preventDefault();
+
+						// If there's another sharing window open, close it.
+						if ( typeof windowOpen !== 'undefined' ) {
+							windowOpen.close();
+						}
+						windowOpen = window.open( el.getAttribute( 'href' ), 'wpcompocket', 'menubar=1,resizable=1,width=450,height=450' );
+						return false;
+					}
+				} );
+			} )();
+var windowOpen;
+			( function () {
+				function matches( el, sel ) {
+					return !! (
+						el.matches && el.matches( sel ) ||
+						el.msMatchesSelector && el.msMatchesSelector( sel )
+					);
+				}
+
+				document.body.addEventListener( 'click', function ( event ) {
+					if ( ! event.target ) {
+						return;
+					}
+
+					var el;
+					if ( matches( event.target, 'a.share-linkedin' ) ) {
+						el = event.target;
+					} else if ( event.target.parentNode && matches( event.target.parentNode, 'a.share-linkedin' ) ) {
+						el = event.target.parentNode;
+					}
+
+					if ( el ) {
+						event.preventDefault();
+
+						// If there's another sharing window open, close it.
+						if ( typeof windowOpen !== 'undefined' ) {
+							windowOpen.close();
+						}
+						windowOpen = window.open( el.getAttribute( 'href' ), 'wpcomlinkedin', 'menubar=1,resizable=1,width=580,height=450' );
+						return false;
+					}
+				} );
+			} )();
+var windowOpen;
+			( function () {
+				function matches( el, sel ) {
+					return !! (
+						el.matches && el.matches( sel ) ||
+						el.msMatchesSelector && el.msMatchesSelector( sel )
+					);
+				}
+
+				document.body.addEventListener( 'click', function ( event ) {
+					if ( ! event.target ) {
+						return;
+					}
+
+					var el;
+					if ( matches( event.target, 'a.share-tumblr' ) ) {
+						el = event.target;
+					} else if ( event.target.parentNode && matches( event.target.parentNode, 'a.share-tumblr' ) ) {
+						el = event.target.parentNode;
+					}
+
+					if ( el ) {
+						event.preventDefault();
+
+						// If there's another sharing window open, close it.
+						if ( typeof windowOpen !== 'undefined' ) {
+							windowOpen.close();
+						}
+						windowOpen = window.open( el.getAttribute( 'href' ), 'wpcomtumblr', 'menubar=1,resizable=1,width=450,height=450' );
+						return false;
+					}
+				} );
+			} )();
+//# sourceURL=sharing-js-js-after
+/* ]]> */
+</script>
+<script id="wp-emoji-settings" type="application/json">
+{"baseUrl":"https://s.w.org/images/core/emoji/17.0.2/72x72/","ext":".png","svgUrl":"https://s.w.org/images/core/emoji/17.0.2/svg/","svgExt":".svg","source":{"concatemoji":"https://www.cocoanetics.com/wp-includes/js/wp-emoji-release.min.js?ver=6.9.7"}}
+</script>
+<script type="module">
+/* <![CDATA[ */
+/*! This file is auto-generated */
+var e="script#wp-emoji-settings",t=document.querySelector(e);if(!(t instanceof HTMLScriptElement))throw new Error("Element missing: "+e);const r=JSON.parse(t.text),s=(window._wpemojiSettings=r,"wpEmojiSettingsSupports"),o=["flag","emoji"];function i(e){try{var t={supportTests:e,timestamp:(new Date).valueOf()};sessionStorage.setItem(s,JSON.stringify(t))}catch(e){}}function c(e,t,n){e.clearRect(0,0,e.canvas.width,e.canvas.height),e.fillText(t,0,0);t=new Uint32Array(e.getImageData(0,0,e.canvas.width,e.canvas.height).data);e.clearRect(0,0,e.canvas.width,e.canvas.height),e.fillText(n,0,0);const r=new Uint32Array(e.getImageData(0,0,e.canvas.width,e.canvas.height).data);return t.every((e,t)=>e===r[t])}function p(e,t){e.clearRect(0,0,e.canvas.width,e.canvas.height),e.fillText(t,0,0);var n=e.getImageData(16,16,1,1);for(let e=0;e<n.data.length;e++)if(0!==n.data[e])return!1;return!0}function u(e,t,n,r){switch(t){case"flag":return n(e,"\ud83c\udff3\ufe0f\u200d\u26a7\ufe0f","\ud83c\udff3\ufe0f\u200b\u26a7\ufe0f")?!1:!n(e,"\ud83c\udde8\ud83c\uddf6","\ud83c\udde8\u200b\ud83c\uddf6")&&!n(e,"\ud83c\udff4\udb40\udc67\udb40\udc62\udb40\udc65\udb40\udc6e\udb40\udc67\udb40\udc7f","\ud83c\udff4\u200b\udb40\udc67\u200b\udb40\udc62\u200b\udb40\udc65\u200b\udb40\udc6e\u200b\udb40\udc67\u200b\udb40\udc7f");case"emoji":return!r(e,"\ud83e\u1fac8")}return!1}function f(e,t,n,r){let a;const s=(a="undefined"!=typeof WorkerGlobalScope&&self instanceof WorkerGlobalScope?new OffscreenCanvas(300,150):document.createElement("canvas")).getContext("2d",{willReadFrequently:!0}),o=(s.textBaseline="top",s.font="600 32px Arial",{});return e.forEach(e=>{o[e]=t(s,e,n,r)}),o}function a(e){var t=document.createElement("script");t.src=e,t.defer=!0,document.head.appendChild(t)}r.supports={everything:!0,everythingExceptFlag:!0},new Promise(t=>{let n=function(){try{var e=JSON.parse(sessionStorage.getItem(s));if("object"==typeof e&&"number"==typeof e.timestamp&&(new Date).valueOf()<e.timestamp+604800&&"object"==typeof e.supportTests)return e.supportTests}catch(e){}return null}();if(!n){if("undefined"!=typeof Worker&&"undefined"!=typeof OffscreenCanvas&&"undefined"!=typeof URL&&URL.createObjectURL&&"undefined"!=typeof Blob)try{var e="postMessage("+f.toString()+"("+[JSON.stringify(o),u.toString(),c.toString(),p.toString()].join(",")+"));",r=new Blob([e],{type:"text/javascript"});const a=new Worker(URL.createObjectURL(r),{name:"wpTestEmojiSupports"});return void(a.onmessage=e=>{i(n=e.data),a.terminate(),t(n)})}catch(e){}i(n=f(o,u,c,p))}t(n)}).then(e=>{for(const n in e)r.supports[n]=e[n],r.supports.everything=r.supports.everything&&r.supports[n],"flag"!==n&&(r.supports.everythingExceptFlag=r.supports.everythingExceptFlag&&r.supports[n]);var t;r.supports.everythingExceptFlag=r.supports.everythingExceptFlag&&!r.supports.flag,r.supports.everything||((t=r.source||{}).concatemoji?a(t.concatemoji):t.wpemoji&&t.twemoji&&(a(t.twemoji),a(t.wpemoji)))});
+//# sourceURL=https://www.cocoanetics.com/wp-includes/js/wp-emoji-loader.min.js
+/* ]]> */
+</script>
+	<iframe src='https://widgets.wp.com/likes/master.html?ver=20260818#ver=20260818' scrolling='no' id='likes-master' name='likes-master' style='display:none;'></iframe>
+	<div id='likes-other-gravatars' role="dialog" aria-hidden="true" tabindex="-1"><div class="likes-text"><span>%d</span></div><ul class="wpl-avatars sd-like-gravatars"></ul></div>
+	<script type="text/javascript"> 
+    jQuery(document).ready(function(){ 
+        jQuery("ul.menu").superfish(); 
+		jQuery("#searchfield").attr("value","Search...");
+		jQuery("#searchfield").focusin(function(){
+			jQuery("#searchfield").attr("value","");	
+		});
+		jQuery("#searchfield").focusout(function() {
+			var formvalue = jQuery("#searchfield").attr("value");
+			if (formvalue=="") {
+				jQuery("#searchfield").attr("value", "Search...");
+				}
+		});
+		if (navigator.userAgent.indexOf('Safari') != -1 && navigator.userAgent.indexOf('Mac') != -1 && navigator.userAgent.indexOf('Chrome') == -1) {
+        	jQuery('html').addClass('safari_mac'); 
+    	}
+    }); 
+</script>
+<script type="text/javascript">
+	jQuery("li.cat-item a").each(function(){ // Remove Titles from wp_list_categories
+		jQuery(this).removeAttr('title');
+	})                
+	jQuery("li.page_item a").each(function(){ // Remove Titles from wp_list_pages
+		jQuery(this).removeAttr('title');
+	})
+</script>
+<script type="text/javascript">
+	if (jQuery('pre[lang=objc]').addClass('brush: objc;')) {
+		SyntaxHighlighter.all();
+	}	
+</script> 
+</body>
+</html>

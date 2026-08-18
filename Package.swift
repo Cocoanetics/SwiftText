@@ -170,7 +170,10 @@ let htmlTargets: [Target] = [
 	.testTarget(
 		name: "SwiftTextHTMLTests",
 		dependencies: ["SwiftTextHTML", "SwiftTextMarkdown", "SwiftTextCore"],
-		path: "Tests/SwiftTextHTMLTests"
+		path: "Tests/SwiftTextHTMLTests",
+		resources: [
+			.process("Resources")
+		]
 	),
 	.testTarget(
 		name: "SwiftTextMarkdownTests",

@@ -28,25 +28,59 @@ public final class HTMLDocument {
 		return root
 	}
 
-	public func markdown() -> String {
-		contentRoot.markdown(imageResolver: resolveMarkdownImageSource).trimmingCharacters(in: .whitespacesAndNewlines)
+	/// The subtree a conversion should read, for a given scope.
+	///
+	/// Computed per call rather than cached: ``ContentScope/mainContent`` builds
+	/// a pruned copy, and holding onto one would double a large document's
+	/// footprint for a conversion the caller may never repeat.
+	private func root(for scope: ContentScope) -> DOMElement {
+		switch scope {
+		case .wholeDocument:
+			return contentRoot
+		case .mainContent:
+			return MainContentExtractor.mainContent(of: contentRoot)
+		}
 	}
 
-	public func markdown(saveImagesAt folderURL: URL?) async throws -> String {
+	/// The document as Markdown.
+	///
+	/// - Parameter scope: Which part of the page to convert. Defaults to
+	///   ``ContentScope/wholeDocument``; pass ``ContentScope/mainContent`` to
+	///   drop navigation, cookie banners, sidebars and footers.
+	public func markdown(scope: ContentScope = .wholeDocument) -> String {
+		root(for: scope)
+			.markdown(imageResolver: resolveMarkdownImageSource)
+			.trimmingCharacters(in: .whitespacesAndNewlines)
+	}
+
+	/// The document as Markdown, with its images downloaded to `folderURL` and
+	/// the links rewritten to point at them.
+	///
+	/// - Parameters:
+	///   - folderURL: Where to save the images. `nil` converts without
+	///     downloading anything.
+	///   - scope: Which part of the page to convert. Only images inside that
+	///     part are downloaded.
+	public func markdown(saveImagesAt folderURL: URL?, scope: ContentScope = .wholeDocument) async throws -> String {
 		guard let folderURL else {
-			return markdown()
+			return markdown(scope: scope)
 		}
 
+		let root = root(for: scope)
 		var sources: [String] = []
-		collectImageSources(from: contentRoot, into: &sources)
+		collectImageSources(from: root, into: &sources)
 		let imageMap = try await downloadImages(sources: sources, to: folderURL)
 		return root.markdown(imageResolver: { source in
 			imageMap[source]
 		}).trimmingCharacters(in: .whitespacesAndNewlines)
 	}
 
-	public func text() -> String {
-		contentRoot.text().trimmingCharacters(in: .whitespacesAndNewlines)
+	/// The document as plain text.
+	///
+	/// - Parameter scope: Which part of the page to read. Defaults to
+	///   ``ContentScope/wholeDocument``.
+	public func text(scope: ContentScope = .wholeDocument) -> String {
+		root(for: scope).text().trimmingCharacters(in: .whitespacesAndNewlines)
 	}
 
 	// MARK: - Stylesheets

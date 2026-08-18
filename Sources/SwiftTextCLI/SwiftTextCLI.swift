@@ -315,6 +315,9 @@ struct HTML: AsyncParsableCommand {
 	@Option(name: .long, help: "Directory to save downloaded images when using Markdown output.")
 	var saveImages: String?
 
+	@Flag(name: .long, help: "Extract only the main content, dropping navigation, cookie banners, sidebars and footers.")
+	var mainContent: Bool = false
+
 	@Flag(name: .long, help: "Load HTML via WebKit before parsing (macOS only).")
 	var webkit: Bool = false
 
@@ -372,12 +375,13 @@ struct HTML: AsyncParsableCommand {
 			}
 			document = try await HTMLDocument(data: data, baseURL: baseURL, encoding: forcedEncoding)
 		}
+		let scope: ContentScope = mainContent ? .mainContent : .wholeDocument
 		let output: String
 		if markdown {
 			let folderURL = resolveOutputDirectory(from: saveImages)
-			output = try await document.markdown(saveImagesAt: folderURL)
+			output = try await document.markdown(saveImagesAt: folderURL, scope: scope)
 		} else {
-			output = document.text()
+			output = document.text(scope: scope)
 		}
 		try writeOutputIfNeeded(output)
 	}

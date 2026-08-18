@@ -16,9 +16,30 @@ Extracts text or Markdown from HTML using:
 Features:
 - Plain text extraction
 - Markdown conversion (links, lists, tables, code)
+- **Main-content extraction** — the article without the page around it
 - **JavaScript execution** on Apple platforms (macOS, iOS, Mac Catalyst): load a
   URL through WebKit and parse the *rendered* DOM, so a client-rendered page
   yields its actual content rather than an empty `<div id="root">`
+
+```swift
+let document = try await HTMLDocument(data: data, baseURL: url)
+
+document.markdown()                       // the whole page, chrome included
+document.markdown(scope: .mainContent)    // just the article
+```
+
+A real page converted whole opens with its cookie banner, logo, social icons
+and main menu — several screens before the article starts. That is tolerable
+when a person reads the output and trims it, and a correctness problem when the
+output is fed to a reader view or an LLM, where the leading boilerplate is both
+wasted tokens and something the model may summarise instead of the article.
+
+`.mainContent` reads the page's own structure first — `<article>`, `<main>`,
+`role="main"` — and falls back to scoring blocks by how much prose they hold,
+discounted by link density, for markup that predates those tags. Either way,
+navigation, cookie banners, sidebars, share widgets and footers are pruned
+before anything is measured. It is a heuristic, so it is opt-in, and a page it
+cannot read comes back whole rather than empty.
 
 ```swift
 // Server-rendered: a plain fetch, no WebKit involved.
@@ -33,7 +54,8 @@ Waiting for `didFinish` is not enough for a single-page app — it fires before
 hydration — so the loader watches for DOM mutations to stop arriving, with a
 `timeout` (default 10 s) bounding the wait. Useful for share extensions,
 clipping articles, and feeding pages to an LLM, where Markdown costs several
-times fewer tokens than raw HTML.
+times fewer tokens than raw HTML. Pair it with `.mainContent` and the result is
+the article alone, scripts run and chrome gone.
 
 ### SwiftTextOCR
 
@@ -368,7 +390,7 @@ On Linux/Windows the CLI needs libxml2 for the HTML/render paths (Linux:
 
 Options:
 - **ocr** *(macOS only)* `--markdown`/`-m` (Vision segmentation), `--save-images <dir>`, `--output-path <file>`/`-o`
-- **html** `--markdown`/`-m`, `--save-images <dir>`, `--output-path <file>`/`-o`, `--webkit` *(macOS)*, `--via-pdf` *(macOS)*
+- **html** `--markdown`/`-m`, `--main-content`, `--save-images <dir>`, `--output-path <file>`/`-o`, `--webkit` *(macOS)*, `--via-pdf` *(macOS)*
 - **docx** `--markdown`/`-m` (headings and lists), `--output-path <file>`/`-o`, `--save-images`
 - **pages** `--markdown`/`-m` (inferred headings), `--output-path <file>`/`-o`, `--save-images`
 - **numbers** `--markdown`/`-m`, `--html`, `--json`, `--output-path <file>`/`-o`
@@ -404,6 +426,7 @@ swifttext docx --markdown ~/Documents/contract.docx
 
 # Extract Markdown from HTML (optionally load via WebKit)
 swifttext html --markdown https://example.com
+swifttext html --markdown --main-content https://example.com
 swifttext html --markdown --webkit https://example.com
 
 # Save Word output to a file
