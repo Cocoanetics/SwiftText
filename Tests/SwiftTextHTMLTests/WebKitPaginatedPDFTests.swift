@@ -75,7 +75,7 @@ struct WebKitPaginatedPDFTests {
 		#expect(document.page(at: 0)?.string?.contains("Paragraph number 1") == true)
 	}
 
-	@Test("Table headers repeat and rows stay on one page", .timeLimit(.minutes(2)))
+	@Test("Spaced table fragments preserve captions, headers, and rows", .timeLimit(.minutes(2)))
 	func tablePagination() async throws {
 		let rows = (1 ... 50).map {
 			let marker = String(format: "%02d", $0)
@@ -85,22 +85,27 @@ struct WebKitPaginatedPDFTests {
 		<html><head><style>
 		@page { size: A4; margin: 2cm; }
 		body { margin: 0; font: 16px sans-serif; }
-		table { border-collapse: collapse; }
+		h2 { break-before: page; }
+		table { border-spacing: 0 12px; border: 4px solid #555; }
 		th, td { border: 1px solid #999; padding: 8px 12px; }
 		</style></head><body>
-		<p style="height: 560px">Filler</p>
-		<table><thead><tr><th>Label</th><th>Value</th></tr></thead>
+		<p>Content before the forced break.</p>
+		<h2>Forced page heading</h2>
+		<table><caption>Preserved table caption</caption>
+		<thead><tr><th>Label</th><th>Value</th></tr></thead>
 		<tbody>\(rows)</tbody></table>
 		</body></html>
 		"""
 		let document = try await paginate(html)
 		#expect(document.pageCount > 1)
-		for pageNumber in 1 ..< document.pageCount {
-			let text = try #require(document.page(at: pageNumber)?.string)
-			#expect(text.contains("Label"), "page \(pageNumber + 1) has no repeated table header")
-			#expect(text.contains("Value"), "page \(pageNumber + 1) has no repeated table header")
-		}
 		let pageTexts = (0 ..< document.pageCount).map { document.page(at: $0)?.string ?? "" }
+		let tablePageTexts = pageTexts.filter { $0.contains("row-marker-") }
+		#expect(tablePageTexts.count > 1)
+		for (index, text) in tablePageTexts.enumerated() {
+			#expect(text.contains("Label"), "table page \(index + 1) has no repeated table header")
+			#expect(text.contains("Value"), "table page \(index + 1) has no repeated table header")
+		}
+		#expect(pageTexts.filter { $0.contains("Preserved table caption") }.count == 1)
 		for rowNumber in 1 ... 50 {
 			let marker = String(format: "%02d", rowNumber)
 			let containingPages = pageTexts.filter {
