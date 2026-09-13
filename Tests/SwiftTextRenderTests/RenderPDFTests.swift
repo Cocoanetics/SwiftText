@@ -36,6 +36,23 @@ struct RenderPDFTests {
 		#endif
 	}
 
+	@Test("Writes document title and authors to the Info dictionary")
+	func writesDocumentMetadata() async throws {
+		let data = try await HTMLRenderer.renderPDF(
+			html: "<h1>Body</h1>",
+			title: "Annual Report 2026",
+			authors: ["Jane Doe", "John Roe"])
+		let text = String(decoding: data, as: UTF8.self)
+		#expect(text.contains("/Title (Annual Report 2026)"))
+		#expect(text.contains("/Author (Jane Doe; John Roe)"))
+
+		#if canImport(PDFKit)
+		let document = try #require(PDFDocument(data: data))
+		#expect(document.documentAttributes?[PDFDocumentAttribute.titleAttribute] as? String == "Annual Report 2026")
+		#expect(document.documentAttributes?[PDFDocumentAttribute.authorAttribute] as? String == "Jane Doe; John Roe")
+		#endif
+	}
+
 	@Test("FlateDecode shrinks text-heavy PDFs several-fold")
 	func compressionShrinksOutput() async throws {
 		// A long, text-heavy document — the case the swift engine bloated on.

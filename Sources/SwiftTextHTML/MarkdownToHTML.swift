@@ -115,7 +115,7 @@ public enum MarkdownToHTML {
 	///   - options: Rendering options forwarded to ``convert(_:options:)``.
 	/// - Returns: A complete HTML document string.
 	public static func document(
-		_ markdown: String, stylesheet: String? = nil, options: Options = []
+		_ markdown: String, stylesheet: String? = nil, options: Options = [], title: String = "Untitled"
 	) -> String {
 		let body = convert(markdown, options: options)
 		let css = stylesheet ?? defaultStylesheet
@@ -124,6 +124,7 @@ public enum MarkdownToHTML {
 		<html>
 		<head>
 		<meta charset="utf-8">
+		<title>\(escapeHTMLText(title))</title>
 		<style>
 		\(css)
 		</style>
@@ -133,6 +134,13 @@ public enum MarkdownToHTML {
 		</body>
 		</html>
 		"""
+	}
+
+	private static func escapeHTMLText(_ value: String) -> String {
+		value
+			.replacingOccurrences(of: "&", with: "&amp;")
+			.replacingOccurrences(of: "<", with: "&lt;")
+			.replacingOccurrences(of: ">", with: "&gt;")
 	}
 
 	/// Strips Markdown formatting to produce plain text.

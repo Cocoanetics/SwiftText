@@ -16,13 +16,17 @@ public enum MarkdownToDocx {
 	///   - baseURL: The directory standalone Markdown image paths are resolved against
 	///     (typically the source `.md` file's folder). When `nil`, images fall back to
 	///     alt-text placeholders.
-	public static func convert(_ markdown: String, to url: URL, pageSetup: DocxPageSetup = .a4, baseURL: URL? = nil) throws {
+	///   - title: Optional document title for the package's core properties.
+	///   - authors: Document authors for the package's core properties.
+	public static func convert(_ markdown: String, to url: URL, pageSetup: DocxPageSetup = .a4, baseURL: URL? = nil, title: String? = nil, authors: [String] = []) throws {
 		let build = MarkdownDocxBuilder.build(from: markdown)
 		let writer = DocxWriter()
 		writer.blocks = build.blocks
 		writer.footnotes = build.footnotes
 		writer.pageSetup = pageSetup
 		writer.baseURL = baseURL
+		writer.title = title
+		writer.authors = authors
 		try writer.write(to: url)
 	}
 

@@ -176,4 +176,9 @@ struct MarkdownToHTMLTests {
 		#expect(html.contains("press <kbd>K</kbd>"))
 		#expect(html.hasPrefix("<!DOCTYPE html>"))
 	}
+
+	@Test func documentIncludesEscapedTitle() {
+		let html = MarkdownToHTML.document("# Body", title: "Research & Development")
+		#expect(html.contains("<title>Research &amp; Development</title>"))
+	}
 }

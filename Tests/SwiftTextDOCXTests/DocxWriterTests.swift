@@ -87,6 +87,22 @@ struct DocxWriterTests {
 		#expect(xml.contains("rLink1"))
 	}
 
+	@Test("Writes title and authors as OOXML core properties")
+	func coreProperties() throws {
+		let url = FileManager.default.temporaryDirectory
+			.appendingPathComponent("metadata-\(UUID().uuidString).docx")
+		defer { try? FileManager.default.removeItem(at: url) }
+
+		try MarkdownToDocx.convert("# Body", to: url, title: "Research & Development", authors: ["Jane Doe", "John Roe"])
+
+		let archive = try DocxArchive(contentsOf: url)
+		let core = try archive.text("docProps/core.xml")
+		#expect(core.contains("<dc:title>Research &amp; Development</dc:title>"))
+		#expect(core.contains("<dc:creator>Jane Doe; John Roe</dc:creator>"))
+		#expect(try archive.text("[Content_Types].xml").contains("/docProps/core.xml"))
+		#expect(try archive.text("_rels/.rels").contains("Target=\"docProps/core.xml\""))
+	}
+
 	@Test("Separated Markdown ordered lists use distinct DOCX numbering instances")
 	func separatedOrderedListsUseDistinctNumberingInstances() throws {
 		let markdown = """
