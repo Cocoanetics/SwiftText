@@ -327,6 +327,32 @@ struct RenderPDFTests {
 		#expect(cells[0].x == cells[2].x)  // A and C share a column
 	}
 
+	@Test("Table row groups continue across page boundaries")
+	func tableRowGroupsPaginate() async throws {
+		let rows = (1 ... 40).map { "<tr><td>Row\($0)</td><td>Value\($0)</td></tr>" }.joined()
+		let html = """
+		<table><thead><tr><th>Label</th><th>Value</th></tr></thead><tbody>\(rows)</tbody></table>
+		<p>ENDMARKER</p>
+		"""
+		let options = RenderOptions(pageWidthPx: 400, pageHeightPx: 200,
+		                            pageMarginPx: 10, compressStreams: false)
+		let data = try await HTMLRenderer.renderPDF(html: html, options: options)
+
+		// Uncompressed base-font text remains visible in the PDF bytes, making this
+		// regression check portable to platforms without PDFKit.
+		for index in 1 ... 40 {
+			#expect(data.range(of: Data("(Row\(index))".utf8)) != nil)
+			#expect(data.range(of: Data("(Value\(index))".utf8)) != nil)
+		}
+		#expect(data.range(of: Data("(ENDMARKER)".utf8)) != nil)
+
+		#if canImport(PDFKit)
+		let document = try #require(PDFDocument(data: data))
+		#expect(document.pageCount > 1)
+		#expect((document.string ?? "").contains("Row40"))
+		#endif
+	}
+
 	@Test("Table cells honor colspan")
 	func tableColspan() async throws {
 		let html = "<table><tr><td colspan=2>Wide</td></tr><tr><td>A</td><td>B</td></tr></table>"

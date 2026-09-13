@@ -226,7 +226,43 @@ public final class LayoutEngine {
 			row.box.width = contentWidth
 			row.box.height = rowHeights[rowIndex]
 		}
+		// Row groups are transparent to grid layout, but they still need geometry:
+		// the painter uses every block's bounds to prune off-page subtrees. Leaving
+		// a <thead>/<tbody>/<tfoot> at its zero-sized default makes it intersect only
+		// the first page and silently drops all of its later rows.
+		_ = sizeTableRowGroups(in: table, contentX: contentX, contentWidth: contentWidth)
 		return y - contentTop
+	}
+
+	/// Give table row-group boxes the union of their laid-out rows. The groups do
+	/// not affect grid sizing, but their bounds must contain their descendants for
+	/// pagination-time subtree culling.
+	private func sizeTableRowGroups(in box: BlockBox, contentX: Double, contentWidth: Double) -> (top: Double, bottom: Double)? {
+		var top = Double.infinity
+		var bottom = -Double.infinity
+		for child in box.children {
+			guard let block = child as? BlockBox else { continue }
+			let bounds: (top: Double, bottom: Double)?
+			switch block.style.display {
+			case .tableRow:
+				bounds = (block.y, block.y + block.height)
+			case .tableRowGroup, .tableHeaderGroup, .tableFooterGroup:
+				bounds = sizeTableRowGroups(in: block, contentX: contentX, contentWidth: contentWidth)
+				if let bounds {
+					block.x = contentX
+					block.y = bounds.top
+					block.width = contentWidth
+					block.height = bounds.bottom - bounds.top
+				}
+			default:
+				bounds = sizeTableRowGroups(in: block, contentX: contentX, contentWidth: contentWidth)
+			}
+			if let bounds {
+				top = min(top, bounds.top)
+				bottom = max(bottom, bounds.bottom)
+			}
+		}
+		return top.isFinite && bottom.isFinite ? (top, bottom) : nil
 	}
 
 	/// Shift a box's laid-out content (lines and child boxes) down by `dy`.
