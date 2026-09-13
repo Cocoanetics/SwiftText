@@ -210,6 +210,10 @@ private func expand(_ declaration: Declaration) -> [(name: String, value: [Compo
 		// declaration overwrite a higher-priority one at random. This is a pure
 		// rename — `parseBreak` accepts the legacy `always` keyword too.
 		return [(String(name.dropFirst("page-".count)), value)]
+	case "word-wrap":
+		// `word-wrap` is the legacy alias of `overflow-wrap`; fold both spellings
+		// into one cascade slot so specificity and source order decide normally.
+		return [("overflow-wrap", value)]
 	case "background":
 		// Minimal: pull out a color if present.
 		if let color = significant(value).first(where: { parseColor($0) != nil }) {
@@ -332,6 +336,10 @@ private func applyLonghand(_ name: String, _ value: [ComponentValue], to style: 
 		}
 	case "white-space":
 		if let whiteSpace = parseWhiteSpace(value) { style.whiteSpace = whiteSpace }
+	case "overflow-wrap":
+		if let wrap = parseOverflowWrap(value) { style.overflowWrap = wrap }
+	case "word-break":
+		if let wordBreak = parseWordBreak(value) { style.wordBreak = wordBreak }
 	case "text-decoration", "text-decoration-line":
 		var underline = false
 		var lineThrough = false
@@ -397,6 +405,13 @@ private func applyLonghand(_ name: String, _ value: [ComponentValue], to style: 
 		}
 	case "width":
 		if let length = parseLength(value, fontSize: fontSize, rootFontSize: rootFontSize) { style.width = length }
+	case "max-width":
+		if let token = significant(value).first, case .ident(let ident) = token.token,
+		   ident.asciiLowercased == "none" {
+			style.maxWidth = nil
+		} else if let length = parseLength(value, fontSize: fontSize, rootFontSize: rootFontSize), length != .auto {
+			style.maxWidth = length
+		}
 	case "height":
 		if let length = parseLength(value, fontSize: fontSize, rootFontSize: rootFontSize) { style.height = length }
 	case "margin-top", "margin-right", "margin-bottom", "margin-left":
@@ -436,7 +451,7 @@ private func globalKeyword(_ value: [ComponentValue]) -> String? {
 
 private let inheritedProperties: Set<String> = [
 	"color", "font-family", "font-size", "font-style", "font-weight",
-	"line-height", "text-align", "white-space",
+	"line-height", "text-align", "white-space", "overflow-wrap", "word-break",
 	"text-decoration", "text-decoration-line",
 	"letter-spacing", "word-spacing",
 	"list-style-type", "list-style",
@@ -497,6 +512,8 @@ private func copyLonghand(_ name: String, from source: ComputedStyle, into style
 	case "line-height": style.lineHeight = source.lineHeight
 	case "text-align": style.textAlign = source.textAlign
 	case "white-space": style.whiteSpace = source.whiteSpace
+	case "overflow-wrap": style.overflowWrap = source.overflowWrap
+	case "word-break": style.wordBreak = source.wordBreak
 	case "text-decoration", "text-decoration-line":
 		style.underline = source.underline
 		style.lineThrough = source.lineThrough
@@ -507,6 +524,7 @@ private func copyLonghand(_ name: String, from source: ComputedStyle, into style
 	case "vertical-align": style.verticalAlign = source.verticalAlign
 	case "direction": style.direction = source.direction
 	case "width": style.width = source.width
+	case "max-width": style.maxWidth = source.maxWidth
 	case "height": style.height = source.height
 	case "break-before": style.breakBefore = source.breakBefore
 	case "break-after": style.breakAfter = source.breakAfter
@@ -593,6 +611,16 @@ private func parseWhiteSpace(_ value: [ComponentValue]) -> WhiteSpace? {
 	case "pre-line": return .preLine
 	default: return nil
 	}
+}
+
+private func parseOverflowWrap(_ value: [ComponentValue]) -> OverflowWrap? {
+	guard let token = significant(value).first, case .ident(let ident) = token.token else { return nil }
+	return OverflowWrap(rawValue: ident.asciiLowercased)
+}
+
+private func parseWordBreak(_ value: [ComponentValue]) -> WordBreak? {
+	guard let token = significant(value).first, case .ident(let ident) = token.token else { return nil }
+	return WordBreak(rawValue: ident.asciiLowercased)
 }
 
 private func parseFontFamily(_ value: [ComponentValue]) -> [String]? {

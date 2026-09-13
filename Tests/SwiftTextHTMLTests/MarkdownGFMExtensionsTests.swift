@@ -109,4 +109,18 @@ struct MarkdownGFMExtensionsTests {
 		#expect(css.contains("task-list-item"))
 		#expect(css.contains("del "))
 	}
+
+	@Test func defaultStylesheetKeepsTablesWithinTheirContainer() {
+		let css = MarkdownToHTML.defaultStylesheet
+		#expect(css.contains("table { border-collapse: collapse; margin: 0.8em 0; font-size: 0.95em; max-width: 100%; }"))
+		#expect(css.contains("""
+		th, td {
+		    border: 1px solid #999;
+		    padding: 0.4em 0.7em;
+		    text-align: left;
+		    overflow-wrap: anywhere;
+		    word-break: break-word;
+		}
+		"""))
+	}
 }
