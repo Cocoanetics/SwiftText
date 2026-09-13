@@ -101,6 +101,9 @@ struct WebKitPaginatedPDFTests {
 		let pageTexts = (0 ..< document.pageCount).map { document.page(at: $0)?.string ?? "" }
 		let tablePageTexts = pageTexts.filter { $0.contains("row-marker-") }
 		#expect(tablePageTexts.count > 1)
+		let headingPage = try #require(pageTexts.firstIndex { $0.contains("Forced page heading") })
+		#expect(pageTexts[headingPage].contains("row-marker-01"),
+		        "the table was moved off the page established by the preceding forced break")
 		for (index, text) in tablePageTexts.enumerated() {
 			#expect(text.contains("Label"), "table page \(index + 1) has no repeated table header")
 			#expect(text.contains("Value"), "table page \(index + 1) has no repeated table header")
@@ -113,6 +116,29 @@ struct WebKitPaginatedPDFTests {
 			}
 			#expect(containingPages.count == 1, "row \(rowNumber) was split or lost")
 		}
+	}
+
+	@Test("A table shorter than one page is split when it straddles a page", .timeLimit(.minutes(2)))
+	func shortStraddlingTable() async throws {
+		let rows = (1 ... 12).map { "<tr><td>short-row-\($0)</td><td>short-value-\($0)</td></tr>" }.joined()
+		let html = """
+		<html><head><style>
+		@page { size: A4; margin: 2cm; }
+		body { margin: 0; font: 16px sans-serif; }
+		table { border-collapse: collapse; }
+		th, td { border: 1px solid #999; padding: 8px 12px; }
+		</style></head><body>
+		<div style="height: 650px">Filler</div>
+		<table><thead><tr><th>Label</th><th>Value</th></tr></thead>
+		<tbody>\(rows)</tbody></table>
+		</body></html>
+		"""
+		let document = try await paginate(html)
+		let tablePages = (0 ..< document.pageCount)
+			.compactMap { document.page(at: $0)?.string }
+			.filter { $0.contains("short-row-") }
+		#expect(tablePages.count == 2)
+		#expect(tablePages.allSatisfy { $0.contains("Label") && $0.contains("Value") })
 	}
 }
 #endif

@@ -238,7 +238,56 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 				};
 			}
 
-			function fragmentTable(table, pageHeight) {
+			function paginatedOffset(table, pageHeight, pageWidth) {
+				const body = document.body;
+				const savedBodyStyle = body.getAttribute('style');
+				const marker = document.createElement('div');
+				marker.style.setProperty('display', 'block', 'important');
+				marker.style.setProperty('height', '0', 'important');
+				marker.style.setProperty('margin', '0', 'important');
+				marker.style.setProperty('padding', '0', 'important');
+				marker.style.setProperty('border', '0', 'important');
+				marker.style.setProperty('break-before', 'auto', 'important');
+				marker.style.setProperty('break-after', 'auto', 'important');
+				table.parentNode.insertBefore(marker, table);
+				const tableGap = table.getBoundingClientRect().top - marker.getBoundingClientRect().top;
+				const forcedBreaks = [];
+				const forcedValues = new Set(['page', 'always', 'left', 'right', 'recto', 'verso']);
+				for (const element of Array.from(body.querySelectorAll('*'))) {
+					const style = getComputedStyle(element);
+					if (forcedValues.has(style.breakBefore) || forcedValues.has(style.breakAfter)) {
+						forcedBreaks.push([element, element.getAttribute('style')]);
+						if (forcedValues.has(style.breakBefore)) {
+							element.style.setProperty('break-before', 'column', 'important');
+						}
+						if (forcedValues.has(style.breakAfter)) {
+							element.style.setProperty('break-after', 'column', 'important');
+						}
+					}
+				}
+
+				// A fixed-height multicolumn body uses WebKit's fragmentation layout.
+				// The marker's column reveals the table's position after pagination
+				// without letting the table's own fragmentation move the measurement.
+				body.style.setProperty('height', pageHeight + 'px', 'important');
+				body.style.setProperty('width', pageWidth + 'px', 'important');
+				body.style.setProperty('column-width', pageWidth + 'px', 'important');
+				body.style.setProperty('column-gap', '0', 'important');
+				body.style.setProperty('column-fill', 'auto', 'important');
+				const bodyTop = body.getBoundingClientRect().top;
+				const offset = marker.getBoundingClientRect().top - bodyTop + tableGap;
+
+				if (savedBodyStyle === null) body.removeAttribute('style');
+				else body.setAttribute('style', savedBodyStyle);
+				for (const [element, savedStyle] of forcedBreaks) {
+					if (savedStyle === null) element.removeAttribute('style');
+					else element.setAttribute('style', savedStyle);
+				}
+				marker.remove();
+				return Math.max(0, Math.min(pageHeight, offset));
+			}
+
+			function fragmentTable(table, pageHeight, pageWidth) {
 				const head = Array.from(table.children).find(element => element.tagName === 'THEAD');
 				const bodies = Array.from(table.children).filter(element => element.tagName === 'TBODY');
 				if (!head || bodies.length !== 1 || table.tFoot || table.dataset.swiftTextPaginated) return;
@@ -249,18 +298,25 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 				const tableRect = table.getBoundingClientRect();
 				const width = tableRect.width;
 				const style = getComputedStyle(table);
-				const marginTop = Math.max(0, parseFloat(style.marginTop) || 0);
-				const marginBottom = Math.max(0, parseFloat(style.marginBottom) || 0);
 				const parent = table.parentNode;
 				const anchor = table.nextSibling;
 				const caption = Array.from(table.children).find(element => element.tagName === 'CAPTION');
 
-				function makeFragment(chunkRows, index) {
+				function makeFragment(chunkRows, index, measuring) {
 					const fragment = table.cloneNode(false);
 					fragment.dataset.swiftTextPaginated = 'true';
 					if (index > 0) fragment.removeAttribute('id');
 					fragment.style.width = width + 'px';
 					fragment.style.boxSizing = 'border-box';
+					fragment.style.marginTop = index === 0 ? style.marginTop : '0';
+					fragment.style.marginBottom = '0';
+					fragment.style.breakBefore = 'auto';
+					fragment.style.pageBreakBefore = 'auto';
+					if (measuring) {
+						fragment.style.setProperty('position', 'absolute', 'important');
+						fragment.style.setProperty('visibility', 'hidden', 'important');
+						fragment.style.margin = '0';
+					}
 
 					if (index === 0 && caption) fragment.appendChild(caption.cloneNode(true));
 					for (const child of Array.from(table.children)) {
@@ -279,67 +335,63 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 					return fragment;
 				}
 
-				// A screen-layout Y coordinate does not reveal the position within a
-				// printed page: forced breaks before the table are absent from that
-				// coordinate system. Only transform tables taller than a fresh page,
-				// and start their fragments at page boundaries where the capacity is
-				// known rather than inferred from a modulo operation.
-				if (tableRect.height + marginTop + marginBottom <= pageHeight + 0.5) return;
+				let capacity = pageHeight - paginatedOffset(table, pageHeight, pageWidth);
+				if (tableRect.height <= capacity + 0.5) return;
 
-				// Measure the same DOM we will print. This includes captions, table
-				// borders and padding, and the gaps produced by separate borders and
-				// vertical border-spacing, none of which are represented by summing
-				// the individual row rectangles.
-				function chunkStartingAt(start, chunkIndex) {
-					const probe = makeFragment([], chunkIndex);
-					probe.style.setProperty('position', 'absolute', 'important');
-					probe.style.setProperty('visibility', 'hidden', 'important');
-					probe.style.setProperty('break-before', 'auto', 'important');
-					probe.style.setProperty('page-break-before', 'auto', 'important');
-					probe.style.marginTop = chunkIndex === 0 ? style.marginTop : '0';
-					probe.style.marginBottom = '0';
+				// Measuring a real fragment includes captions, table decorations,
+				// border spacing, and selector-dependent row sizes.
+				function measuredHeight(chunkRows, index) {
+					const probe = makeFragment(chunkRows, index, true);
 					parent.insertBefore(probe, table);
-
-					const probeBody = probe.tBodies[0];
-					let end = start;
-					while (end < rows.length) {
-						const copy = rows[end].cloneNode(true);
-						copy.style.breakInside = 'avoid';
-						copy.style.pageBreakInside = 'avoid';
-						probeBody.appendChild(copy);
-						const outerHeight = probe.getBoundingClientRect().height
-							+ (chunkIndex === 0 ? marginTop : 0) + marginBottom;
-						if (outerHeight > pageHeight + 0.5 && end > start) {
-							copy.remove();
-							break;
-						}
-						end += 1;
-						// An intrinsically over-height row must remain intact in one
-						// fragment; WebKit has no lossless way to make it fit.
-						if (outerHeight > pageHeight + 0.5) break;
-					}
+					const height = probe.getBoundingClientRect().height;
 					probe.remove();
-					return rows.slice(start, end);
+					return height;
+				}
+
+				let startsOnNewPage = false;
+				if (measuredHeight([rows[0]], 0) > capacity + 0.5) {
+					startsOnNewPage = true;
+					capacity = pageHeight;
 				}
 
 				const chunks = [];
-				let start = 0;
-				while (start < rows.length) {
-					const chunk = chunkStartingAt(start, chunks.length);
-					chunks.push(chunk);
-					start += chunk.length;
+				let chunk = [];
+				for (const row of rows) {
+					if (chunk.length && measuredHeight(chunk.concat(row), chunks.length) > capacity + 0.5) {
+						chunks.push(chunk);
+						chunk = [];
+						capacity = pageHeight;
+					}
+					chunk.push(row);
 				}
+				if (chunk.length) chunks.push(chunk);
+				if (chunks.length < 2 && !startsOnNewPage) return;
 
 				const fragments = chunks.map((chunkRows, index) => {
-					const fragment = makeFragment(chunkRows, index);
-					fragment.style.marginTop = index === 0 ? style.marginTop : '0';
+					const fragment = makeFragment(chunkRows, index, false);
 					fragment.style.marginBottom = index === chunks.length - 1 ? style.marginBottom : '0';
-					fragment.style.breakBefore = 'page';
-					fragment.style.pageBreakBefore = 'always';
 					return fragment;
 				});
 
-				for (const fragment of fragments) parent.insertBefore(fragment, anchor);
+				for (const [index, fragment] of fragments.entries()) {
+					if (index > 0 || startsOnNewPage) {
+						// WebKit can apply a break on a collapsed table after laying out
+						// its header, which leaves that header on the preceding page. A
+						// block marker establishes the page boundary before table layout.
+						const marker = document.createElement('div');
+						marker.dataset.swiftTextPageBreak = 'true';
+						marker.style.setProperty('display', 'block', 'important');
+						marker.style.setProperty('height', '1px', 'important');
+						marker.style.setProperty('margin', '0 0 -1px', 'important');
+						marker.style.setProperty('padding', '0', 'important');
+						marker.style.setProperty('border', '0', 'important');
+						marker.style.setProperty('overflow', 'hidden', 'important');
+						marker.style.setProperty('break-before', 'page', 'important');
+						marker.style.setProperty('page-break-before', 'always', 'important');
+						parent.insertBefore(marker, anchor);
+					}
+					parent.insertBefore(fragment, anchor);
+				}
 				table.remove();
 			}
 
@@ -350,7 +402,9 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 				const layoutWidth = document.documentElement.clientWidth;
 				if (printableWidth <= 0 || printableHeight <= 0 || layoutWidth <= 0) return;
 				const pageHeight = printableHeight * layoutWidth / printableWidth;
-				for (const table of Array.from(document.querySelectorAll('table'))) fragmentTable(table, pageHeight);
+				for (const table of Array.from(document.querySelectorAll('table'))) {
+					fragmentTable(table, pageHeight, layoutWidth);
+				}
 			}
 
 			window.addEventListener('beforeprint', prepare, { once: true });
