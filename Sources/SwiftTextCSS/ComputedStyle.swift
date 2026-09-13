@@ -97,6 +97,21 @@ public enum WhiteSpace: Equatable, Sendable {
 	}
 }
 
+/// Whether otherwise-unbreakable text may wrap to avoid overflowing its line.
+public enum OverflowWrap: String, Equatable, Sendable {
+	case normal
+	case breakWord = "break-word"
+	case anywhere
+}
+
+/// Additional soft wrap opportunities permitted within words.
+public enum WordBreak: String, Equatable, Sendable {
+	case normal
+	case breakAll = "break-all"
+	case keepAll = "keep-all"
+	case breakWord = "break-word"
+}
+
 public enum ListStyleType: String, Equatable, Sendable {
 	case disc, circle, square, none
 	case decimal
@@ -168,6 +183,10 @@ public struct ComputedStyle: Equatable, Sendable {
 	public var lineHeight: LineHeight
 	public var textAlign: TextAlign
 	public var whiteSpace: WhiteSpace
+	/// Whether otherwise-unbreakable text may break to avoid overflow (`overflow-wrap`).
+	public var overflowWrap: OverflowWrap
+	/// Additional break opportunities within words (`word-break`).
+	public var wordBreak: WordBreak
 	/// Whether text is underlined (`text-decoration: underline`).
 	public var underline: Bool
 	/// Whether text has a line through it (`text-decoration: line-through`).
@@ -194,6 +213,8 @@ public struct ComputedStyle: Equatable, Sendable {
 	public var borderStyle: Edges<BorderStyle>
 	public var borderColor: Edges<RGBA>
 	public var width: Length
+	/// The maximum content width, or `nil` for the initial `none` value.
+	public var maxWidth: Length?
 	public var height: Length
 	/// Page-break preference immediately before this box (`break-before`).
 	public var breakBefore: Break
@@ -222,6 +243,8 @@ public struct ComputedStyle: Equatable, Sendable {
 		lineHeight: .normal,
 		textAlign: .start,
 		whiteSpace: .normal,
+		overflowWrap: .normal,
+		wordBreak: .normal,
 		underline: false,
 		lineThrough: false,
 		letterSpacing: 0,
@@ -238,6 +261,7 @@ public struct ComputedStyle: Equatable, Sendable {
 		borderStyle: Edges(.none),
 		borderColor: Edges(RGBA(0, 0, 0, 1)),
 		width: .auto,
+		maxWidth: nil,
 		height: .auto,
 		breakBefore: .auto,
 		breakAfter: .auto,
@@ -255,6 +279,8 @@ public struct ComputedStyle: Equatable, Sendable {
 		style.lineHeight = parent.lineHeight
 		style.textAlign = parent.textAlign
 		style.whiteSpace = parent.whiteSpace
+		style.overflowWrap = parent.overflowWrap
+		style.wordBreak = parent.wordBreak
 		// text-decoration is not formally inherited, but an ancestor's decoration
 		// visually spans descendants; propagating it approximates that.
 		style.underline = parent.underline

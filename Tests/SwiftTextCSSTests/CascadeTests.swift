@@ -119,6 +119,34 @@ struct CascadeTests {
 		#expect(childStyle.display == .inline) // display does not inherit
 	}
 
+	@Test("Text wrapping properties inherit and max-width does not")
+	func textWrappingProperties() {
+		let resolver = StyleResolver(authorStyleSheets: [
+			"div { overflow-wrap: anywhere; word-break: break-word; max-width: 75% }"
+		])
+		let parent = Element("div")
+		let child = Element("span")
+		parent.adding(child)
+		let parentStyle = style(parent, resolver: resolver)
+		#expect(parentStyle.overflowWrap == .anywhere)
+		#expect(parentStyle.wordBreak == .breakWord)
+		#expect(parentStyle.maxWidth == .percent(75))
+
+		let childStyle = resolver.style(for: child, inheriting: parentStyle, rootFontSize: 16)
+		#expect(childStyle.overflowWrap == .anywhere)
+		#expect(childStyle.wordBreak == .breakWord)
+		#expect(childStyle.maxWidth == nil)
+	}
+
+	@Test("word-wrap aliases overflow-wrap in the cascade")
+	func wordWrapAlias() {
+		let modernLast = StyleResolver(authorStyleSheets: ["p { word-wrap: anywhere; overflow-wrap: normal }"])
+		#expect(style(Element("p"), resolver: modernLast).overflowWrap == .normal)
+
+		let legacyLast = StyleResolver(authorStyleSheets: ["p { overflow-wrap: normal; word-wrap: anywhere }"])
+		#expect(style(Element("p"), resolver: legacyLast).overflowWrap == .anywhere)
+	}
+
 	@Test("Box shorthands expand to edges")
 	func boxShorthand() {
 		let resolver = StyleResolver(authorStyleSheets: ["div { margin: 10px 20px; padding: 5px }"])

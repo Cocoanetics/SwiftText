@@ -47,7 +47,10 @@ public final class LayoutEngine {
 		let marginRight = style.margin.right.resolved(percentageBasis: basis) ?? 0
 		let horizontalExtras = marginLeft + marginRight + border.left + border.right + paddingLeft + paddingRight
 		let explicitWidth = style.width.resolved(percentageBasis: basis)
-		let contentWidth = max(0, explicitWidth ?? (containingWidth - horizontalExtras))
+		let availableWidth = containingWidth - horizontalExtras
+		let unclampedWidth = explicitWidth ?? availableWidth
+		let maximumWidth = style.maxWidth?.resolved(percentageBasis: basis)
+		let contentWidth = max(0, min(unclampedWidth, maximumWidth ?? unclampedWidth))
 		let borderBoxWidth = contentWidth + paddingLeft + paddingRight + border.left + border.right
 
 		box.x = marginX + marginLeft
@@ -508,6 +511,50 @@ public final class LayoutEngine {
 					pieces.append(Piece(text: text, font: run.font, width: width))
 					wordWidth += width
 				}
+				let level = wordLevel(tokenIndex)
+				func append(_ pieces: [Piece]) {
+					for piece in pieces {
+						let fragment = TextFragment(text: piece.text, style: style, x: penX, y: 0,
+						                            width: piece.width, baseline: 0, href: href,
+						                            bidiLevel: level, font: piece.font)
+						fragments.append(fragment)
+						penX += piece.width
+					}
+				}
+				func appendWithBreaks(_ pieces: [Piece]) {
+					let units = pieces.flatMap { piece in
+						piece.text.map { character in
+							let text = String(character)
+							let width = piece.font.width(of: text, size: style.fontSize)
+								+ style.letterSpacing * Double(text.unicodeScalars.count)
+							return Piece(text: text, font: piece.font, width: width)
+						}
+					}
+					var chunkText = ""
+					var chunkWidth = 0.0
+					var chunkFont: Font?
+					func flushChunk() {
+						guard let font = chunkFont else { return }
+						append([Piece(text: chunkText, font: font, width: chunkWidth)])
+						chunkText = ""
+						chunkWidth = 0
+						chunkFont = nil
+					}
+					for unit in units {
+						if penX + chunkWidth + unit.width > contentWidth,
+						   !chunkText.isEmpty || !fragments.isEmpty {
+							flushChunk()
+							finishLine(isLast: false)
+						}
+						if let font = chunkFont, font.key != unit.font.key {
+							flushChunk()
+						}
+						chunkFont = unit.font
+						chunkText += unit.text
+						chunkWidth += unit.width
+					}
+					flushChunk()
+				}
 				func gap(_ spaceStyle: ComputedStyle) -> Double {
 					// word-spacing adds to each inter-word space.
 					fonts.font(for: spaceStyle).width(of: " ", size: spaceStyle.fontSize) + spaceStyle.wordSpacing
@@ -515,22 +562,34 @@ public final class LayoutEngine {
 				let spaceWidth = pendingSpace.map(gap) ?? 0
 
 				let wraps = style.whiteSpace.wraps
-				if wraps && !fragments.isEmpty && penX + spaceWidth + wordWidth > contentWidth {
-					finishLine(isLast: false)
-				} else if !fragments.isEmpty, let space = pendingSpace {
-					penX += gap(space)
-					pendingSpace = nil
-				}
-
-				// One fragment per font-run; all share the word's bidi level so the
-				// reorder treats the word's runs as a unit.
-				let level = wordLevel(tokenIndex)
-				for piece in pieces {
-					let fragment = TextFragment(text: piece.text, style: style, x: penX, y: 0,
-					                            width: piece.width, baseline: 0, href: href,
-					                            bidiLevel: level, font: piece.font)
-					fragments.append(fragment)
-					penX += piece.width
+				let breaksAnywhere = style.overflowWrap != .normal || style.wordBreak == .breakWord
+				if wraps && style.wordBreak == .breakAll {
+					if !fragments.isEmpty, let space = pendingSpace {
+						let width = gap(space)
+						if penX + width > contentWidth {
+							finishLine(isLast: false)
+						} else {
+							penX += width
+							pendingSpace = nil
+						}
+					}
+					if penX + wordWidth > contentWidth {
+						appendWithBreaks(pieces)
+					} else {
+						append(pieces)
+					}
+				} else {
+					if wraps && !fragments.isEmpty && penX + spaceWidth + wordWidth > contentWidth {
+						finishLine(isLast: false)
+					} else if !fragments.isEmpty, let space = pendingSpace {
+						penX += gap(space)
+						pendingSpace = nil
+					}
+					if wraps && breaksAnywhere && penX + wordWidth > contentWidth {
+						appendWithBreaks(pieces)
+					} else {
+						append(pieces)
+					}
 				}
 			}
 		}

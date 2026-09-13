@@ -293,6 +293,13 @@ struct RenderPDFTests {
 		#expect(root.height > 0)
 	}
 
+	@Test("max-width constrains a block")
+	func maxWidthConstrainsBlock() async throws {
+		let root = try await layoutTree("<div style=\"width:300px;max-width:100px\">x</div>", contentWidth: 200)
+		let div = try #require(firstBlock(in: root) { $0.element?.localName == "div" })
+		#expect(div.width == 100)
+	}
+
 	@Test("Block siblings stack vertically")
 	func stacksBlocks() async throws {
 		let root = try await layoutTree("<div><p>first</p><p>second</p></div>", contentWidth: 400)
@@ -325,6 +332,39 @@ struct RenderPDFTests {
 		#expect(cells[2].y > cells[0].y)   // C is below A
 		#expect(cells[0].y == cells[1].y)  // A and B share a row
 		#expect(cells[0].x == cells[2].x)  // A and C share a column
+	}
+
+	@Test("Unbreakable table tokens wrap in rendered PDFs")
+	func unbreakableTableTokenWraps() async throws {
+		let token = String(repeating: "X", count: 75)
+		let css = """
+		table { max-width: 100%; }
+		th, td { border: 1px solid black; padding: 4px; overflow-wrap: anywhere; word-break: break-word; }
+		"""
+		let tableHTML = "<table><tr><th>Key</th><th>Reference</th></tr><tr><td>Token</td><td>\(token)</td></tr></table>"
+		let root = try await layoutTree(tableHTML, css: [css], contentWidth: 200)
+		let cells = collectBlocks(in: root) { $0.element?.localName == "td" }
+		let tokenCell = try #require(cells.last)
+		#expect(tokenCell.lines.count > 1)
+		for fragment in tokenCell.lines.flatMap(\.fragments) {
+			#expect(fragment.x + fragment.width <= tokenCell.x + tokenCell.width)
+		}
+
+		let html = """
+		<style>\(css)</style>
+		\(tableHTML)
+		"""
+		let options = RenderOptions(pageWidthPx: 240, pageHeightPx: 500,
+		                            pageMarginPx: 20, compressStreams: false)
+		let data = try await HTMLRenderer.renderPDF(html: html, options: options)
+		let pdf = String(decoding: data, as: UTF8.self)
+		let pieces = pdf.split(separator: "\n").compactMap { line -> String? in
+			guard line.first == "(", line.hasSuffix(") Tj") else { return nil }
+			let text = String(line.dropFirst().dropLast(4))
+			return !text.isEmpty && text.allSatisfy { $0 == "X" } ? text : nil
+		}
+		#expect(pieces.count > 1)
+		#expect(pieces.joined() == token)
 	}
 
 	@Test("Table row groups continue across page boundaries")
