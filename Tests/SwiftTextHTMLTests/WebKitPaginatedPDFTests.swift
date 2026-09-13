@@ -12,7 +12,7 @@ import PDFKit
 import Testing
 @testable import SwiftTextHTML
 
-@Suite("WebKit paginated PDF export")
+@Suite("WebKit paginated PDF export", .serialized)
 @MainActor
 struct WebKitPaginatedPDFTests {
 	private let a4 = CGSize(width: 595.28, height: 841.89)
