@@ -362,7 +362,15 @@ struct PDF: AsyncParsableCommand {
 
 /// Converts a Markdown string to a self-contained HTML document
 /// styled for print output and with CSS `@page` size directives.
-func markdownToHTML(_ markdown: String, paper: PaperSize, landscape: Bool, pageBreakBefore: HeadingBreakLevel? = nil, extraCSS: String? = nil) -> String {
+func markdownToHTML(
+	_ markdown: String,
+	paper: PaperSize,
+	landscape: Bool,
+	pageBreakBefore: HeadingBreakLevel? = nil,
+	extraCSS: String? = nil,
+	title: String? = nil,
+	authors: [String] = []
+) -> String {
 	let orientation = landscape ? "landscape" : "portrait"
 	let pageCSS = "\(paper.cssName) \(orientation)"
 	let body = MarkdownToHTML.convert(markdown)
@@ -375,13 +383,17 @@ func markdownToHTML(_ markdown: String, paper: PaperSize, landscape: Bool, pageB
 		\(level.rawValue) { page-break-before: always; break-before: page; }
 		"""
 	} ?? ""
+	var metadata = title.map { "<title>\(escapeHTMLMetadata($0))</title>\n" } ?? ""
+	for author in authors where !author.isEmpty {
+		metadata += "<meta name=\"author\" content=\"\(escapeHTMLMetadata(author, attribute: true))\">\n"
+	}
 	return """
 	<!DOCTYPE html>
 	<html lang="en">
 	<head>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<style>
+	\(metadata)<style>
 	@page { size: \(pageCSS); margin: 2cm; }
 	*, *::before, *::after { box-sizing: border-box; }
 	body {
@@ -520,6 +532,19 @@ func markdownToHTML(_ markdown: String, paper: PaperSize, landscape: Bool, pageB
 	</body>
 	</html>
 	"""
+}
+
+private func escapeHTMLMetadata(_ value: String, attribute: Bool = false) -> String {
+	var escaped = value
+		.replacingOccurrences(of: "&", with: "&amp;")
+		.replacingOccurrences(of: "<", with: "&lt;")
+		.replacingOccurrences(of: ">", with: "&gt;")
+	if attribute {
+		escaped = escaped
+			.replacingOccurrences(of: "\"", with: "&quot;")
+			.replacingOccurrences(of: "'", with: "&#39;")
+	}
+	return escaped
 }
 
 // MARK: - EML → HTML

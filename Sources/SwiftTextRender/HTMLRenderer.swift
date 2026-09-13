@@ -66,7 +66,16 @@ public enum HTMLRenderer {
 	///   - fonts: A font book; register OpenType fonts on it to embed them and
 	///     render arbitrary families/scripts. Defaults to base-14 only.
 	///   - options: Page geometry.
-	public static func renderPDF(html: String, css: [String] = [], fonts: FontBook = FontBook(), options: RenderOptions = RenderOptions()) async throws -> Data {
+	///   - title: Optional document title written to the PDF Info dictionary.
+	///   - authors: Document authors written to the PDF Info dictionary.
+	public static func renderPDF(
+		html: String,
+		css: [String] = [],
+		fonts: FontBook = FontBook(),
+		options: RenderOptions = RenderOptions(),
+		title: String? = nil,
+		authors: [String] = []
+	) async throws -> Data {
 		let builder = try await DomBuilder(html: Data(html.utf8), baseURL: nil)
 		guard let root = builder.root else { throw RenderError.noDocument }
 
@@ -107,6 +116,12 @@ public enum HTMLRenderer {
 			: paginate(rootBox, columnHeight: columnHeight, pageHeightPx: pageHeightPx, margin: margin)
 
 		let pdf = PDF()
+		if let title, !title.isEmpty {
+			pdf.info["Title"] = PDFString(title)
+		}
+		if !authors.isEmpty {
+			pdf.info["Author"] = PDFString(authors.joined(separator: "; "))
+		}
 		let fontBuilder = FontResourceBuilder(pdf: pdf, compress: options.compressStreams)
 		var pageObjects: [PDFDictionary] = []
 		let totalPages = slices.count

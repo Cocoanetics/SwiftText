@@ -12,6 +12,9 @@ import SwiftTextEPUB
 import SwiftTextHTML
 import SwiftTextPages
 import SwiftTextRender
+#if os(macOS)
+import PDFKit
+#endif
 
 enum RenderOutputFormat: String, ExpressibleByArgument, CaseIterable {
 	case html
@@ -72,10 +75,10 @@ struct Render: AsyncParsableCommand {
 	@Option(name: .long, help: "For EPUB output, a cover image file (JPEG/PNG). Apple Books wants at least 1400px wide.")
 	var cover: String?
 
-	@Option(name: .long, help: "For EPUB output, the book title (dc:title). Defaults to the first top-level heading, or the input filename.")
+	@Option(name: .long, help: "Document title for HTML, PDF, DOCX, and EPUB output. Defaults to the first top-level heading, or the input filename.")
 	var title: String?
 
-	@Option(name: .long, help: "For EPUB output, an author (dc:creator). Repeat for multiple authors.")
+	@Option(name: .long, help: "Document author for HTML, PDF, DOCX, and EPUB output. Repeat for multiple authors.")
 	var author: [String] = []
 
 	@Option(name: .long, help: "For EPUB output, the BCP-47 language tag (dc:language). Default: en.")
@@ -119,31 +122,37 @@ struct Render: AsyncParsableCommand {
 		let chosenFormat = try resolvedFormat()
 		let outputURL = try resolvedOutputURL(format: chosenFormat)
 		let userCSS = try loadUserCSS()
+		let resolvedTitle = title ?? inferTitle(from: markdownText)
+			?? (input.map { URL(fileURLWithPath: $0).deletingPathExtension().lastPathComponent } ?? "Untitled")
 
 		switch chosenFormat {
 		case .html:
-			let html = markdownToHTML(markdownText, paper: paper, landscape: landscape, pageBreakBefore: pageBreakBefore, extraCSS: userCSS)
+			let html = markdownToHTML(markdownText, paper: paper, landscape: landscape, pageBreakBefore: pageBreakBefore,
+			                          extraCSS: userCSS, title: resolvedTitle, authors: author)
 			try writeString(html, to: outputURL)
 			print(outputURL.path)
 		case .pdf:
-			let html = markdownToHTML(markdownText, paper: paper, landscape: landscape, pageBreakBefore: pageBreakBefore, extraCSS: userCSS)
-			try await renderPDF(html: html, baseURL: baseURL, outputURL: outputURL)
+			let html = markdownToHTML(markdownText, paper: paper, landscape: landscape, pageBreakBefore: pageBreakBefore,
+			                          extraCSS: userCSS, title: resolvedTitle, authors: author)
+			try await renderPDF(html: html, baseURL: baseURL, outputURL: outputURL,
+			                    title: resolvedTitle, authors: author)
 			print(outputURL.path)
 		case .docx:
-			try MarkdownToDocx.convert(markdownText, to: outputURL, pageSetup: docxPageSetup(), baseURL: baseURL)
+			try MarkdownToDocx.convert(markdownText, to: outputURL, pageSetup: docxPageSetup(), baseURL: baseURL,
+			                           title: resolvedTitle, authors: author)
 			print(outputURL.path)
 		case .pages:
 			try MarkdownToPages.convert(markdownText, to: outputURL, packaging: package ? .package : .singleFile, baseURL: baseURL)
 			print(outputURL.path)
 		case .epub:
-			try renderEPUB(markdownText, baseURL: baseURL, outputURL: outputURL, userCSS: userCSS)
+			try renderEPUB(markdownText, baseURL: baseURL, outputURL: outputURL, userCSS: userCSS, title: resolvedTitle)
 			print(outputURL.path)
 		}
 	}
 
 	// MARK: - EPUB
 
-	private func renderEPUB(_ markdown: String, baseURL: URL?, outputURL: URL, userCSS: String?) throws {
+	private func renderEPUB(_ markdown: String, baseURL: URL?, outputURL: URL, userCSS: String?, title: String) throws {
 		var coverData: Data?
 		var coverFilename: String?
 		if let cover {
@@ -155,10 +164,8 @@ struct Render: AsyncParsableCommand {
 			coverFilename = coverURL.lastPathComponent
 		}
 
-		let resolvedTitle = title ?? inferTitle(from: markdown) ?? (input.map { URL(fileURLWithPath: $0).deletingPathExtension().lastPathComponent } ?? "Untitled")
-
 		let metadata = EpubMetadata(
-			title: resolvedTitle,
+			title: title,
 			authors: author,
 			language: language,
 			coverImage: coverData,
@@ -167,27 +174,9 @@ struct Render: AsyncParsableCommand {
 		try MarkdownToEpub.convert(markdown, to: outputURL, metadata: metadata, options: options)
 	}
 
-	/// The first ATX heading's text, used as a default EPUB title. Skips fenced
-	/// code blocks so a `# …` line inside ``` fences isn't mistaken for a heading.
+	/// The first top-level heading's plain text, used as the default document title.
 	private func inferTitle(from markdown: String) -> String? {
-		var fence: Character?
-		for rawLine in markdown.split(separator: "\n", omittingEmptySubsequences: false) {
-			let line = rawLine.trimmingCharacters(in: .whitespaces)
-			// Toggle in/out of a fenced code block on ``` or ~~~.
-			if line.hasPrefix("```") || line.hasPrefix("~~~") {
-				let marker = line.first!
-				if fence == nil { fence = marker } else if fence == marker { fence = nil }
-				continue
-			}
-			guard fence == nil, line.hasPrefix("#") else { continue }
-			let hashes = line.prefix { $0 == "#" }
-			guard (1...6).contains(hashes.count) else { continue }
-			let rest = line.dropFirst(hashes.count)
-			guard rest.first == " " else { continue }
-			let text = rest.trimmingCharacters(in: .whitespaces)
-			if !text.isEmpty { return text }
-		}
-		return nil
+		MarkdownToHTML.firstHeadingPlainText(markdown)
 	}
 
 	/// Loads the `--css` file if given.
@@ -285,9 +274,9 @@ struct Render: AsyncParsableCommand {
 
 	@MainActor
 	@available(macOS 12.0, *)
-	private func renderPDF(html: String, baseURL: URL?, outputURL: URL) async throws {
+	private func renderPDF(html: String, baseURL: URL?, outputURL: URL, title: String, authors: [String]) async throws {
 		if engine == .swift {
-			try await renderPDFSwift(html: html, outputURL: outputURL)
+			try await renderPDFSwift(html: html, outputURL: outputURL, title: title, authors: authors)
 			return
 		}
 		#if os(macOS)
@@ -303,6 +292,7 @@ struct Render: AsyncParsableCommand {
 			browser.preserveFrameHeight = true
 			await browser.waitForLoadCompletion()
 			let pdfData = try await browser.exportPaginatedPDFData(paperSize: pageSize())
+				.settingPDFMetadata(title: title, authors: authors)
 			try writeData(pdfData, to: outputURL)
 		} else {
 			let browser = WebKitBrowser(htmlString: html, baseURL: nil)
@@ -310,6 +300,7 @@ struct Render: AsyncParsableCommand {
 			browser.preserveFrameHeight = true
 			await browser.waitForLoadCompletion()
 			let pdfData = try await browser.exportPaginatedPDFData(paperSize: pageSize())
+				.settingPDFMetadata(title: title, authors: authors)
 			try writeData(pdfData, to: outputURL)
 		}
 		#else
@@ -319,14 +310,14 @@ struct Render: AsyncParsableCommand {
 
 	/// Renders the print HTML to a PDF via the cross-platform SwiftTextRender engine.
 	@available(macOS 12.0, *)
-	private func renderPDFSwift(html: String, outputURL: URL) async throws {
+	private func renderPDFSwift(html: String, outputURL: URL, title: String, authors: [String]) async throws {
 		let size = paper.pointSize
 		let widthPoints = landscape ? size.height : size.width
 		let heightPoints = landscape ? size.width : size.height
 		var options = RenderOptions()
 		options.pageWidthPx = widthPoints / 0.75 // points → CSS pixels
 		options.pageHeightPx = heightPoints / 0.75
-		let data = try await HTMLRenderer.renderPDF(html: html, options: options)
+		let data = try await HTMLRenderer.renderPDF(html: html, options: options, title: title, authors: authors)
 		try writeData(data, to: outputURL)
 	}
 
@@ -336,3 +327,20 @@ struct Render: AsyncParsableCommand {
 		try data.write(to: url)
 	}
 }
+
+#if os(macOS)
+private extension Data {
+	/// Applies metadata after WebKit's print pipeline has produced the PDF while
+	/// preserving its existing producer and date attributes.
+	func settingPDFMetadata(title: String, authors: [String]) -> Data {
+		guard let document = PDFDocument(data: self) else { return self }
+		var attributes = document.documentAttributes ?? [:]
+		attributes[PDFDocumentAttribute.titleAttribute] = title
+		if !authors.isEmpty {
+			attributes[PDFDocumentAttribute.authorAttribute] = authors.joined(separator: "; ")
+		}
+		document.documentAttributes = attributes
+		return document.dataRepresentation() ?? self
+	}
+}
+#endif

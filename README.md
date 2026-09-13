@@ -396,7 +396,7 @@ Options:
 - **numbers** `--markdown`/`-m`, `--html`, `--json`, `--output-path <file>`/`-o`
 - **keynote** `--markdown`/`-m`, `--json`, `--output-path <file>`/`-o`
 - **pdf** `--engine webkit|swift`, `--paper a4|letter`, `--landscape`, `--stdin`, `--output <file>`/`-o`
-- **render** `--format html|pdf|docx|pages|epub`, `--engine webkit|swift`, `--paper`, `--landscape`, `--page-break-before <h1…h6>`, `--package`, `--output <file>`/`-o`; EPUB & shared: `--css <file>` (html/pdf/epub), `--cover <image>`, `--title`, `--author` (repeatable), `--language`, `--chapter-level <h1…h6>`
+- **render** `--format html|pdf|docx|pages|epub`, `--engine webkit|swift`, `--paper`, `--landscape`, `--page-break-before <h1…h6>`, `--package`, `--output <file>`/`-o`; metadata: `--title`, `--author` (repeatable) for HTML/PDF/DOCX/EPUB; EPUB & shared: `--css <file>` (html/pdf/epub), `--cover <image>`, `--language`, `--chapter-level <h1…h6>`
 - **overlay** *(macOS only)* `--output-path <file>`/`-o`, `--dpi <value>`, `--raw`
 
 The `pdf` and `render` commands render via **WebKit** by default on macOS and via

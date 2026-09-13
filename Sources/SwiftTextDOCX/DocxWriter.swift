@@ -125,6 +125,10 @@ public final class DocxWriter {
 	/// images render as their alt-text placeholder instead of being embedded.
 	public var baseURL: URL?
 
+	/// Document title and authors emitted in `docProps/core.xml`.
+	public var title: String?
+	public var authors: [String] = []
+
 	// MARK: - Private State
 
 	/// Tracks hyperlink relationships for document.xml.rels.
@@ -184,11 +188,13 @@ public final class DocxWriter {
 		let numberingXML = generateNumbering()
 		let settingsXML = generateSettings()
 		let fontTableXML = generateFontTable()
+		let corePropertiesXML = generateCoreProperties()
 
 		// Assemble the OPC parts, then hand the whole container to libarchive.
 		var entries = [
 			xmlPart("[Content_Types].xml", contentTypes),
 			xmlPart("_rels/.rels", rels),
+			xmlPart("docProps/core.xml", corePropertiesXML),
 			xmlPart("word/_rels/document.xml.rels", documentRels),
 			xmlPart("word/document.xml", documentXML),
 			xmlPart("word/styles.xml", stylesXML),
@@ -679,6 +685,7 @@ public final class DocxWriter {
 		<Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>
 		<Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/>
 		<Override PartName="/word/fontTable.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.fontTable+xml"/>
+		<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
 		\(footnotesOverride)</Types>
 		"""
 	}
@@ -688,7 +695,21 @@ public final class DocxWriter {
 		<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 		<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
 		<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+		<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
 		</Relationships>
+		"""
+	}
+
+	private func generateCoreProperties() -> String {
+		let titleXML = title.map { "<dc:title>\(xmlEscape($0))</dc:title>" } ?? ""
+		let creator = authors.filter { !$0.isEmpty }.joined(separator: "; ")
+		let creatorXML = creator.isEmpty ? "" : "<dc:creator>\(xmlEscape(creator))</dc:creator>"
+		return """
+		<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+		<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/">
+		\(titleXML)
+		\(creatorXML)
+		</cp:coreProperties>
 		"""
 	}
 
