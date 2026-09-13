@@ -68,7 +68,14 @@ public enum HTMLRenderer {
 	///   - options: Page geometry.
 	///   - title: Optional document title written to the PDF Info dictionary.
 	///   - authors: Document authors written to the PDF Info dictionary.
-	public static func renderPDF(html: String, css: [String] = [], fonts: FontBook = FontBook(), options: RenderOptions = RenderOptions(), title: String? = nil, authors: [String] = []) async throws -> Data {
+	public static func renderPDF(
+		html: String,
+		css: [String] = [],
+		fonts: FontBook = FontBook(),
+		options: RenderOptions = RenderOptions(),
+		title: String? = nil,
+		authors: [String] = []
+	) async throws -> Data {
 		let builder = try await DomBuilder(html: Data(html.utf8), baseURL: nil)
 		guard let root = builder.root else { throw RenderError.noDocument }
 
