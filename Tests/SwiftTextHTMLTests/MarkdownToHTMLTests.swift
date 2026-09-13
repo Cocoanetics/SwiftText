@@ -156,6 +156,17 @@ struct MarkdownToHTMLTests {
 		#expect(text.contains("link"))
 	}
 
+	@Test func firstHeadingPlainTextUsesParsedVisibleText() {
+		let markdown = """
+		```
+		# Ignored
+		```
+
+		# Research &amp; *Development* [Plan](https://example.com) `2026`
+		"""
+		#expect(MarkdownToHTML.firstHeadingPlainText(markdown) == "Research & Development Plan 2026")
+	}
+
 	@Test func footnotes() {
 		let html = MarkdownToHTML.convert("Hello[^a].\n\n[^a]: The note")
 		#expect(html.contains("<sup><a href=\"#fn-1\" id=\"ref-1\">[1]</a></sup>"))

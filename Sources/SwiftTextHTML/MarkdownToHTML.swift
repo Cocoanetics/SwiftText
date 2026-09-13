@@ -1,4 +1,5 @@
 import Foundation
+import Markdown
 import SwiftTextMarkdown
 
 /// Markdown to HTML converter, backed by swift-markdown's CommonMark/GFM parser.
@@ -34,6 +35,18 @@ public enum MarkdownToHTML {
 	/// the AST, and a `<div class="footnote-definition">` block appended.
 	public static func convert(_ markdown: String, options: Options = []) -> String {
 		MarkdownFootnoteRenderer.convert(markdown, options: options)
+	}
+
+	/// Returns the plain-text content of the first top-level heading.
+	public static func firstHeadingPlainText(_ markdown: String) -> String? {
+		let document = Document(parsing: markdown)
+		for child in document.children {
+			guard let heading = child as? Heading else { continue }
+			let text = swiftMarkdownPlainText(of: heading)
+				.trimmingCharacters(in: .whitespacesAndNewlines)
+			if !text.isEmpty { return text }
+		}
+		return nil
 	}
 
 	/// Default stylesheet for Markdown HTML output.

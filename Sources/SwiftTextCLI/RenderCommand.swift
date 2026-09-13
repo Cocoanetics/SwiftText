@@ -174,27 +174,9 @@ struct Render: AsyncParsableCommand {
 		try MarkdownToEpub.convert(markdown, to: outputURL, metadata: metadata, options: options)
 	}
 
-	/// The first ATX heading's text, used as the default document title. Skips fenced
-	/// code blocks so a `# …` line inside ``` fences isn't mistaken for a heading.
+	/// The first top-level heading's plain text, used as the default document title.
 	private func inferTitle(from markdown: String) -> String? {
-		var fence: Character?
-		for rawLine in markdown.split(separator: "\n", omittingEmptySubsequences: false) {
-			let line = rawLine.trimmingCharacters(in: .whitespaces)
-			// Toggle in/out of a fenced code block on ``` or ~~~.
-			if line.hasPrefix("```") || line.hasPrefix("~~~") {
-				let marker = line.first!
-				if fence == nil { fence = marker } else if fence == marker { fence = nil }
-				continue
-			}
-			guard fence == nil, line.hasPrefix("#") else { continue }
-			let hashes = line.prefix { $0 == "#" }
-			guard (1...6).contains(hashes.count) else { continue }
-			let rest = line.dropFirst(hashes.count)
-			guard rest.first == " " else { continue }
-			let text = rest.trimmingCharacters(in: .whitespaces)
-			if !text.isEmpty { return text }
-		}
-		return nil
+		MarkdownToHTML.firstHeadingPlainText(markdown)
 	}
 
 	/// Loads the `--css` file if given.
