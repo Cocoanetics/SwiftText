@@ -12,7 +12,7 @@ import PDFKit
 import Testing
 @testable import SwiftTextHTML
 
-@Suite("WebKit paginated PDF export")
+@Suite("WebKit paginated PDF export", .serialized)
 @MainActor
 struct WebKitPaginatedPDFTests {
 	private let a4 = CGSize(width: 595.28, height: 841.89)
@@ -73,6 +73,72 @@ struct WebKitPaginatedPDFTests {
 		// The first page must carry real content — a paginator that emits blank
 		// pages would still satisfy a bare count check.
 		#expect(document.page(at: 0)?.string?.contains("Paragraph number 1") == true)
+	}
+
+	@Test("Spaced table fragments preserve captions, headers, and rows", .timeLimit(.minutes(2)))
+	func tablePagination() async throws {
+		let rows = (1 ... 50).map {
+			let marker = String(format: "%02d", $0)
+			return "<tr><td>row-marker-\(marker)</td><td>value-marker-\(marker)</td></tr>"
+		}.joined()
+		let html = """
+		<html><head><style>
+		@page { size: A4; margin: 2cm; }
+		body { margin: 0; font: 16px sans-serif; }
+		h2 { break-before: page; }
+		table { border-spacing: 0 12px; border: 4px solid #555; }
+		th, td { border: 1px solid #999; padding: 8px 12px; }
+		</style></head><body>
+		<p>Content before the forced break.</p>
+		<h2>Forced page heading</h2>
+		<table><caption>Preserved table caption</caption>
+		<thead><tr><th>Label</th><th>Value</th></tr></thead>
+		<tbody>\(rows)</tbody></table>
+		</body></html>
+		"""
+		let document = try await paginate(html)
+		#expect(document.pageCount > 1)
+		let pageTexts = (0 ..< document.pageCount).map { document.page(at: $0)?.string ?? "" }
+		let tablePageTexts = pageTexts.filter { $0.contains("row-marker-") }
+		#expect(tablePageTexts.count > 1)
+		let headingPage = try #require(pageTexts.firstIndex { $0.contains("Forced page heading") })
+		#expect(pageTexts[headingPage].contains("row-marker-01"),
+		        "the table was moved off the page established by the preceding forced break")
+		for (index, text) in tablePageTexts.enumerated() {
+			#expect(text.contains("Label"), "table page \(index + 1) has no repeated table header")
+			#expect(text.contains("Value"), "table page \(index + 1) has no repeated table header")
+		}
+		#expect(pageTexts.filter { $0.contains("Preserved table caption") }.count == 1)
+		for rowNumber in 1 ... 50 {
+			let marker = String(format: "%02d", rowNumber)
+			let containingPages = pageTexts.filter {
+				$0.contains("row-marker-\(marker)") && $0.contains("value-marker-\(marker)")
+			}
+			#expect(containingPages.count == 1, "row \(rowNumber) was split or lost")
+		}
+	}
+
+	@Test("A table shorter than one page is split when it straddles a page", .timeLimit(.minutes(2)))
+	func shortStraddlingTable() async throws {
+		let rows = (1 ... 12).map { "<tr><td>short-row-\($0)</td><td>short-value-\($0)</td></tr>" }.joined()
+		let html = """
+		<html><head><style>
+		@page { size: A4; margin: 2cm; }
+		body { margin: 0; font: 16px sans-serif; }
+		table { border-collapse: collapse; }
+		th, td { border: 1px solid #999; padding: 8px 12px; }
+		</style></head><body>
+		<div style="height: 650px">Filler</div>
+		<table><thead><tr><th>Label</th><th>Value</th></tr></thead>
+		<tbody>\(rows)</tbody></table>
+		</body></html>
+		"""
+		let document = try await paginate(html)
+		let tablePages = (0 ..< document.pageCount)
+			.compactMap { document.page(at: $0)?.string }
+			.filter { $0.contains("short-row-") }
+		#expect(tablePages.count == 2)
+		#expect(tablePages.allSatisfy { $0.contains("Label") && $0.contains("Value") })
 	}
 }
 #endif

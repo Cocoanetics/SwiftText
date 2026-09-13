@@ -496,6 +496,8 @@ func markdownToHTML(
 	    word-break: break-all;
 	}
 	table { border-collapse: collapse; margin: 0.8em 0; font-size: 0.95em; max-width: 100%; }
+	thead { display: table-header-group; }
+	tr { page-break-inside: avoid; break-inside: avoid; }
 	th, td {
 	    border: 1px solid #999;
 	    padding: 0.4em 0.7em;
