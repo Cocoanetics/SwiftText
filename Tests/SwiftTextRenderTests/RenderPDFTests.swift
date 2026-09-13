@@ -375,6 +375,38 @@ struct RenderPDFTests {
 		#expect(cells[0].height >= cells[1].height + cells[2].height) // Tall spans both rows
 	}
 
+	@Test("Tall rowspan cells continue across page boundaries")
+	func tallRowspanCellsPaginate() async throws {
+		let spanningContent = (1 ... 20).map { "<p>SpanLine\($0)</p>" }.joined()
+		let html = """
+		<table><tbody><tr><td rowspan=2>\(spanningContent)</td><td>A</td></tr><tr><td>B</td></tr></tbody></table>
+		<p>AFTERTABLE</p>
+		"""
+		let root = try await layoutTree(html, contentWidth: 400)
+		let table = try #require(firstBlock(in: root) { $0.element?.localName == "table" })
+		let group = try #require(firstBlock(in: table) { $0.element?.localName == "tbody" })
+		let rows = collectBlocks(in: table) { $0.element?.localName == "tr" }
+		let spanningCell = try #require(firstBlock(in: table) { $0.element?.attributeValue("rowspan") == "2" })
+		#expect(rows.count == 2)
+		#expect(rows[0].y + rows[0].height >= spanningCell.y + spanningCell.height)
+		#expect(group.y + group.height >= spanningCell.y + spanningCell.height)
+		#expect(table.y + table.height >= spanningCell.y + spanningCell.height)
+
+		let options = RenderOptions(pageWidthPx: 400, pageHeightPx: 200,
+		                            pageMarginPx: 10, compressStreams: false)
+		let data = try await HTMLRenderer.renderPDF(html: html, options: options)
+		for index in 1 ... 20 {
+			#expect(data.range(of: Data("(SpanLine\(index))".utf8)) != nil)
+		}
+		#expect(data.range(of: Data("(AFTERTABLE)".utf8)) != nil)
+
+		#if canImport(PDFKit)
+		let document = try #require(PDFDocument(data: data))
+		#expect(document.pageCount > 1)
+		#expect((document.string ?? "").contains("SpanLine20"))
+		#endif
+	}
+
 	@Test("Table cell vertical-align: bottom pushes content down")
 	func cellVerticalAlign() async throws {
 		let html = "<table><tr><td style=\"height:100px\">tall</td><td style=\"vertical-align: bottom\">low</td></tr></table>"

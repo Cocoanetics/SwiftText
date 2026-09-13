@@ -188,6 +188,20 @@ public final class LayoutEngine {
 		for placement in placements where placement.rowspan == 1 {
 			rowHeights[placement.row] = max(rowHeights[placement.row], measured[ObjectIdentifier(placement.cell)] ?? 0)
 		}
+		// A spanning cell can require more height than the rows it covers get from
+		// their single-row cells. Share that deficit across the span so the table's
+		// flow height contains the cell instead of letting it overlap later content.
+		for placement in placements where placement.rowspan > 1 {
+			let lastRow = min(placement.row + placement.rowspan - 1, rows.count - 1)
+			let spannedRows = placement.row ... lastRow
+			let currentHeight = spannedRows.reduce(0.0) { $0 + rowHeights[$1] }
+				+ Double(lastRow - placement.row) * spacing
+			let deficit = (measured[ObjectIdentifier(placement.cell)] ?? 0) - currentHeight
+			if deficit > 0 {
+				let share = deficit / Double(spannedRows.count)
+				for row in spannedRows { rowHeights[row] += share }
+			}
+		}
 		var rowTops = [Double](repeating: 0, count: rows.count)
 		var y = contentTop + spacing
 		for index in rows.indices {
@@ -230,13 +244,13 @@ public final class LayoutEngine {
 		// the painter uses every block's bounds to prune off-page subtrees. Leaving
 		// a <thead>/<tbody>/<tfoot> at its zero-sized default makes it intersect only
 		// the first page and silently drops all of its later rows.
-		_ = sizeTableRowGroups(in: table, contentX: contentX, contentWidth: contentWidth)
-		return y - contentTop
+		let bounds = sizeTableRowGroups(in: table, contentX: contentX, contentWidth: contentWidth)
+		return max(y, (bounds?.bottom ?? contentTop) + spacing) - contentTop
 	}
 
-	/// Give table row-group boxes the union of their laid-out rows. The groups do
-	/// not affect grid sizing, but their bounds must contain their descendants for
-	/// pagination-time subtree culling.
+	/// Give table rows and row-group boxes bounds that contain their laid-out
+	/// descendants. The groups do not affect grid sizing, but every ancestor must
+	/// contain its descendants for pagination-time subtree culling.
 	private func sizeTableRowGroups(in box: BlockBox, contentX: Double, contentWidth: Double) -> (top: Double, bottom: Double)? {
 		var top = Double.infinity
 		var bottom = -Double.infinity
@@ -245,7 +259,14 @@ public final class LayoutEngine {
 			let bounds: (top: Double, bottom: Double)?
 			switch block.style.display {
 			case .tableRow:
-				bounds = (block.y, block.y + block.height)
+				// Rowspan cells remain children of their starting row. Enlarge that
+				// row's paint bounds to contain them so page-slice pruning can still
+				// reach the cell on every page it intersects.
+				let childBottom = block.children.reduce(block.y + block.height) {
+					max($0, $1.y + $1.height)
+				}
+				block.height = childBottom - block.y
+				bounds = (block.y, childBottom)
 			case .tableRowGroup, .tableHeaderGroup, .tableFooterGroup:
 				bounds = sizeTableRowGroups(in: block, contentX: contentX, contentWidth: contentWidth)
 				if let bounds {
