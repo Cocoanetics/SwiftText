@@ -74,5 +74,40 @@ struct WebKitPaginatedPDFTests {
 		// pages would still satisfy a bare count check.
 		#expect(document.page(at: 0)?.string?.contains("Paragraph number 1") == true)
 	}
+
+	@Test("Table headers repeat and rows stay on one page", .timeLimit(.minutes(2)))
+	func tablePagination() async throws {
+		let rows = (1 ... 50).map {
+			let marker = String(format: "%02d", $0)
+			return "<tr><td>row-marker-\(marker)</td><td>value-marker-\(marker)</td></tr>"
+		}.joined()
+		let html = """
+		<html><head><style>
+		@page { size: A4; margin: 2cm; }
+		body { margin: 0; font: 16px sans-serif; }
+		table { border-collapse: collapse; }
+		th, td { border: 1px solid #999; padding: 8px 12px; }
+		</style></head><body>
+		<p style="height: 560px">Filler</p>
+		<table><thead><tr><th>Label</th><th>Value</th></tr></thead>
+		<tbody>\(rows)</tbody></table>
+		</body></html>
+		"""
+		let document = try await paginate(html)
+		#expect(document.pageCount > 1)
+		for pageNumber in 1 ..< document.pageCount {
+			let text = try #require(document.page(at: pageNumber)?.string)
+			#expect(text.contains("Label"), "page \(pageNumber + 1) has no repeated table header")
+			#expect(text.contains("Value"), "page \(pageNumber + 1) has no repeated table header")
+		}
+		let pageTexts = (0 ..< document.pageCount).map { document.page(at: $0)?.string ?? "" }
+		for rowNumber in 1 ... 50 {
+			let marker = String(format: "%02d", rowNumber)
+			let containingPages = pageTexts.filter {
+				$0.contains("row-marker-\(marker)") && $0.contains("value-marker-\(marker)")
+			}
+			#expect(containingPages.count == 1, "row \(rowNumber) was split or lost")
+		}
+	}
 }
 #endif

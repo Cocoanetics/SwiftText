@@ -167,11 +167,164 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 	@available(macOS 11.0, *)
 	package func exportPaginatedPDFData(paperSize: CGSize) async throws -> Data {
 		let webView = try await loadedWebView()
+		try await prepareTablesForPrinting(in: webView, paperSize: paperSize)
 		#if canImport(UIKit)
 		return try Self.paginatedPDFData(from: webView, paperSize: paperSize)
 		#else
 		return try await Self.paginatedPDFData(from: webView, paperSize: paperSize)
 		#endif
+	}
+
+	/// WebKit's print paginator neither repeats table headers nor keeps a row's
+	/// border and contents together. Split ordinary tables into page-sized table
+	/// fragments immediately before printing, while print-media styles are active.
+	/// Each continuation is a real table with its own cloned `thead`, so the result
+	/// does not depend on WebKit implementing table fragmentation correctly.
+	@MainActor
+	private func prepareTablesForPrinting(in webView: WKWebView, paperSize: CGSize) async throws {
+		let script = """
+		(function() {
+			const paperWidth = \(paperSize.width);
+			const paperHeight = \(paperSize.height);
+
+			function lengthInPoints(value, reference) {
+				if (!value) return 0;
+				const match = String(value).trim().match(/^(-?[0-9]*\\.?[0-9]+)\\s*(px|pt|pc|in|cm|mm|q|%)?$/i);
+				if (!match) return 0;
+				const amount = parseFloat(match[1]);
+				switch ((match[2] || 'px').toLowerCase()) {
+				case 'pt': return amount;
+				case 'pc': return amount * 12;
+				case 'in': return amount * 72;
+				case 'cm': return amount * 72 / 2.54;
+				case 'mm': return amount * 72 / 25.4;
+				case 'q': return amount * 72 / 101.6;
+				case '%': return amount * reference / 100;
+				default: return amount * 0.75;
+				}
+			}
+
+			function pageMargins() {
+				let values = ['0', '0', '0', '0'];
+				function apply(style) {
+					if (style.margin) {
+						const parts = style.margin.trim().split(/\\s+/);
+						if (parts.length === 1) values = [parts[0], parts[0], parts[0], parts[0]];
+						if (parts.length === 2) values = [parts[0], parts[1], parts[0], parts[1]];
+						if (parts.length === 3) values = [parts[0], parts[1], parts[2], parts[1]];
+						if (parts.length >= 4) values = parts.slice(0, 4);
+					}
+					if (style.marginTop) values[0] = style.marginTop;
+					if (style.marginRight) values[1] = style.marginRight;
+					if (style.marginBottom) values[2] = style.marginBottom;
+					if (style.marginLeft) values[3] = style.marginLeft;
+				}
+
+				function visit(rules) {
+					for (const rule of Array.from(rules || [])) {
+						if (rule.type === CSSRule.PAGE_RULE && !rule.selectorText) apply(rule.style);
+						if (rule.cssRules) visit(rule.cssRules);
+					}
+				}
+
+				for (const sheet of Array.from(document.styleSheets)) {
+					try { visit(sheet.cssRules); } catch (_) { /* cross-origin stylesheet */ }
+				}
+				return {
+					top: lengthInPoints(values[0], paperHeight),
+					right: lengthInPoints(values[1], paperWidth),
+					bottom: lengthInPoints(values[2], paperHeight),
+					left: lengthInPoints(values[3], paperWidth)
+				};
+			}
+
+			function fragmentTable(table, pageHeight) {
+				const head = Array.from(table.children).find(element => element.tagName === 'THEAD');
+				const bodies = Array.from(table.children).filter(element => element.tagName === 'TBODY');
+				if (!head || bodies.length !== 1 || table.tFoot || table.dataset.swiftTextPaginated) return;
+
+				const rows = Array.from(bodies[0].rows);
+				if (rows.length < 2 || rows.some(row => row.querySelector('[rowspan]'))) return;
+
+				const tableRect = table.getBoundingClientRect();
+				const headHeight = head.getBoundingClientRect().height;
+				const rowHeights = rows.map(row => row.getBoundingClientRect().height);
+				const pageOffset = ((tableRect.top + window.scrollY) % pageHeight + pageHeight) % pageHeight;
+				let firstCapacity = pageHeight - pageOffset - headHeight;
+				const fullCapacity = pageHeight - headHeight;
+				const totalRowsHeight = rowHeights.reduce((sum, height) => sum + height, 0);
+				if (totalRowsHeight <= firstCapacity + 0.5) return;
+
+				let startsOnNewPage = false;
+				if (firstCapacity < rowHeights[0] - 0.5) {
+					startsOnNewPage = true;
+					firstCapacity = fullCapacity;
+				}
+
+				const chunks = [];
+				let chunk = [];
+				let remaining = firstCapacity;
+				for (let index = 0; index < rows.length; index++) {
+					const height = rowHeights[index];
+					if (chunk.length && height > remaining + 0.5) {
+						chunks.push(chunk);
+						chunk = [];
+						remaining = fullCapacity;
+					}
+					chunk.push(rows[index]);
+					remaining -= height;
+				}
+				if (chunk.length) chunks.push(chunk);
+				if (chunks.length < 2 && !startsOnNewPage) return;
+
+				const width = tableRect.width;
+				const parent = table.parentNode;
+				const anchor = table.nextSibling;
+				const fragments = chunks.map((chunkRows, index) => {
+					const fragment = table.cloneNode(false);
+					fragment.dataset.swiftTextPaginated = 'true';
+					if (index > 0) fragment.removeAttribute('id');
+					fragment.style.width = width + 'px';
+					fragment.style.marginTop = index === 0 ? getComputedStyle(table).marginTop : '0';
+					fragment.style.marginBottom = index === chunks.length - 1 ? getComputedStyle(table).marginBottom : '0';
+					if (index > 0 || startsOnNewPage) {
+						fragment.style.breakBefore = 'page';
+						fragment.style.pageBreakBefore = 'always';
+					}
+
+					for (const child of Array.from(table.children)) {
+						if (child.tagName === 'COLGROUP') fragment.appendChild(child.cloneNode(true));
+					}
+					fragment.appendChild(head.cloneNode(true));
+					const body = bodies[0].cloneNode(false);
+					body.removeAttribute('id');
+					for (const row of chunkRows) {
+						row.style.breakInside = 'avoid';
+						row.style.pageBreakInside = 'avoid';
+						body.appendChild(row);
+					}
+					fragment.appendChild(body);
+					return fragment;
+				});
+
+				for (const fragment of fragments) parent.insertBefore(fragment, anchor);
+				table.remove();
+			}
+
+			function prepare() {
+				const margins = pageMargins();
+				const printableWidth = paperWidth - margins.left - margins.right;
+				const printableHeight = paperHeight - margins.top - margins.bottom;
+				const layoutWidth = document.documentElement.clientWidth;
+				if (printableWidth <= 0 || printableHeight <= 0 || layoutWidth <= 0) return;
+				const pageHeight = printableHeight * layoutWidth / printableWidth;
+				for (const table of Array.from(document.querySelectorAll('table'))) fragmentTable(table, pageHeight);
+			}
+
+			window.addEventListener('beforeprint', prepare, { once: true });
+		})();
+		"""
+		_ = try await webView.evaluateJavaScript(script)
 	}
 
 	#if canImport(UIKit)
