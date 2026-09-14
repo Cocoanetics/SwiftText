@@ -123,6 +123,45 @@ struct CascadeTests {
 		#expect(style(element, resolver: resolver).color == RGBA(0, 0, 1, 1))
 	}
 
+	@Test("Print and all media rules participate in the cascade")
+	func printMediaRules() {
+		let resolver = StyleResolver(authorStyleSheets: ["""
+			body { max-width: 960px; margin: 0 auto; padding: 2em }
+			@media print { body { max-width: none; margin: 0; padding: 0 } }
+			@media all { body { color: blue } }
+			"""])
+		let body = style(Element("body"), resolver: resolver)
+		#expect(body.maxWidth == nil)
+		#expect(body.margin == Edges(.px(0)))
+		#expect(body.padding == Edges(.px(0)))
+		#expect(body.color == RGBA(0, 0, 1, 1))
+	}
+
+	@Test("Non-print and unsupported media rules do not participate in the cascade")
+	func nonPrintMediaRules() {
+		let resolver = StyleResolver(authorStyleSheets: ["""
+			p { color: red; padding: 1px }
+			@media screen { p { color: blue } }
+			@media speech { p { padding: 2px } }
+			@media print and (min-width: 1px) { p { padding: 3px } }
+			"""])
+		let paragraph = style(Element("p"), resolver: resolver)
+		#expect(paragraph.color == RGBA(1, 0, 0, 1))
+		#expect(paragraph.padding == Edges(.px(1)))
+	}
+
+	@Test("Media query lists and type modifiers match the print medium")
+	func mediaQueryListsAndModifiers() {
+		let resolver = StyleResolver(authorStyleSheets: ["""
+			p { color: red; padding: 1px }
+			@media screen, only print { p { color: blue } }
+			@media not screen { p { padding: 2px } }
+			"""])
+		let paragraph = style(Element("p"), resolver: resolver)
+		#expect(paragraph.color == RGBA(0, 0, 1, 1))
+		#expect(paragraph.padding == Edges(.px(2)))
+	}
+
 	@Test("Inherited properties flow to children")
 	func inheritance() {
 		let resolver = StyleResolver(authorStyleSheets: ["div { color: red; font-size: 20px }"])
