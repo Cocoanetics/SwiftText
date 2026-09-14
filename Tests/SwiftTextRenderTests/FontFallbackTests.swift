@@ -22,8 +22,54 @@ struct FontFallbackTests {
 		let helvetica = StandardFont.helvetica(bold: false, italic: false)
 		#expect(helvetica.covers("2"))
 		#expect(helvetica.covers("\u{2014}"))   // em dash (CP1252)
+		#expect(!helvetica.covers("\u{007F}"))  // non-printing CP1252 control
 		#expect(!helvetica.covers("\u{0628}"))  // Arabic beh
 		#expect(!helvetica.covers("\u{4E00}"))  // CJK
+	}
+
+	@Test("Base-14 fonts use Adobe WinAnsi advances")
+	func base14WinAnsiAdvances() {
+		let cases: [(String, StandardFont, [Character: Double])] = [
+			("Helvetica", .helvetica(bold: false, italic: false), [
+				"Ä": 667, "Ö": 778, "Ü": 722, "ß": 611, "Ç": 722, "æ": 889, "œ": 944,
+				"‚": 222, "“": 333, "”": 333, "•": 350, "—": 1000, "…": 1000,
+				"™": 1000, "€": 556, "µ": 556, "¼": 834, "×": 584, "±": 584
+			]),
+			("Helvetica-Bold", .helvetica(bold: true, italic: false), [
+				"Ä": 722, "Ö": 778, "Ü": 722, "ß": 611, "Ç": 722, "æ": 889, "œ": 944,
+				"‚": 278, "“": 500, "”": 500, "•": 350, "—": 1000, "…": 1000,
+				"™": 1000, "€": 556, "µ": 611, "¼": 834, "×": 584, "±": 584
+			]),
+			("Times-Roman", .times(bold: false, italic: false), [
+				"À": 722, "Ä": 722, "Ö": 722, "Ü": 722, "ß": 500, "Ç": 667, "æ": 667, "œ": 722,
+				"‚": 333, "“": 444, "”": 444, "•": 350, "—": 1000, "…": 1000,
+				"™": 980, "€": 500, "µ": 500, "¼": 750, "×": 564, "±": 564
+			]),
+			("Times-Italic", .times(bold: false, italic: true), [
+				"A": 611, "À": 611, "Ä": 611, "Ö": 722, "Ü": 722, "ß": 500, "Ç": 667,
+				"æ": 667, "œ": 667, "‚": 333, "“": 556, "”": 556, "•": 350,
+				"—": 889, "…": 889, "™": 980, "€": 500, "µ": 500, "¼": 750,
+				"×": 675, "±": 675
+			]),
+			("Times-Bold", .times(bold: true, italic: false), [
+				"À": 722, "Ä": 722, "Ö": 778, "Ü": 722, "ß": 556, "Ç": 722, "æ": 722, "œ": 722,
+				"‚": 333, "“": 500, "”": 500, "•": 350, "—": 1000, "…": 1000,
+				"™": 1000, "€": 500, "µ": 556, "¼": 750, "×": 570, "±": 570
+			]),
+			("Times-BoldItalic", .times(bold: true, italic: true), [
+				"A": 667, "À": 667, "Ä": 667, "Ö": 722, "Ü": 722, "ß": 500, "Ç": 667,
+				"æ": 722, "œ": 722, "‚": 333, "“": 500, "”": 500, "•": 350,
+				"—": 1000, "…": 1000, "™": 1000, "€": 500, "µ": 576, "¼": 750,
+				"×": 570, "±": 570
+			])
+		]
+
+		for (name, font, expected) in cases {
+			for (character, width) in expected {
+				let scalar = character.unicodeScalars.first!
+				#expect(font.advance(scalar) == width, "\(name): \(character)")
+			}
+		}
 	}
 
 	#if os(macOS)
