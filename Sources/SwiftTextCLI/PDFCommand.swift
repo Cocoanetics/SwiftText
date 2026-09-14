@@ -277,7 +277,7 @@ struct PDF: AsyncParsableCommand {
 		var options = RenderOptions()
 		options.pageWidthPx = widthPoints / 0.75 // points → CSS pixels
 		options.pageHeightPx = heightPoints / 0.75
-		let data = try await HTMLRenderer.renderPDF(html: html, options: options)
+		let data = try await HTMLRenderer.renderPDF(html: html, baseURL: baseURL, options: options)
 		try writeData(data, to: outputURL)
 	}
 

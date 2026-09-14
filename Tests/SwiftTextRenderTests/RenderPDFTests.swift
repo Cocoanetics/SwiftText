@@ -221,6 +221,7 @@ struct RenderPDFTests {
 
 	// A 1×1 PNG (data URI).
 	private let onePixelPNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+	private let rgbPNG = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAQAAAABCAIAAAB2XpiaAAAADUlEQVR4nGM4YWMDRwAivQUBgsPAqAAAAABJRU5ErkJggg==")!
 
 	@Test("Decodes image dimensions from a data URI")
 	func decodesImageDimensions() {
@@ -236,6 +237,53 @@ struct RenderPDFTests {
 		#expect(img.image != nil)
 		#expect(img.width == 50)
 		#expect(img.height == 30)
+	}
+
+	@Test("Relative image paths resolve against the document directory")
+	func embedsRelativeFileImage() async throws {
+		let directory = FileManager.default.temporaryDirectory
+			.appendingPathComponent("swifttext-render-\(UUID().uuidString)", isDirectory: true)
+		try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+		defer { try? FileManager.default.removeItem(at: directory) }
+		try rgbPNG.write(to: directory.appendingPathComponent("pic.png"))
+
+		let pdf = try await HTMLRenderer.renderPDF(html: #"<img src="pic.png">"#, baseURL: directory)
+		#expect(pdf.range(of: Data("/Subtype /Image".utf8)) != nil)
+		#expect(pdf.range(of: Data("/FlateDecode".utf8)) != nil)
+	}
+
+	@Test("Absolute paths and file URLs load local images", arguments: [false, true])
+	func embedsAbsoluteFileImage(asFileURL: Bool) async throws {
+		let url = FileManager.default.temporaryDirectory
+			.appendingPathComponent("swifttext-render-\(UUID().uuidString).png")
+		try rgbPNG.write(to: url)
+		defer { try? FileManager.default.removeItem(at: url) }
+		let source = asFileURL ? url.absoluteString : url.path
+
+		let pdf = try await HTMLRenderer.renderPDF(html: #"<img src="\#(source)">"#)
+		#expect(pdf.range(of: Data("/Subtype /Image".utf8)) != nil)
+	}
+
+	@Test("Unreadable image paths warn and render a placeholder")
+	func missingImagePlaceholder() async throws {
+		let directory = FileManager.default.temporaryDirectory
+			.appendingPathComponent("swifttext-render-\(UUID().uuidString)", isDirectory: true)
+		try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+		defer { try? FileManager.default.removeItem(at: directory) }
+		var warnings: [String] = []
+		let options = RenderOptions(compressStreams: false)
+		let pdf = try await HTMLRenderer.renderPDF(
+			html: #"<p>Before</p><img src="missing.png"><p>After</p>"#,
+			baseURL: directory,
+			options: options,
+			warningHandler: { warnings.append($0) })
+
+		#expect(warnings.count == 1)
+		#expect(warnings[0].contains("missing.png"))
+		#expect(pdf.range(of: Data("0.9 0.9 0.9 rg".utf8)) != nil)
+		#if canImport(PDFKit)
+		#expect(try #require(PDFDocument(data: pdf)).string?.contains("Before\nAfter") == true)
+		#endif
 	}
 
 	#if canImport(AppKit)
