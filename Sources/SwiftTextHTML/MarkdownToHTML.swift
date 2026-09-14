@@ -105,8 +105,16 @@ public enum MarkdownToHTML {
 	    padding: 0.4em 0.7em;
 	    text-align: left;
 	    overflow-wrap: anywhere;
-	    word-break: break-word;
+	    word-break: normal;
+	    min-width: 4em;
 	}
+	/* Fixed per-cell minimums must not push genuinely wide tables outside the viewport. */
+	table:has(tr > :nth-child(12)) {
+	    table-layout: fixed;
+	    width: 100%;
+	}
+	table:has(tr > :nth-child(12)) th,
+	table:has(tr > :nth-child(12)) td { min-width: 0; }
 	th { background: #dcdcdc; font-weight: 600; }
 	tr:nth-child(even) td { background: #f9f9f9; }
 	img { max-width: 100%; height: auto; }

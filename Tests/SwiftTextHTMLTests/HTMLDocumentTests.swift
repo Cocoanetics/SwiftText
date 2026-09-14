@@ -86,147 +86,156 @@ private func writeHydratingFixture() throws -> URL {
 	return fileURL
 }
 
-/// The headline of #52: one call from a URL to Markdown, with the page's own
-/// scripts having run first.
-@available(iOS 16.0, *)
-@Test(.timeLimit(.minutes(1)))
-func htmlDocumentExecutesJavaScript() async throws {
-	let fileURL = try writeHydratingFixture()
-	defer { try? FileManager.default.removeItem(at: fileURL) }
+extension WebKitIntegrationTests {
 
-	let markdown = try await HTMLDocument(url: fileURL, executingJavaScript: true).markdown()
-	#expect(markdown.contains("# Hydrated"))
-	#expect(markdown.contains("Written by **JavaScript**."))
-	#expect(!markdown.contains("LOADING"), "the pre-hydration DOM was captured")
-}
+	/// The headline of #52: one call from a URL to Markdown, with the page's own
+	/// scripts having run first.
+	@available(iOS 16.0, *)
+	@Test(.timeLimit(.minutes(1)))
+	func htmlDocumentExecutesJavaScript() async throws {
+		let fileURL = try writeHydratingFixture()
+		defer { try? FileManager.default.removeItem(at: fileURL) }
 
-/// `executingJavaScript: false` must skip WebKit entirely and fetch directly —
-/// the cheap path for server-rendered pages. Same fixture, opposite result.
-@available(iOS 16.0, *)
-@Test(.timeLimit(.minutes(1)))
-func htmlDocumentWithoutJavaScriptFetchesDirectly() async throws {
-	let fileURL = try writeHydratingFixture()
-	defer { try? FileManager.default.removeItem(at: fileURL) }
+		let markdown = try await HTMLDocument(url: fileURL, executingJavaScript: true).markdown()
+		#expect(markdown.contains("# Hydrated"))
+		#expect(markdown.contains("Written by **JavaScript**."))
+		#expect(!markdown.contains("LOADING"), "the pre-hydration DOM was captured")
+	}
 
-	let markdown = try await HTMLDocument(url: fileURL, executingJavaScript: false).markdown()
-	#expect(markdown.contains("LOADING"))
-	#expect(!markdown.contains("Hydrated"), "scripts ran on the no-JavaScript path")
-}
+	/// `executingJavaScript: false` must skip WebKit entirely and fetch directly —
+	/// the cheap path for server-rendered pages. Same fixture, opposite result.
+	@available(iOS 16.0, *)
+	@Test(.timeLimit(.minutes(1)))
+	func htmlDocumentWithoutJavaScriptFetchesDirectly() async throws {
+		let fileURL = try writeHydratingFixture()
+		defer { try? FileManager.default.removeItem(at: fileURL) }
 
-/// A load failure has to reach the caller as an error rather than an empty
-/// document — the initializer is the only thing an app-side caller sees.
-@available(iOS 16.0, *)
-@Test(.timeLimit(.minutes(1)))
-func htmlDocumentReportsJavaScriptLoadFailure() async throws {
-	let missing = FileManager.default.temporaryDirectory
-		.appendingPathComponent("swifttext-missing-\(UUID().uuidString).html")
-	await #expect(throws: WebKitBrowserError.self) {
-		_ = try await HTMLDocument(url: missing, executingJavaScript: true)
+		let markdown = try await HTMLDocument(url: fileURL, executingJavaScript: false).markdown()
+		#expect(markdown.contains("LOADING"))
+		#expect(!markdown.contains("Hydrated"), "scripts ran on the no-JavaScript path")
+	}
+
+	/// A load failure has to reach the caller as an error rather than an empty
+	/// document — the initializer is the only thing an app-side caller sees.
+	@available(iOS 16.0, *)
+	@Test(.timeLimit(.minutes(1)))
+	func htmlDocumentReportsJavaScriptLoadFailure() async throws {
+		let missing = FileManager.default.temporaryDirectory
+			.appendingPathComponent("swifttext-missing-\(UUID().uuidString).html")
+		await #expect(throws: WebKitBrowserError.self) {
+			_ = try await HTMLDocument(url: missing, executingJavaScript: true)
+		}
 	}
 }
 #endif
 
 #if os(macOS)
-@Test
-@MainActor
-func webKitBrowserLoadsHTML() async throws {
-	let url = try #require(URL(string: "https://www.cocoanetics.com/2025/12/swifttext/"))
-	let browser = WebKitBrowser(url: url)
-	await browser.waitForLoadCompletion()
-	let html = await browser.html()
-	#expect(html?.localizedCaseInsensitiveContains("SwiftText") == true)
-}
+extension WebKitIntegrationTests {
+	@Test
+	@MainActor
+	func webKitBrowserLoadsHTML() async throws {
+		let url = FileManager.default.temporaryDirectory
+			.appendingPathComponent("swifttext-webkit-\(UUID().uuidString).html")
+		try "<html><body><p>SwiftText</p></body></html>".write(to: url, atomically: true, encoding: .utf8)
+		defer { try? FileManager.default.removeItem(at: url) }
 
-/// A failed navigation must surface as an error, not hang. Before the
-/// `didFailProvisionalNavigation` handler existed, the injected script never
-/// ran, so nothing ever resumed the waiter and this call blocked forever — the
-/// time limit is what turns a regression into a failure instead of a hung suite.
-@Test(.timeLimit(.minutes(1)))
-@MainActor
-func webKitBrowserReportsNavigationFailure() async throws {
-	// A file that isn't there: fails locally, with no network or DNS in play.
-	// (A refused TCP port is not equivalent — WebKit blocks low ports outright
-	// and reports `didFinish` on an empty document instead of failing.)
-	let missing = FileManager.default.temporaryDirectory
-		.appendingPathComponent("swifttext-missing-\(UUID().uuidString).html")
-	let browser = WebKitBrowser(fileURL: missing, readAccessRoot: FileManager.default.temporaryDirectory)
-	await browser.waitForLoadCompletion()
-
-	#expect(await browser.html() == nil)
-	let error = try #require(browser.loadError as? WebKitBrowserError)
-	guard case .loadFailed = error else {
-		Issue.record("expected .loadFailed, got \(error)")
-		return
-	}
-
-	// Every export reports the real cause, not a vague "no HTML". `exportHTML`
-	// used to swallow it and throw `.missingHTML` instead.
-	let destination = FileManager.default.temporaryDirectory
-		.appendingPathComponent("swifttext-export-\(UUID().uuidString).html")
-	defer { try? FileManager.default.removeItem(at: destination) }
-	await #expect(throws: WebKitBrowserError.self) {
-		try await browser.exportHTML(to: destination)
-	}
-	#expect(!FileManager.default.fileExists(atPath: destination.path))
-}
-
-/// The Swift-side backstop fires even when WebKit never calls back at all.
-///
-/// The page busy-waits, blocking the web content process's main thread, so the
-/// navigation cannot finish and the capture script is never injected — leaving
-/// the watchdog as the only thing that can end this load.
-///
-/// The block outlasts the test's own time limit deliberately. Anything shorter
-/// is a race between the watchdog and the page finishing, and that race is
-/// losable: under a loaded machine `Task.sleep` overshoots badly, and a 3 s
-/// block against a 0.3 s timeout still failed roughly one run in three here
-/// (never with `--no-parallel`, which is what identified starvation rather than
-/// the fixture as the cause). Since the page cannot possibly complete while
-/// this test is alive, no amount of starvation can change the outcome — only
-/// how long the watchdog takes to report it.
-///
-/// It stays bounded rather than `while (true)` so that a web view which somehow
-/// outlived its test cannot spin a core indefinitely; WebKit tears the content
-/// process down with the view, so in practice the loop ends within the second
-/// the test takes.
-@Test(.timeLimit(.minutes(1)))
-@MainActor
-func webKitBrowserTimesOut() async throws {
-	let stalling = """
-	<html><body><p>Hello</p>
-	<script>var end = Date.now() + 60000; while (Date.now() < end) {}</script>
-	</body></html>
-	"""
-	let browser = WebKitBrowser(htmlString: stalling)
-	browser.timeout = 0.3
-	await browser.waitForLoadCompletion()
-
-	let error = try #require(browser.loadError as? WebKitBrowserError)
-	guard case .timedOut = error else {
-		Issue.record("expected .timedOut, got \(error)")
-		return
-	}
-	// The export methods rethrow it rather than emitting a blank page.
-	await #expect(throws: WebKitBrowserError.self) {
-		_ = try await browser.exportPDFData()
-	}
-}
-
-/// Registering the browser itself as the script-message handler used to close a
-/// cycle — browser → web view → configuration → content controller → browser —
-/// so every load leaked an instance and its web content process.
-@Test(.timeLimit(.minutes(1)))
-@MainActor
-func webKitBrowserDeallocatesAfterLoad() async throws {
-	weak var weakBrowser: WebKitBrowser?
-
-	do {
-		let browser = WebKitBrowser(htmlString: "<html><body><p>Hello</p></body></html>")
+		let browser = WebKitBrowser(url: url)
 		await browser.waitForLoadCompletion()
-		#expect(await browser.html() != nil)
-		weakBrowser = browser
+		let html = await browser.html()
+		#expect(html?.localizedCaseInsensitiveContains("SwiftText") == true)
 	}
 
-	#expect(weakBrowser == nil, "WebKitBrowser leaked — the script-message handler cycle is back")
+	/// A failed navigation must surface as an error, not hang. Before the
+	/// `didFailProvisionalNavigation` handler existed, the injected script never
+	/// ran, so nothing ever resumed the waiter and this call blocked forever — the
+	/// time limit is what turns a regression into a failure instead of a hung suite.
+	@Test(.timeLimit(.minutes(1)))
+	@MainActor
+	func webKitBrowserReportsNavigationFailure() async throws {
+		// A file that isn't there: fails locally, with no network or DNS in play.
+		// (A refused TCP port is not equivalent — WebKit blocks low ports outright
+		// and reports `didFinish` on an empty document instead of failing.)
+		let missing = FileManager.default.temporaryDirectory
+			.appendingPathComponent("swifttext-missing-\(UUID().uuidString).html")
+		let browser = WebKitBrowser(fileURL: missing, readAccessRoot: FileManager.default.temporaryDirectory)
+		await browser.waitForLoadCompletion()
+
+		#expect(await browser.html() == nil)
+		let error = try #require(browser.loadError as? WebKitBrowserError)
+		guard case .loadFailed = error else {
+			Issue.record("expected .loadFailed, got \(error)")
+			return
+		}
+
+		// Every export reports the real cause, not a vague "no HTML". `exportHTML`
+		// used to swallow it and throw `.missingHTML` instead.
+		let destination = FileManager.default.temporaryDirectory
+			.appendingPathComponent("swifttext-export-\(UUID().uuidString).html")
+		defer { try? FileManager.default.removeItem(at: destination) }
+		await #expect(throws: WebKitBrowserError.self) {
+			try await browser.exportHTML(to: destination)
+		}
+		#expect(!FileManager.default.fileExists(atPath: destination.path))
+	}
+
+	/// The Swift-side backstop fires even when WebKit never calls back at all.
+	///
+	/// The page busy-waits, blocking the web content process's main thread, so the
+	/// navigation cannot finish and the capture script is never injected — leaving
+	/// the watchdog as the only thing that can end this load.
+	///
+	/// The block outlasts the test's own time limit deliberately. Anything shorter
+	/// is a race between the watchdog and the page finishing, and that race is
+	/// losable: under a loaded machine `Task.sleep` overshoots badly, and a 3 s
+	/// block against a 0.3 s timeout still failed roughly one run in three here
+	/// (never with `--no-parallel`, which is what identified starvation rather than
+	/// the fixture as the cause). Since the page cannot possibly complete while
+	/// this test is alive, no amount of starvation can change the outcome — only
+	/// how long the watchdog takes to report it.
+	///
+	/// It stays bounded rather than `while (true)` so that a web view which somehow
+	/// outlived its test cannot spin a core indefinitely; WebKit tears the content
+	/// process down with the view, so in practice the loop ends within the second
+	/// the test takes.
+	@Test(.timeLimit(.minutes(1)))
+	@MainActor
+	func webKitBrowserTimesOut() async throws {
+		let stalling = """
+		<html><body><p>Hello</p>
+		<script>var end = Date.now() + 60000; while (Date.now() < end) {}</script>
+		</body></html>
+		"""
+		let browser = WebKitBrowser(htmlString: stalling)
+		browser.timeout = 0.3
+		await browser.waitForLoadCompletion()
+
+		let error = try #require(browser.loadError as? WebKitBrowserError)
+		guard case .timedOut = error else {
+			Issue.record("expected .timedOut, got \(error)")
+			return
+		}
+		// The export methods rethrow it rather than emitting a blank page.
+		await #expect(throws: WebKitBrowserError.self) {
+			_ = try await browser.exportPDFData()
+		}
+	}
+
+	/// Registering the browser itself as the script-message handler used to close a
+	/// cycle — browser → web view → configuration → content controller → browser —
+	/// so every load leaked an instance and its web content process.
+	@Test(.timeLimit(.minutes(1)))
+	@MainActor
+	func webKitBrowserDeallocatesAfterLoad() async throws {
+		weak var weakBrowser: WebKitBrowser?
+
+		do {
+			let browser = WebKitBrowser(htmlString: "<html><body><p>Hello</p></body></html>")
+			await browser.waitForLoadCompletion()
+			#expect(await browser.html() != nil)
+			weakBrowser = browser
+		}
+
+		#expect(weakBrowser == nil, "WebKitBrowser leaked — the script-message handler cycle is back")
+	}
 }
 #endif

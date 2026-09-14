@@ -119,8 +119,17 @@ struct MarkdownGFMExtensionsTests {
 		    padding: 0.4em 0.7em;
 		    text-align: left;
 		    overflow-wrap: anywhere;
-		    word-break: break-word;
+		    word-break: normal;
+		    min-width: 4em;
 		}
+		"""))
+		#expect(css.contains("""
+		table:has(tr > :nth-child(12)) {
+		    table-layout: fixed;
+		    width: 100%;
+		}
+		table:has(tr > :nth-child(12)) th,
+		table:has(tr > :nth-child(12)) td { min-width: 0; }
 		"""))
 	}
 }
