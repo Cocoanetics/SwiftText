@@ -23,13 +23,17 @@ public struct PageGeometry {
 	public let columnTop: Double
 	/// The height of the column slice shown on this page.
 	public let sliceHeightPx: Double
+	/// Space reserved above the column slice for repeated table headers.
+	public let contentOffsetPx: Double
 
-	public init(pageWidthPx: Double, pageHeightPx: Double, marginPx: Double, columnTop: Double, sliceHeightPx: Double) {
+	public init(pageWidthPx: Double, pageHeightPx: Double, marginPx: Double,
+	            columnTop: Double, sliceHeightPx: Double, contentOffsetPx: Double = 0) {
 		self.pageWidthPx = pageWidthPx
 		self.pageHeightPx = pageHeightPx
 		self.marginPx = marginPx
 		self.columnTop = columnTop
 		self.sliceHeightPx = sliceHeightPx
+		self.contentOffsetPx = contentOffsetPx
 	}
 }
 
@@ -40,6 +44,8 @@ public final class Painter {
 
 	private let builder: FontResourceBuilder
 	private var linkAnnotations: [PDFDictionary] = []
+	private var paintOffsetY = 0.0
+	private var paintingRepeatedHeader = false
 
 	public init(geometry: PageGeometry, fonts: FontBook, builder: FontResourceBuilder, compress: Bool = true) {
 		self.geometry = geometry
@@ -56,9 +62,11 @@ public final class Painter {
 		stream.pushState()
 		// Clip to this page's content slice so other pages don't bleed in.
 		let contentWidth = geometry.pageWidthPx - 2 * geometry.marginPx
+		let paintedHeight = min(geometry.pageHeightPx - 2 * geometry.marginPx,
+		                        geometry.contentOffsetPx + geometry.sliceHeightPx)
 		stream.rectangle(geometry.marginPx,
-		                 geometry.pageHeightPx - geometry.marginPx - geometry.sliceHeightPx,
-		                 contentWidth, geometry.sliceHeightPx)
+		                 geometry.pageHeightPx - geometry.marginPx - paintedHeight,
+		                 contentWidth, paintedHeight)
 		stream.clip()
 		stream.endPath()
 	}
@@ -73,7 +81,8 @@ public final class Painter {
 	/// stream would carry the entire document's drawing, making a paginated
 	/// render O(pages × document) in both time and output size.
 	private func blockIntersectsSlice(top: Double, height: Double) -> Bool {
-		top + height >= sliceTop - 0.5 && top <= sliceBottom + 0.5
+		if paintingRepeatedHeader { return true }
+		return top + height >= sliceTop - 0.5 && top <= sliceBottom + 0.5
 	}
 
 	/// Whether a line whose top sits at column `top` belongs to this page.
@@ -82,12 +91,13 @@ public final class Painter {
 	/// Keying on the top (rather than an inclusive overlap) avoids painting a
 	/// boundary line as a clipped sliver on the preceding page too.
 	private func lineOnThisPage(_ top: Double) -> Bool {
-		top >= sliceTop - 0.5 && top < sliceBottom - 0.5
+		if paintingRepeatedHeader { return true }
+		return top >= sliceTop - 0.5 && top < sliceBottom - 0.5
 	}
 
 	/// Page y (from page top) for a column y-coordinate.
 	private func pageY(_ columnY: Double) -> Double {
-		geometry.marginPx + (columnY - geometry.columnTop)
+		geometry.marginPx + geometry.contentOffsetPx + (columnY - geometry.columnTop) + paintOffsetY
 	}
 
 	/// Lower-left y (PDF y-up) for a box whose column top and height are given.
@@ -119,6 +129,17 @@ public final class Painter {
 			}
 		}
 		// Inline and text boxes are painted through their block's line fragments.
+	}
+
+	/// Paint a table header group at the top of a continuation page. Its original
+	/// column position is left intact in the laid-out tree; only this paint pass is
+	/// translated, so the same header can be reused by every page fragment.
+	func paintRepeatedTableHeader(_ header: BlockBox) {
+		paintingRepeatedHeader = true
+		paintOffsetY = geometry.columnTop - header.y - geometry.contentOffsetPx
+		paint(header)
+		paintOffsetY = 0
+		paintingRepeatedHeader = false
 	}
 
 	// MARK: - Backgrounds and borders
@@ -303,8 +324,8 @@ public final class Painter {
 
 	/// A `/Link` annotation covering a fragment, if it falls on this page slice.
 	private func addLinkAnnotation(for fragment: TextFragment, font: Font, href: String) {
-		guard fragment.baseline >= geometry.columnTop,
-		      fragment.baseline <= geometry.columnTop + geometry.sliceHeightPx else { return }
+		guard paintingRepeatedHeader || (fragment.baseline >= geometry.columnTop
+		      && fragment.baseline <= geometry.columnTop + geometry.sliceHeightPx) else { return }
 		let ascent = font.ascent(size: fragment.style.fontSize)
 		let descent = font.descent(size: fragment.style.fontSize)
 		let topPageY = pageY(fragment.baseline) - ascent

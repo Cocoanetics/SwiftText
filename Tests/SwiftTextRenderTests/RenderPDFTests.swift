@@ -367,7 +367,7 @@ struct RenderPDFTests {
 		#expect(pieces.joined() == token)
 	}
 
-	@Test("Table row groups continue across page boundaries")
+	@Test("Table row groups continue across page boundaries and repeat headers")
 	func tableRowGroupsPaginate() async throws {
 		let rows = (1 ... 40).map { "<tr><td>Row\($0)</td><td>Value\($0)</td></tr>" }.joined()
 		let html = """
@@ -385,11 +385,21 @@ struct RenderPDFTests {
 			#expect(data.range(of: Data("(Value\(index))".utf8)) != nil)
 		}
 		#expect(data.range(of: Data("(ENDMARKER)".utf8)) != nil)
+		let pdf = String(decoding: data, as: UTF8.self)
+		#expect(pdf.components(separatedBy: "(Label) Tj").count > 2)
+		#expect(pdf.components(separatedBy: "(Value) Tj").count > 2)
 
 		#if canImport(PDFKit)
 		let document = try #require(PDFDocument(data: data))
 		#expect(document.pageCount > 1)
 		#expect((document.string ?? "").contains("Row40"))
+		let tablePageTexts = (0 ..< document.pageCount).compactMap { document.page(at: $0)?.string }
+			.filter { $0.contains("Row") }
+		#expect(tablePageTexts.count > 1)
+		for text in tablePageTexts {
+			#expect(text.contains("Label"))
+			#expect(text.contains("Value"))
+		}
 		#endif
 	}
 
