@@ -572,6 +572,10 @@ public final class LayoutEngine {
 						penX += piece.width
 					}
 				}
+				func gap(_ spaceStyle: ComputedStyle) -> Double {
+					// word-spacing adds to each inter-word space.
+					fonts.font(for: spaceStyle).width(of: " ", size: spaceStyle.fontSize) + spaceStyle.wordSpacing
+				}
 				func appendWithBreaks(_ pieces: [Piece], preferringSoftBreaks: Bool, breakingAnywhere: Bool) {
 					let units = pieces.flatMap { piece in
 						piece.text.map { character in
@@ -624,16 +628,21 @@ public final class LayoutEngine {
 					for segmentEnd in preferredBreaks.sorted() + [units.count] {
 						let segment = units[segmentStart ..< segmentEnd]
 						let segmentWidth = segment.reduce(0) { $0 + $1.width }
+						if segmentStart == 0, !fragments.isEmpty, let space = pendingSpace {
+							let width = gap(space)
+							if penX + width + segmentWidth > contentWidth {
+								finishLine(isLast: false)
+							} else {
+								penX += width
+								pendingSpace = nil
+							}
+						}
 						if penX + segmentWidth > contentWidth, !fragments.isEmpty {
 							finishLine(isLast: false)
 						}
-						appendUnits(segment, breakingAnywhere: breakingAnywhere && segmentWidth > contentWidth)
+						appendUnits(segment, breakingAnywhere: breakingAnywhere)
 						segmentStart = segmentEnd
 					}
-				}
-				func gap(_ spaceStyle: ComputedStyle) -> Double {
-					// word-spacing adds to each inter-word space.
-					fonts.font(for: spaceStyle).width(of: " ", size: spaceStyle.fontSize) + spaceStyle.wordSpacing
 				}
 				let spaceWidth = pendingSpace.map(gap) ?? 0
 
@@ -655,16 +664,14 @@ public final class LayoutEngine {
 						append(pieces)
 					}
 				} else {
-					if wraps && !fragments.isEmpty && penX + spaceWidth + wordWidth > contentWidth {
-						finishLine(isLast: false)
-					} else if !fragments.isEmpty, let space = pendingSpace {
-						penX += gap(space)
-						pendingSpace = nil
-					}
-					if wraps && penX + wordWidth > contentWidth {
-						appendWithBreaks(pieces, preferringSoftBreaks: true, breakingAnywhere: breaksAnywhere)
-					} else {
+					if !wraps || penX + spaceWidth + wordWidth <= contentWidth {
+						if !fragments.isEmpty, let space = pendingSpace {
+							penX += gap(space)
+							pendingSpace = nil
+						}
 						append(pieces)
+					} else {
+						appendWithBreaks(pieces, preferringSoftBreaks: true, breakingAnywhere: breaksAnywhere)
 					}
 				}
 			}
