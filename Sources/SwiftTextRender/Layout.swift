@@ -698,8 +698,11 @@ public final class LayoutEngine {
 		walk(table, groups: [])
 		return rows
 	}
+}
 
-	// MARK: - Inline layout
+// MARK: - Inline layout
+
+private extension LayoutEngine {
 
 	private enum InlineToken {
 		case word(String, ComputedStyle, href: String?)
