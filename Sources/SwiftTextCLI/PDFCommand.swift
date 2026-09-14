@@ -506,6 +506,13 @@ func markdownToHTML(
 	    word-break: normal;
 	    min-width: 4em;
 	}
+	/* Fixed per-cell minimums must not push genuinely wide tables off the page. */
+	table:has(tr > :nth-child(12)) {
+	    table-layout: fixed;
+	    width: 100%;
+	}
+	table:has(tr > :nth-child(12)) th,
+	table:has(tr > :nth-child(12)) td { min-width: 0; }
 	th { background: #dcdcdc; font-weight: 600; }
 	tr:nth-child(even) td { background: #f9f9f9; }
 	img {
