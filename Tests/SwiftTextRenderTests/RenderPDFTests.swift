@@ -387,6 +387,53 @@ struct RenderPDFTests {
 		#expect(pieces.joined() == token)
 	}
 
+	@Test("Overflow wrapping prefers punctuation break opportunities")
+	func overflowWrapPrefersPunctuationBreaks() async throws {
+		let tokens = [
+			String(repeating: "abcd-", count: 12) + "abcd",
+			"research/very/long/path/identifier-cannot-wrap-here.md"
+		]
+		for wrappingRule in ["", "overflow-wrap: anywhere;"] {
+			let css = ["p { margin: 0; \(wrappingRule) }"]
+			for token in tokens {
+				let root = try await layoutTree("<p>\(token)</p>", css: css, contentWidth: 100)
+				let paragraph = try #require(firstBlock(in: root) { $0.element?.localName == "p" })
+				let lines = paragraph.lines.map { $0.fragments.map(\.text).joined() }
+				#expect(lines.count > 1)
+				#expect(lines.dropLast().allSatisfy { $0.hasSuffix("-") || $0.hasSuffix("/") })
+				#expect(lines.joined() == token)
+			}
+		}
+	}
+
+	@Test("A punctuation segment fills the current line before wrapping")
+	func punctuationSegmentUsesRemainingLineWidth() async throws {
+		let style = ComputedStyle.initial
+		let font = FontBook().font(for: style)
+		let width = font.width(of: "prefix foo/", size: style.fontSize) + 0.1
+		let root = try await layoutTree("<p>prefix foo/bar</p>", css: ["body, p { margin: 0; }"], contentWidth: width)
+		let paragraph = try #require(firstBlock(in: root) { $0.element?.localName == "p" })
+		let lines = paragraph.lines.map { $0.fragments.map(\.text).joined() }
+		#expect(lines == ["prefixfoo/", "bar"])
+	}
+
+	@Test("Overflow wrapping accounts for first-line indentation")
+	func overflowWrapAccountsForIndentation() async throws {
+		let token = "abcdefghij"
+		for wrappingRule in ["overflow-wrap:anywhere", "word-break:break-all"] {
+			let root = try await layoutTree(
+				"<p style=\"margin:0;text-indent:60px;\(wrappingRule)\">\(token)</p>",
+				css: ["body { margin: 0; }"],
+				contentWidth: 100)
+			let paragraph = try #require(firstBlock(in: root) { $0.element?.localName == "p" })
+			#expect(paragraph.lines.count > 1)
+			#expect(paragraph.lines.flatMap(\.fragments).map(\.text).joined() == token)
+			for fragment in paragraph.lines.flatMap(\.fragments) {
+				#expect(fragment.x + fragment.width <= paragraph.x + paragraph.width + 0.001)
+			}
+		}
+	}
+
 	@Test("Table row groups continue across page boundaries and repeat headers")
 	func tableRowGroupsPaginate() async throws {
 		let rows = (1 ... 40).map { "<tr><td>Row\($0)</td><td>Value\($0)</td></tr>" }.joined()

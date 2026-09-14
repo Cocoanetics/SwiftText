@@ -11,9 +11,49 @@
 
 import Foundation
 import SwiftTextCSS
+#if canImport(Darwin)
+import CoreFoundation
+#endif
 
 public final class LayoutEngine {
 	private let fonts: FontBook
+
+	private func preferredLineBreakOffsets(in word: String) -> Set<Int> {
+		#if canImport(Darwin)
+		let string = word as CFString
+		let length = CFStringGetLength(string)
+		let tokenizer = CFStringTokenizerCreate(nil, string, CFRange(location: 0, length: length),
+		                                        kCFStringTokenizerUnitLineBreak, nil)
+		var offsets = Set<Int>()
+		while CFStringTokenizerAdvanceToNextToken(tokenizer).rawValue != 0 {
+			let range = CFStringTokenizerGetCurrentTokenRange(tokenizer)
+			let offset = range.location + range.length
+			if offset < length { offsets.insert(offset) }
+		}
+		return offsets
+		#else
+		// Core Foundation's line-break tokenizer is Darwin-only. Keep the
+		// portable engines consistent for the common UAX #14 HY/SY cases.
+		let breakAfter: Set<UInt32> = [
+			0x002D, // HYPHEN-MINUS (HY)
+			0x002F, // SOLIDUS (SY)
+			0x058A, 0x05BE, 0x1400, 0x2010, 0x2012, 0x2013, 0x2014, 0x2E17, 0x2E40
+		]
+		let length = word.utf16.count
+		var utf16Offset = 0
+		var offsets = Set<Int>()
+		for character in word {
+			utf16Offset += character.utf16.count
+			if utf16Offset < length,
+			   character.unicodeScalars.count == 1,
+			   let scalar = character.unicodeScalars.first,
+			   breakAfter.contains(scalar.value) {
+				offsets.insert(utf16Offset)
+			}
+		}
+		return offsets
+		#endif
+	}
 
 	public init(fonts: FontBook) {
 		self.fonts = fonts
@@ -514,6 +554,17 @@ public final class LayoutEngine {
 				let level = wordLevel(tokenIndex)
 				func append(_ pieces: [Piece]) {
 					for piece in pieces {
+						if let last = fragments.indices.last,
+						   fragments[last].font?.key == piece.font.key,
+						   fragments[last].style == style,
+						   fragments[last].href == href,
+						   fragments[last].bidiLevel == level,
+						   abs(fragments[last].x + fragments[last].width - penX) < 0.001 {
+							fragments[last].text += piece.text
+							fragments[last].width += piece.width
+							penX += piece.width
+							continue
+						}
 						let fragment = TextFragment(text: piece.text, style: style, x: penX, y: 0,
 						                            width: piece.width, baseline: 0, href: href,
 						                            bidiLevel: level, font: piece.font)
@@ -521,13 +572,29 @@ public final class LayoutEngine {
 						penX += piece.width
 					}
 				}
-				func appendWithBreaks(_ pieces: [Piece]) {
+				func gap(_ spaceStyle: ComputedStyle) -> Double {
+					// word-spacing adds to each inter-word space.
+					fonts.font(for: spaceStyle).width(of: " ", size: spaceStyle.fontSize) + spaceStyle.wordSpacing
+				}
+				func appendWithBreaks(_ pieces: [Piece], preferringSoftBreaks: Bool, breakingAnywhere: Bool) {
 					let units = pieces.flatMap { piece in
 						piece.text.map { character in
 							let text = String(character)
 							let width = piece.font.width(of: text, size: style.fontSize)
 								+ style.letterSpacing * Double(text.unicodeScalars.count)
 							return Piece(text: text, font: piece.font, width: width)
+						}
+					}
+					var preferredBreaks = Set<Int>()
+					if preferringSoftBreaks {
+						let word = pieces.map(\.text).joined()
+						let utf16BreakOffsets = preferredLineBreakOffsets(in: word)
+						var utf16Offset = 0
+						for (offset, unit) in units.enumerated() {
+							utf16Offset += unit.text.utf16.count
+							if utf16BreakOffsets.contains(utf16Offset) {
+								preferredBreaks.insert(offset + 1)
+							}
 						}
 					}
 					var chunkText = ""
@@ -540,24 +607,42 @@ public final class LayoutEngine {
 						chunkWidth = 0
 						chunkFont = nil
 					}
-					for unit in units {
-						if penX + chunkWidth + unit.width > contentWidth,
-						   !chunkText.isEmpty || !fragments.isEmpty {
-							flushChunk()
+					func appendUnits(_ units: ArraySlice<Piece>, breakingAnywhere: Bool) {
+						for unit in units {
+							if breakingAnywhere,
+							   penX + chunkWidth + unit.width > contentWidth,
+							   !chunkText.isEmpty || !fragments.isEmpty {
+								flushChunk()
+								finishLine(isLast: false)
+							}
+							if let font = chunkFont, font.key != unit.font.key {
+								flushChunk()
+							}
+							chunkFont = unit.font
+							chunkText += unit.text
+							chunkWidth += unit.width
+						}
+						flushChunk()
+					}
+					var segmentStart = 0
+					for segmentEnd in preferredBreaks.sorted() + [units.count] {
+						let segment = units[segmentStart ..< segmentEnd]
+						let segmentWidth = segment.reduce(0) { $0 + $1.width }
+						if segmentStart == 0, !fragments.isEmpty, let space = pendingSpace {
+							let width = gap(space)
+							if penX + width + segmentWidth > contentWidth {
+								finishLine(isLast: false)
+							} else {
+								penX += width
+								pendingSpace = nil
+							}
+						}
+						if penX + segmentWidth > contentWidth, !fragments.isEmpty {
 							finishLine(isLast: false)
 						}
-						if let font = chunkFont, font.key != unit.font.key {
-							flushChunk()
-						}
-						chunkFont = unit.font
-						chunkText += unit.text
-						chunkWidth += unit.width
+						appendUnits(segment, breakingAnywhere: breakingAnywhere)
+						segmentStart = segmentEnd
 					}
-					flushChunk()
-				}
-				func gap(_ spaceStyle: ComputedStyle) -> Double {
-					// word-spacing adds to each inter-word space.
-					fonts.font(for: spaceStyle).width(of: " ", size: spaceStyle.fontSize) + spaceStyle.wordSpacing
 				}
 				let spaceWidth = pendingSpace.map(gap) ?? 0
 
@@ -574,21 +659,19 @@ public final class LayoutEngine {
 						}
 					}
 					if penX + wordWidth > contentWidth {
-						appendWithBreaks(pieces)
+						appendWithBreaks(pieces, preferringSoftBreaks: false, breakingAnywhere: true)
 					} else {
 						append(pieces)
 					}
 				} else {
-					if wraps && !fragments.isEmpty && penX + spaceWidth + wordWidth > contentWidth {
-						finishLine(isLast: false)
-					} else if !fragments.isEmpty, let space = pendingSpace {
-						penX += gap(space)
-						pendingSpace = nil
-					}
-					if wraps && breaksAnywhere && penX + wordWidth > contentWidth {
-						appendWithBreaks(pieces)
-					} else {
+					if !wraps || penX + spaceWidth + wordWidth <= contentWidth {
+						if !fragments.isEmpty, let space = pendingSpace {
+							penX += gap(space)
+							pendingSpace = nil
+						}
 						append(pieces)
+					} else {
+						appendWithBreaks(pieces, preferringSoftBreaks: true, breakingAnywhere: breaksAnywhere)
 					}
 				}
 			}
