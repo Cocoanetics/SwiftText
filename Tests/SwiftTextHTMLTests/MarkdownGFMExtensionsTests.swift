@@ -119,7 +119,8 @@ struct MarkdownGFMExtensionsTests {
 		    padding: 0.4em 0.7em;
 		    text-align: left;
 		    overflow-wrap: anywhere;
-		    word-break: break-word;
+		    word-break: normal;
+		    min-width: 4em;
 		}
 		"""))
 	}

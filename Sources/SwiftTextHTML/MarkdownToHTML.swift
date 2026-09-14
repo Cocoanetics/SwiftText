@@ -105,7 +105,8 @@ public enum MarkdownToHTML {
 	    padding: 0.4em 0.7em;
 	    text-align: left;
 	    overflow-wrap: anywhere;
-	    word-break: break-word;
+	    word-break: normal;
+	    min-width: 4em;
 	}
 	th { background: #dcdcdc; font-weight: 600; }
 	tr:nth-child(even) td { background: #f9f9f9; }
