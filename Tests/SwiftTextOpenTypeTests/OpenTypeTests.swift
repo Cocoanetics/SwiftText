@@ -13,8 +13,8 @@ struct OpenTypeTests {
 	/// Build a tiny but valid sfnt font in memory so the parser can be tested
 	/// deterministically with no external fixtures.
 	///
-	/// It has four glyphs — `.notdef`, `A`, `B`, space — with known advances and
-	/// a format-4 cmap mapping `A`→1, `B`→2, space→3.
+	/// It has four glyphs — `.notdef`, `A`, composite `B`, space — with known
+	/// advances and a format-4 cmap mapping `A`→1, `B`→2, space→3.
 	private func makeMinimalFont() -> Data {
 		func u16(_ v: Int) -> [UInt8] { [UInt8((v >> 8) & 0xFF), UInt8(v & 0xFF)] }
 		func u32(_ v: Int) -> [UInt8] {
@@ -35,7 +35,7 @@ struct OpenTypeTests {
 		head += u16(0)                      // macStyle
 		head += u16(0)                      // lowestRecPPEM
 		head += i16(0)                      // fontDirectionHint
-		head += i16(0)                      // indexToLocFormat
+		head += i16(1)                      // indexToLocFormat (long)
 		head += i16(0)                      // glyphDataFormat
 
 		var hhea: [UInt8] = []
@@ -72,8 +72,28 @@ struct OpenTypeTests {
 		cmap += u16(3) + u16(1) + u32(12)   // (3,1) record at offset 12
 		cmap += sub
 
+		func simpleGlyph() -> [UInt8] {
+			i16(0) + i16(0) + i16(0) + i16(0) + i16(0) // contours + bbox
+		}
+		var glyf: [UInt8] = []
+		var glyphOffsets: [Int] = []
+		func appendGlyph(_ bytes: [UInt8]) {
+			glyphOffsets.append(glyf.count)
+			glyf += bytes
+			while glyf.count % 4 != 0 { glyf.append(0) }
+		}
+		appendGlyph(simpleGlyph()) // .notdef
+		appendGlyph(simpleGlyph()) // A
+		// Composite B references A. Flags 0 means byte arguments and no transform.
+		appendGlyph(i16(-1) + i16(0) + i16(0) + i16(0) + i16(0) + u16(0) + u16(1) + [0, 0])
+		appendGlyph(simpleGlyph()) // space
+		glyphOffsets.append(glyf.count)
+		var loca: [UInt8] = []
+		for offset in glyphOffsets { loca += u32(offset) }
+
 		let tables: [(String, [UInt8])] = [
-			("cmap", cmap), ("head", head), ("hhea", hhea), ("hmtx", hmtx), ("maxp", maxp)
+			("cmap", cmap), ("glyf", glyf), ("head", head), ("hhea", hhea),
+			("hmtx", hmtx), ("loca", loca), ("maxp", maxp)
 		]
 
 		var sfnt: [UInt8] = []
@@ -132,6 +152,37 @@ struct OpenTypeTests {
 		#expect(font.advanceWidth(of: "AB") == 1300)
 		#expect(font.width(of: "AB", size: 1000) == 1300)
 		#expect(abs(font.width(of: "AB", size: 12) - 15.6) < 1e-9)
+	}
+
+	@Test("Subsets TrueType glyphs densely and preserves composite dependencies")
+	func trueTypeSubset() throws {
+		let originalData = makeMinimalFont()
+		let font = try OpenTypeFont(data: originalData)
+		let result = try font.subsetTrueType(glyphs: [2: "B"])
+		let subset = try #require(result)
+		let parsed = try OpenTypeFont(data: subset.data)
+
+		// B depends on A, so both outlines survive even though only B has a cmap
+		// entry. Their already-dense original identifiers remain stable here.
+		#expect(subset.glyphMapping == [0: 0, 1: 1, 2: 2])
+		#expect(parsed.numGlyphs == 3)
+		#expect(parsed.glyphID(for: "B") == 2)
+		#expect(parsed.glyphID(for: "A") == nil)
+		#expect(parsed.advanceWidth(glyph: 2) == 700)
+		#expect(subset.data.count < originalData.count)
+	}
+
+	@Test("Renumbers sparse TrueType glyph identifiers")
+	func sparseTrueTypeSubset() throws {
+		let font = try OpenTypeFont(data: makeMinimalFont())
+		let result = try font.subsetTrueType(glyphs: [3: " "])
+		let subset = try #require(result)
+		let parsed = try OpenTypeFont(data: subset.data)
+
+		#expect(subset.glyphMapping == [0: 0, 3: 1])
+		#expect(parsed.numGlyphs == 2)
+		#expect(parsed.glyphID(for: " ") == 1)
+		#expect(parsed.advanceWidth(glyph: 1) == 250)
 	}
 
 	@Test("Rejects non-sfnt data")
