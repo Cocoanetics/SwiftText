@@ -479,9 +479,9 @@ public final class LayoutEngine {
 	}
 
 	/// Approximate CSS automatic table layout with each cell's intrinsic widths.
-	/// If the preferred widths do not fit, reduce every column proportionally,
-	/// without crossing its min-content width unless the minimum grid itself does
-	/// not fit the available width.
+	/// If the preferred widths do not fit, distribute the reduction over each
+	/// column's max-content slack. If the minimum grid itself does not fit, keep
+	/// narrower columns at min-content and cap the widest columns instead.
 	private func tableColumnWidths(_ placements: [CellPlacement], columnCount: Int,
 	                               availableWidth: Double, spacing: Double) -> [Double] {
 		func intrinsicWidths(measuring measure: (BlockBox) -> Double) -> [Double] {

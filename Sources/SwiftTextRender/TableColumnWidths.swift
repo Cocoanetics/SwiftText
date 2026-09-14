@@ -15,27 +15,30 @@ enum TableColumnWidths {
 		let minimumWidth = minimum.reduce(0, +)
 		guard minimumWidth < availableWidth else {
 			guard minimumWidth > 0 else { return preferred }
-			let scale = availableWidth / minimumWidth
-			return minimum.map { $0 * scale }
+			return capWidest(minimum, to: availableWidth)
 		}
 
-		var result = preferred
-		var flexible = Set(preferred.indices)
-		var fixedWidth = 0.0
-		while !flexible.isEmpty {
-			let preferredFlexibleWidth = flexible.reduce(0.0) { $0 + preferred[$1] }
-			guard preferredFlexibleWidth > 0 else { break }
-			let scale = (availableWidth - fixedWidth) / preferredFlexibleWidth
-			let belowMinimum = flexible.filter { preferred[$0] * scale < minimum[$0] }
-			if belowMinimum.isEmpty {
-				for column in flexible { result[column] = preferred[column] * scale }
-				break
+		let flexibility = preferred.indices.map { max(0, preferred[$0] - minimum[$0]) }
+		let flexibleWidth = flexibility.reduce(0, +)
+		guard flexibleWidth > 0 else { return minimum }
+		let scale = (availableWidth - minimumWidth) / flexibleWidth
+		return preferred.indices.map { minimum[$0] + flexibility[$0] * scale }
+	}
+
+	/// Keeps narrower columns at min-content and shares unavoidable overflow only
+	/// among the widest columns, progressively capping them to the same width.
+	private static func capWidest(_ minimum: [Double], to availableWidth: Double) -> [Double] {
+		var result = minimum
+		let columns = minimum.indices.sorted { minimum[$0] < minimum[$1] }
+		var remainingWidth = availableWidth
+		for (offset, column) in columns.enumerated() {
+			let remainingColumns = columns.count - offset
+			let cap = remainingWidth / Double(remainingColumns)
+			guard minimum[column] < cap else {
+				for cappedColumn in columns[offset...] { result[cappedColumn] = cap }
+				return result
 			}
-			for column in belowMinimum {
-				result[column] = minimum[column]
-				fixedWidth += minimum[column]
-				flexible.remove(column)
-			}
+			remainingWidth -= minimum[column]
 		}
 		return result
 	}
