@@ -157,6 +157,13 @@ public final class Painter {
 		let border = box.usedBorder
 		guard border.top > 0 || border.right > 0 || border.bottom > 0 || border.left > 0 else { return }
 		let style = box.style
+		let colors = box.resolvedCollapsedBorders.map {
+			Edges(
+				top: $0.top?.color ?? style.borderColor.top,
+				right: $0.right?.color ?? style.borderColor.right,
+				bottom: $0.bottom?.color ?? style.borderColor.bottom,
+				left: $0.left?.color ?? style.borderColor.left)
+		} ?? style.borderColor
 		let bottomY = yUp(columnTop: box.y, height: box.height)
 
 		func fillEdge(_ x: Double, _ y: Double, _ w: Double, _ h: Double, _ color: RGBA) {
@@ -168,16 +175,16 @@ public final class Painter {
 
 		stream.pushState()
 		if border.top > 0 {
-			fillEdge(box.x, bottomY + box.height - border.top, box.width, border.top, style.borderColor.top)
+			fillEdge(box.x, bottomY + box.height - border.top, box.width, border.top, colors.top)
 		}
 		if border.bottom > 0 {
-			fillEdge(box.x, bottomY, box.width, border.bottom, style.borderColor.bottom)
+			fillEdge(box.x, bottomY, box.width, border.bottom, colors.bottom)
 		}
 		if border.left > 0 {
-			fillEdge(box.x, bottomY, border.left, box.height, style.borderColor.left)
+			fillEdge(box.x, bottomY, border.left, box.height, colors.left)
 		}
 		if border.right > 0 {
-			fillEdge(box.x + box.width - border.right, bottomY, border.right, box.height, style.borderColor.right)
+			fillEdge(box.x + box.width - border.right, bottomY, border.right, box.height, colors.right)
 		}
 		stream.popState()
 	}

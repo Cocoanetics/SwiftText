@@ -51,6 +51,23 @@ struct CascadeTests {
 		#expect(p.color == RGBA(0, 0, 0, 1))
 	}
 
+	@Test("Table border model and spacing are computed and inherited")
+	func tableBorders() {
+		let resolver = StyleResolver(authorStyleSheets: [
+			"table { border-collapse: collapse; border-spacing: 3px 5px }"
+		])
+		let table = Element("table")
+		let cell = Element("td")
+		table.adding(cell)
+		let tableStyle = style(table, resolver: resolver)
+		#expect(tableStyle.borderCollapse == .collapse)
+		#expect(tableStyle.borderSpacing == BorderSpacing(horizontal: 3, vertical: 5))
+
+		let cellStyle = resolver.style(for: cell, inheriting: tableStyle, rootFontSize: 16)
+		#expect(cellStyle.borderCollapse == .collapse)
+		#expect(cellStyle.borderSpacing == BorderSpacing(horizontal: 3, vertical: 5))
+	}
+
 	@Test("User-agent headings: size and weight")
 	func uaHeadings() {
 		let resolver = StyleResolver()

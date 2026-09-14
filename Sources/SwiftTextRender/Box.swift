@@ -8,6 +8,13 @@
 import Foundation
 import SwiftTextCSS
 
+/// The border selected for an edge by the collapsed-table conflict algorithm.
+struct CollapsedBorder: Equatable {
+	let width: Double
+	let style: BorderStyle
+	let color: RGBA
+}
+
 /// Base class for all boxes. Geometry fields are filled during layout and refer
 /// to the border-box top-left corner in absolute page coordinates.
 public class Box {
@@ -23,6 +30,9 @@ public class Box {
 	public var y: Double = 0
 	public var width: Double = 0
 	public var height: Double = 0
+	/// Resolved collapsed borders. A non-nil outer optional means the box
+	/// participates in a collapsed table; nil edges do not reserve or paint space.
+	var resolvedCollapsedBorders: Edges<CollapsedBorder?>?
 
 	init(style: ComputedStyle) {
 		self.style = style
@@ -30,7 +40,14 @@ public class Box {
 
 	/// Used (drawn) border widths, accounting for `border-style: none`.
 	public var usedBorder: Edges<Double> {
-		Edges(
+		if let resolved = resolvedCollapsedBorders {
+			return Edges(
+				top: resolved.top?.width ?? 0,
+				right: resolved.right?.width ?? 0,
+				bottom: resolved.bottom?.width ?? 0,
+				left: resolved.left?.width ?? 0)
+		}
+		return Edges(
 			top: style.borderStyle.top.isVisible ? style.borderWidth.top : 0,
 			right: style.borderStyle.right.isVisible ? style.borderWidth.right : 0,
 			bottom: style.borderStyle.bottom.isVisible ? style.borderWidth.bottom : 0,
