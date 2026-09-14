@@ -590,13 +590,7 @@ public final class LayoutEngine {
 			contentWidth = box.style.width.resolved(percentageBasis: 0) ?? Double(image.width)
 		} else if box.establishesInlineContext {
 			var tokens: [InlineToken] = []
-			let source = ObjectIdentifier(box)
-			let decorations = TextDecorationRuns(
-				underline: box.style.underline ? TextDecorationRun(source: source, style: box.style) : nil,
-				lineThrough: box.style.lineThrough ? TextDecorationRun(source: source, style: box.style) : nil)
-			for child in box.children {
-				collectInline(child, into: &tokens, href: nil, decorations: decorations)
-			}
+			for child in box.children { collectInline(child, into: &tokens, href: nil, decorations: TextDecorationRuns()) }
 			contentWidth = minContentWidth(of: tokens, textIndent: box.style.textIndent)
 		} else {
 			contentWidth = box.children.compactMap { $0 as? BlockBox }.map(minContentWidth(of:)).max() ?? 0
