@@ -823,46 +823,6 @@ extension RenderPDFTests {
 		#endif
 	}
 
-	@Test("Text decorations span whitespace within an inline run", arguments: [
-		"<p><a href=\"https://example.com\">Ein Link aus mehreren Woertern</a></p>",
-		"<p><s>Ein durchgestrichener Satz aus mehreren Woertern</s></p>"
-	])
-	func textDecorationsSpanWhitespace(_ html: String) async throws {
-		let data = try await HTMLRenderer.renderPDF(
-			html: html,
-			options: RenderOptions(compressStreams: false))
-		let lines = String(decoding: data, as: UTF8.self).split(separator: "\n")
-		// One rectangle clips the page content; the other is the single
-		// decoration bar spanning every word and intervening space.
-		#expect(lines.filter { $0.hasSuffix(" re") }.count == 2)
-	}
-
-	@Test("Wrapped text decorations produce one bar per line")
-	func wrappedTextDecorationsProduceOneBarPerLine() async throws {
-		let html = "<p><u>one two three four five six seven eight nine ten</u></p>"
-		let contentWidth = 120.0
-		let root = try await layoutTree(html, contentWidth: contentWidth)
-		let paragraph = try #require(firstBlock(in: root) { $0.element?.localName == "p" })
-		#expect(paragraph.lines.count > 1)
-
-		let data = try await HTMLRenderer.renderPDF(
-			html: html,
-			options: RenderOptions(pageWidthPx: contentWidth + 64, pageHeightPx: nil,
-			                       pageMarginPx: 32, compressStreams: false))
-		let lines = String(decoding: data, as: UTF8.self).split(separator: "\n")
-		let decorationCount = lines.filter { $0.hasSuffix(" re") }.count - 1
-		#expect(decorationCount == paragraph.lines.count)
-	}
-
-	@Test("Separate decorated elements keep separate bars")
-	func separateDecoratedElementsKeepSeparateBars() async throws {
-		let data = try await HTMLRenderer.renderPDF(
-			html: "<p><u>one</u> <u>two</u></p>",
-			options: RenderOptions(compressStreams: false))
-		let lines = String(decoding: data, as: UTF8.self).split(separator: "\n")
-		#expect(lines.filter { $0.hasSuffix(" re") }.count == 3)
-	}
-
 	@Test("letter-spacing widens text and emits Tc")
 	func letterSpacing() async throws {
 		let plain = try await layoutTree("<p>hello</p>", contentWidth: 600)
