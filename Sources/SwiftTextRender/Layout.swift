@@ -11,49 +11,9 @@
 
 import Foundation
 import SwiftTextCSS
-#if canImport(Darwin)
-import CoreFoundation
-#endif
 
 public final class LayoutEngine {
 	private let fonts: FontBook
-
-	private func preferredLineBreakOffsets(in word: String) -> Set<Int> {
-		#if canImport(Darwin)
-		let string = word as CFString
-		let length = CFStringGetLength(string)
-		let tokenizer = CFStringTokenizerCreate(nil, string, CFRange(location: 0, length: length),
-		                                        kCFStringTokenizerUnitLineBreak, nil)
-		var offsets = Set<Int>()
-		while CFStringTokenizerAdvanceToNextToken(tokenizer).rawValue != 0 {
-			let range = CFStringTokenizerGetCurrentTokenRange(tokenizer)
-			let offset = range.location + range.length
-			if offset < length { offsets.insert(offset) }
-		}
-		return offsets
-		#else
-		// Core Foundation's line-break tokenizer is Darwin-only. Keep the
-		// portable engines consistent for the common UAX #14 HY/SY cases.
-		let breakAfter: Set<UInt32> = [
-			0x002D, // HYPHEN-MINUS (HY)
-			0x002F, // SOLIDUS (SY)
-			0x058A, 0x05BE, 0x1400, 0x2010, 0x2012, 0x2013, 0x2014, 0x2E17, 0x2E40
-		]
-		let length = word.utf16.count
-		var utf16Offset = 0
-		var offsets = Set<Int>()
-		for character in word {
-			utf16Offset += character.utf16.count
-			if utf16Offset < length,
-			   character.unicodeScalars.count == 1,
-			   let scalar = character.unicodeScalars.first,
-			   breakAfter.contains(scalar.value) {
-				offsets.insert(utf16Offset)
-			}
-		}
-		return offsets
-		#endif
-	}
 
 	public init(fonts: FontBook) {
 		self.fonts = fonts
@@ -518,36 +478,36 @@ public final class LayoutEngine {
 		return max(y, (bounds?.bottom ?? contentTop) + verticalSpacing) - contentTop
 	}
 
-	/// Approximate CSS automatic table layout with each cell's max-content width.
-	/// If the preferred widths do not fit, reduce every column proportionally so
-	/// the grid remains inside the table's available width.
+	/// Approximate CSS automatic table layout with each cell's intrinsic widths.
+	/// If the preferred widths do not fit, reduce every column proportionally,
+	/// without crossing its min-content width unless the minimum grid itself does
+	/// not fit the available width.
 	private func tableColumnWidths(_ placements: [CellPlacement], columnCount: Int,
 	                               availableWidth: Double, spacing: Double) -> [Double] {
-		var widths = [Double](repeating: 0, count: columnCount)
+		func intrinsicWidths(measuring measure: (BlockBox) -> Double) -> [Double] {
+			var widths = [Double](repeating: 0, count: columnCount)
 
-		// Establish ordinary columns first. Colspan requirements are applied after
-		// that so they only add the width not already supplied by their columns.
-		for placement in placements where placement.colspan == 1 {
-			widths[placement.column] = max(widths[placement.column], maxContentWidth(of: placement.cell))
-		}
-		for placement in placements.filter({ $0.colspan > 1 }).sorted(by: { $0.colspan < $1.colspan }) {
-			let end = min(placement.column + placement.colspan, columnCount)
-			let columns = placement.column ..< end
-			let current = widths[columns].reduce(0, +) + Double(columns.count - 1) * spacing
-			let deficit = maxContentWidth(of: placement.cell) - current
-			if deficit > 0 {
-				let share = deficit / Double(columns.count)
-				for column in columns { widths[column] += share }
+			// Establish ordinary columns first. Colspan requirements are applied after
+			// that so they only add the width not already supplied by their columns.
+			for placement in placements where placement.colspan == 1 {
+				widths[placement.column] = max(widths[placement.column], measure(placement.cell))
 			}
+			for placement in placements.filter({ $0.colspan > 1 }).sorted(by: { $0.colspan < $1.colspan }) {
+				let end = min(placement.column + placement.colspan, columnCount)
+				let columns = placement.column ..< end
+				let current = widths[columns].reduce(0, +) + Double(columns.count - 1) * spacing
+				let deficit = measure(placement.cell) - current
+				if deficit > 0 {
+					let share = deficit / Double(columns.count)
+					for column in columns { widths[column] += share }
+				}
+			}
+			return widths
 		}
 
-		let preferredWidth = widths.reduce(0, +)
-		guard preferredWidth > 0 else {
-			return [Double](repeating: availableWidth / Double(columnCount), count: columnCount)
-		}
-		guard preferredWidth > availableWidth else { return widths }
-		let scale = availableWidth / preferredWidth
-		return widths.map { $0 * scale }
+		let widths = intrinsicWidths(measuring: maxContentWidth(of:))
+		let minimums = intrinsicWidths(measuring: minContentWidth(of:))
+		return TableColumnWidths.fit(preferred: widths, minimum: minimums, to: availableWidth)
 	}
 
 	/// The border-box width a block needs when none of its inline content wraps.
@@ -606,15 +566,113 @@ public final class LayoutEngine {
 				if hasContent, let space = pendingSpace {
 					lineWidth += fonts.font(for: space).width(of: " ", size: space.fontSize) + space.wordSpacing
 				}
-				for run in fonts.resolveRuns(word, style: style) {
-					lineWidth += run.font.width(of: run.text, size: style.fontSize)
-						+ style.letterSpacing * Double(run.text.unicodeScalars.count)
-				}
+				lineWidth += inlineTextWidth(word, style: style)
 				hasContent = true
 				pendingSpace = nil
 			}
 		}
 		return max(maximum, lineWidth)
+	}
+
+	/// The border-box width needed at ordinary soft wrap opportunities. Emergency
+	/// opportunities from `overflow-wrap: break-word` deliberately do not count;
+	/// `anywhere` and `word-break: break-all` do count.
+	private func minContentWidth(of box: BlockBox) -> Double {
+		let border = box.usedBorder
+		let padding = (box.style.padding.left.resolved(percentageBasis: 0) ?? 0)
+			+ (box.style.padding.right.resolved(percentageBasis: 0) ?? 0)
+		let margins = (box.style.margin.left.resolved(percentageBasis: 0) ?? 0)
+			+ (box.style.margin.right.resolved(percentageBasis: 0) ?? 0)
+		let extras = border.left + border.right + padding + margins
+
+		let contentWidth: Double
+		if let image = box.image {
+			contentWidth = box.style.width.resolved(percentageBasis: 0) ?? Double(image.width)
+		} else if box.establishesInlineContext {
+			var tokens: [InlineToken] = []
+			for child in box.children { collectInline(child, into: &tokens, href: nil) }
+			contentWidth = minContentWidth(of: tokens, textIndent: box.style.textIndent)
+		} else {
+			contentWidth = box.children.compactMap { $0 as? BlockBox }.map(minContentWidth(of:)).max() ?? 0
+		}
+		let specifiedWidth = box.style.width.resolved(percentageBasis: 0) ?? 0
+		return max(contentWidth, specifiedWidth) + extras
+	}
+
+	private func minContentWidth(of tokens: [InlineToken], textIndent: Double) -> Double {
+		var maximum = 0.0
+		var runWidth = 0.0
+		var hasContent = false
+		var isFirstContent = true
+		var pendingSpace: ComputedStyle?
+		func finishRun() { maximum = max(maximum, runWidth); runWidth = 0 }
+		func beginContent() {
+			if isFirstContent {
+				runWidth += textIndent
+				isFirstContent = false
+			}
+			hasContent = true
+		}
+		func prepareContent(wrapping wraps: Bool) {
+			if wraps, hasContent {
+				finishRun()
+				hasContent = false
+			} else if let space = pendingSpace {
+				runWidth += fonts.font(for: space).width(of: " ", size: space.fontSize) + space.wordSpacing
+			}
+			pendingSpace = nil
+		}
+		for token in tokens {
+			switch token {
+			case .space(let style):
+				if hasContent { pendingSpace = style }
+			case .forcedBreak:
+				finishRun()
+				hasContent = false
+				pendingSpace = nil
+			case .checkbox(_, let style):
+				prepareContent(wrapping: style.whiteSpace.wraps)
+				beginContent()
+				runWidth += (style.margin.left.resolved(percentageBasis: 0) ?? 0)
+					+ style.fontSize
+					+ (style.margin.right.resolved(percentageBasis: 0) ?? 0)
+			case .word(let word, let style, _):
+				prepareContent(wrapping: style.whiteSpace.wraps)
+				beginContent()
+				for (index, width) in minContentSegments(of: word, style: style).enumerated() {
+					if index > 0 { finishRun() }
+					runWidth += width
+				}
+			}
+		}
+		finishRun()
+		return maximum
+	}
+
+	private func inlineTextWidth(_ text: String, style: ComputedStyle) -> Double {
+		fonts.resolveRuns(text, style: style).reduce(0.0) { width, run in
+			width + run.font.width(of: run.text, size: style.fontSize)
+				+ style.letterSpacing * Double(run.text.unicodeScalars.count)
+		}
+	}
+
+	private func minContentSegments(of word: String, style: ComputedStyle) -> [Double] {
+		guard style.whiteSpace.wraps else { return [inlineTextWidth(word, style: style)] }
+		if style.wordBreak == .breakAll || style.overflowWrap == .anywhere {
+			return word.map { inlineTextWidth(String($0), style: style) }
+		}
+
+		let breaks = preferredLineBreakOffsets(in: word).sorted()
+		guard !breaks.isEmpty else { return [inlineTextWidth(word, style: style)] }
+		var widths: [Double] = []
+		var start = word.startIndex
+		for offset in breaks {
+			let end = String.Index(utf16Offset: offset, in: word)
+			widths.append(inlineTextWidth(String(word[start ..< end]), style: style))
+			start = end
+		}
+		widths.append(inlineTextWidth(String(word[start...]), style: style))
+		return widths
 	}
 
 	/// Give table rows and row-group boxes bounds that contain their laid-out
@@ -1023,7 +1081,7 @@ private extension LayoutEngine {
 						append(pieces)
 					}
 				} else {
-					if !wraps || penX + spaceWidth + wordWidth <= contentWidth {
+					if !wraps || penX + spaceWidth + wordWidth <= contentWidth + 0.001 {
 						if !fragments.isEmpty, let space = pendingSpace {
 							penX += gap(space)
 							pendingSpace = nil

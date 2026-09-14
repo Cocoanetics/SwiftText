@@ -332,7 +332,7 @@ struct RenderPDFTests {
 
 	// MARK: - Layout geometry
 
-	private func layoutTree(_ html: String, css: [String] = [], contentWidth: Double) async throws -> BlockBox {
+	func layoutTree(_ html: String, css: [String] = [], contentWidth: Double) async throws -> BlockBox {
 		let builder = try await DomBuilder(html: Data(html.utf8), baseURL: nil)
 		let root = try #require(builder.root)
 		let resolver = StyleResolver(authorStyleSheets: css)
@@ -749,7 +749,7 @@ extension RenderPDFTests {
 		#expect(div.width == 130)
 	}
 
-	private func collectBlocks(in box: BlockBox, where predicate: (BlockBox) -> Bool) -> [BlockBox] {
+	func collectBlocks(in box: BlockBox, where predicate: (BlockBox) -> Bool) -> [BlockBox] {
 		var result: [BlockBox] = []
 		if predicate(box) { result.append(box) }
 		for child in box.children {
