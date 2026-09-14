@@ -1137,3 +1137,40 @@ extension RenderPDFTests {
 		#expect(data.count > 0)
 	}
 }
+
+extension RenderPDFTests {
+	@Test("Checkbox inputs reserve space and paint distinct checked states")
+	func checkboxInputs() async throws {
+		let html = MarkdownToHTML.convert("- [ ] Open\n- [x] Done")
+		let checkboxCSS = """
+		li.task-list-item { list-style: none }
+		input[type="checkbox"] { margin-right: 0.4em }
+		"""
+		let root = try await layoutTree(
+			html,
+			css: [checkboxCSS],
+			contentWidth: 400)
+		let items = collectBlocks(in: root) { $0.element?.localName == "li" }
+		#expect(items.count == 2)
+		let firstFragment = try #require(items.first?.lines.first?.fragments.first)
+		let secondFragment = try #require(items.last?.lines.first?.fragments.first)
+		guard case .checkbox(let firstChecked, let firstSize, _) = firstFragment.inlineControl,
+		      case .checkbox(let secondChecked, _, _) = secondFragment.inlineControl else {
+			Issue.record("expected each line to start with a checkbox control")
+			return
+		}
+		#expect(firstChecked == false)
+		#expect(secondChecked == true)
+		#expect(firstSize == firstFragment.style.fontSize)
+		#expect(firstFragment.width > firstSize)
+
+		let data = try await HTMLRenderer.renderPDF(
+			html: html,
+			css: [checkboxCSS + "\ninput { color: #c00 }"],
+			options: RenderOptions(compressStreams: false))
+		let pdf = String(decoding: data, as: UTF8.self)
+		#expect(pdf.contains("0.8 0 0 RG"))
+		#expect(pdf.components(separatedBy: " re\nS\n").count - 1 == 2)
+		#expect(pdf.components(separatedBy: " l\n").count - 1 == 2)
+	}
+}

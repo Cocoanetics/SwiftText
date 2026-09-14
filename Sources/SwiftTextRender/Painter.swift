@@ -119,7 +119,11 @@ public final class Painter {
 			} else if block.establishesInlineContext {
 				for line in block.lines where lineOnThisPage(line.y) {
 					for fragment in line.fragments {
-						paintText(fragment)
+						if let control = fragment.inlineControl {
+							paintInlineControl(control, fragment: fragment)
+						} else {
+							paintText(fragment)
+						}
 					}
 				}
 			} else {
@@ -129,6 +133,38 @@ public final class Painter {
 			}
 		}
 		// Inline and text boxes are painted through their block's line fragments.
+	}
+
+	// MARK: - Inline controls
+
+	private func paintInlineControl(_ control: TextFragment.InlineControl, fragment: TextFragment) {
+		switch control {
+		case .checkbox(let isChecked, let size, let leadingMargin):
+			let x = fragment.x + leadingMargin
+			let lineHeight = fragment.style.resolvedLineHeight()
+			let top = fragment.y + max(0, (lineHeight - size) / 2)
+			let bottom = geometry.pageHeightPx - pageY(top) - size
+			let color = fragment.style.color
+			let outlineWidth = max(1, size / 16)
+
+			stream.pushState()
+			stream.setColorRGB(color.red, color.green, color.blue, stroke: true)
+			stream.setLineWidth(outlineWidth)
+			let inset = outlineWidth / 2
+			stream.rectangle(x + inset, bottom + inset, size - outlineWidth, size - outlineWidth)
+			stream.stroke()
+
+			if isChecked {
+				stream.setLineWidth(max(1.5, size / 9))
+				stream.setLineCap(1)
+				stream.setLineJoin(1)
+				stream.moveTo(x + size * 0.20, bottom + size * 0.52)
+				stream.lineTo(x + size * 0.42, bottom + size * 0.28)
+				stream.lineTo(x + size * 0.82, bottom + size * 0.74)
+				stream.stroke()
+			}
+			stream.popState()
+		}
 	}
 
 	/// Paint a table header group at the top of a continuation page. Its original
