@@ -15,12 +15,12 @@ struct MarkdownGFMExtensionsTests {
 
 	@Test func taskListsUnchecked() {
 		let html = MarkdownToHTML.convert("- [ ] Todo")
-		#expect(html.contains(#"<li class="task-list-item"><input type="checkbox" disabled> Todo</li>"#))
+		#expect(html.contains(#"<li class="task-list-item"><input type="checkbox" disabled="disabled"> Todo</li>"#))
 	}
 
 	@Test func taskListsChecked() {
 		let html = MarkdownToHTML.convert("- [x] Done")
-		#expect(html.contains(#"<input type="checkbox" disabled checked>"#))
+		#expect(html.contains(#"<input type="checkbox" disabled="disabled" checked="checked">"#))
 		#expect(html.contains("Done"))
 	}
 

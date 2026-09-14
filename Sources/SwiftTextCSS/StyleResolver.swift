@@ -398,6 +398,15 @@ private func applyLonghand(_ name: String, _ value: [ComponentValue], to style: 
 		   let align = VerticalAlign(rawValue: ident.asciiLowercased) {
 			style.verticalAlign = align
 		}
+	case "border-collapse":
+		if let token = significant(value).first, case .ident(let ident) = token.token,
+		   let collapse = BorderCollapse(rawValue: ident.asciiLowercased) {
+			style.borderCollapse = collapse
+		}
+	case "border-spacing":
+		if let spacing = parseBorderSpacing(value, fontSize: fontSize, rootFontSize: rootFontSize) {
+			style.borderSpacing = spacing
+		}
 	case "direction":
 		if let token = significant(value).first, case .ident(let ident) = token.token,
 		   let direction = Direction(rawValue: ident.asciiLowercased) {
@@ -455,7 +464,7 @@ private let inheritedProperties: Set<String> = [
 	"text-decoration", "text-decoration-line",
 	"letter-spacing", "word-spacing",
 	"list-style-type", "list-style",
-	"text-indent", "direction"
+	"text-indent", "direction", "border-collapse", "border-spacing"
 ]
 
 /// Parse a fragmentation keyword for `break-before` / `break-after` (and their
@@ -522,6 +531,8 @@ private func copyLonghand(_ name: String, from source: ComputedStyle, into style
 	case "list-style-type", "list-style": style.listStyleType = source.listStyleType
 	case "text-indent": style.textIndent = source.textIndent
 	case "vertical-align": style.verticalAlign = source.verticalAlign
+	case "border-collapse": style.borderCollapse = source.borderCollapse
+	case "border-spacing": style.borderSpacing = source.borderSpacing
 	case "direction": style.direction = source.direction
 	case "width": style.width = source.width
 	case "max-width": style.maxWidth = source.maxWidth
@@ -621,6 +632,18 @@ private func parseOverflowWrap(_ value: [ComponentValue]) -> OverflowWrap? {
 private func parseWordBreak(_ value: [ComponentValue]) -> WordBreak? {
 	guard let token = significant(value).first, case .ident(let ident) = token.token else { return nil }
 	return WordBreak(rawValue: ident.asciiLowercased)
+}
+
+private func parseBorderSpacing(_ value: [ComponentValue], fontSize: Double, rootFontSize: Double) -> BorderSpacing? {
+	let tokens = significant(value)
+	guard (1 ... 2).contains(tokens.count) else { return nil }
+	let lengths = tokens.compactMap { token -> Double? in
+		guard let length = parseLength([token], fontSize: fontSize, rootFontSize: rootFontSize),
+		      case .px(let pixels) = length, pixels >= 0 else { return nil }
+		return pixels
+	}
+	guard lengths.count == tokens.count else { return nil }
+	return BorderSpacing(horizontal: lengths[0], vertical: lengths.count == 2 ? lengths[1] : lengths[0])
 }
 
 private func parseFontFamily(_ value: [ComponentValue]) -> [String]? {

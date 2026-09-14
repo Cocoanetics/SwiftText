@@ -152,12 +152,32 @@ struct RenderPDFTests {
 		#expect(contains("/CIDFontType2"))
 		#expect(contains("/Identity-H"))
 		#expect(contains("/FontFile2"))
+		#expect(contains("+MyEmbeddedFont"))
+		#expect(!contains("/CIDToGIDMap /Identity"))
+		#expect(pdf.count < data.count / 2)
 
 		#if canImport(PDFKit)
 		let document = try #require(PDFDocument(data: pdf))
 		#expect(document.pageCount >= 1)
 		// ToUnicode lets the text be extracted even though it's encoded as glyphs.
 		#expect((document.string ?? "").contains("Hello"))
+		#endif
+	}
+
+	@Test("A system fallback glyph embeds a small TrueType subset")
+	func subsetsSystemFallbackFont() async throws {
+		guard FileManager.default.fileExists(atPath: "/System/Library/Fonts/Supplemental/Arial Unicode.ttf") else {
+			return
+		}
+		let pdf = try await HTMLRenderer.renderPDF(html: "<p>Ein Pfeil: →</p>")
+
+		#expect(pdf.count < 200_000)
+		#expect(pdf.range(of: Data("+FallbackArialUnicodettf".utf8)) != nil)
+		#expect(pdf.range(of: Data("/CIDToGIDMap /Identity".utf8)) == nil)
+
+		#if canImport(PDFKit)
+		let document = try #require(PDFDocument(data: pdf))
+		#expect((document.string ?? "").contains("Ein Pfeil: →"))
 		#endif
 	}
 
@@ -201,6 +221,7 @@ struct RenderPDFTests {
 
 	// A 1×1 PNG (data URI).
 	private let onePixelPNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+	private let rgbPNG = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAQAAAABCAIAAAB2XpiaAAAADUlEQVR4nGM4YWMDRwAivQUBgsPAqAAAAABJRU5ErkJggg==")!
 
 	@Test("Decodes image dimensions from a data URI")
 	func decodesImageDimensions() {
@@ -216,6 +237,53 @@ struct RenderPDFTests {
 		#expect(img.image != nil)
 		#expect(img.width == 50)
 		#expect(img.height == 30)
+	}
+
+	@Test("Relative image paths resolve against the document directory")
+	func embedsRelativeFileImage() async throws {
+		let directory = FileManager.default.temporaryDirectory
+			.appendingPathComponent("swifttext-render-\(UUID().uuidString)", isDirectory: true)
+		try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+		defer { try? FileManager.default.removeItem(at: directory) }
+		try rgbPNG.write(to: directory.appendingPathComponent("pic.png"))
+
+		let pdf = try await HTMLRenderer.renderPDF(html: #"<img src="pic.png">"#, baseURL: directory)
+		#expect(pdf.range(of: Data("/Subtype /Image".utf8)) != nil)
+		#expect(pdf.range(of: Data("/FlateDecode".utf8)) != nil)
+	}
+
+	@Test("Absolute paths and file URLs load local images", arguments: [false, true])
+	func embedsAbsoluteFileImage(asFileURL: Bool) async throws {
+		let url = FileManager.default.temporaryDirectory
+			.appendingPathComponent("swifttext-render-\(UUID().uuidString).png")
+		try rgbPNG.write(to: url)
+		defer { try? FileManager.default.removeItem(at: url) }
+		let source = asFileURL ? url.absoluteString : url.path
+
+		let pdf = try await HTMLRenderer.renderPDF(html: #"<img src="\#(source)">"#)
+		#expect(pdf.range(of: Data("/Subtype /Image".utf8)) != nil)
+	}
+
+	@Test("Unreadable image paths warn and render a placeholder")
+	func missingImagePlaceholder() async throws {
+		let directory = FileManager.default.temporaryDirectory
+			.appendingPathComponent("swifttext-render-\(UUID().uuidString)", isDirectory: true)
+		try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+		defer { try? FileManager.default.removeItem(at: directory) }
+		var warnings: [String] = []
+		let options = RenderOptions(compressStreams: false)
+		let pdf = try await HTMLRenderer.renderPDF(
+			html: #"<p>Before</p><img src="missing.png"><p>After</p>"#,
+			baseURL: directory,
+			options: options,
+			warningHandler: { warnings.append($0) })
+
+		#expect(warnings.count == 1)
+		#expect(warnings[0].contains("missing.png"))
+		#expect(pdf.range(of: Data("0.9 0.9 0.9 rg".utf8)) != nil)
+		#if canImport(PDFKit)
+		#expect(try #require(PDFDocument(data: pdf)).string?.contains("Before\nAfter") == true)
+		#endif
 	}
 
 	#if canImport(AppKit)
@@ -333,6 +401,99 @@ struct RenderPDFTests {
 		#expect(cells[0].y == cells[1].y)  // A and B share a row
 		#expect(cells[0].x == cells[2].x)  // A and C share a column
 	}
+}
+
+extension RenderPDFTests {
+
+	@Test("Table border spacing and collapsed shared borders")
+	func tableBorderModels() async throws {
+		let html = "<table><tr><td>A</td><td>B</td></tr><tr><td>C</td><td>D</td></tr></table>"
+		let separated = try await layoutTree(
+			html,
+			css: ["table { border-spacing: 7px 11px } td { border: 1px solid black }"],
+			contentWidth: 400)
+		let separatedCells = collectBlocks(in: separated) { $0.element?.localName == "td" }
+		#expect(abs(separatedCells[1].x - (separatedCells[0].x + separatedCells[0].width) - 7) < 0.01)
+		#expect(abs(separatedCells[2].y - (separatedCells[0].y + separatedCells[0].height) - 11) < 0.01)
+
+		let collapsed = try await layoutTree(
+			html,
+			css: ["table { border-collapse: collapse; border-spacing: 7px 11px } td { border: 1px solid black }"],
+			contentWidth: 400)
+		let collapsedCells = collectBlocks(in: collapsed) { $0.element?.localName == "td" }
+		#expect(abs(collapsedCells[1].x - (collapsedCells[0].x + collapsedCells[0].width)) < 0.01)
+		#expect(abs(collapsedCells[2].y - (collapsedCells[0].y + collapsedCells[0].height)) < 0.01)
+		#expect(collapsedCells[0].usedBorder == Edges(1.0))
+		#expect(collapsedCells[1].usedBorder.left == 0)
+		#expect(collapsedCells[2].usedBorder.top == 0)
+		#expect(collapsedCells[3].usedBorder.left == 0)
+		#expect(collapsedCells[3].usedBorder.top == 0)
+	}
+
+	@Test("Collapsed table borders select the winning adjacent cell edge")
+	func collapsedBorderConflictResolution() async throws {
+		let html = """
+		<table style="border-collapse: collapse">
+		<tr>
+		<td style="border-right: none">A</td>
+		<td style="border-left: 5px solid red; border-right: 6px dotted blue">B</td>
+		<td style="border-left: 5px solid red; border-right: 5px dashed blue">C</td>
+		<td style="border-left: 5px solid red">D</td>
+		</tr>
+		</table>
+		"""
+		let root = try await layoutTree(html, contentWidth: 400)
+		let cells = collectBlocks(in: root) { $0.element?.localName == "td" }
+		#expect(cells.count == 4)
+
+		// A visible edge beats `none`, even though it belongs to the right cell.
+		#expect(cells[0].usedBorder.right == 0)
+		#expect(cells[1].usedBorder.left == 5)
+		#expect(cells[1].resolvedCollapsedBorders?.left?.color == RGBA(1, 0, 0, 1))
+
+		// Width is compared before style, so 6px dotted beats 5px solid.
+		#expect(cells[1].usedBorder.right == 6)
+		#expect(cells[1].resolvedCollapsedBorders?.right?.style == .dotted)
+		#expect(cells[2].usedBorder.left == 0)
+
+		// At equal widths, solid outranks dashed and the right cell owns the winner.
+		#expect(cells[2].usedBorder.right == 0)
+		#expect(cells[3].usedBorder.left == 5)
+		#expect(cells[3].resolvedCollapsedBorders?.left?.style == .solid)
+	}
+
+	@Test("Table, row-group, and row borders join collapsed conflict resolution")
+	func collapsedStructuralBorderConflictResolution() async throws {
+		let html = """
+		<table style="border-collapse: collapse; border: 4px solid blue">
+		<tbody style="border: 3px solid green; border-top-width: 5px">
+		<tr style="border: 2px solid black; border-bottom: 6px dotted black">
+		<td style="border: 1px solid red">A</td>
+		</tr>
+		<tr><td style="border: 1px solid red">B</td></tr>
+		</tbody>
+		</table>
+		"""
+		let root = try await layoutTree(html, contentWidth: 400)
+		let table = try #require(firstBlock(in: root) { $0.element?.localName == "table" })
+		let group = try #require(firstBlock(in: root) { $0.element?.localName == "tbody" })
+		let row = try #require(firstBlock(in: root) { $0.element?.localName == "tr" })
+		let cells = collectBlocks(in: root) { $0.element?.localName == "td" }
+
+		// Structural boxes no longer reserve and paint overlapping border widths.
+		#expect(table.usedBorder == Edges(0.0))
+		#expect(group.usedBorder == Edges(0.0))
+		#expect(row.usedBorder == Edges(0.0))
+		// The wider group top and first-row bottom rules win their segments.
+		#expect(cells[0].resolvedCollapsedBorders?.top == CollapsedBorder(
+			width: 5, style: .solid, color: RGBA(0, 0.5019607843137255, 0, 1)))
+		#expect(cells[0].resolvedCollapsedBorders?.bottom == CollapsedBorder(
+			width: 6, style: .dotted, color: RGBA(0, 0, 0, 1)))
+		#expect(cells[1].resolvedCollapsedBorders?.top == nil)
+		// The table wins the remaining outer sides and transfers them to cells.
+		#expect(cells[0].resolvedCollapsedBorders?.left?.width == 4)
+		#expect(cells[1].resolvedCollapsedBorders?.bottom?.color == RGBA(0, 0, 1, 1))
+	}
 
 	@Test("Table columns are sized by their content")
 	func tableColumnsUseContentWidth() async throws {
@@ -385,6 +546,53 @@ struct RenderPDFTests {
 		}
 		#expect(pieces.count > 1)
 		#expect(pieces.joined() == token)
+	}
+
+	@Test("Overflow wrapping prefers punctuation break opportunities")
+	func overflowWrapPrefersPunctuationBreaks() async throws {
+		let tokens = [
+			String(repeating: "abcd-", count: 12) + "abcd",
+			"research/very/long/path/identifier-cannot-wrap-here.md"
+		]
+		for wrappingRule in ["", "overflow-wrap: anywhere;"] {
+			let css = ["p { margin: 0; \(wrappingRule) }"]
+			for token in tokens {
+				let root = try await layoutTree("<p>\(token)</p>", css: css, contentWidth: 100)
+				let paragraph = try #require(firstBlock(in: root) { $0.element?.localName == "p" })
+				let lines = paragraph.lines.map { $0.fragments.map(\.text).joined() }
+				#expect(lines.count > 1)
+				#expect(lines.dropLast().allSatisfy { $0.hasSuffix("-") || $0.hasSuffix("/") })
+				#expect(lines.joined() == token)
+			}
+		}
+	}
+
+	@Test("A punctuation segment fills the current line before wrapping")
+	func punctuationSegmentUsesRemainingLineWidth() async throws {
+		let style = ComputedStyle.initial
+		let font = FontBook().font(for: style)
+		let width = font.width(of: "prefix foo/", size: style.fontSize) + 0.1
+		let root = try await layoutTree("<p>prefix foo/bar</p>", css: ["body, p { margin: 0; }"], contentWidth: width)
+		let paragraph = try #require(firstBlock(in: root) { $0.element?.localName == "p" })
+		let lines = paragraph.lines.map { $0.fragments.map(\.text).joined() }
+		#expect(lines == ["prefixfoo/", "bar"])
+	}
+
+	@Test("Overflow wrapping accounts for first-line indentation")
+	func overflowWrapAccountsForIndentation() async throws {
+		let token = "abcdefghij"
+		for wrappingRule in ["overflow-wrap:anywhere", "word-break:break-all"] {
+			let root = try await layoutTree(
+				"<p style=\"margin:0;text-indent:60px;\(wrappingRule)\">\(token)</p>",
+				css: ["body { margin: 0; }"],
+				contentWidth: 100)
+			let paragraph = try #require(firstBlock(in: root) { $0.element?.localName == "p" })
+			#expect(paragraph.lines.count > 1)
+			#expect(paragraph.lines.flatMap(\.fragments).map(\.text).joined() == token)
+			for fragment in paragraph.lines.flatMap(\.fragments) {
+				#expect(fragment.x + fragment.width <= paragraph.x + paragraph.width + 0.001)
+			}
+		}
 	}
 
 	@Test("Table row groups continue across page boundaries and repeat headers")
@@ -947,5 +1155,42 @@ struct RenderPDFTests {
 		let url = URL(fileURLWithPath: "/tmp/swifttext_render_sample.pdf")
 		try data.write(to: url)
 		#expect(data.count > 0)
+	}
+}
+
+extension RenderPDFTests {
+	@Test("Checkbox inputs reserve space and paint distinct checked states")
+	func checkboxInputs() async throws {
+		let html = MarkdownToHTML.convert("- [ ] Open\n- [x] Done")
+		let checkboxCSS = """
+		li.task-list-item { list-style: none }
+		input[type="checkbox"] { margin-right: 0.4em }
+		"""
+		let root = try await layoutTree(
+			html,
+			css: [checkboxCSS],
+			contentWidth: 400)
+		let items = collectBlocks(in: root) { $0.element?.localName == "li" }
+		#expect(items.count == 2)
+		let firstFragment = try #require(items.first?.lines.first?.fragments.first)
+		let secondFragment = try #require(items.last?.lines.first?.fragments.first)
+		guard case .checkbox(let firstChecked, let firstSize, _) = firstFragment.inlineControl,
+		      case .checkbox(let secondChecked, _, _) = secondFragment.inlineControl else {
+			Issue.record("expected each line to start with a checkbox control")
+			return
+		}
+		#expect(firstChecked == false)
+		#expect(secondChecked == true)
+		#expect(firstSize == firstFragment.style.fontSize)
+		#expect(firstFragment.width > firstSize)
+
+		let data = try await HTMLRenderer.renderPDF(
+			html: html,
+			css: [checkboxCSS + "\ninput { color: #c00 }"],
+			options: RenderOptions(compressStreams: false))
+		let pdf = String(decoding: data, as: UTF8.self)
+		#expect(pdf.contains("0.8 0 0 RG"))
+		#expect(pdf.components(separatedBy: " re\nS\n").count - 1 == 2)
+		#expect(pdf.components(separatedBy: " l\n").count - 1 == 2)
 	}
 }

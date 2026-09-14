@@ -207,25 +207,31 @@ private struct HTMLRenderer: MarkupVisitor {
 	}
 
 	mutating func visitListItem(_ listItem: ListItem) {
+		let isTaskItem: Bool
 		switch listItem.checkbox {
 		case .checked:
-			let input = options.contains(.xhtml)
-				? #"<input type="checkbox" disabled="disabled" checked="checked" />"#
-				: #"<input type="checkbox" disabled checked>"#
+			isTaskItem = true
+			// Keep boolean attributes explicit in HTML as well as XHTML. The
+			// libxml SAX bridge otherwise omits a final valueless attribute, which
+			// would erase the checked state before SwiftTextRender sees the DOM.
+			let input = #"<input type="checkbox" disabled="disabled" checked="checked""# + voidClose
 			output += #"<li class="task-list-item">"# + input + " "
 		case .unchecked:
-			let input = options.contains(.xhtml)
-				? #"<input type="checkbox" disabled="disabled" />"#
-				: #"<input type="checkbox" disabled>"#
+			isTaskItem = true
+			let input = #"<input type="checkbox" disabled="disabled""# + voidClose
 			output += #"<li class="task-list-item">"# + input + " "
 		case .none:
+			isTaskItem = false
 			output += "<li>"
 		}
-		// If the only child is a single paragraph, unwrap it so output matches
-		// the existing renderer's `<li>foo</li>` shape rather than `<li><p>foo</p></li>`.
 		let blocks = Array(listItem.children)
-		if blocks.count == 1, let only = blocks.first as? Paragraph {
-			for child in only.children { visit(child) }
+		// Keep a task control and its label in the same inline run even when the
+		// item has later blocks, such as a nested list. Single-paragraph list
+		// items retain the existing unwrapped `<li>foo</li>` shape as well.
+		if let firstParagraph = blocks.first as? Paragraph,
+		   isTaskItem || blocks.count == 1 {
+			for child in firstParagraph.children { visit(child) }
+			for block in blocks.dropFirst() { visit(block) }
 		} else {
 			for child in blocks { visit(child) }
 		}

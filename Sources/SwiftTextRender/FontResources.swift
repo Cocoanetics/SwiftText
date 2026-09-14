@@ -84,20 +84,22 @@ public final class FontResourceBuilder {
 
 	private func buildType0Font(_ font: EmbeddedFont, glyphs: [Int: Unicode.Scalar]) -> PDFObject {
 		let scale = 1000.0 / font.unitsPerEm
-		let name = font.postScriptName
 
 		// TrueType (`glyf`) outlines embed as FontFile2 + CIDFontType2; CFF
 		// (PostScript) outlines as FontFile3 (Subtype OpenType) + CIDFontType0.
 		// Encoding a FontFile2 stream that is actually CFF produces invalid text.
 		let cff = font.hasCFFOutlines
-		let fontFile = PDFStream(stream: [font.data])
+		let subset = cff ? nil : try? font.otf.subsetTrueType(glyphs: glyphs)
+		let fontData = subset?.data ?? font.data
+		let name = subset == nil ? font.postScriptName : subsetName(for: font.postScriptName, glyphs: glyphs.keys)
+		let fontFile = PDFStream(stream: [fontData])
 		// Deflate the embedded font program. `/Length1` stays the *decoded* size,
 		// so it is still correct once the stream carries a `/FlateDecode` filter.
 		fontFile.compressed = compress
 		if cff {
 			fontFile.setExtra("Subtype", PDFName("OpenType"))
 		} else {
-			fontFile.setExtra("Length1", font.data.count)
+			fontFile.setExtra("Length1", fontData.count)
 		}
 		pdf.addObject(fontFile)
 
@@ -128,8 +130,9 @@ public final class FontResourceBuilder {
 			widths.elements.append(PDFArray([width]))
 		}
 
-		// CIDFontType0 (CFF) addresses glyphs by GID via Identity-H, so no
-		// CIDToGIDMap; CIDFontType2 (TrueType) needs the Identity map.
+		// CIDFontType0 (CFF) addresses glyphs by GID via Identity-H. A subset
+		// TrueType font has dense new GIDs, so map the original CIDs emitted into
+		// page streams to their corresponding subset GIDs.
 		var cidEntries: [(String, PDFValue)] = [
 			("Type", "/Font"),
 			("Subtype", cff ? "/CIDFontType0" : "/CIDFontType2"),
@@ -144,7 +147,13 @@ public final class FontResourceBuilder {
 			("W", widths)
 		]
 		if !cff {
-			cidEntries.insert(("CIDToGIDMap", "/Identity"), at: 5)
+			if let mapping = subset?.glyphMapping {
+				let cidToGID = buildCIDToGIDMap(mapping: mapping, usedGlyphs: glyphs.keys)
+				pdf.addObject(cidToGID)
+				cidEntries.insert(("CIDToGIDMap", cidToGID.reference), at: 5)
+			} else {
+				cidEntries.insert(("CIDToGIDMap", "/Identity"), at: 5)
+			}
 		}
 		let cidFont = PDFDictionary(cidEntries)
 		pdf.addObject(cidFont)
@@ -162,6 +171,35 @@ public final class FontResourceBuilder {
 		])
 		pdf.addObject(type0)
 		return type0
+	}
+
+	private func buildCIDToGIDMap(mapping: [Int: Int], usedGlyphs: Dictionary<Int, Unicode.Scalar>.Keys) -> PDFStream {
+		let maximumCID = usedGlyphs.max() ?? 0
+		var bytes = [UInt8](repeating: 0, count: (maximumCID + 1) * 2)
+		for cid in usedGlyphs {
+			guard let glyph = mapping[cid] else { continue }
+			bytes[cid * 2] = UInt8((glyph >> 8) & 0xFF)
+			bytes[cid * 2 + 1] = UInt8(glyph & 0xFF)
+		}
+		let stream = PDFStream(stream: [Data(bytes)])
+		stream.compressed = compress
+		return stream
+	}
+
+	private func subsetName(for postScriptName: String, glyphs: Dictionary<Int, Unicode.Scalar>.Keys) -> String {
+		var value: UInt32 = 2_166_136_261
+		for byte in postScriptName.utf8 {
+			value = (value ^ UInt32(byte)) &* 16_777_619
+		}
+		for glyph in glyphs.sorted() {
+			value = (value ^ UInt32(glyph)) &* 16_777_619
+		}
+		var prefix = ""
+		for _ in 0 ..< 6 {
+			prefix.append(Character(Unicode.Scalar(65 + value % 26)!))
+			value = value / 26 &+ 1
+		}
+		return prefix + "+" + postScriptName
 	}
 
 	private func buildToUnicode(glyphs: [Int: Unicode.Scalar]) -> PDFStream {

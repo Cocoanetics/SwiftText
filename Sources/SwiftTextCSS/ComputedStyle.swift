@@ -140,6 +140,22 @@ public enum BorderStyle: String, Equatable, Sendable {
 	}
 }
 
+/// Which CSS table border model is used.
+public enum BorderCollapse: String, Equatable, Sendable {
+	case separate, collapse
+}
+
+/// The horizontal and vertical distance between adjacent table-cell borders.
+public struct BorderSpacing: Equatable, Sendable {
+	public var horizontal: Double
+	public var vertical: Double
+
+	public init(horizontal: Double, vertical: Double) {
+		self.horizontal = horizontal
+		self.vertical = vertical
+	}
+}
+
 /// Line height: a multiplier of font-size, an absolute length, or `normal`.
 public enum LineHeight: Equatable, Sendable {
 	case normal
@@ -212,6 +228,10 @@ public struct ComputedStyle: Equatable, Sendable {
 	public var borderWidth: Edges<Double>
 	public var borderStyle: Edges<BorderStyle>
 	public var borderColor: Edges<RGBA>
+	/// The table border model (`border-collapse`; inherited by table descendants).
+	public var borderCollapse: BorderCollapse
+	/// Horizontal and vertical table-cell spacing (`border-spacing`; inherited).
+	public var borderSpacing: BorderSpacing
 	public var width: Length
 	/// The maximum content width, or `nil` for the initial `none` value.
 	public var maxWidth: Length?
@@ -260,6 +280,8 @@ public struct ComputedStyle: Equatable, Sendable {
 		borderWidth: Edges(0),
 		borderStyle: Edges(.none),
 		borderColor: Edges(RGBA(0, 0, 0, 1)),
+		borderCollapse: .separate,
+		borderSpacing: BorderSpacing(horizontal: 0, vertical: 0),
 		width: .auto,
 		maxWidth: nil,
 		height: .auto,
@@ -290,6 +312,8 @@ public struct ComputedStyle: Equatable, Sendable {
 		style.listStyleType = parent.listStyleType
 		style.textIndent = parent.textIndent
 		style.direction = parent.direction
+		style.borderCollapse = parent.borderCollapse
+		style.borderSpacing = parent.borderSpacing
 		// Initial border color is `currentColor`, i.e. the (inherited) color.
 		style.borderColor = Edges(parent.color)
 		return style

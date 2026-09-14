@@ -119,7 +119,11 @@ public final class Painter {
 			} else if block.establishesInlineContext {
 				for line in block.lines where lineOnThisPage(line.y) {
 					for fragment in line.fragments {
-						paintText(fragment)
+						if let control = fragment.inlineControl {
+							paintInlineControl(control, fragment: fragment)
+						} else {
+							paintText(fragment)
+						}
 					}
 				}
 			} else {
@@ -129,6 +133,38 @@ public final class Painter {
 			}
 		}
 		// Inline and text boxes are painted through their block's line fragments.
+	}
+
+	// MARK: - Inline controls
+
+	private func paintInlineControl(_ control: TextFragment.InlineControl, fragment: TextFragment) {
+		switch control {
+		case .checkbox(let isChecked, let size, let leadingMargin):
+			let x = fragment.x + leadingMargin
+			let lineHeight = fragment.style.resolvedLineHeight()
+			let top = fragment.y + max(0, (lineHeight - size) / 2)
+			let bottom = geometry.pageHeightPx - pageY(top) - size
+			let color = fragment.style.color
+			let outlineWidth = max(1, size / 16)
+
+			stream.pushState()
+			stream.setColorRGB(color.red, color.green, color.blue, stroke: true)
+			stream.setLineWidth(outlineWidth)
+			let inset = outlineWidth / 2
+			stream.rectangle(x + inset, bottom + inset, size - outlineWidth, size - outlineWidth)
+			stream.stroke()
+
+			if isChecked {
+				stream.setLineWidth(max(1.5, size / 9))
+				stream.setLineCap(1)
+				stream.setLineJoin(1)
+				stream.moveTo(x + size * 0.20, bottom + size * 0.52)
+				stream.lineTo(x + size * 0.42, bottom + size * 0.28)
+				stream.lineTo(x + size * 0.82, bottom + size * 0.74)
+				stream.stroke()
+			}
+			stream.popState()
+		}
 	}
 
 	/// Paint a table header group at the top of a continuation page. Its original
@@ -157,6 +193,13 @@ public final class Painter {
 		let border = box.usedBorder
 		guard border.top > 0 || border.right > 0 || border.bottom > 0 || border.left > 0 else { return }
 		let style = box.style
+		let colors = box.resolvedCollapsedBorders.map {
+			Edges(
+				top: $0.top?.color ?? style.borderColor.top,
+				right: $0.right?.color ?? style.borderColor.right,
+				bottom: $0.bottom?.color ?? style.borderColor.bottom,
+				left: $0.left?.color ?? style.borderColor.left)
+		} ?? style.borderColor
 		let bottomY = yUp(columnTop: box.y, height: box.height)
 
 		func fillEdge(_ x: Double, _ y: Double, _ w: Double, _ h: Double, _ color: RGBA) {
@@ -168,16 +211,16 @@ public final class Painter {
 
 		stream.pushState()
 		if border.top > 0 {
-			fillEdge(box.x, bottomY + box.height - border.top, box.width, border.top, style.borderColor.top)
+			fillEdge(box.x, bottomY + box.height - border.top, box.width, border.top, colors.top)
 		}
 		if border.bottom > 0 {
-			fillEdge(box.x, bottomY, box.width, border.bottom, style.borderColor.bottom)
+			fillEdge(box.x, bottomY, box.width, border.bottom, colors.bottom)
 		}
 		if border.left > 0 {
-			fillEdge(box.x, bottomY, border.left, box.height, style.borderColor.left)
+			fillEdge(box.x, bottomY, border.left, box.height, colors.left)
 		}
 		if border.right > 0 {
-			fillEdge(box.x + box.width - border.right, bottomY, border.right, box.height, style.borderColor.right)
+			fillEdge(box.x + box.width - border.right, bottomY, border.right, box.height, colors.right)
 		}
 		stream.popState()
 	}

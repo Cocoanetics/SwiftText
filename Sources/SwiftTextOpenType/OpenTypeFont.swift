@@ -45,9 +45,10 @@ public struct OpenTypeFont {
 	/// (FontFile3/CIDFontType0 vs FontFile2/CIDFontType2).
 	public let hasCFFOutlines: Bool
 
-	private let fonts: FontBytes
-	private let hmtxOffset: Int
-	private let numberOfHMetrics: Int
+	let fonts: FontBytes
+	let tables: [String: (offset: Int, length: Int)]
+	let hmtxOffset: Int
+	let numberOfHMetrics: Int
 	private let cmap: CmapSubtable?
 
 	/// Parse a font from raw bytes.
@@ -89,6 +90,7 @@ public struct OpenTypeFont {
 			let length = try fonts.u32(record + 12)
 			tables[tag] = (offset, length)
 		}
+		self.tables = tables
 
 		func require(_ tag: String) throws -> Int {
 			guard let table = tables[tag] else { throw OpenTypeError.missingTable(tag) }

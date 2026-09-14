@@ -11,9 +11,49 @@
 
 import Foundation
 import SwiftTextCSS
+#if canImport(Darwin)
+import CoreFoundation
+#endif
 
 public final class LayoutEngine {
 	private let fonts: FontBook
+
+	private func preferredLineBreakOffsets(in word: String) -> Set<Int> {
+		#if canImport(Darwin)
+		let string = word as CFString
+		let length = CFStringGetLength(string)
+		let tokenizer = CFStringTokenizerCreate(nil, string, CFRange(location: 0, length: length),
+		                                        kCFStringTokenizerUnitLineBreak, nil)
+		var offsets = Set<Int>()
+		while CFStringTokenizerAdvanceToNextToken(tokenizer).rawValue != 0 {
+			let range = CFStringTokenizerGetCurrentTokenRange(tokenizer)
+			let offset = range.location + range.length
+			if offset < length { offsets.insert(offset) }
+		}
+		return offsets
+		#else
+		// Core Foundation's line-break tokenizer is Darwin-only. Keep the
+		// portable engines consistent for the common UAX #14 HY/SY cases.
+		let breakAfter: Set<UInt32> = [
+			0x002D, // HYPHEN-MINUS (HY)
+			0x002F, // SOLIDUS (SY)
+			0x058A, 0x05BE, 0x1400, 0x2010, 0x2012, 0x2013, 0x2014, 0x2E17, 0x2E40
+		]
+		let length = word.utf16.count
+		var utf16Offset = 0
+		var offsets = Set<Int>()
+		for character in word {
+			utf16Offset += character.utf16.count
+			if utf16Offset < length,
+			   character.unicodeScalars.count == 1,
+			   let scalar = character.unicodeScalars.first,
+			   breakAfter.contains(scalar.value) {
+				offsets.insert(utf16Offset)
+			}
+		}
+		return offsets
+		#endif
+	}
 
 	public init(fonts: FontBook) {
 		self.fonts = fonts
@@ -35,6 +75,9 @@ public final class LayoutEngine {
 	private func layoutBlock(_ box: BlockBox, containingWidth: Double, marginX: Double, borderBoxTop: Double) -> Double {
 		let style = box.style
 		let basis = containingWidth
+		if style.display == .table {
+			resolveCollapsedBorders(in: box)
+		}
 
 		let marginLeft = style.margin.left.resolved(percentageBasis: basis) ?? 0
 
@@ -146,42 +189,260 @@ public final class LayoutEngine {
 		let rowspan: Int
 	}
 
-	/// Lay out a `display: table` box as a content-sized column grid, honoring
-	/// colspan and rowspan.
-	private func layoutTable(_ table: BlockBox, contentWidth: Double, contentX: Double, contentTop: Double) -> Double {
-		let rows = collectTableRows(table)
-		guard !rows.isEmpty else { return 0 }
-		let spacing = 2.0 // border-spacing (UA default)
+	private struct TableRow {
+		let box: BlockBox
+		let cells: [BlockBox]
+		let groups: [BlockBox]
+	}
 
-		// Place cells into a grid, marking spanned slots as occupied.
+	private enum BorderSide {
+		case top, right, bottom, left
+	}
+
+	private enum BorderSource: Int {
+		case table
+		case rowGroup
+		case row
+		case cell
+	}
+
+	private struct BorderCandidate {
+		let border: CollapsedBorder
+		let source: BorderSource
+		let box: BlockBox
+		let side: BorderSide
+	}
+
+	private struct TableGrid {
+		let rows: [TableRow]
+		let placements: [CellPlacement]
+		let slots: [Int: CellPlacement]
+		let columnCount: Int
+	}
+
+	private func borderCandidate(_ box: BlockBox, side: BorderSide, source: BorderSource) -> BorderCandidate {
+		let width: Double
+		let style: BorderStyle
+		let color: RGBA
+		switch side {
+		case .top:
+			width = box.style.borderWidth.top
+			style = box.style.borderStyle.top
+			color = box.style.borderColor.top
+		case .right:
+			width = box.style.borderWidth.right
+			style = box.style.borderStyle.right
+			color = box.style.borderColor.right
+		case .bottom:
+			width = box.style.borderWidth.bottom
+			style = box.style.borderStyle.bottom
+			color = box.style.borderColor.bottom
+		case .left:
+			width = box.style.borderWidth.left
+			style = box.style.borderStyle.left
+			color = box.style.borderColor.left
+		}
+		return BorderCandidate(border: CollapsedBorder(width: width, style: style, color: color),
+		                       source: source, box: box, side: side)
+	}
+
+	private func winningBorder(_ candidates: [BorderCandidate]) -> BorderCandidate? {
+		func styleRank(_ style: BorderStyle) -> Int {
+			switch style {
+			case .none: return 0
+			case .inset: return 1
+			case .groove: return 2
+			case .outset: return 3
+			case .ridge: return 4
+			case .dotted: return 5
+			case .dashed: return 6
+			case .solid: return 7
+			case .double: return 8
+			case .hidden: return 9
+			}
+		}
+
+		func outranks(_ candidate: BorderCandidate, _ winner: BorderCandidate) -> Bool {
+			let candidateHidden = candidate.border.style == .hidden
+			let winnerHidden = winner.border.style == .hidden
+			if candidateHidden != winnerHidden { return candidateHidden }
+			let candidateVisible = candidate.border.style != .none && candidate.border.width > 0
+			let winnerVisible = winner.border.style != .none && winner.border.width > 0
+			if candidateVisible != winnerVisible { return candidateVisible }
+			if candidate.border.width != winner.border.width {
+				return candidate.border.width > winner.border.width
+			}
+			let candidateStyle = styleRank(candidate.border.style)
+			let winnerStyle = styleRank(winner.border.style)
+			if candidateStyle != winnerStyle { return candidateStyle > winnerStyle }
+			return candidate.source.rawValue > winner.source.rawValue
+		}
+
+		guard var winner = candidates.first else { return nil }
+		for candidate in candidates.dropFirst() where outranks(candidate, winner) {
+			winner = candidate
+		}
+		return winner
+	}
+
+	private func setResolvedBorder(_ border: CollapsedBorder, on box: BlockBox, side: BorderSide) {
+		guard border.style != .hidden, border.style != .none, border.width > 0 else { return }
+		guard var resolved = box.resolvedCollapsedBorders else { return }
+		func stronger(_ existing: CollapsedBorder?) -> CollapsedBorder {
+			guard let existing else { return border }
+			let old = BorderCandidate(border: existing, source: .cell, box: box, side: side)
+			let new = BorderCandidate(border: border, source: .cell, box: box, side: side)
+			return winningBorder([old, new])?.border ?? existing
+		}
+		switch side {
+		case .top: resolved.top = stronger(resolved.top)
+		case .right: resolved.right = stronger(resolved.right)
+		case .bottom: resolved.bottom = stronger(resolved.bottom)
+		case .left: resolved.left = stronger(resolved.left)
+		}
+		box.resolvedCollapsedBorders = resolved
+	}
+
+	private func resolveCollapsedBorders(in table: BlockBox) {
+		guard table.style.borderCollapse == .collapse else { return }
+		let grid = tableGrid(for: table)
+		guard !grid.rows.isEmpty, grid.columnCount > 0 else { return }
+
+		var boxes: [BlockBox] = [table]
+		for row in grid.rows {
+			boxes.append(row.box)
+			boxes.append(contentsOf: row.groups)
+			boxes.append(contentsOf: row.cells)
+		}
+		var seen = Set<ObjectIdentifier>()
+		for box in boxes where seen.insert(ObjectIdentifier(box)).inserted {
+			box.resolvedCollapsedBorders = Edges(nil)
+		}
+
+		func slot(_ row: Int, _ column: Int) -> CellPlacement? {
+			grid.slots[row * 4096 + column]
+		}
+		func sameCell(_ lhs: CellPlacement?, _ rhs: CellPlacement?) -> Bool {
+			guard let lhs, let rhs else { return false }
+			return lhs.cell === rhs.cell
+		}
+		func contains(_ groups: [BlockBox], _ group: BlockBox) -> Bool {
+			groups.contains { $0 === group }
+		}
+
+		// Resolve one vertical segment per row and column boundary. Cell borders
+		// compete on interior edges; row, row-group, and table sides join the
+		// candidates at the outside of the grid.
+		for rowIndex in grid.rows.indices {
+			let row = grid.rows[rowIndex]
+			for column in 0 ... grid.columnCount {
+				let left = column > 0 ? slot(rowIndex, column - 1) : nil
+				let right = column < grid.columnCount ? slot(rowIndex, column) : nil
+				if sameCell(left, right) { continue }
+				var candidates: [BorderCandidate] = []
+				if let left { candidates.append(borderCandidate(left.cell, side: .right, source: .cell)) }
+				if let right { candidates.append(borderCandidate(right.cell, side: .left, source: .cell)) }
+				if column == 0 {
+					candidates.append(borderCandidate(row.box, side: .left, source: .row))
+					candidates.append(contentsOf: row.groups.map { borderCandidate($0, side: .left, source: .rowGroup) })
+					candidates.append(borderCandidate(table, side: .left, source: .table))
+				} else if column == grid.columnCount {
+					candidates.append(borderCandidate(row.box, side: .right, source: .row))
+					candidates.append(contentsOf: row.groups.map { borderCandidate($0, side: .right, source: .rowGroup) })
+					candidates.append(borderCandidate(table, side: .right, source: .table))
+				}
+				guard let winner = winningBorder(candidates) else { continue }
+				let owner = winner.source == .cell ? winner
+					: left.map { borderCandidate($0.cell, side: .right, source: .cell) }
+						?? right.map { borderCandidate($0.cell, side: .left, source: .cell) }
+				if let owner { setResolvedBorder(winner.border, on: owner.box, side: owner.side) }
+			}
+		}
+
+		// Resolve horizontal segments between rows. A row-group side participates
+		// only where the adjoining row falls outside that group.
+		for rowBoundary in 0 ... grid.rows.count {
+			let upperRow = rowBoundary > 0 ? grid.rows[rowBoundary - 1] : nil
+			let lowerRow = rowBoundary < grid.rows.count ? grid.rows[rowBoundary] : nil
+			for column in 0 ..< grid.columnCount {
+				let upper = rowBoundary > 0 ? slot(rowBoundary - 1, column) : nil
+				let lower = rowBoundary < grid.rows.count ? slot(rowBoundary, column) : nil
+				if sameCell(upper, lower) { continue }
+				var candidates: [BorderCandidate] = []
+				if let upper { candidates.append(borderCandidate(upper.cell, side: .bottom, source: .cell)) }
+				if let lower { candidates.append(borderCandidate(lower.cell, side: .top, source: .cell)) }
+				if let upperRow { candidates.append(borderCandidate(upperRow.box, side: .bottom, source: .row)) }
+				if let lowerRow { candidates.append(borderCandidate(lowerRow.box, side: .top, source: .row)) }
+				if let upperRow {
+					for group in upperRow.groups where lowerRow.map({ !contains($0.groups, group) }) ?? true {
+						candidates.append(borderCandidate(group, side: .bottom, source: .rowGroup))
+					}
+				}
+				if let lowerRow {
+					for group in lowerRow.groups where upperRow.map({ !contains($0.groups, group) }) ?? true {
+						candidates.append(borderCandidate(group, side: .top, source: .rowGroup))
+					}
+				}
+				if rowBoundary == 0 {
+					candidates.append(borderCandidate(table, side: .top, source: .table))
+				} else if rowBoundary == grid.rows.count {
+					candidates.append(borderCandidate(table, side: .bottom, source: .table))
+				}
+				guard let winner = winningBorder(candidates) else { continue }
+				let owner = winner.source == .cell ? winner
+					: upper.map { borderCandidate($0.cell, side: .bottom, source: .cell) }
+						?? lower.map { borderCandidate($0.cell, side: .top, source: .cell) }
+				if let owner { setResolvedBorder(winner.border, on: owner.box, side: owner.side) }
+			}
+		}
+	}
+
+	private func tableGrid(for table: BlockBox) -> TableGrid {
+		let rows = collectTableRows(table)
 		var placements: [CellPlacement] = []
-		var occupied = Set<Int>()
+		var slots: [Int: CellPlacement] = [:]
 		func slot(_ row: Int, _ column: Int) -> Int { row * 4096 + column }
 		for (rowIndex, row) in rows.enumerated() {
 			var column = 0
 			for cell in row.cells {
-				while occupied.contains(slot(rowIndex, column)) { column += 1 }
+				while slots[slot(rowIndex, column)] != nil { column += 1 }
 				let colspan = spanAttribute(cell, "colspan")
 				let rowspan = spanAttribute(cell, "rowspan")
-				placements.append(CellPlacement(cell: cell, row: rowIndex, column: column, colspan: colspan, rowspan: rowspan))
+				let placement = CellPlacement(cell: cell, row: rowIndex, column: column,
+				                              colspan: colspan, rowspan: rowspan)
+				placements.append(placement)
 				for r in rowIndex ..< rowIndex + rowspan {
-					for c in column ..< column + colspan { occupied.insert(slot(r, c)) }
+					for c in column ..< column + colspan { slots[slot(r, c)] = placement }
 				}
 				column += colspan
 			}
 		}
+		return TableGrid(rows: rows, placements: placements, slots: slots,
+		                 columnCount: placements.map { $0.column + $0.colspan }.max() ?? 0)
+	}
 
-		let columnCount = placements.map { $0.column + $0.colspan }.max() ?? 0
+	/// Lay out a `display: table` box as a content-sized column grid, honoring
+	/// colspan and rowspan.
+	private func layoutTable(_ table: BlockBox, contentWidth: Double, contentX: Double, contentTop: Double) -> Double {
+		let grid = tableGrid(for: table)
+		let rows = grid.rows
+		guard !rows.isEmpty else { return 0 }
+		let collapsed = table.style.borderCollapse == .collapse
+		let horizontalSpacing = collapsed ? 0 : table.style.borderSpacing.horizontal
+		let verticalSpacing = collapsed ? 0 : table.style.borderSpacing.vertical
+
+		let placements = grid.placements
+		let columnCount = grid.columnCount
 		guard columnCount > 0 else { return 0 }
 		let columnWidths = tableColumnWidths(placements, columnCount: columnCount,
-		                                    availableWidth: max(0, contentWidth - Double(columnCount + 1) * spacing),
-		                                    spacing: spacing)
+		                                    availableWidth: max(0, contentWidth - Double(columnCount + 1) * horizontalSpacing),
+		                                    spacing: horizontalSpacing)
 		func columnX(_ column: Int) -> Double {
-			contentX + spacing + columnWidths[..<column].reduce(0, +) + Double(column) * spacing
+			contentX + horizontalSpacing + columnWidths[..<column].reduce(0, +) + Double(column) * horizontalSpacing
 		}
 		func spanWidth(_ column: Int, _ colspan: Int) -> Double {
 			columnWidths[column ..< min(column + colspan, columnCount)].reduce(0, +)
-				+ Double(colspan - 1) * spacing
+				+ Double(colspan - 1) * horizontalSpacing
 		}
 
 		// Pass 1: measure each cell's height at its column width.
@@ -204,7 +465,7 @@ public final class LayoutEngine {
 			let lastRow = min(placement.row + placement.rowspan - 1, rows.count - 1)
 			let spannedRows = placement.row ... lastRow
 			let currentHeight = spannedRows.reduce(0.0) { $0 + rowHeights[$1] }
-				+ Double(lastRow - placement.row) * spacing
+				+ Double(lastRow - placement.row) * verticalSpacing
 			let deficit = (measured[ObjectIdentifier(placement.cell)] ?? 0) - currentHeight
 			if deficit > 0 {
 				let share = deficit / Double(spannedRows.count)
@@ -212,10 +473,10 @@ public final class LayoutEngine {
 			}
 		}
 		var rowTops = [Double](repeating: 0, count: rows.count)
-		var y = contentTop + spacing
+		var y = contentTop + verticalSpacing
 		for index in rows.indices {
 			rowTops[index] = y
-			y += rowHeights[index] + spacing
+			y += rowHeights[index] + verticalSpacing
 		}
 
 		// Pass 2: re-lay out each cell at its final position, stretch to its row(s),
@@ -227,7 +488,7 @@ public final class LayoutEngine {
 			let lastRow = min(placement.row + placement.rowspan - 1, rows.count - 1)
 			var stretched = 0.0
 			for r in placement.row ... lastRow { stretched += rowHeights[r] }
-			stretched += Double(lastRow - placement.row) * spacing
+			stretched += Double(lastRow - placement.row) * verticalSpacing
 			stretched = max(stretched, naturalHeight)
 			placement.cell.height = stretched
 
@@ -254,7 +515,7 @@ public final class LayoutEngine {
 		// a <thead>/<tbody>/<tfoot> at its zero-sized default makes it intersect only
 		// the first page and silently drops all of its later rows.
 		let bounds = sizeTableRowGroups(in: table, contentX: contentX, contentWidth: contentWidth)
-		return max(y, (bounds?.bottom ?? contentTop) + spacing) - contentTop
+		return max(y, (bounds?.bottom ?? contentTop) + verticalSpacing) - contentTop
 	}
 
 	/// Approximate CSS automatic table layout with each cell's max-content width.
@@ -325,6 +586,15 @@ public final class LayoutEngine {
 				maximum = max(maximum, lineWidth)
 				lineWidth = 0
 				hasContent = false
+				pendingSpace = nil
+			case .checkbox(_, let style):
+				if hasContent, let space = pendingSpace {
+					lineWidth += fonts.font(for: space).width(of: " ", size: space.fontSize) + space.wordSpacing
+				}
+				lineWidth += (style.margin.left.resolved(percentageBasis: 0) ?? 0)
+					+ style.fontSize
+					+ (style.margin.right.resolved(percentageBasis: 0) ?? 0)
+				hasContent = true
 				pendingSpace = nil
 			case .word(let word, let style, _):
 				if hasContent, let space = pendingSpace {
@@ -404,9 +674,9 @@ public final class LayoutEngine {
 	}
 
 	/// Collect table rows (and their cells), descending through row groups.
-	private func collectTableRows(_ table: BlockBox) -> [(box: BlockBox, cells: [BlockBox])] {
-		var rows: [(box: BlockBox, cells: [BlockBox])] = []
-		func walk(_ box: BlockBox) {
+	private func collectTableRows(_ table: BlockBox) -> [TableRow] {
+		var rows: [TableRow] = []
+		func walk(_ box: BlockBox, groups: [BlockBox]) {
 			for child in box.children {
 				guard let block = child as? BlockBox else { continue }
 				switch block.style.display {
@@ -415,15 +685,17 @@ public final class LayoutEngine {
 						guard let cell = child as? BlockBox, cell.style.display == .tableCell else { return nil }
 						return cell
 					}
-					rows.append((block, cells))
+					rows.append(TableRow(box: block, cells: cells, groups: groups))
 				case .tableRowGroup, .tableHeaderGroup, .tableFooterGroup:
-					walk(block)
+					walk(block, groups: groups + [block])
+				case .table:
+					continue
 				default:
-					walk(block)
+					walk(block, groups: groups)
 				}
 			}
 		}
-		walk(table)
+		walk(table, groups: [])
 		return rows
 	}
 
@@ -431,6 +703,7 @@ public final class LayoutEngine {
 
 	private enum InlineToken {
 		case word(String, ComputedStyle, href: String?)
+		case checkbox(isChecked: Bool, style: ComputedStyle)
 		case space(ComputedStyle)
 		case forcedBreak(ComputedStyle)
 	}
@@ -450,6 +723,7 @@ public final class LayoutEngine {
 			tokenScalarStart.append(bidiScalars.count)
 			switch token {
 			case .word(let word, _, _): bidiScalars.append(contentsOf: word.unicodeScalars)
+			case .checkbox: bidiScalars.append("\u{FFFC}")
 			case .space: bidiScalars.append(" ")
 			case .forcedBreak: bidiScalars.append("\n")
 			}
@@ -581,6 +855,26 @@ public final class LayoutEngine {
 					lineTop += height
 				}
 				pendingSpace = nil
+			case .checkbox(let isChecked, let style):
+				let leadingMargin = style.margin.left.resolved(percentageBasis: contentWidth) ?? 0
+				let trailingMargin = style.margin.right.resolved(percentageBasis: contentWidth) ?? 0
+				let size = style.fontSize
+				let width = leadingMargin + size + trailingMargin
+				let precedingSpaceWidth = pendingSpace.map(spaceWidth) ?? 0
+				if style.whiteSpace.wraps, penX + precedingSpaceWidth + width > contentWidth, !fragments.isEmpty {
+					finishLine(isLast: false)
+				} else {
+					penX += precedingSpaceWidth
+					pendingSpace = nil
+				}
+
+				var fragment = TextFragment(
+					text: "", style: style, x: penX, y: 0, width: width, baseline: 0,
+					bidiLevel: wordLevel(tokenIndex), font: fonts.font(for: style))
+				fragment.inlineControl = .checkbox(
+					isChecked: isChecked, size: size, leadingMargin: leadingMargin)
+				fragments.append(fragment)
+				penX += width
 			case .word(let rawWord, let style, let href):
 				// Split the word into runs that share one font (font fallback), then
 				// shape each Arabic run into presentation forms. Shaping stays in
@@ -604,6 +898,17 @@ public final class LayoutEngine {
 				let level = wordLevel(tokenIndex)
 				func append(_ pieces: [Piece]) {
 					for piece in pieces {
+						if let last = fragments.indices.last,
+						   fragments[last].font?.key == piece.font.key,
+						   fragments[last].style == style,
+						   fragments[last].href == href,
+						   fragments[last].bidiLevel == level,
+						   abs(fragments[last].x + fragments[last].width - penX) < 0.001 {
+							fragments[last].text += piece.text
+							fragments[last].width += piece.width
+							penX += piece.width
+							continue
+						}
 						let fragment = TextFragment(text: piece.text, style: style, x: penX, y: 0,
 						                            width: piece.width, baseline: 0, href: href,
 						                            bidiLevel: level, font: piece.font)
@@ -611,13 +916,29 @@ public final class LayoutEngine {
 						penX += piece.width
 					}
 				}
-				func appendWithBreaks(_ pieces: [Piece]) {
+				func gap(_ spaceStyle: ComputedStyle) -> Double {
+					// word-spacing adds to each inter-word space.
+					fonts.font(for: spaceStyle).width(of: " ", size: spaceStyle.fontSize) + spaceStyle.wordSpacing
+				}
+				func appendWithBreaks(_ pieces: [Piece], preferringSoftBreaks: Bool, breakingAnywhere: Bool) {
 					let units = pieces.flatMap { piece in
 						piece.text.map { character in
 							let text = String(character)
 							let width = piece.font.width(of: text, size: style.fontSize)
 								+ style.letterSpacing * Double(text.unicodeScalars.count)
 							return Piece(text: text, font: piece.font, width: width)
+						}
+					}
+					var preferredBreaks = Set<Int>()
+					if preferringSoftBreaks {
+						let word = pieces.map(\.text).joined()
+						let utf16BreakOffsets = preferredLineBreakOffsets(in: word)
+						var utf16Offset = 0
+						for (offset, unit) in units.enumerated() {
+							utf16Offset += unit.text.utf16.count
+							if utf16BreakOffsets.contains(utf16Offset) {
+								preferredBreaks.insert(offset + 1)
+							}
 						}
 					}
 					var chunkText = ""
@@ -630,24 +951,42 @@ public final class LayoutEngine {
 						chunkWidth = 0
 						chunkFont = nil
 					}
-					for unit in units {
-						if penX + chunkWidth + unit.width > contentWidth,
-						   !chunkText.isEmpty || !fragments.isEmpty {
-							flushChunk()
+					func appendUnits(_ units: ArraySlice<Piece>, breakingAnywhere: Bool) {
+						for unit in units {
+							if breakingAnywhere,
+							   penX + chunkWidth + unit.width > contentWidth,
+							   !chunkText.isEmpty || !fragments.isEmpty {
+								flushChunk()
+								finishLine(isLast: false)
+							}
+							if let font = chunkFont, font.key != unit.font.key {
+								flushChunk()
+							}
+							chunkFont = unit.font
+							chunkText += unit.text
+							chunkWidth += unit.width
+						}
+						flushChunk()
+					}
+					var segmentStart = 0
+					for segmentEnd in preferredBreaks.sorted() + [units.count] {
+						let segment = units[segmentStart ..< segmentEnd]
+						let segmentWidth = segment.reduce(0) { $0 + $1.width }
+						if segmentStart == 0, !fragments.isEmpty, let space = pendingSpace {
+							let width = gap(space)
+							if penX + width + segmentWidth > contentWidth {
+								finishLine(isLast: false)
+							} else {
+								penX += width
+								pendingSpace = nil
+							}
+						}
+						if penX + segmentWidth > contentWidth, !fragments.isEmpty {
 							finishLine(isLast: false)
 						}
-						if let font = chunkFont, font.key != unit.font.key {
-							flushChunk()
-						}
-						chunkFont = unit.font
-						chunkText += unit.text
-						chunkWidth += unit.width
+						appendUnits(segment, breakingAnywhere: breakingAnywhere)
+						segmentStart = segmentEnd
 					}
-					flushChunk()
-				}
-				func gap(_ spaceStyle: ComputedStyle) -> Double {
-					// word-spacing adds to each inter-word space.
-					fonts.font(for: spaceStyle).width(of: " ", size: spaceStyle.fontSize) + spaceStyle.wordSpacing
 				}
 				let spaceWidth = pendingSpace.map(gap) ?? 0
 
@@ -664,21 +1003,19 @@ public final class LayoutEngine {
 						}
 					}
 					if penX + wordWidth > contentWidth {
-						appendWithBreaks(pieces)
+						appendWithBreaks(pieces, preferringSoftBreaks: false, breakingAnywhere: true)
 					} else {
 						append(pieces)
 					}
 				} else {
-					if wraps && !fragments.isEmpty && penX + spaceWidth + wordWidth > contentWidth {
-						finishLine(isLast: false)
-					} else if !fragments.isEmpty, let space = pendingSpace {
-						penX += gap(space)
-						pendingSpace = nil
-					}
-					if wraps && breaksAnywhere && penX + wordWidth > contentWidth {
-						appendWithBreaks(pieces)
-					} else {
+					if !wraps || penX + spaceWidth + wordWidth <= contentWidth {
+						if !fragments.isEmpty, let space = pendingSpace {
+							penX += gap(space)
+							pendingSpace = nil
+						}
 						append(pieces)
+					} else {
+						appendWithBreaks(pieces, preferringSoftBreaks: true, breakingAnywhere: breaksAnywhere)
 					}
 				}
 			}
@@ -729,6 +1066,15 @@ public final class LayoutEngine {
 			// A <br> forces a line break.
 			if inline.element?.localName == "br" {
 				tokens.append(.forcedBreak(inline.style))
+				return
+			}
+			// Checkboxes are replaced inline content: reserve a one-em square and
+			// paint it directly rather than relying on a font's symbol coverage.
+			if inline.element?.localName == "input",
+			   inline.element?.attributeValue("type")?.lowercased() == "checkbox" {
+				tokens.append(.checkbox(
+					isChecked: inline.element?.attributeValue("checked") != nil,
+					style: inline.style))
 				return
 			}
 			// An <a href> establishes a link for its descendant text.
