@@ -590,7 +590,7 @@ public final class LayoutEngine {
 			contentWidth = box.style.width.resolved(percentageBasis: 0) ?? Double(image.width)
 		} else if box.establishesInlineContext {
 			var tokens: [InlineToken] = []
-			for child in box.children { collectInline(child, into: &tokens, href: nil) }
+			for child in box.children { collectInline(child, into: &tokens, href: nil, decorations: TextDecorationRuns()) }
 			contentWidth = minContentWidth(of: tokens, textIndent: box.style.textIndent)
 		} else {
 			contentWidth = box.children.compactMap { $0 as? BlockBox }.map(minContentWidth(of:)).max() ?? 0
@@ -636,7 +636,7 @@ public final class LayoutEngine {
 				runWidth += (style.margin.left.resolved(percentageBasis: 0) ?? 0)
 					+ style.fontSize
 					+ (style.margin.right.resolved(percentageBasis: 0) ?? 0)
-			case .word(let word, let style, _):
+			case .word(let word, let style, _, _):
 				prepareContent(wrapping: style.whiteSpace.wraps)
 				beginContent()
 				for (index, width) in minContentSegments(of: word, style: style).enumerated() {
