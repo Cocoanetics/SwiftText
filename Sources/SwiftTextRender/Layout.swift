@@ -507,39 +507,7 @@ public final class LayoutEngine {
 
 		let widths = intrinsicWidths(measuring: maxContentWidth(of:))
 		let minimums = intrinsicWidths(measuring: minContentWidth(of:))
-
-		let preferredWidth = widths.reduce(0, +)
-		guard preferredWidth > 0 else {
-			return [Double](repeating: availableWidth / Double(columnCount), count: columnCount)
-		}
-		guard preferredWidth > availableWidth else { return widths }
-
-		let minimumWidth = minimums.reduce(0, +)
-		guard minimumWidth < availableWidth else {
-			guard minimumWidth > 0 else { return widths }
-			let scale = availableWidth / minimumWidth
-			return minimums.map { $0 * scale }
-		}
-
-		var result = widths
-		var flexible = Set(widths.indices)
-		var fixedWidth = 0.0
-		while !flexible.isEmpty {
-			let preferredFlexibleWidth = flexible.reduce(0.0) { $0 + widths[$1] }
-			guard preferredFlexibleWidth > 0 else { break }
-			let scale = (availableWidth - fixedWidth) / preferredFlexibleWidth
-			let belowMinimum = flexible.filter { widths[$0] * scale < minimums[$0] }
-			if belowMinimum.isEmpty {
-				for column in flexible { result[column] = widths[column] * scale }
-				break
-			}
-			for column in belowMinimum {
-				result[column] = minimums[column]
-				fixedWidth += minimums[column]
-				flexible.remove(column)
-			}
-		}
-		return result
+		return TableColumnWidths.fit(preferred: widths, minimum: minimums, to: availableWidth)
 	}
 
 	/// The border-box width a block needs when none of its inline content wraps.
