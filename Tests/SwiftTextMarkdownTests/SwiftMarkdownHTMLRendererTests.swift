@@ -148,6 +148,13 @@ struct SwiftMarkdownHTMLRendererTests {
 		#expect(html.contains(#"<li class="task-list-item"><input type="checkbox" disabled="disabled" checked="checked"> Done</li>"#))
 	}
 
+	@Test func taskListCheckboxStaysWithLabelBeforeNestedList() {
+		let html = SwiftMarkdownHTMLRenderer.convert("- [ ] Parent\n  - Child")
+
+		#expect(html.contains(#"<input type="checkbox" disabled="disabled"> Parent<ul>"#))
+		#expect(!html.contains("<p>Parent</p>"))
+	}
+
 	@Test func rawHTMLEscapedByDefault() {
 		let block = SwiftMarkdownHTMLRenderer.convert("<p align=\"center\"><img src=\"logo.png\"></p>")
 		#expect(block.contains("&lt;p align=\"center\"&gt;"))
