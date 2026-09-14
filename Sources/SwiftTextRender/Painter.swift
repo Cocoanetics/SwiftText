@@ -125,6 +125,7 @@ public final class Painter {
 							paintText(fragment)
 						}
 					}
+					paintDecorations(in: line.fragments)
 				}
 			} else {
 				for child in block.children {
@@ -323,31 +324,77 @@ public final class Painter {
 		stream.endText()
 		if letterSpacing != 0 { stream.setCharacterSpacing(0) } // reset for following text
 
-		if fragment.style.underline || fragment.style.lineThrough {
-			paintDecorations(fragment, font: font)
-		}
 		if let href = fragment.href {
 			addLinkAnnotation(for: fragment, font: font, href: href)
 		}
 	}
 
-	/// Draw underline and/or line-through bars for a fragment.
-	private func paintDecorations(_ fragment: TextFragment, font: Font) {
-		let size = fragment.style.fontSize
+	private enum DecorationKind {
+		case underline
+		case lineThrough
+	}
+
+	/// Draw one continuous bar for each decorated inline run on this line.
+	private func paintDecorations(in fragments: [TextFragment]) {
+		paintDecorationRuns(in: fragments, kind: .underline)
+		paintDecorationRuns(in: fragments, kind: .lineThrough)
+	}
+
+	private func paintDecorationRuns(in fragments: [TextFragment], kind: DecorationKind) {
+		var active: (run: TextDecorationRun, x: Double, endX: Double, baseline: Double)?
+
+		func flush() {
+			guard let active else { return }
+			paintDecoration(kind, style: active.run.style, x: active.x,
+			                width: active.endX - active.x, baseline: active.baseline)
+		}
+
+		for fragment in fragments {
+			let run = kind == .underline ? fragment.decorations.underline : fragment.decorations.lineThrough
+			guard fragment.inlineControl == nil else {
+				flush()
+				active = nil
+				continue
+			}
+			guard let run else {
+				flush()
+				active = nil
+				let isDecorated = kind == .underline ? fragment.style.underline : fragment.style.lineThrough
+				if isDecorated {
+					paintDecoration(kind, style: fragment.style, x: fragment.x,
+					                width: fragment.width, baseline: fragment.baseline)
+				}
+				continue
+			}
+
+			if let current = active, current.run.source == run.source {
+				active?.endX = max(current.endX, fragment.x + fragment.width)
+			} else {
+				flush()
+				active = (run, fragment.x, fragment.x + fragment.width, fragment.baseline)
+			}
+		}
+		flush()
+	}
+
+	private func paintDecoration(_ kind: DecorationKind, style: ComputedStyle,
+	                             x: Double, width: Double, baseline: Double) {
+		let size = style.fontSize
 		let thickness = max(0.5, size / 16)
-		let color = fragment.style.color
+		let color = style.color
+		let font = fonts.font(for: style)
 		stream.pushState()
 		stream.setColorRGB(color.red, color.green, color.blue)
 		func bar(atColumnY columnY: Double) {
 			let bottom = geometry.pageHeightPx - pageY(columnY + thickness / 2)
-			stream.rectangle(fragment.x, bottom, fragment.width, thickness)
+			stream.rectangle(x, bottom, width, thickness)
 			stream.fill()
 		}
-		if fragment.style.underline {
-			bar(atColumnY: fragment.baseline + size * 0.12)
-		}
-		if fragment.style.lineThrough {
-			bar(atColumnY: fragment.baseline - font.ascent(size: size) * 0.30)
+		switch kind {
+		case .underline:
+			bar(atColumnY: baseline + size * 0.12)
+		case .lineThrough:
+			bar(atColumnY: baseline - font.ascent(size: size) * 0.30)
 		}
 		stream.popState()
 	}
