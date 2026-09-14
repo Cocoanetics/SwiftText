@@ -518,36 +518,68 @@ public final class LayoutEngine {
 		return max(y, (bounds?.bottom ?? contentTop) + verticalSpacing) - contentTop
 	}
 
-	/// Approximate CSS automatic table layout with each cell's max-content width.
-	/// If the preferred widths do not fit, reduce every column proportionally so
-	/// the grid remains inside the table's available width.
+	/// Approximate CSS automatic table layout with each cell's intrinsic widths.
+	/// If the preferred widths do not fit, reduce every column proportionally,
+	/// without crossing its min-content width unless the minimum grid itself does
+	/// not fit the available width.
 	private func tableColumnWidths(_ placements: [CellPlacement], columnCount: Int,
 	                               availableWidth: Double, spacing: Double) -> [Double] {
-		var widths = [Double](repeating: 0, count: columnCount)
+		func intrinsicWidths(measuring measure: (BlockBox) -> Double) -> [Double] {
+			var widths = [Double](repeating: 0, count: columnCount)
 
-		// Establish ordinary columns first. Colspan requirements are applied after
-		// that so they only add the width not already supplied by their columns.
-		for placement in placements where placement.colspan == 1 {
-			widths[placement.column] = max(widths[placement.column], maxContentWidth(of: placement.cell))
-		}
-		for placement in placements.filter({ $0.colspan > 1 }).sorted(by: { $0.colspan < $1.colspan }) {
-			let end = min(placement.column + placement.colspan, columnCount)
-			let columns = placement.column ..< end
-			let current = widths[columns].reduce(0, +) + Double(columns.count - 1) * spacing
-			let deficit = maxContentWidth(of: placement.cell) - current
-			if deficit > 0 {
-				let share = deficit / Double(columns.count)
-				for column in columns { widths[column] += share }
+			// Establish ordinary columns first. Colspan requirements are applied after
+			// that so they only add the width not already supplied by their columns.
+			for placement in placements where placement.colspan == 1 {
+				widths[placement.column] = max(widths[placement.column], measure(placement.cell))
 			}
+			for placement in placements.filter({ $0.colspan > 1 }).sorted(by: { $0.colspan < $1.colspan }) {
+				let end = min(placement.column + placement.colspan, columnCount)
+				let columns = placement.column ..< end
+				let current = widths[columns].reduce(0, +) + Double(columns.count - 1) * spacing
+				let deficit = measure(placement.cell) - current
+				if deficit > 0 {
+					let share = deficit / Double(columns.count)
+					for column in columns { widths[column] += share }
+				}
+			}
+			return widths
 		}
+
+		let widths = intrinsicWidths(measuring: maxContentWidth(of:))
+		let minimums = intrinsicWidths(measuring: minContentWidth(of:))
 
 		let preferredWidth = widths.reduce(0, +)
 		guard preferredWidth > 0 else {
 			return [Double](repeating: availableWidth / Double(columnCount), count: columnCount)
 		}
 		guard preferredWidth > availableWidth else { return widths }
-		let scale = availableWidth / preferredWidth
-		return widths.map { $0 * scale }
+
+		let minimumWidth = minimums.reduce(0, +)
+		guard minimumWidth < availableWidth else {
+			guard minimumWidth > 0 else { return widths }
+			let scale = availableWidth / minimumWidth
+			return minimums.map { $0 * scale }
+		}
+
+		var result = widths
+		var flexible = Set(widths.indices)
+		var fixedWidth = 0.0
+		while !flexible.isEmpty {
+			let preferredFlexibleWidth = flexible.reduce(0.0) { $0 + widths[$1] }
+			guard preferredFlexibleWidth > 0 else { break }
+			let scale = (availableWidth - fixedWidth) / preferredFlexibleWidth
+			let belowMinimum = flexible.filter { widths[$0] * scale < minimums[$0] }
+			if belowMinimum.isEmpty {
+				for column in flexible { result[column] = widths[column] * scale }
+				break
+			}
+			for column in belowMinimum {
+				result[column] = minimums[column]
+				fixedWidth += minimums[column]
+				flexible.remove(column)
+			}
+		}
+		return result
 	}
 
 	/// The border-box width a block needs when none of its inline content wraps.
@@ -609,6 +641,80 @@ public final class LayoutEngine {
 			}
 		}
 		return max(maximum, lineWidth)
+	}
+
+	/// The border-box width needed at ordinary soft wrap opportunities. Emergency
+	/// opportunities from `overflow-wrap: break-word` deliberately do not count;
+	/// `anywhere` and `word-break: break-all` do count.
+	private func minContentWidth(of box: BlockBox) -> Double {
+		let border = box.usedBorder
+		let padding = (box.style.padding.left.resolved(percentageBasis: 0) ?? 0)
+			+ (box.style.padding.right.resolved(percentageBasis: 0) ?? 0)
+		let margins = (box.style.margin.left.resolved(percentageBasis: 0) ?? 0)
+			+ (box.style.margin.right.resolved(percentageBasis: 0) ?? 0)
+		let extras = border.left + border.right + padding + margins
+
+		let contentWidth: Double
+		if let image = box.image {
+			contentWidth = box.style.width.resolved(percentageBasis: 0) ?? Double(image.width)
+		} else if box.establishesInlineContext {
+			var tokens: [InlineToken] = []
+			for child in box.children { collectInline(child, into: &tokens, href: nil) }
+			if box.style.whiteSpace.wraps {
+				contentWidth = minContentWidth(of: tokens, textIndent: box.style.textIndent)
+			} else {
+				contentWidth = maxContentWidth(of: tokens, textIndent: box.style.textIndent)
+			}
+		} else {
+			contentWidth = box.children.compactMap { $0 as? BlockBox }.map(minContentWidth(of:)).max() ?? 0
+		}
+		let specifiedWidth = box.style.width.resolved(percentageBasis: 0) ?? 0
+		return max(contentWidth, specifiedWidth) + extras
+	}
+
+	private func minContentWidth(of tokens: [InlineToken], textIndent: Double) -> Double {
+		var maximum = 0.0
+		var isFirstContent = true
+		for token in tokens {
+			let width: Double
+			switch token {
+			case .space, .forcedBreak:
+				continue
+			case .checkbox(_, let style):
+				width = (style.margin.left.resolved(percentageBasis: 0) ?? 0)
+					+ style.fontSize
+					+ (style.margin.right.resolved(percentageBasis: 0) ?? 0)
+			case .word(let word, let style, _):
+				width = minContentWidth(of: word, style: style)
+			}
+			maximum = max(maximum, width + (isFirstContent ? textIndent : 0))
+			isFirstContent = false
+		}
+		return maximum
+	}
+
+	private func minContentWidth(of word: String, style: ComputedStyle) -> Double {
+		func width(of text: String) -> Double {
+			fonts.resolveRuns(text, style: style).reduce(0.0) { width, run in
+				width + run.font.width(of: run.text, size: style.fontSize)
+					+ style.letterSpacing * Double(run.text.unicodeScalars.count)
+			}
+		}
+
+		if style.wordBreak == .breakAll || style.overflowWrap == .anywhere {
+			return word.map { width(of: String($0)) }.max() ?? 0
+		}
+
+		let breaks = preferredLineBreakOffsets(in: word).sorted()
+		guard !breaks.isEmpty else { return width(of: word) }
+		var maximum = 0.0
+		var start = word.startIndex
+		for offset in breaks {
+			let end = String.Index(utf16Offset: offset, in: word)
+			maximum = max(maximum, width(of: String(word[start ..< end])))
+			start = end
+		}
+		return max(maximum, width(of: String(word[start...])))
 	}
 
 	/// Give table rows and row-group boxes bounds that contain their laid-out
@@ -1011,7 +1117,7 @@ private extension LayoutEngine {
 						append(pieces)
 					}
 				} else {
-					if !wraps || penX + spaceWidth + wordWidth <= contentWidth {
+					if !wraps || penX + spaceWidth + wordWidth <= contentWidth + 0.001 {
 						if !fragments.isEmpty, let space = pendingSpace {
 							penX += gap(space)
 							pendingSpace = nil
