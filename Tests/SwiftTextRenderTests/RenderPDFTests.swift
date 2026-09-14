@@ -332,7 +332,7 @@ struct RenderPDFTests {
 
 	// MARK: - Layout geometry
 
-	private func layoutTree(_ html: String, css: [String] = [], contentWidth: Double) async throws -> BlockBox {
+	func layoutTree(_ html: String, css: [String] = [], contentWidth: Double) async throws -> BlockBox {
 		let builder = try await DomBuilder(html: Data(html.utf8), baseURL: nil)
 		let root = try #require(builder.root)
 		let resolver = StyleResolver(authorStyleSheets: css)
@@ -513,33 +513,6 @@ extension RenderPDFTests {
 		#expect(cells.count == 2)
 		#expect(cells[1].width > cells[0].width)
 		#expect(cells[1].x + cells[1].width <= 198.01)
-	}
-
-	@Test("Break-word does not reduce table min-content width")
-	func breakWordPreservesTableMinContentWidth() async throws {
-		let html = """
-		<table><tr><td>Dokumentnummer</td><td>Several ordinary words create a wide preferred column</td></tr></table>
-		"""
-		func firstCell(for wrappingRule: String, contentWidth: Double = 220) async throws -> BlockBox {
-			let css = ["table { max-width: 100%; } td { padding: 0; \(wrappingRule) }"]
-			let root = try await layoutTree(html, css: css, contentWidth: contentWidth)
-			let cells = collectBlocks(in: root) { $0.element?.localName == "td" }
-			return try #require(cells.first)
-		}
-
-		let normal = try await firstCell(for: "overflow-wrap: normal")
-		let breakWord = try await firstCell(for: "overflow-wrap: break-word")
-		let anywhere = try await firstCell(for: "overflow-wrap: anywhere")
-		let breakAll = try await firstCell(for: "word-break: break-all")
-		let constrainedBreakWord = try await firstCell(for: "overflow-wrap: break-word", contentWidth: 80)
-
-		#expect(abs(breakWord.width - normal.width) < 0.01)
-		#expect(anywhere.width < breakWord.width)
-		#expect(abs(breakAll.width - anywhere.width) < 0.01)
-		#expect(breakWord.lines.count == 1)
-		#expect(anywhere.lines.count > 1)
-		#expect(constrainedBreakWord.lines.count > 1)
-		#expect(constrainedBreakWord.lines.flatMap(\.fragments).map(\.text).joined() == "Dokumentnummer")
 	}
 
 	@Test("Unbreakable table tokens wrap in rendered PDFs")
@@ -776,7 +749,7 @@ extension RenderPDFTests {
 		#expect(div.width == 130)
 	}
 
-	private func collectBlocks(in box: BlockBox, where predicate: (BlockBox) -> Bool) -> [BlockBox] {
+	func collectBlocks(in box: BlockBox, where predicate: (BlockBox) -> Bool) -> [BlockBox] {
 		var result: [BlockBox] = []
 		if predicate(box) { result.append(box) }
 		for child in box.children {
