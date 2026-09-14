@@ -77,9 +77,13 @@ extension OpenTypeFont {
 				result.append((component, cursor + 2 - range.lowerBound))
 				cursor += 4
 				cursor += (flags & 0x0001) != 0 ? 4 : 2 // component arguments
-				if (flags & 0x0008) != 0 { cursor += 2 }
-				else if (flags & 0x0040) != 0 { cursor += 4 }
-				else if (flags & 0x0080) != 0 { cursor += 8 }
+				if (flags & 0x0008) != 0 {
+					cursor += 2
+				} else if (flags & 0x0040) != 0 {
+					cursor += 4
+				} else if (flags & 0x0080) != 0 {
+					cursor += 8
+				}
 				guard cursor <= range.upperBound else {
 					throw OpenTypeError.truncated(offset: cursor)
 				}
