@@ -140,5 +140,80 @@ struct WebKitIntegrationTests {
 		#expect(tablePages.count == 2)
 		#expect(tablePages.allSatisfy { $0.contains("Label") && $0.contains("Value") })
 	}
+
+	@Test("Table fragments keep headers when the table starts late on a page", .timeLimit(.minutes(2)))
+	func tableStartingLateOnPage() async throws {
+		let rows = (1 ... 45).map {
+			"| \($0) | research/very/long/path/segment-\($0)/identifier-that-cannot-wrap-\($0).md | \($0 * 7) |"
+		}.joined(separator: "\n")
+		let longToken = String(repeating: "A", count: 200)
+		let longURL = "https://example.com/" + (1 ... 24).map { "segment\($0)" }.joined(separator: "/")
+			+ "/final.html"
+		let fifteenHeaders = (1 ... 15).map { "Col\($0)" }.joined(separator: " | ")
+		let fifteenDividers = Array(repeating: "---", count: 15).joined(separator: "|")
+		let fifteenValues = (1 ... 15).map { "v1\($0)" }.joined(separator: " | ")
+		let fifteenMoreValues = (1 ... 15).map { "v2\($0)" }.joined(separator: " | ")
+		let eightHeaders = (1 ... 8).map { "VeryLongHeaderName\($0)" }.joined(separator: " | ")
+		let eightDividers = Array(repeating: "---", count: 8).joined(separator: "|")
+		let eightValues = Array(repeating: "x", count: 8).joined(separator: " | ")
+		let filler = (1 ... 8).map { "Filler paragraph \($0) before the long table." }.joined(separator: "\n\n")
+		let markdown = """
+		# Prüfblatt Tabellen
+
+		## 1 Langer Token neben kurzer Spalte (war: Spaltenkollaps)
+
+		| Key | Value |
+		|---|---|
+		| Long | \(longToken) |
+		| Short | ok |
+
+		## 2 Lange URL (war: rechter Rahmen abgeschnitten)
+
+		| Key | Value |
+		|---|---|
+		| Link | \(longURL) |
+		| Short | ok |
+
+		## 3 Fünfzehn Spalten
+
+		| \(fifteenHeaders) |
+		|\(fifteenDividers)|
+		| \(fifteenValues) |
+		| \(fifteenMoreValues) |
+
+		## 4 Acht lange Kopfzeilennamen
+
+		| \(eightHeaders) |
+		|\(eightDividers)|
+		| \(eightValues) |
+
+		\(filler)
+
+		## 5 Tabelle über Seitenumbruch (war: Kopf verwaist, Phantomzeile)
+
+		| ID | Path | N |
+		|---:|---|---:|
+		\(rows)
+		"""
+		let stylesheet = """
+		\(MarkdownToHTML.defaultStylesheet)
+		@page { size: A4; margin: 2cm; }
+		*, *::before, *::after { box-sizing: border-box; }
+		@media print { body { max-width: none; padding: 0; margin: 0; } }
+		h1, h2 { break-after: avoid; break-inside: avoid; }
+		thead { display: table-header-group; }
+		tr { page-break-inside: avoid; break-inside: avoid; }
+		"""
+		let html = MarkdownToHTML.document(markdown, stylesheet: stylesheet)
+		let document = try await paginate(html)
+		let tablePages = (0 ..< document.pageCount)
+			.compactMap { document.page(at: $0)?.string }
+			.filter { $0.contains("segment-") }
+		let rowCounts = tablePages.map { $0.components(separatedBy: "segment-").count - 1 }
+		#expect(rowCounts.first.map { $0 >= 10 } == true, "the first table page is mostly empty")
+		for (index, text) in tablePages.enumerated() {
+			#expect(text.contains("Path"), "table page \(index + 1) has no path header")
+		}
+	}
 }
 #endif

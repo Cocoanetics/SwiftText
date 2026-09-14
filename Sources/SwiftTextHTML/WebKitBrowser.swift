@@ -335,7 +335,8 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 					return fragment;
 				}
 
-				let capacity = pageHeight - paginatedOffset(table, pageHeight, pageWidth);
+				const offset = paginatedOffset(table, pageHeight, pageWidth);
+				let capacity = pageHeight - offset;
 				if (tableRect.height <= capacity + 0.5) return;
 
 				// Measuring a real fragment includes captions, table decorations,
@@ -348,8 +349,13 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 					return height;
 				}
 
-				let startsOnNewPage = false;
-				if (measuredHeight([rows[0]], 0) > capacity + 0.5) {
+				// Once the unpaginated flow is already taller than a page, WebKit's
+				// column layout can understate the final print offset after preceding
+				// avoid-break content. Start a multi-page table on a reliable boundary;
+				// also do so when less than three quarters of the current page remains.
+				let startsOnNewPage = tableRect.height > pageHeight
+					&& (tableRect.top > pageHeight || offset > pageHeight * 0.25);
+				if (startsOnNewPage || measuredHeight([rows[0]], 0) > capacity + 0.5) {
 					startsOnNewPage = true;
 					capacity = pageHeight;
 				}
