@@ -334,6 +334,26 @@ struct RenderPDFTests {
 		#expect(cells[0].x == cells[2].x)  // A and C share a column
 	}
 
+	@Test("Table columns are sized by their content")
+	func tableColumnsUseContentWidth() async throws {
+		let html = "<table><tr><td>A</td><td>A much longer column of text</td><td>A</td></tr></table>"
+		let root = try await layoutTree(html, contentWidth: 400)
+		let cells = collectBlocks(in: root) { $0.element?.localName == "td" }
+		#expect(cells.count == 3)
+		#expect(cells[1].width > cells[0].width * 5)
+		#expect(abs(cells[0].width - cells[2].width) < 0.01)
+	}
+
+	@Test("Content-sized table columns shrink proportionally to fit")
+	func tableColumnsFitAvailableWidth() async throws {
+		let html = "<table><tr><td>Short</td><td>A much longer column that exceeds the available table width</td></tr></table>"
+		let root = try await layoutTree(html, contentWidth: 200)
+		let cells = collectBlocks(in: root) { $0.element?.localName == "td" }
+		#expect(cells.count == 2)
+		#expect(cells[1].width > cells[0].width)
+		#expect(cells[1].x + cells[1].width <= 198.01)
+	}
+
 	@Test("Unbreakable table tokens wrap in rendered PDFs")
 	func unbreakableTableTokenWraps() async throws {
 		let token = String(repeating: "X", count: 75)

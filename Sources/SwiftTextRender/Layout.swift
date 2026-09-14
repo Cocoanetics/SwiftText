@@ -146,9 +146,8 @@ public final class LayoutEngine {
 		let rowspan: Int
 	}
 
-	/// Lay out a `display: table` box as an equal-column grid, honoring colspan
-	/// and rowspan. Content-based column sizing is not modeled (columns are
-	/// equal width).
+	/// Lay out a `display: table` box as a content-sized column grid, honoring
+	/// colspan and rowspan.
 	private func layoutTable(_ table: BlockBox, contentWidth: Double, contentX: Double, contentTop: Double) -> Double {
 		let rows = collectTableRows(table)
 		guard !rows.isEmpty else { return 0 }
@@ -174,14 +173,21 @@ public final class LayoutEngine {
 
 		let columnCount = placements.map { $0.column + $0.colspan }.max() ?? 0
 		guard columnCount > 0 else { return 0 }
-		let columnWidth = max(0, (contentWidth - Double(columnCount + 1) * spacing) / Double(columnCount))
-		func columnX(_ column: Int) -> Double { contentX + spacing + Double(column) * (columnWidth + spacing) }
-		func spanWidth(_ colspan: Int) -> Double { Double(colspan) * columnWidth + Double(colspan - 1) * spacing }
+		let columnWidths = tableColumnWidths(placements, columnCount: columnCount,
+		                                    availableWidth: max(0, contentWidth - Double(columnCount + 1) * spacing),
+		                                    spacing: spacing)
+		func columnX(_ column: Int) -> Double {
+			contentX + spacing + columnWidths[..<column].reduce(0, +) + Double(column) * spacing
+		}
+		func spanWidth(_ column: Int, _ colspan: Int) -> Double {
+			columnWidths[column ..< min(column + colspan, columnCount)].reduce(0, +)
+				+ Double(colspan - 1) * spacing
+		}
 
 		// Pass 1: measure each cell's height at its column width.
 		var measured: [ObjectIdentifier: Double] = [:]
 		for placement in placements {
-			let height = layoutBlock(placement.cell, containingWidth: spanWidth(placement.colspan),
+			let height = layoutBlock(placement.cell, containingWidth: spanWidth(placement.column, placement.colspan),
 			                         marginX: columnX(placement.column), borderBoxTop: contentTop)
 			measured[ObjectIdentifier(placement.cell)] = height
 		}
@@ -215,7 +221,7 @@ public final class LayoutEngine {
 		// Pass 2: re-lay out each cell at its final position, stretch to its row(s),
 		// and apply vertical-align by shifting the cell's content.
 		for placement in placements {
-			_ = layoutBlock(placement.cell, containingWidth: spanWidth(placement.colspan),
+			_ = layoutBlock(placement.cell, containingWidth: spanWidth(placement.column, placement.colspan),
 			                marginX: columnX(placement.column), borderBoxTop: rowTops[placement.row])
 			let naturalHeight = placement.cell.height
 			let lastRow = min(placement.row + placement.rowspan - 1, rows.count - 1)
@@ -249,6 +255,90 @@ public final class LayoutEngine {
 		// the first page and silently drops all of its later rows.
 		let bounds = sizeTableRowGroups(in: table, contentX: contentX, contentWidth: contentWidth)
 		return max(y, (bounds?.bottom ?? contentTop) + spacing) - contentTop
+	}
+
+	/// Approximate CSS automatic table layout with each cell's max-content width.
+	/// If the preferred widths do not fit, reduce every column proportionally so
+	/// the grid remains inside the table's available width.
+	private func tableColumnWidths(_ placements: [CellPlacement], columnCount: Int,
+	                               availableWidth: Double, spacing: Double) -> [Double] {
+		var widths = [Double](repeating: 0, count: columnCount)
+
+		// Establish ordinary columns first. Colspan requirements are applied after
+		// that so they only add the width not already supplied by their columns.
+		for placement in placements where placement.colspan == 1 {
+			widths[placement.column] = max(widths[placement.column], maxContentWidth(of: placement.cell))
+		}
+		for placement in placements.filter({ $0.colspan > 1 }).sorted(by: { $0.colspan < $1.colspan }) {
+			let end = min(placement.column + placement.colspan, columnCount)
+			let columns = placement.column ..< end
+			let current = widths[columns].reduce(0, +) + Double(columns.count - 1) * spacing
+			let deficit = maxContentWidth(of: placement.cell) - current
+			if deficit > 0 {
+				let share = deficit / Double(columns.count)
+				for column in columns { widths[column] += share }
+			}
+		}
+
+		let preferredWidth = widths.reduce(0, +)
+		guard preferredWidth > 0 else {
+			return [Double](repeating: availableWidth / Double(columnCount), count: columnCount)
+		}
+		guard preferredWidth > availableWidth else { return widths }
+		let scale = availableWidth / preferredWidth
+		return widths.map { $0 * scale }
+	}
+
+	/// The border-box width a block needs when none of its inline content wraps.
+	private func maxContentWidth(of box: BlockBox) -> Double {
+		let border = box.usedBorder
+		let padding = (box.style.padding.left.resolved(percentageBasis: 0) ?? 0)
+			+ (box.style.padding.right.resolved(percentageBasis: 0) ?? 0)
+		let margins = (box.style.margin.left.resolved(percentageBasis: 0) ?? 0)
+			+ (box.style.margin.right.resolved(percentageBasis: 0) ?? 0)
+		let extras = border.left + border.right + padding + margins
+
+		let contentWidth: Double
+		if let image = box.image {
+			contentWidth = box.style.width.resolved(percentageBasis: 0) ?? Double(image.width)
+		} else if box.establishesInlineContext {
+			var tokens: [InlineToken] = []
+			for child in box.children { collectInline(child, into: &tokens, href: nil) }
+			contentWidth = maxContentWidth(of: tokens, textIndent: box.style.textIndent)
+		} else {
+			contentWidth = box.children.compactMap { $0 as? BlockBox }.map(maxContentWidth(of:)).max() ?? 0
+		}
+		let specifiedWidth = box.style.width.resolved(percentageBasis: 0) ?? 0
+		return max(contentWidth, specifiedWidth) + extras
+	}
+
+	private func maxContentWidth(of tokens: [InlineToken], textIndent: Double) -> Double {
+		var maximum = 0.0
+		var lineWidth = textIndent
+		var hasContent = false
+		var pendingSpace: ComputedStyle?
+		for token in tokens {
+			switch token {
+			case .space(let style):
+				if hasContent { pendingSpace = style }
+			case .forcedBreak:
+				maximum = max(maximum, lineWidth)
+				lineWidth = 0
+				hasContent = false
+				pendingSpace = nil
+			case .word(let word, let style, _):
+				if hasContent, let space = pendingSpace {
+					lineWidth += fonts.font(for: space).width(of: " ", size: space.fontSize) + space.wordSpacing
+				}
+				for run in fonts.resolveRuns(word, style: style) {
+					lineWidth += run.font.width(of: run.text, size: style.fontSize)
+						+ style.letterSpacing * Double(run.text.unicodeScalars.count)
+				}
+				hasContent = true
+				pendingSpace = nil
+			}
+		}
+		return max(maximum, lineWidth)
 	}
 
 	/// Give table rows and row-group boxes bounds that contain their laid-out
