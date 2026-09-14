@@ -372,11 +372,76 @@ struct RenderPDFTests {
 		let collapsedCells = collectBlocks(in: collapsed) { $0.element?.localName == "td" }
 		#expect(abs(collapsedCells[1].x - (collapsedCells[0].x + collapsedCells[0].width)) < 0.01)
 		#expect(abs(collapsedCells[2].y - (collapsedCells[0].y + collapsedCells[0].height)) < 0.01)
-		#expect(collapsedCells[0].suppressedCollapsedBorders == Edges(false))
-		#expect(collapsedCells[1].suppressedCollapsedBorders.left)
-		#expect(collapsedCells[2].suppressedCollapsedBorders.top)
-		#expect(collapsedCells[3].suppressedCollapsedBorders.left)
-		#expect(collapsedCells[3].suppressedCollapsedBorders.top)
+		#expect(collapsedCells[0].usedBorder == Edges(1.0))
+		#expect(collapsedCells[1].usedBorder.left == 0)
+		#expect(collapsedCells[2].usedBorder.top == 0)
+		#expect(collapsedCells[3].usedBorder.left == 0)
+		#expect(collapsedCells[3].usedBorder.top == 0)
+	}
+
+	@Test("Collapsed table borders select the winning adjacent cell edge")
+	func collapsedBorderConflictResolution() async throws {
+		let html = """
+		<table style="border-collapse: collapse">
+		<tr>
+		<td style="border-right: none">A</td>
+		<td style="border-left: 5px solid red; border-right: 6px dotted blue">B</td>
+		<td style="border-left: 5px solid red; border-right: 5px dashed blue">C</td>
+		<td style="border-left: 5px solid red">D</td>
+		</tr>
+		</table>
+		"""
+		let root = try await layoutTree(html, contentWidth: 400)
+		let cells = collectBlocks(in: root) { $0.element?.localName == "td" }
+		#expect(cells.count == 4)
+
+		// A visible edge beats `none`, even though it belongs to the right cell.
+		#expect(cells[0].usedBorder.right == 0)
+		#expect(cells[1].usedBorder.left == 5)
+		#expect(cells[1].resolvedCollapsedBorders?.left?.color == RGBA(1, 0, 0, 1))
+
+		// Width is compared before style, so 6px dotted beats 5px solid.
+		#expect(cells[1].usedBorder.right == 6)
+		#expect(cells[1].resolvedCollapsedBorders?.right?.style == .dotted)
+		#expect(cells[2].usedBorder.left == 0)
+
+		// At equal widths, solid outranks dashed and the right cell owns the winner.
+		#expect(cells[2].usedBorder.right == 0)
+		#expect(cells[3].usedBorder.left == 5)
+		#expect(cells[3].resolvedCollapsedBorders?.left?.style == .solid)
+	}
+
+	@Test("Table, row-group, and row borders join collapsed conflict resolution")
+	func collapsedStructuralBorderConflictResolution() async throws {
+		let html = """
+		<table style="border-collapse: collapse; border: 4px solid blue">
+		<tbody style="border: 3px solid green; border-top-width: 5px">
+		<tr style="border: 2px solid black; border-bottom: 6px dotted black">
+		<td style="border: 1px solid red">A</td>
+		</tr>
+		<tr><td style="border: 1px solid red">B</td></tr>
+		</tbody>
+		</table>
+		"""
+		let root = try await layoutTree(html, contentWidth: 400)
+		let table = try #require(firstBlock(in: root) { $0.element?.localName == "table" })
+		let group = try #require(firstBlock(in: root) { $0.element?.localName == "tbody" })
+		let row = try #require(firstBlock(in: root) { $0.element?.localName == "tr" })
+		let cells = collectBlocks(in: root) { $0.element?.localName == "td" }
+
+		// Structural boxes no longer reserve and paint overlapping border widths.
+		#expect(table.usedBorder == Edges(0.0))
+		#expect(group.usedBorder == Edges(0.0))
+		#expect(row.usedBorder == Edges(0.0))
+		// The wider group top and first-row bottom rules win their segments.
+		#expect(cells[0].resolvedCollapsedBorders?.top == CollapsedBorder(
+			width: 5, style: .solid, color: RGBA(0, 0.5019607843137255, 0, 1)))
+		#expect(cells[0].resolvedCollapsedBorders?.bottom == CollapsedBorder(
+			width: 6, style: .dotted, color: RGBA(0, 0, 0, 1)))
+		#expect(cells[1].resolvedCollapsedBorders?.top == nil)
+		// The table wins the remaining outer sides and transfers them to cells.
+		#expect(cells[0].resolvedCollapsedBorders?.left?.width == 4)
+		#expect(cells[1].resolvedCollapsedBorders?.bottom?.color == RGBA(0, 0, 1, 1))
 	}
 
 	@Test("Unbreakable table tokens wrap in rendered PDFs")

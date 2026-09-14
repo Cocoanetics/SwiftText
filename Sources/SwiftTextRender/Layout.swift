@@ -75,6 +75,9 @@ public final class LayoutEngine {
 	private func layoutBlock(_ box: BlockBox, containingWidth: Double, marginX: Double, borderBoxTop: Double) -> Double {
 		let style = box.style
 		let basis = containingWidth
+		if style.display == .table {
+			resolveCollapsedBorders(in: box)
+		}
 
 		let marginLeft = style.margin.left.resolved(percentageBasis: basis) ?? 0
 
@@ -186,53 +189,255 @@ public final class LayoutEngine {
 		let rowspan: Int
 	}
 
+	private struct TableRow {
+		let box: BlockBox
+		let cells: [BlockBox]
+		let groups: [BlockBox]
+	}
+
+	private enum BorderSide {
+		case top, right, bottom, left
+	}
+
+	private enum BorderSource: Int {
+		case table
+		case rowGroup
+		case row
+		case cell
+	}
+
+	private struct BorderCandidate {
+		let border: CollapsedBorder
+		let source: BorderSource
+		let box: BlockBox
+		let side: BorderSide
+	}
+
+	private struct TableGrid {
+		let rows: [TableRow]
+		let placements: [CellPlacement]
+		let slots: [Int: CellPlacement]
+		let columnCount: Int
+	}
+
+	private func borderCandidate(_ box: BlockBox, side: BorderSide, source: BorderSource) -> BorderCandidate {
+		let width: Double
+		let style: BorderStyle
+		let color: RGBA
+		switch side {
+		case .top:
+			width = box.style.borderWidth.top
+			style = box.style.borderStyle.top
+			color = box.style.borderColor.top
+		case .right:
+			width = box.style.borderWidth.right
+			style = box.style.borderStyle.right
+			color = box.style.borderColor.right
+		case .bottom:
+			width = box.style.borderWidth.bottom
+			style = box.style.borderStyle.bottom
+			color = box.style.borderColor.bottom
+		case .left:
+			width = box.style.borderWidth.left
+			style = box.style.borderStyle.left
+			color = box.style.borderColor.left
+		}
+		return BorderCandidate(border: CollapsedBorder(width: width, style: style, color: color),
+		                       source: source, box: box, side: side)
+	}
+
+	private func winningBorder(_ candidates: [BorderCandidate]) -> BorderCandidate? {
+		func styleRank(_ style: BorderStyle) -> Int {
+			switch style {
+			case .none: return 0
+			case .inset: return 1
+			case .groove: return 2
+			case .outset: return 3
+			case .ridge: return 4
+			case .dotted: return 5
+			case .dashed: return 6
+			case .solid: return 7
+			case .double: return 8
+			case .hidden: return 9
+			}
+		}
+
+		func outranks(_ candidate: BorderCandidate, _ winner: BorderCandidate) -> Bool {
+			let candidateHidden = candidate.border.style == .hidden
+			let winnerHidden = winner.border.style == .hidden
+			if candidateHidden != winnerHidden { return candidateHidden }
+			let candidateVisible = candidate.border.style != .none && candidate.border.width > 0
+			let winnerVisible = winner.border.style != .none && winner.border.width > 0
+			if candidateVisible != winnerVisible { return candidateVisible }
+			if candidate.border.width != winner.border.width {
+				return candidate.border.width > winner.border.width
+			}
+			let candidateStyle = styleRank(candidate.border.style)
+			let winnerStyle = styleRank(winner.border.style)
+			if candidateStyle != winnerStyle { return candidateStyle > winnerStyle }
+			return candidate.source.rawValue > winner.source.rawValue
+		}
+
+		guard var winner = candidates.first else { return nil }
+		for candidate in candidates.dropFirst() where outranks(candidate, winner) {
+			winner = candidate
+		}
+		return winner
+	}
+
+	private func setResolvedBorder(_ border: CollapsedBorder, on box: BlockBox, side: BorderSide) {
+		guard border.style != .hidden, border.style != .none, border.width > 0 else { return }
+		guard var resolved = box.resolvedCollapsedBorders else { return }
+		func stronger(_ existing: CollapsedBorder?) -> CollapsedBorder {
+			guard let existing else { return border }
+			let old = BorderCandidate(border: existing, source: .cell, box: box, side: side)
+			let new = BorderCandidate(border: border, source: .cell, box: box, side: side)
+			return winningBorder([old, new])?.border ?? existing
+		}
+		switch side {
+		case .top: resolved.top = stronger(resolved.top)
+		case .right: resolved.right = stronger(resolved.right)
+		case .bottom: resolved.bottom = stronger(resolved.bottom)
+		case .left: resolved.left = stronger(resolved.left)
+		}
+		box.resolvedCollapsedBorders = resolved
+	}
+
+	private func resolveCollapsedBorders(in table: BlockBox) {
+		guard table.style.borderCollapse == .collapse else { return }
+		let grid = tableGrid(for: table)
+		guard !grid.rows.isEmpty, grid.columnCount > 0 else { return }
+
+		var boxes: [BlockBox] = [table]
+		for row in grid.rows {
+			boxes.append(row.box)
+			boxes.append(contentsOf: row.groups)
+			boxes.append(contentsOf: row.cells)
+		}
+		var seen = Set<ObjectIdentifier>()
+		for box in boxes where seen.insert(ObjectIdentifier(box)).inserted {
+			box.resolvedCollapsedBorders = Edges(nil)
+		}
+
+		func slot(_ row: Int, _ column: Int) -> CellPlacement? {
+			grid.slots[row * 4096 + column]
+		}
+		func sameCell(_ lhs: CellPlacement?, _ rhs: CellPlacement?) -> Bool {
+			guard let lhs, let rhs else { return false }
+			return lhs.cell === rhs.cell
+		}
+		func contains(_ groups: [BlockBox], _ group: BlockBox) -> Bool {
+			groups.contains { $0 === group }
+		}
+
+		// Resolve one vertical segment per row and column boundary. Cell borders
+		// compete on interior edges; row, row-group, and table sides join the
+		// candidates at the outside of the grid.
+		for rowIndex in grid.rows.indices {
+			let row = grid.rows[rowIndex]
+			for column in 0 ... grid.columnCount {
+				let left = column > 0 ? slot(rowIndex, column - 1) : nil
+				let right = column < grid.columnCount ? slot(rowIndex, column) : nil
+				if sameCell(left, right) { continue }
+				var candidates: [BorderCandidate] = []
+				if let left { candidates.append(borderCandidate(left.cell, side: .right, source: .cell)) }
+				if let right { candidates.append(borderCandidate(right.cell, side: .left, source: .cell)) }
+				if column == 0 {
+					candidates.append(borderCandidate(row.box, side: .left, source: .row))
+					candidates.append(contentsOf: row.groups.map { borderCandidate($0, side: .left, source: .rowGroup) })
+					candidates.append(borderCandidate(table, side: .left, source: .table))
+				} else if column == grid.columnCount {
+					candidates.append(borderCandidate(row.box, side: .right, source: .row))
+					candidates.append(contentsOf: row.groups.map { borderCandidate($0, side: .right, source: .rowGroup) })
+					candidates.append(borderCandidate(table, side: .right, source: .table))
+				}
+				guard let winner = winningBorder(candidates) else { continue }
+				let owner = winner.source == .cell ? winner
+					: left.map { borderCandidate($0.cell, side: .right, source: .cell) }
+						?? right.map { borderCandidate($0.cell, side: .left, source: .cell) }
+				if let owner { setResolvedBorder(winner.border, on: owner.box, side: owner.side) }
+			}
+		}
+
+		// Resolve horizontal segments between rows. A row-group side participates
+		// only where the adjoining row falls outside that group.
+		for rowBoundary in 0 ... grid.rows.count {
+			let upperRow = rowBoundary > 0 ? grid.rows[rowBoundary - 1] : nil
+			let lowerRow = rowBoundary < grid.rows.count ? grid.rows[rowBoundary] : nil
+			for column in 0 ..< grid.columnCount {
+				let upper = rowBoundary > 0 ? slot(rowBoundary - 1, column) : nil
+				let lower = rowBoundary < grid.rows.count ? slot(rowBoundary, column) : nil
+				if sameCell(upper, lower) { continue }
+				var candidates: [BorderCandidate] = []
+				if let upper { candidates.append(borderCandidate(upper.cell, side: .bottom, source: .cell)) }
+				if let lower { candidates.append(borderCandidate(lower.cell, side: .top, source: .cell)) }
+				if let upperRow { candidates.append(borderCandidate(upperRow.box, side: .bottom, source: .row)) }
+				if let lowerRow { candidates.append(borderCandidate(lowerRow.box, side: .top, source: .row)) }
+				if let upperRow {
+					for group in upperRow.groups where lowerRow.map({ !contains($0.groups, group) }) ?? true {
+						candidates.append(borderCandidate(group, side: .bottom, source: .rowGroup))
+					}
+				}
+				if let lowerRow {
+					for group in lowerRow.groups where upperRow.map({ !contains($0.groups, group) }) ?? true {
+						candidates.append(borderCandidate(group, side: .top, source: .rowGroup))
+					}
+				}
+				if rowBoundary == 0 {
+					candidates.append(borderCandidate(table, side: .top, source: .table))
+				} else if rowBoundary == grid.rows.count {
+					candidates.append(borderCandidate(table, side: .bottom, source: .table))
+				}
+				guard let winner = winningBorder(candidates) else { continue }
+				let owner = winner.source == .cell ? winner
+					: upper.map { borderCandidate($0.cell, side: .bottom, source: .cell) }
+						?? lower.map { borderCandidate($0.cell, side: .top, source: .cell) }
+				if let owner { setResolvedBorder(winner.border, on: owner.box, side: owner.side) }
+			}
+		}
+	}
+
+	private func tableGrid(for table: BlockBox) -> TableGrid {
+		let rows = collectTableRows(table)
+		var placements: [CellPlacement] = []
+		var slots: [Int: CellPlacement] = [:]
+		func slot(_ row: Int, _ column: Int) -> Int { row * 4096 + column }
+		for (rowIndex, row) in rows.enumerated() {
+			var column = 0
+			for cell in row.cells {
+				while slots[slot(rowIndex, column)] != nil { column += 1 }
+				let colspan = spanAttribute(cell, "colspan")
+				let rowspan = spanAttribute(cell, "rowspan")
+				let placement = CellPlacement(cell: cell, row: rowIndex, column: column,
+				                              colspan: colspan, rowspan: rowspan)
+				placements.append(placement)
+				for r in rowIndex ..< rowIndex + rowspan {
+					for c in column ..< column + colspan { slots[slot(r, c)] = placement }
+				}
+				column += colspan
+			}
+		}
+		return TableGrid(rows: rows, placements: placements, slots: slots,
+		                 columnCount: placements.map { $0.column + $0.colspan }.max() ?? 0)
+	}
+
 	/// Lay out a `display: table` box as an equal-column grid, honoring colspan
 	/// and rowspan. Content-based column sizing is not modeled (columns are
 	/// equal width).
 	private func layoutTable(_ table: BlockBox, contentWidth: Double, contentX: Double, contentTop: Double) -> Double {
-		let rows = collectTableRows(table)
+		let grid = tableGrid(for: table)
+		let rows = grid.rows
 		guard !rows.isEmpty else { return 0 }
 		let collapsed = table.style.borderCollapse == .collapse
 		let horizontalSpacing = collapsed ? 0 : table.style.borderSpacing.horizontal
 		let verticalSpacing = collapsed ? 0 : table.style.borderSpacing.vertical
 
-		// Place cells into a grid, marking spanned slots as occupied.
-		var placements: [CellPlacement] = []
-		var occupied = Set<Int>()
-		func slot(_ row: Int, _ column: Int) -> Int { row * 4096 + column }
-		for (rowIndex, row) in rows.enumerated() {
-			var column = 0
-			for cell in row.cells {
-				while occupied.contains(slot(rowIndex, column)) { column += 1 }
-				let colspan = spanAttribute(cell, "colspan")
-				let rowspan = spanAttribute(cell, "rowspan")
-				placements.append(CellPlacement(cell: cell, row: rowIndex, column: column, colspan: colspan, rowspan: rowspan))
-				for r in rowIndex ..< rowIndex + rowspan {
-					for c in column ..< column + colspan { occupied.insert(slot(r, c)) }
-				}
-				column += colspan
-			}
-		}
-
-		let columnCount = placements.map { $0.column + $0.colspan }.max() ?? 0
+		let placements = grid.placements
+		let columnCount = grid.columnCount
 		guard columnCount > 0 else { return 0 }
 		let columnWidth = max(0, (contentWidth - Double(columnCount + 1) * horizontalSpacing) / Double(columnCount))
 		func columnX(_ column: Int) -> Double { contentX + horizontalSpacing + Double(column) * (columnWidth + horizontalSpacing) }
 		func spanWidth(_ colspan: Int) -> Double { Double(colspan) * columnWidth + Double(colspan - 1) * horizontalSpacing }
-
-		// In the collapsed model an interior edge belongs to only one cell. Prefer
-		// the cell above or to the left so ordinary rectangular grids paint every
-		// shared rule once while retaining all four outer edges.
-		for placement in placements {
-			placement.cell.suppressedCollapsedBorders = Edges(false)
-			guard collapsed else { continue }
-			let occupiedRows = placement.row ..< placement.row + placement.rowspan
-			let occupiedColumns = placement.column ..< placement.column + placement.colspan
-			placement.cell.suppressedCollapsedBorders.left = placement.column > 0
-				&& occupiedRows.allSatisfy { occupied.contains(slot($0, placement.column - 1)) }
-			placement.cell.suppressedCollapsedBorders.top = placement.row > 0
-				&& occupiedColumns.allSatisfy { occupied.contains(slot(placement.row - 1, $0)) }
-		}
 
 		// Pass 1: measure each cell's height at its column width.
 		var measured: [ObjectIdentifier: Double] = [:]
@@ -370,9 +575,9 @@ public final class LayoutEngine {
 	}
 
 	/// Collect table rows (and their cells), descending through row groups.
-	private func collectTableRows(_ table: BlockBox) -> [(box: BlockBox, cells: [BlockBox])] {
-		var rows: [(box: BlockBox, cells: [BlockBox])] = []
-		func walk(_ box: BlockBox) {
+	private func collectTableRows(_ table: BlockBox) -> [TableRow] {
+		var rows: [TableRow] = []
+		func walk(_ box: BlockBox, groups: [BlockBox]) {
 			for child in box.children {
 				guard let block = child as? BlockBox else { continue }
 				switch block.style.display {
@@ -381,15 +586,17 @@ public final class LayoutEngine {
 						guard let cell = child as? BlockBox, cell.style.display == .tableCell else { return nil }
 						return cell
 					}
-					rows.append((block, cells))
+					rows.append(TableRow(box: block, cells: cells, groups: groups))
 				case .tableRowGroup, .tableHeaderGroup, .tableFooterGroup:
-					walk(block)
+					walk(block, groups: groups + [block])
+				case .table:
+					continue
 				default:
-					walk(block)
+					walk(block, groups: groups)
 				}
 			}
 		}
-		walk(table)
+		walk(table, groups: [])
 		return rows
 	}
 
