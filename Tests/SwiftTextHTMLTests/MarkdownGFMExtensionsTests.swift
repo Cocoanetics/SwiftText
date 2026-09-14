@@ -118,7 +118,7 @@ struct MarkdownGFMExtensionsTests {
 		    border: 1px solid #999;
 		    padding: 0.4em 0.7em;
 		    text-align: left;
-		    overflow-wrap: anywhere;
+		    overflow-wrap: break-word;
 		    word-break: normal;
 		    min-width: 4em;
 		}
