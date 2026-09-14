@@ -152,12 +152,32 @@ struct RenderPDFTests {
 		#expect(contains("/CIDFontType2"))
 		#expect(contains("/Identity-H"))
 		#expect(contains("/FontFile2"))
+		#expect(contains("+MyEmbeddedFont"))
+		#expect(!contains("/CIDToGIDMap /Identity"))
+		#expect(pdf.count < data.count / 2)
 
 		#if canImport(PDFKit)
 		let document = try #require(PDFDocument(data: pdf))
 		#expect(document.pageCount >= 1)
 		// ToUnicode lets the text be extracted even though it's encoded as glyphs.
 		#expect((document.string ?? "").contains("Hello"))
+		#endif
+	}
+
+	@Test("A system fallback glyph embeds a small TrueType subset")
+	func subsetsSystemFallbackFont() async throws {
+		guard FileManager.default.fileExists(atPath: "/System/Library/Fonts/Supplemental/Arial Unicode.ttf") else {
+			return
+		}
+		let pdf = try await HTMLRenderer.renderPDF(html: "<p>Ein Pfeil: →</p>")
+
+		#expect(pdf.count < 200_000)
+		#expect(pdf.range(of: Data("+FallbackArialUnicodettf".utf8)) != nil)
+		#expect(pdf.range(of: Data("/CIDToGIDMap /Identity".utf8)) == nil)
+
+		#if canImport(PDFKit)
+		let document = try #require(PDFDocument(data: pdf))
+		#expect((document.string ?? "").contains("Ein Pfeil: →"))
 		#endif
 	}
 
