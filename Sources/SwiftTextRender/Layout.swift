@@ -564,7 +564,13 @@ public final class LayoutEngine {
 			contentWidth = box.style.width.resolved(percentageBasis: 0) ?? Double(image.width)
 		} else if box.establishesInlineContext {
 			var tokens: [InlineToken] = []
-			for child in box.children { collectInline(child, into: &tokens, href: nil) }
+			let source = ObjectIdentifier(box)
+			let decorations = TextDecorationRuns(
+				underline: box.style.underline ? TextDecorationRun(source: source, style: box.style) : nil,
+				lineThrough: box.style.lineThrough ? TextDecorationRun(source: source, style: box.style) : nil)
+			for child in box.children {
+				collectInline(child, into: &tokens, href: nil, decorations: decorations)
+			}
 			contentWidth = maxContentWidth(of: tokens, textIndent: box.style.textIndent)
 		} else {
 			contentWidth = box.children.compactMap { $0 as? BlockBox }.map(maxContentWidth(of:)).max() ?? 0
@@ -596,7 +602,7 @@ public final class LayoutEngine {
 					+ (style.margin.right.resolved(percentageBasis: 0) ?? 0)
 				hasContent = true
 				pendingSpace = nil
-			case .word(let word, let style, _):
+			case .word(let word, let style, _, _):
 				if hasContent, let space = pendingSpace {
 					lineWidth += fonts.font(for: space).width(of: " ", size: space.fontSize) + space.wordSpacing
 				}
@@ -705,7 +711,7 @@ public final class LayoutEngine {
 private extension LayoutEngine {
 
 	private enum InlineToken {
-		case word(String, ComputedStyle, href: String?)
+		case word(String, ComputedStyle, href: String?, decorations: TextDecorationRuns)
 		case checkbox(isChecked: Bool, style: ComputedStyle)
 		case space(ComputedStyle)
 		case forcedBreak(ComputedStyle)
@@ -714,8 +720,12 @@ private extension LayoutEngine {
 	/// Lay out the inline content of `box` into lines. Returns the content height.
 	private func layoutInline(_ box: BlockBox, contentWidth: Double, contentX: Double, contentTop: Double) -> Double {
 		var tokens: [InlineToken] = []
+		let source = ObjectIdentifier(box)
+		let decorations = TextDecorationRuns(
+			underline: box.style.underline ? TextDecorationRun(source: source, style: box.style) : nil,
+			lineThrough: box.style.lineThrough ? TextDecorationRun(source: source, style: box.style) : nil)
 		for child in box.children {
-			collectInline(child, into: &tokens, href: nil)
+			collectInline(child, into: &tokens, href: nil, decorations: decorations)
 		}
 
 		// Resolve bidi levels over the whole inline content (per paragraph) so each
@@ -725,7 +735,7 @@ private extension LayoutEngine {
 		for token in tokens {
 			tokenScalarStart.append(bidiScalars.count)
 			switch token {
-			case .word(let word, _, _): bidiScalars.append(contentsOf: word.unicodeScalars)
+			case .word(let word, _, _, _): bidiScalars.append(contentsOf: word.unicodeScalars)
 			case .checkbox: bidiScalars.append("\u{FFFC}")
 			case .space: bidiScalars.append(" ")
 			case .forcedBreak: bidiScalars.append("\n")
@@ -878,7 +888,7 @@ private extension LayoutEngine {
 					isChecked: isChecked, size: size, leadingMargin: leadingMargin)
 				fragments.append(fragment)
 				penX += width
-			case .word(let rawWord, let style, let href):
+			case .word(let rawWord, let style, let href, let decorations):
 				// Split the word into runs that share one font (font fallback), then
 				// shape each Arabic run into presentation forms. Shaping stays in
 				// logical order (one glyph per scalar) so the later bidi pass can
@@ -905,6 +915,7 @@ private extension LayoutEngine {
 						   fragments[last].font?.key == piece.font.key,
 						   fragments[last].style == style,
 						   fragments[last].href == href,
+						   fragments[last].decorations == decorations,
 						   fragments[last].bidiLevel == level,
 						   abs(fragments[last].x + fragments[last].width - penX) < 0.001 {
 							fragments[last].text += piece.text
@@ -912,9 +923,10 @@ private extension LayoutEngine {
 							penX += piece.width
 							continue
 						}
-						let fragment = TextFragment(text: piece.text, style: style, x: penX, y: 0,
+						var fragment = TextFragment(text: piece.text, style: style, x: penX, y: 0,
 						                            width: piece.width, baseline: 0, href: href,
 						                            bidiLevel: level, font: piece.font)
+						fragment.decorations = decorations
 						fragments.append(fragment)
 						penX += piece.width
 					}
@@ -1029,7 +1041,7 @@ private extension LayoutEngine {
 		return lineTop - contentTop
 	}
 
-	private func collectInline(_ box: Box, into tokens: inout [InlineToken], href: String?) {
+	private func collectInline(_ box: Box, into tokens: inout [InlineToken], href: String?, decorations: TextDecorationRuns) {
 		if let text = box as? TextBox {
 			let style = text.style
 			if style.whiteSpace == .pre {
@@ -1038,19 +1050,19 @@ private extension LayoutEngine {
 				var segment = ""
 				for character in text.text {
 					if character == "\n" {
-						if !segment.isEmpty { tokens.append(.word(segment, style, href: href)); segment = "" }
+						if !segment.isEmpty { tokens.append(.word(segment, style, href: href, decorations: decorations)); segment = "" }
 						tokens.append(.forcedBreak(style))
 					} else if character != "\r" {
 						segment.append(character)
 					}
 				}
-				if !segment.isEmpty { tokens.append(.word(segment, style, href: href)) }
+				if !segment.isEmpty { tokens.append(.word(segment, style, href: href, decorations: decorations)) }
 				return
 			}
 			let content = style.whiteSpace.collapsesWhitespace ? collapseWhitespace(text.text) : text.text
 			var word = ""
 			func flushWord() {
-				if !word.isEmpty { tokens.append(.word(word, style, href: href)); word = "" }
+				if !word.isEmpty { tokens.append(.word(word, style, href: href, decorations: decorations)); word = "" }
 			}
 			for character in content {
 				if character == "\n" && !style.whiteSpace.collapsesWhitespace {
@@ -1087,7 +1099,17 @@ private extension LayoutEngine {
 			} else {
 				childHref = href
 			}
-			for child in inline.children { collectInline(child, into: &tokens, href: childHref) }
+			let source = ObjectIdentifier(inline)
+			let childDecorations = TextDecorationRuns(
+				underline: inline.style.underline
+					? decorations.underline ?? TextDecorationRun(source: source, style: inline.style)
+					: nil,
+				lineThrough: inline.style.lineThrough
+					? decorations.lineThrough ?? TextDecorationRun(source: source, style: inline.style)
+					: nil)
+			for child in inline.children {
+				collectInline(child, into: &tokens, href: childHref, decorations: childDecorations)
+			}
 		}
 	}
 

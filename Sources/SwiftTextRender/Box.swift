@@ -114,6 +114,18 @@ public final class LineBox {
 	public init() {}
 }
 
+/// The element that established a propagated text decoration and the style
+/// whose metrics and color should paint it.
+struct TextDecorationRun: Equatable {
+	let source: ObjectIdentifier
+	let style: ComputedStyle
+}
+
+struct TextDecorationRuns: Equatable {
+	var underline: TextDecorationRun?
+	var lineThrough: TextDecorationRun?
+}
+
 /// A shaped run of text positioned on a line.
 public struct TextFragment {
 	enum InlineControl {
@@ -136,6 +148,9 @@ public struct TextFragment {
 	public var font: Font?
 	/// A painted inline control occupying this fragment instead of text.
 	var inlineControl: InlineControl?
+	/// Decorations are identified by their originating element so whitespace
+	/// gaps within one run can be painted without joining separate runs.
+	var decorations: TextDecorationRuns
 
 	public init(text: String, style: ComputedStyle, x: Double, y: Double, width: Double, baseline: Double, href: String? = nil, bidiLevel: UInt8 = 0, font: Font? = nil) {
 		self.text = text
@@ -148,5 +163,6 @@ public struct TextFragment {
 		self.bidiLevel = bidiLevel
 		self.font = font
 		self.inlineControl = nil
+		self.decorations = TextDecorationRuns()
 	}
 }
