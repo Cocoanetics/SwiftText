@@ -403,6 +403,49 @@ struct RenderPDFTests {
 		#endif
 	}
 
+	@Test("Tall table headers repeat only when a complete body fragment fits")
+	func tallTableHeaderDoesNotClipBodyRows() async throws {
+		let rows = (1 ... 8).map { "<tr><td>BodyRow\($0)</td></tr>" }.joined()
+		let html = """
+		<style>thead th { height: 170px; }</style>
+		<table><thead><tr><th>TALLHEADER</th></tr></thead><tbody>\(rows)</tbody></table>
+		"""
+		let options = RenderOptions(pageWidthPx: 300, pageHeightPx: 200,
+		                            pageMarginPx: 10, compressStreams: false)
+		let data = try await HTMLRenderer.renderPDF(html: html, options: options)
+		let pdf = String(decoding: data, as: UTF8.self)
+
+		#expect(pdf.components(separatedBy: "(TALLHEADER) Tj").count == 2)
+		for index in 1 ... 8 {
+			#expect(data.range(of: Data("(BodyRow\(index))".utf8)) != nil)
+		}
+	}
+
+	@Test("Table headers stop repeating after the final row")
+	func tableHeaderDoesNotRepeatIntoTrailingTableHeight() async throws {
+		let html = """
+		<style>table { height: 500px; }</style>
+		<table><thead><tr><th>ONLYHEADER</th></tr></thead><tbody><tr><td>ONLYROW</td></tr></tbody></table>
+		<p>AFTERTABLE</p>
+		"""
+		let options = RenderOptions(pageWidthPx: 300, pageHeightPx: 200,
+		                            pageMarginPx: 10, compressStreams: false)
+		let data = try await HTMLRenderer.renderPDF(html: html, options: options)
+		let pdf = String(decoding: data, as: UTF8.self)
+
+		#expect(pdf.components(separatedBy: "(ONLYHEADER) Tj").count == 2)
+		#expect(data.range(of: Data("(ONLYROW)".utf8)) != nil)
+		#expect(data.range(of: Data("(AFTERTABLE)".utf8)) != nil)
+
+		#if canImport(PDFKit)
+		let document = try #require(PDFDocument(data: data))
+		let afterPage = try #require((0 ..< document.pageCount)
+			.compactMap { document.page(at: $0)?.string }
+			.first { $0.contains("AFTERTABLE") })
+		#expect(!afterPage.contains("ONLYHEADER"))
+		#endif
+	}
+
 	@Test("Table cells honor colspan")
 	func tableColspan() async throws {
 		let html = "<table><tr><td colspan=2>Wide</td></tr><tr><td>A</td><td>B</td></tr></table>"

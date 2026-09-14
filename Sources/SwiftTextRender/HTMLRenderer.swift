@@ -333,17 +333,23 @@ public enum HTMLRenderer {
 		/// Bottom of the last thing that actually paints. Used to recognise a
 		/// forced break with nothing below it.
 		var lastContentY: Double = -.infinity
+		/// Complete painted fragments that pagination must not clip. Repeated table
+		/// headers are used only when the next such fragment still fits below them.
+		var contentFragments: [(top: Double, bottom: Double)] = []
 
 		mutating func noteContent(top: Double, bottom: Double) {
 			firstContentY = min(firstContentY, top)
 			lastContentY = max(lastContentY, bottom)
+			contentFragments.append((top, bottom))
 		}
 	}
 
 	private struct RepeatedTableHeader {
 		let box: BlockBox
 		let tableTop: Double
-		let tableBottom: Double
+		/// Painted bottom of the table's final row. The table box itself can extend
+		/// farther because of padding, border spacing, or an explicit height.
+		let lastRowBottom: Double
 		let reservedHeight: Double
 	}
 
@@ -365,6 +371,7 @@ public enum HTMLRenderer {
 
 		var points = BreakPoints()
 		collectBreaks(root, into: &points)
+		let contentFragments = points.contentFragments.sorted { ($0.top, $0.bottom) < ($1.top, $1.bottom) }
 		let tableHeaders = repeatedTableHeaders(in: root)
 
 		// Drop breaks that would only produce a blank page — one with nothing
@@ -399,12 +406,21 @@ public enum HTMLRenderer {
 		var top = 0.0
 		while top < columnHeight - epsilon {
 			let repeatedHeader = tableHeaders
-				.filter {
-					top >= $0.box.y + $0.box.height - epsilon
-						&& top < $0.tableBottom - epsilon
-						&& $0.reservedHeight < contentHeight - epsilon
+				.filter { header in
+					guard top >= header.box.y + header.box.height - epsilon,
+					      top < header.lastRowBottom - epsilon,
+					      header.reservedHeight < contentHeight - epsilon else { return false }
+					guard let nextFragment = contentFragments.first(where: {
+						$0.bottom > top + epsilon && $0.top < header.lastRowBottom - epsilon
+					}) else { return false }
+					let availableBottom = top + contentHeight - header.reservedHeight
+					let fragmentBottomLimit = forced.first {
+						$0 > top + epsilon && $0 <= availableBottom + epsilon
+					} ?? availableBottom
+					return nextFragment.top >= top - epsilon
+						&& nextFragment.bottom <= fragmentBottomLimit + epsilon
 				}
-				.min { ($0.tableBottom - $0.tableTop) < ($1.tableBottom - $1.tableTop) }
+				.min { ($0.lastRowBottom - $0.tableTop) < ($1.lastRowBottom - $1.tableTop) }
 			let reservedHeight = repeatedHeader?.reservedHeight ?? 0
 			let target = top + max(epsilon, contentHeight - reservedHeight)
 
@@ -456,6 +472,7 @@ public enum HTMLRenderer {
 					}
 				}
 				collectTableChildren(box)
+				let lastRowBottom = rows.map { $0.y + $0.height }.max() ?? box.y
 				for group in groups where group.height > 0 {
 					let groupBottom = group.y + group.height
 					let followingRowTop = rows.lazy.map(\.y).filter { $0 >= groupBottom - breakEpsilon }.min()
@@ -463,7 +480,7 @@ public enum HTMLRenderer {
 					headers.append(RepeatedTableHeader(
 						box: group,
 						tableTop: box.y,
-						tableBottom: box.y + box.height,
+						lastRowBottom: lastRowBottom,
 						reservedHeight: group.height + trailingGap))
 				}
 			}
@@ -472,7 +489,7 @@ public enum HTMLRenderer {
 			}
 		}
 		visit(root)
-		return headers.filter { $0.reservedHeight < $0.tableBottom - $0.tableTop - breakEpsilon }
+		return headers.filter { $0.reservedHeight < $0.lastRowBottom - $0.tableTop - breakEpsilon }
 	}
 
 	/// Whether this box draws anything of its own — a background or a visible
