@@ -24,16 +24,62 @@ struct CompiledRule {
 /// Compile a CSS string into matchable rules, skipping anything unparseable.
 func compileRules(_ css: String, origin: Origin) -> [CompiledRule] {
 	var rules: [CompiledRule] = []
-	for node in parseStylesheet(css, skipComments: true, skipWhitespace: true) {
-		guard case .qualifiedRule(let qualified) = node else { continue }
-		guard let selectors = parseSelectorList(qualified.prelude) else { continue }
-		let declarations = parseDeclarations(qualified.content)
-		guard !declarations.isEmpty else { continue }
-		for selector in selectors {
-			rules.append(CompiledRule(selector: selector, declarations: declarations, origin: origin))
+	func append(_ nodes: [CSSNode]) {
+		for node in nodes {
+			switch node {
+			case .qualifiedRule(let qualified):
+				guard let selectors = parseSelectorList(qualified.prelude) else { continue }
+				let declarations = parseDeclarations(qualified.content)
+				guard !declarations.isEmpty else { continue }
+				for selector in selectors {
+					rules.append(CompiledRule(selector: selector, declarations: declarations, origin: origin))
+				}
+			case .atRule(let atRule) where atRule.lowerAtKeyword == "media":
+				guard matchesPrintMedium(atRule.prelude), let content = atRule.content else { continue }
+				append(parseBlocksContents(content, skipComments: true, skipWhitespace: true))
+			default:
+				continue
+			}
 		}
 	}
+	append(parseStylesheet(css, skipComments: true, skipWhitespace: true))
 	return rules
+}
+
+/// Whether a comma-separated media query list contains a query matching print.
+/// Media features are intentionally unsupported for now and therefore do not
+/// match, rather than being applied in an unknown environment.
+private func matchesPrintMedium(_ prelude: [ComponentValue]) -> Bool {
+	var queries: [[ComponentValue]] = [[]]
+	for token in prelude where !token.isWhitespaceOrComment {
+		if token.isLiteral(",") {
+			queries.append([])
+		} else {
+			queries[queries.count - 1].append(token)
+		}
+	}
+
+	return queries.contains { query in
+		let words = query.compactMap(\.identLowerValue)
+		guard words.count == query.count else { return false }
+
+		let negated: Bool
+		let medium: String
+		switch words.count {
+		case 1:
+			negated = false
+			medium = words[0]
+		case 2 where words[0] == "only" || words[0] == "not":
+			negated = words[0] == "not"
+			medium = words[1]
+		default:
+			return false
+		}
+
+		guard medium == "print" || medium == "screen" || medium == "all" else { return false }
+		let matches = medium == "print" || medium == "all"
+		return negated ? !matches : matches
+	}
 }
 
 /// Resolves computed styles for elements given author stylesheets.
