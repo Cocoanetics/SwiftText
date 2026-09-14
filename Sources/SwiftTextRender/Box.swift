@@ -99,6 +99,10 @@ public final class LineBox {
 
 /// A shaped run of text positioned on a line.
 public struct TextFragment {
+	enum InlineControl {
+		case checkbox(isChecked: Bool, size: Double, leadingMargin: Double)
+	}
+
 	public var text: String
 	public let style: ComputedStyle
 	public var x: Double
@@ -113,6 +117,8 @@ public struct TextFragment {
 	/// The font this run is drawn with. When nil, the painter resolves it from
 	/// `style`; font fallback sets it so a fallback face survives to drawing.
 	public var font: Font?
+	/// A painted inline control occupying this fragment instead of text.
+	var inlineControl: InlineControl?
 
 	public init(text: String, style: ComputedStyle, x: Double, y: Double, width: Double, baseline: Double, href: String? = nil, bidiLevel: UInt8 = 0, font: Font? = nil) {
 		self.text = text
@@ -124,5 +130,6 @@ public struct TextFragment {
 		self.href = href
 		self.bidiLevel = bidiLevel
 		self.font = font
+		self.inlineControl = nil
 	}
 }

@@ -144,8 +144,8 @@ struct SwiftMarkdownHTMLRendererTests {
 	@Test func taskListsRenderAsCheckboxes() {
 		let html = SwiftMarkdownHTMLRenderer.convert("- [ ] Todo\n- [x] Done")
 		#expect(html.contains("<ul>"))
-		#expect(html.contains(#"<li class="task-list-item"><input type="checkbox" disabled> Todo</li>"#))
-		#expect(html.contains(#"<li class="task-list-item"><input type="checkbox" disabled checked> Done</li>"#))
+		#expect(html.contains(#"<li class="task-list-item"><input type="checkbox" disabled="disabled"> Todo</li>"#))
+		#expect(html.contains(#"<li class="task-list-item"><input type="checkbox" disabled="disabled" checked="checked"> Done</li>"#))
 	}
 
 	@Test func rawHTMLEscapedByDefault() {

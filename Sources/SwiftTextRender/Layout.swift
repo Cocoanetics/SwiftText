@@ -381,6 +381,7 @@ public final class LayoutEngine {
 
 	private enum InlineToken {
 		case word(String, ComputedStyle, href: String?)
+		case checkbox(isChecked: Bool, style: ComputedStyle)
 		case space(ComputedStyle)
 		case forcedBreak(ComputedStyle)
 	}
@@ -400,6 +401,7 @@ public final class LayoutEngine {
 			tokenScalarStart.append(bidiScalars.count)
 			switch token {
 			case .word(let word, _, _): bidiScalars.append(contentsOf: word.unicodeScalars)
+			case .checkbox: bidiScalars.append("\u{FFFC}")
 			case .space: bidiScalars.append(" ")
 			case .forcedBreak: bidiScalars.append("\n")
 			}
@@ -531,6 +533,26 @@ public final class LayoutEngine {
 					lineTop += height
 				}
 				pendingSpace = nil
+			case .checkbox(let isChecked, let style):
+				let leadingMargin = style.margin.left.resolved(percentageBasis: contentWidth) ?? 0
+				let trailingMargin = style.margin.right.resolved(percentageBasis: contentWidth) ?? 0
+				let size = style.fontSize
+				let width = leadingMargin + size + trailingMargin
+				let precedingSpaceWidth = pendingSpace.map(spaceWidth) ?? 0
+				if style.whiteSpace.wraps, penX + precedingSpaceWidth + width > contentWidth, !fragments.isEmpty {
+					finishLine(isLast: false)
+				} else {
+					penX += precedingSpaceWidth
+					pendingSpace = nil
+				}
+
+				var fragment = TextFragment(
+					text: "", style: style, x: penX, y: 0, width: width, baseline: 0,
+					bidiLevel: wordLevel(tokenIndex), font: fonts.font(for: style))
+				fragment.inlineControl = .checkbox(
+					isChecked: isChecked, size: size, leadingMargin: leadingMargin)
+				fragments.append(fragment)
+				penX += width
 			case .word(let rawWord, let style, let href):
 				// Split the word into runs that share one font (font fallback), then
 				// shape each Arabic run into presentation forms. Shaping stays in
@@ -722,6 +744,15 @@ public final class LayoutEngine {
 			// A <br> forces a line break.
 			if inline.element?.localName == "br" {
 				tokens.append(.forcedBreak(inline.style))
+				return
+			}
+			// Checkboxes are replaced inline content: reserve a one-em square and
+			// paint it directly rather than relying on a font's symbol coverage.
+			if inline.element?.localName == "input",
+			   inline.element?.attributeValue("type")?.lowercased() == "checkbox" {
+				tokens.append(.checkbox(
+					isChecked: inline.element?.attributeValue("checked") != nil,
+					style: inline.style))
 				return
 			}
 			// An <a href> establishes a link for its descendant text.

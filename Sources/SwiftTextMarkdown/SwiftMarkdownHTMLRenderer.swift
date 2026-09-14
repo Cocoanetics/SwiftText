@@ -209,14 +209,13 @@ private struct HTMLRenderer: MarkupVisitor {
 	mutating func visitListItem(_ listItem: ListItem) {
 		switch listItem.checkbox {
 		case .checked:
-			let input = options.contains(.xhtml)
-				? #"<input type="checkbox" disabled="disabled" checked="checked" />"#
-				: #"<input type="checkbox" disabled checked>"#
+			// Keep boolean attributes explicit in HTML as well as XHTML. The
+			// libxml SAX bridge otherwise omits a final valueless attribute, which
+			// would erase the checked state before SwiftTextRender sees the DOM.
+			let input = #"<input type="checkbox" disabled="disabled" checked="checked""# + voidClose
 			output += #"<li class="task-list-item">"# + input + " "
 		case .unchecked:
-			let input = options.contains(.xhtml)
-				? #"<input type="checkbox" disabled="disabled" />"#
-				: #"<input type="checkbox" disabled>"#
+			let input = #"<input type="checkbox" disabled="disabled""# + voidClose
 			output += #"<li class="task-list-item">"# + input + " "
 		case .none:
 			output += "<li>"
