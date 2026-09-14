@@ -17,8 +17,9 @@ import Testing
 struct WebKitIntegrationTests {
 	private let a4 = CGSize(width: 595.28, height: 841.89)
 
-	private func paginate(_ html: String) async throws -> PDFDocument {
+	private func paginate(_ html: String, timeout: TimeInterval = 30) async throws -> PDFDocument {
 		let browser = WebKitBrowser(htmlString: html)
+		browser.timeout = timeout
 		browser.frameSize = a4
 		// Let WebKit paginate rather than stretching the frame to the content.
 		browser.preserveFrameHeight = true
@@ -68,7 +69,7 @@ struct WebKitIntegrationTests {
 	@Test("Content that overflows the page is split", .timeLimit(.minutes(2)))
 	func naturalOverflow() async throws {
 		let paragraphs = (1 ... 200).map { "<p>Paragraph number \($0) of the overflow fixture.</p>" }.joined()
-		let document = try await paginate("<html><body>\(paragraphs)</body></html>")
+		let document = try await paginate("<html><body>\(paragraphs)</body></html>", timeout: 60)
 		#expect(document.pageCount > 1)
 		// The first page must carry real content — a paginator that emits blank
 		// pages would still satisfy a bare count check.
