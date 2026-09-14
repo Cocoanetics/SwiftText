@@ -495,21 +495,21 @@ func markdownToHTML(
 	    white-space: pre-wrap;
 	    word-break: break-all;
 	}
-	table { border-collapse: collapse; margin: 0.8em 0; font-size: 0.95em; max-width: 100%; }
+	table { border-collapse: collapse; margin: 0.8em 0; font-size: 0.95em; max-width: calc(100% - 2px); }
 	thead { display: table-header-group; }
 	tr { page-break-inside: avoid; break-inside: avoid; }
 	th, td {
 	    border: 1px solid #999;
 	    padding: 0.4em 0.7em;
 	    text-align: left;
-	    overflow-wrap: anywhere;
+	    overflow-wrap: break-word;
 	    word-break: normal;
 	    min-width: 4em;
 	}
 	/* Fixed per-cell minimums must not push genuinely wide tables off the page. */
 	table:has(tr > :nth-child(12)) {
 	    table-layout: fixed;
-	    width: 100%;
+	    width: calc(100% - 2px);
 	}
 	table:has(tr > :nth-child(12)) th,
 	table:has(tr > :nth-child(12)) td { min-width: 0; }

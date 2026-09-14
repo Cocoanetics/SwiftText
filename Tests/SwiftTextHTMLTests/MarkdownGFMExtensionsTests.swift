@@ -112,13 +112,13 @@ struct MarkdownGFMExtensionsTests {
 
 	@Test func defaultStylesheetKeepsTablesWithinTheirContainer() {
 		let css = MarkdownToHTML.defaultStylesheet
-		#expect(css.contains("table { border-collapse: collapse; margin: 0.8em 0; font-size: 0.95em; max-width: 100%; }"))
+		#expect(css.contains("table { border-collapse: collapse; margin: 0.8em 0; font-size: 0.95em; max-width: calc(100% - 2px); }"))
 		#expect(css.contains("""
 		th, td {
 		    border: 1px solid #999;
 		    padding: 0.4em 0.7em;
 		    text-align: left;
-		    overflow-wrap: anywhere;
+		    overflow-wrap: break-word;
 		    word-break: normal;
 		    min-width: 4em;
 		}
@@ -126,7 +126,7 @@ struct MarkdownGFMExtensionsTests {
 		#expect(css.contains("""
 		table:has(tr > :nth-child(12)) {
 		    table-layout: fixed;
-		    width: 100%;
+		    width: calc(100% - 2px);
 		}
 		table:has(tr > :nth-child(12)) th,
 		table:has(tr > :nth-child(12)) td { min-width: 0; }
