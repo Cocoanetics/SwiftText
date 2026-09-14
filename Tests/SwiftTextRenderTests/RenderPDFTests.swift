@@ -367,6 +367,25 @@ struct RenderPDFTests {
 		#expect(pieces.joined() == token)
 	}
 
+	@Test("Overflow wrapping prefers punctuation break opportunities")
+	func overflowWrapPrefersPunctuationBreaks() async throws {
+		let tokens = [
+			String(repeating: "abcd-", count: 12) + "abcd",
+			"research/very/long/path/identifier-cannot-wrap-here.md"
+		]
+		for wrappingRule in ["", "overflow-wrap: anywhere;"] {
+			let css = ["p { margin: 0; \(wrappingRule) }"]
+			for token in tokens {
+				let root = try await layoutTree("<p>\(token)</p>", css: css, contentWidth: 100)
+				let paragraph = try #require(firstBlock(in: root) { $0.element?.localName == "p" })
+				let lines = paragraph.lines.map { $0.fragments.map(\.text).joined() }
+				#expect(lines.count > 1)
+				#expect(lines.dropLast().allSatisfy { $0.hasSuffix("-") || $0.hasSuffix("/") })
+				#expect(lines.joined() == token)
+			}
+		}
+	}
+
 	@Test("Table row groups continue across page boundaries and repeat headers")
 	func tableRowGroupsPaginate() async throws {
 		let rows = (1 ... 40).map { "<tr><td>Row\($0)</td><td>Value\($0)</td></tr>" }.joined()
