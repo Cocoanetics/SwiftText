@@ -276,7 +276,7 @@ struct Render: AsyncParsableCommand {
 	@available(macOS 12.0, *)
 	private func renderPDF(html: String, baseURL: URL?, outputURL: URL, title: String, authors: [String]) async throws {
 		if engine == .swift {
-			try await renderPDFSwift(html: html, outputURL: outputURL, title: title, authors: authors)
+			try await renderPDFSwift(html: html, baseURL: baseURL, outputURL: outputURL, title: title, authors: authors)
 			return
 		}
 		#if os(macOS)
@@ -310,14 +310,14 @@ struct Render: AsyncParsableCommand {
 
 	/// Renders the print HTML to a PDF via the cross-platform SwiftTextRender engine.
 	@available(macOS 12.0, *)
-	private func renderPDFSwift(html: String, outputURL: URL, title: String, authors: [String]) async throws {
+	private func renderPDFSwift(html: String, baseURL: URL?, outputURL: URL, title: String, authors: [String]) async throws {
 		let size = paper.pointSize
 		let widthPoints = landscape ? size.height : size.width
 		let heightPoints = landscape ? size.width : size.height
 		var options = RenderOptions()
 		options.pageWidthPx = widthPoints / 0.75 // points → CSS pixels
 		options.pageHeightPx = heightPoints / 0.75
-		let data = try await HTMLRenderer.renderPDF(html: html, options: options, title: title, authors: authors)
+		let data = try await HTMLRenderer.renderPDF(html: html, baseURL: baseURL, options: options, title: title, authors: authors)
 		try writeData(data, to: outputURL)
 	}
 

@@ -65,19 +65,27 @@ public enum HTMLRenderer {
 	///     pass author CSS here).
 	///   - fonts: A font book; register OpenType fonts on it to embed them and
 	///     render arbitrary families/scripts. Defaults to base-14 only.
+	///   - baseURL: The directory local image paths are resolved against.
 	///   - options: Page geometry.
 	///   - title: Optional document title written to the PDF Info dictionary.
 	///   - authors: Document authors written to the PDF Info dictionary.
+	///   - warningHandler: Receives warnings for images that cannot be rendered.
+	///     By default, warnings are written to standard error.
 	public static func renderPDF(
 		html: String,
 		css: [String] = [],
 		fonts: FontBook = FontBook(),
+		baseURL: URL? = nil,
 		options: RenderOptions = RenderOptions(),
 		title: String? = nil,
-		authors: [String] = []
+		authors: [String] = [],
+		warningHandler: ((String) -> Void)? = nil
 	) async throws -> Data {
-		let builder = try await DomBuilder(html: Data(html.utf8), baseURL: nil)
+		let builder = try await DomBuilder(html: Data(html.utf8), baseURL: baseURL)
 		guard let root = builder.root else { throw RenderError.noDocument }
+		let reportWarning = warningHandler ?? { warning in
+			FileHandle.standardError.write(Data("swifttext: warning: \(warning)\n".utf8))
+		}
 
 		// Author stylesheets: the document's own <style> elements first, then any
 		// sheets supplied by the caller (which therefore win on equal specificity).
@@ -98,7 +106,7 @@ public enum HTMLRenderer {
 		}
 
 		let styled = StyledElement.build(domElement: root, resolver: resolver, baseDirection: baseDirection)
-		guard let rootBox = BoxTreeBuilder.build(from: styled) as? BlockBox else { throw RenderError.noRootBox }
+		guard let rootBox = BoxTreeBuilder.build(from: styled, baseURL: baseURL, warningHandler: reportWarning) as? BlockBox else { throw RenderError.noRootBox }
 
 		let engine = LayoutEngine(fonts: fonts)
 		let margin = options.pageMarginPx

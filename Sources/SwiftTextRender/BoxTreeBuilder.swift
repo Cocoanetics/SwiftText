@@ -11,22 +11,27 @@ import SwiftTextCSS
 public enum BoxTreeBuilder {
 
 	/// Build a box for a styled element, or `nil` if it is `display: none`.
-	public static func build(from element: StyledElement) -> Box? {
+	public static func build(
+		from element: StyledElement,
+		baseURL: URL? = nil,
+		warningHandler: ((String) -> Void)? = nil
+	) -> Box? {
 		let style = element.computedStyle
 		if style.display == .none { return nil }
 
-		// Replaced <img>: a leaf block carrying the decoded image. (Only data:
-		// URIs are resolved for now; other sources produce no box.)
+		// Replaced <img>: a leaf block carrying the decoded image or a visible
+		// placeholder when its source cannot be rendered.
 		if element.localName == "img" {
-			guard let src = element.attributeValue("src"), src.hasPrefix("data:"),
-			      let image = ImageDecoder.decode(dataURI: src) else { return nil }
 			let box = BlockBox(style: style)
-			box.image = image
+			box.image = loadImage(
+				source: element.attributeValue("src"),
+				baseURL: baseURL,
+				warningHandler: warningHandler)
 			box.element = element
 			return box
 		}
 
-		let childBoxes = buildChildBoxes(of: element)
+		let childBoxes = buildChildBoxes(of: element, baseURL: baseURL, warningHandler: warningHandler)
 
 		let box: Box
 		switch style.display {
@@ -124,12 +129,16 @@ public enum BoxTreeBuilder {
 		return result
 	}
 
-	private static func buildChildBoxes(of element: StyledElement) -> [Box] {
+	private static func buildChildBoxes(
+		of element: StyledElement,
+		baseURL: URL?,
+		warningHandler: ((String) -> Void)?
+	) -> [Box] {
 		var result: [Box] = []
 		for child in element.children {
 			switch child {
 			case .element(let childElement):
-				if let box = build(from: childElement) {
+				if let box = build(from: childElement, baseURL: baseURL, warningHandler: warningHandler) {
 					result.append(box)
 				}
 			case .text(let text):
@@ -138,6 +147,82 @@ public enum BoxTreeBuilder {
 			}
 		}
 		return result
+	}
+
+	private static func loadImage(
+		source: String?,
+		baseURL: URL?,
+		warningHandler: ((String) -> Void)?
+	) -> DecodedImage {
+		guard let source, !source.isEmpty else {
+			warningHandler?("an <img> element has no source; rendering a placeholder")
+			return missingImagePlaceholder()
+		}
+
+		if source.hasPrefix("data:") {
+			guard let image = ImageDecoder.decode(dataURI: source) else {
+				warningHandler?("image data URI could not be decoded; rendering a placeholder")
+				return missingImagePlaceholder()
+			}
+			if image.pdfStream == nil {
+				warningHandler?("image data URI uses an unsupported image variant; rendering a placeholder")
+			}
+			return image
+		}
+
+		guard let url = resolvedImageURL(source, baseURL: baseURL) else {
+			warningHandler?("image source '\(source)' is not a local file; rendering a placeholder")
+			return missingImagePlaceholder()
+		}
+
+		let data: Data
+		do {
+			data = try Data(contentsOf: url)
+		} catch {
+			warningHandler?("image source '\(source)' could not be read: \(error.localizedDescription); rendering a placeholder")
+			return missingImagePlaceholder()
+		}
+
+		guard let image = ImageDecoder.decode(data) else {
+			warningHandler?("image source '\(source)' has an unsupported format; rendering a placeholder")
+			return missingImagePlaceholder()
+		}
+		if image.pdfStream == nil {
+			warningHandler?("image source '\(source)' uses an unsupported image variant; rendering a placeholder")
+		}
+		return image
+	}
+
+	private static func missingImagePlaceholder() -> DecodedImage {
+		DecodedImage(width: 300, height: 150, pdfStream: nil)
+	}
+
+	/// Resolves relative paths against the document directory and accepts absolute
+	/// paths and file URLs. Other URL schemes are deliberately not fetched during
+	/// synchronous layout.
+	private static func resolvedImageURL(_ source: String, baseURL: URL?) -> URL? {
+		#if os(Windows)
+		if source.count >= 3 {
+			let characters = Array(source)
+			if characters[1] == ":", characters[2] == "\\" || characters[2] == "/" {
+				return URL(fileURLWithPath: source)
+			}
+		}
+		if source.hasPrefix("\\\\") {
+			return URL(fileURLWithPath: source)
+		}
+		#endif
+
+		if source.hasPrefix("/") {
+			return URL(fileURLWithPath: source)
+		}
+		if let sourceURL = URL(string: source), sourceURL.scheme != nil {
+			return sourceURL.isFileURL ? sourceURL : nil
+		}
+		guard let baseURL,
+		      let resolved = URL(string: source, relativeTo: baseURL)?.absoluteURL,
+		      resolved.isFileURL else { return nil }
+		return resolved
 	}
 
 	/// Ensure block containers don't mix block- and inline-level children: wrap
