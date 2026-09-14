@@ -23,6 +23,8 @@ public class Box {
 	public var y: Double = 0
 	public var width: Double = 0
 	public var height: Double = 0
+	/// Edges omitted when an adjacent table cell owns the shared collapsed border.
+	var suppressedCollapsedBorders = Edges(false)
 
 	init(style: ComputedStyle) {
 		self.style = style

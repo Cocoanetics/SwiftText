@@ -354,6 +354,31 @@ struct RenderPDFTests {
 		#expect(cells[0].x == cells[2].x)  // A and C share a column
 	}
 
+	@Test("Table border spacing and collapsed shared borders")
+	func tableBorderModels() async throws {
+		let html = "<table><tr><td>A</td><td>B</td></tr><tr><td>C</td><td>D</td></tr></table>"
+		let separated = try await layoutTree(
+			html,
+			css: ["table { border-spacing: 7px 11px } td { border: 1px solid black }"],
+			contentWidth: 400)
+		let separatedCells = collectBlocks(in: separated) { $0.element?.localName == "td" }
+		#expect(abs(separatedCells[1].x - (separatedCells[0].x + separatedCells[0].width) - 7) < 0.01)
+		#expect(abs(separatedCells[2].y - (separatedCells[0].y + separatedCells[0].height) - 11) < 0.01)
+
+		let collapsed = try await layoutTree(
+			html,
+			css: ["table { border-collapse: collapse; border-spacing: 7px 11px } td { border: 1px solid black }"],
+			contentWidth: 400)
+		let collapsedCells = collectBlocks(in: collapsed) { $0.element?.localName == "td" }
+		#expect(abs(collapsedCells[1].x - (collapsedCells[0].x + collapsedCells[0].width)) < 0.01)
+		#expect(abs(collapsedCells[2].y - (collapsedCells[0].y + collapsedCells[0].height)) < 0.01)
+		#expect(collapsedCells[0].suppressedCollapsedBorders == Edges(false))
+		#expect(collapsedCells[1].suppressedCollapsedBorders.left)
+		#expect(collapsedCells[2].suppressedCollapsedBorders.top)
+		#expect(collapsedCells[3].suppressedCollapsedBorders.left)
+		#expect(collapsedCells[3].suppressedCollapsedBorders.top)
+	}
+
 	@Test("Unbreakable table tokens wrap in rendered PDFs")
 	func unbreakableTableTokenWraps() async throws {
 		let token = String(repeating: "X", count: 75)

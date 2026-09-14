@@ -167,16 +167,16 @@ public final class Painter {
 		}
 
 		stream.pushState()
-		if border.top > 0 {
+		if border.top > 0, !box.suppressedCollapsedBorders.top {
 			fillEdge(box.x, bottomY + box.height - border.top, box.width, border.top, style.borderColor.top)
 		}
-		if border.bottom > 0 {
+		if border.bottom > 0, !box.suppressedCollapsedBorders.bottom {
 			fillEdge(box.x, bottomY, box.width, border.bottom, style.borderColor.bottom)
 		}
-		if border.left > 0 {
+		if border.left > 0, !box.suppressedCollapsedBorders.left {
 			fillEdge(box.x, bottomY, border.left, box.height, style.borderColor.left)
 		}
-		if border.right > 0 {
+		if border.right > 0, !box.suppressedCollapsedBorders.right {
 			fillEdge(box.x + box.width - border.right, bottomY, border.right, box.height, style.borderColor.right)
 		}
 		stream.popState()

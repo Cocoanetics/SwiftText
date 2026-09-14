@@ -192,7 +192,9 @@ public final class LayoutEngine {
 	private func layoutTable(_ table: BlockBox, contentWidth: Double, contentX: Double, contentTop: Double) -> Double {
 		let rows = collectTableRows(table)
 		guard !rows.isEmpty else { return 0 }
-		let spacing = 2.0 // border-spacing (UA default)
+		let collapsed = table.style.borderCollapse == .collapse
+		let horizontalSpacing = collapsed ? 0 : table.style.borderSpacing.horizontal
+		let verticalSpacing = collapsed ? 0 : table.style.borderSpacing.vertical
 
 		// Place cells into a grid, marking spanned slots as occupied.
 		var placements: [CellPlacement] = []
@@ -214,9 +216,23 @@ public final class LayoutEngine {
 
 		let columnCount = placements.map { $0.column + $0.colspan }.max() ?? 0
 		guard columnCount > 0 else { return 0 }
-		let columnWidth = max(0, (contentWidth - Double(columnCount + 1) * spacing) / Double(columnCount))
-		func columnX(_ column: Int) -> Double { contentX + spacing + Double(column) * (columnWidth + spacing) }
-		func spanWidth(_ colspan: Int) -> Double { Double(colspan) * columnWidth + Double(colspan - 1) * spacing }
+		let columnWidth = max(0, (contentWidth - Double(columnCount + 1) * horizontalSpacing) / Double(columnCount))
+		func columnX(_ column: Int) -> Double { contentX + horizontalSpacing + Double(column) * (columnWidth + horizontalSpacing) }
+		func spanWidth(_ colspan: Int) -> Double { Double(colspan) * columnWidth + Double(colspan - 1) * horizontalSpacing }
+
+		// In the collapsed model an interior edge belongs to only one cell. Prefer
+		// the cell above or to the left so ordinary rectangular grids paint every
+		// shared rule once while retaining all four outer edges.
+		for placement in placements {
+			placement.cell.suppressedCollapsedBorders = Edges(false)
+			guard collapsed else { continue }
+			let occupiedRows = placement.row ..< placement.row + placement.rowspan
+			let occupiedColumns = placement.column ..< placement.column + placement.colspan
+			placement.cell.suppressedCollapsedBorders.left = placement.column > 0
+				&& occupiedRows.allSatisfy { occupied.contains(slot($0, placement.column - 1)) }
+			placement.cell.suppressedCollapsedBorders.top = placement.row > 0
+				&& occupiedColumns.allSatisfy { occupied.contains(slot(placement.row - 1, $0)) }
+		}
 
 		// Pass 1: measure each cell's height at its column width.
 		var measured: [ObjectIdentifier: Double] = [:]
@@ -238,7 +254,7 @@ public final class LayoutEngine {
 			let lastRow = min(placement.row + placement.rowspan - 1, rows.count - 1)
 			let spannedRows = placement.row ... lastRow
 			let currentHeight = spannedRows.reduce(0.0) { $0 + rowHeights[$1] }
-				+ Double(lastRow - placement.row) * spacing
+				+ Double(lastRow - placement.row) * verticalSpacing
 			let deficit = (measured[ObjectIdentifier(placement.cell)] ?? 0) - currentHeight
 			if deficit > 0 {
 				let share = deficit / Double(spannedRows.count)
@@ -246,10 +262,10 @@ public final class LayoutEngine {
 			}
 		}
 		var rowTops = [Double](repeating: 0, count: rows.count)
-		var y = contentTop + spacing
+		var y = contentTop + verticalSpacing
 		for index in rows.indices {
 			rowTops[index] = y
-			y += rowHeights[index] + spacing
+			y += rowHeights[index] + verticalSpacing
 		}
 
 		// Pass 2: re-lay out each cell at its final position, stretch to its row(s),
@@ -261,7 +277,7 @@ public final class LayoutEngine {
 			let lastRow = min(placement.row + placement.rowspan - 1, rows.count - 1)
 			var stretched = 0.0
 			for r in placement.row ... lastRow { stretched += rowHeights[r] }
-			stretched += Double(lastRow - placement.row) * spacing
+			stretched += Double(lastRow - placement.row) * verticalSpacing
 			stretched = max(stretched, naturalHeight)
 			placement.cell.height = stretched
 
@@ -288,7 +304,7 @@ public final class LayoutEngine {
 		// a <thead>/<tbody>/<tfoot> at its zero-sized default makes it intersect only
 		// the first page and silently drops all of its later rows.
 		let bounds = sizeTableRowGroups(in: table, contentX: contentX, contentWidth: contentWidth)
-		return max(y, (bounds?.bottom ?? contentTop) + spacing) - contentTop
+		return max(y, (bounds?.bottom ?? contentTop) + verticalSpacing) - contentTop
 	}
 
 	/// Give table rows and row-group boxes bounds that contain their laid-out
