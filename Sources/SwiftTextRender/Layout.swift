@@ -592,10 +592,7 @@ public final class LayoutEngine {
 				if hasContent, let space = pendingSpace {
 					lineWidth += fonts.font(for: space).width(of: " ", size: space.fontSize) + space.wordSpacing
 				}
-				for run in fonts.resolveRuns(word, style: style) {
-					lineWidth += run.font.width(of: run.text, size: style.fontSize)
-						+ style.letterSpacing * Double(run.text.unicodeScalars.count)
-				}
+				lineWidth += inlineTextWidth(word, style: style)
 				hasContent = true
 				pendingSpace = nil
 			}
@@ -620,11 +617,7 @@ public final class LayoutEngine {
 		} else if box.establishesInlineContext {
 			var tokens: [InlineToken] = []
 			for child in box.children { collectInline(child, into: &tokens, href: nil) }
-			if box.style.whiteSpace.wraps {
-				contentWidth = minContentWidth(of: tokens, textIndent: box.style.textIndent)
-			} else {
-				contentWidth = maxContentWidth(of: tokens, textIndent: box.style.textIndent)
-			}
+			contentWidth = minContentWidth(of: tokens, textIndent: box.style.textIndent)
 		} else {
 			contentWidth = box.children.compactMap { $0 as? BlockBox }.map(minContentWidth(of:)).max() ?? 0
 		}
@@ -634,47 +627,78 @@ public final class LayoutEngine {
 
 	private func minContentWidth(of tokens: [InlineToken], textIndent: Double) -> Double {
 		var maximum = 0.0
+		var runWidth = 0.0
+		var hasContent = false
 		var isFirstContent = true
+		var pendingSpace: ComputedStyle?
+		func finishRun() { maximum = max(maximum, runWidth); runWidth = 0 }
+		func beginContent() {
+			if isFirstContent {
+				runWidth += textIndent
+				isFirstContent = false
+			}
+			hasContent = true
+		}
+		func prepareContent(wrapping wraps: Bool) {
+			if wraps, hasContent {
+				finishRun()
+				hasContent = false
+			} else if let space = pendingSpace {
+				runWidth += fonts.font(for: space).width(of: " ", size: space.fontSize) + space.wordSpacing
+			}
+			pendingSpace = nil
+		}
 		for token in tokens {
-			let width: Double
 			switch token {
-			case .space, .forcedBreak:
-				continue
+			case .space(let style):
+				if hasContent { pendingSpace = style }
+			case .forcedBreak:
+				finishRun()
+				hasContent = false
+				pendingSpace = nil
 			case .checkbox(_, let style):
-				width = (style.margin.left.resolved(percentageBasis: 0) ?? 0)
+				prepareContent(wrapping: style.whiteSpace.wraps)
+				beginContent()
+				runWidth += (style.margin.left.resolved(percentageBasis: 0) ?? 0)
 					+ style.fontSize
 					+ (style.margin.right.resolved(percentageBasis: 0) ?? 0)
 			case .word(let word, let style, _):
-				width = minContentWidth(of: word, style: style)
+				prepareContent(wrapping: style.whiteSpace.wraps)
+				beginContent()
+				for (index, width) in minContentSegments(of: word, style: style).enumerated() {
+					if index > 0 { finishRun() }
+					runWidth += width
+				}
 			}
-			maximum = max(maximum, width + (isFirstContent ? textIndent : 0))
-			isFirstContent = false
 		}
+		finishRun()
 		return maximum
 	}
 
-	private func minContentWidth(of word: String, style: ComputedStyle) -> Double {
-		func width(of text: String) -> Double {
-			fonts.resolveRuns(text, style: style).reduce(0.0) { width, run in
-				width + run.font.width(of: run.text, size: style.fontSize)
-					+ style.letterSpacing * Double(run.text.unicodeScalars.count)
-			}
+	private func inlineTextWidth(_ text: String, style: ComputedStyle) -> Double {
+		fonts.resolveRuns(text, style: style).reduce(0.0) { width, run in
+			width + run.font.width(of: run.text, size: style.fontSize)
+				+ style.letterSpacing * Double(run.text.unicodeScalars.count)
 		}
+	}
 
+	private func minContentSegments(of word: String, style: ComputedStyle) -> [Double] {
+		guard style.whiteSpace.wraps else { return [inlineTextWidth(word, style: style)] }
 		if style.wordBreak == .breakAll || style.overflowWrap == .anywhere {
-			return word.map { width(of: String($0)) }.max() ?? 0
+			return word.map { inlineTextWidth(String($0), style: style) }
 		}
 
 		let breaks = preferredLineBreakOffsets(in: word).sorted()
-		guard !breaks.isEmpty else { return width(of: word) }
-		var maximum = 0.0
+		guard !breaks.isEmpty else { return [inlineTextWidth(word, style: style)] }
+		var widths: [Double] = []
 		var start = word.startIndex
 		for offset in breaks {
 			let end = String.Index(utf16Offset: offset, in: word)
-			maximum = max(maximum, width(of: String(word[start ..< end])))
+			widths.append(inlineTextWidth(String(word[start ..< end]), style: style))
 			start = end
 		}
-		return max(maximum, width(of: String(word[start...])))
+		widths.append(inlineTextWidth(String(word[start...]), style: style))
+		return widths
 	}
 
 	/// Give table rows and row-group boxes bounds that contain their laid-out

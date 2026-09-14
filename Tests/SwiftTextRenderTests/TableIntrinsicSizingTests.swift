@@ -5,6 +5,23 @@ import Testing
 @testable import SwiftTextRender
 
 extension RenderPDFTests {
+	@Test("Descendant nowrap runs set table min-content width")
+	func descendantNowrapPreservesTableMinContentWidth() async throws {
+		let html = """
+		<table><tr><td><span style="white-space: nowrap">several long words</span></td>
+		<td>Several ordinary words create a wide preferred column</td></tr></table>
+		"""
+		let css = ["table { max-width: 100%; } td { padding: 0; }"]
+		let root = try await layoutTree(html, css: css, contentWidth: 220)
+		let cells = collectBlocks(in: root) { $0.element?.localName == "td" }
+		let nowrapCell = try #require(cells.first)
+
+		#expect(nowrapCell.lines.count == 1)
+		let rightEdge = nowrapCell.lines.flatMap(\.fragments)
+			.map { $0.x + $0.width }.max() ?? nowrapCell.x
+		#expect(rightEdge <= nowrapCell.x + nowrapCell.width + 0.01)
+	}
+
 	@Test("Break-word does not reduce table min-content width")
 	func breakWordPreservesTableMinContentWidth() async throws {
 		let html = """
