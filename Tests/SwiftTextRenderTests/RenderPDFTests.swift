@@ -353,6 +353,9 @@ struct RenderPDFTests {
 		#expect(cells[0].y == cells[1].y)  // A and B share a row
 		#expect(cells[0].x == cells[2].x)  // A and C share a column
 	}
+}
+
+extension RenderPDFTests {
 
 	@Test("Table border spacing and collapsed shared borders")
 	func tableBorderModels() async throws {
