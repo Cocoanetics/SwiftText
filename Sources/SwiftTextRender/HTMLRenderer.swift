@@ -112,7 +112,7 @@ public enum HTMLRenderer {
 		// nil` is a single auto-height page.
 		let pageHeightPx = options.pageHeightPx ?? (columnHeight + 2 * margin)
 		let slices = options.pageHeightPx == nil
-			? [(top: 0.0, bottom: columnHeight)]
+			? [PageSlice(top: 0, bottom: columnHeight, repeatedHeader: nil)]
 			: paginate(rootBox, columnHeight: columnHeight, pageHeightPx: pageHeightPx, margin: margin)
 
 		let pdf = PDF()
@@ -127,9 +127,13 @@ public enum HTMLRenderer {
 		let totalPages = slices.count
 		for (pageIndex, slice) in slices.enumerated() {
 			let geometry = PageGeometry(pageWidthPx: options.pageWidthPx, pageHeightPx: pageHeightPx,
-			                            marginPx: margin, columnTop: slice.top, sliceHeightPx: slice.bottom - slice.top)
+			                            marginPx: margin, columnTop: slice.top, sliceHeightPx: slice.bottom - slice.top,
+			                            contentOffsetPx: slice.repeatedHeader?.reservedHeight ?? 0)
 			let painter = Painter(geometry: geometry, fonts: fonts, builder: fontBuilder, compress: options.compressStreams)
 			painter.paint(rootBox)
+			if let header = slice.repeatedHeader {
+				painter.paintRepeatedTableHeader(header.box)
+			}
 			if !pageRules.isEmpty {
 				let marginBoxes = resolveMarginBoxes(pageRules, pageIndex: pageIndex, totalPages: totalPages,
 				                                     rootStyle: rootBox.style, rootFontSize: rootBox.style.fontSize)
@@ -227,7 +231,7 @@ public enum HTMLRenderer {
 	// MARK: - Bookmarks / outline
 
 	/// Build a PDF outline (bookmarks) from the document's heading hierarchy.
-	private static func addOutline(to pdf: PDF, root: BlockBox, slices: [(top: Double, bottom: Double)],
+	private static func addOutline(to pdf: PDF, root: BlockBox, slices: [PageSlice],
 	                               pages: [PDFDictionary], pageHeightPx: Double, margin: Double) {
 		var headings: [(level: Int, title: String, y: Double)] = []
 		collectHeadings(root, into: &headings)
@@ -252,7 +256,7 @@ public enum HTMLRenderer {
 				pageIndex = index
 				break
 			}
-			let pageY = margin + (y - slices[pageIndex].top)
+			let pageY = margin + (slices[pageIndex].repeatedHeader?.reservedHeight ?? 0) + (y - slices[pageIndex].top)
 			let topPt = (pageHeightPx - pageY) * pxToPt
 			return PDFArray([pages[pageIndex].reference, "/XYZ", margin * pxToPt, topPt, "null"])
 		}
@@ -329,11 +333,30 @@ public enum HTMLRenderer {
 		/// Bottom of the last thing that actually paints. Used to recognise a
 		/// forced break with nothing below it.
 		var lastContentY: Double = -.infinity
+		/// Complete painted fragments that pagination must not clip. Repeated table
+		/// headers are used only when the next such fragment still fits below them.
+		var contentFragments: [(top: Double, bottom: Double)] = []
 
 		mutating func noteContent(top: Double, bottom: Double) {
 			firstContentY = min(firstContentY, top)
 			lastContentY = max(lastContentY, bottom)
+			contentFragments.append((top, bottom))
 		}
+	}
+
+	private struct RepeatedTableHeader {
+		let box: BlockBox
+		let tableTop: Double
+		/// Painted bottom of the table's final row. The table box itself can extend
+		/// farther because of padding, border spacing, or an explicit height.
+		let lastRowBottom: Double
+		let reservedHeight: Double
+	}
+
+	private struct PageSlice {
+		let top: Double
+		let bottom: Double
+		let repeatedHeader: RepeatedTableHeader?
 	}
 
 	/// Tolerance for comparing column coordinates, in CSS pixels. Also the floor
@@ -342,12 +365,14 @@ public enum HTMLRenderer {
 
 	/// Split the laid-out column into page slices, honouring CSS fragmentation
 	/// properties and otherwise breaking at line and block boundaries.
-	private static func paginate(_ root: BlockBox, columnHeight: Double, pageHeightPx: Double, margin: Double) -> [(top: Double, bottom: Double)] {
+	private static func paginate(_ root: BlockBox, columnHeight: Double, pageHeightPx: Double, margin: Double) -> [PageSlice] {
 		let contentHeight = max(1, pageHeightPx - 2 * margin)
 		let epsilon = breakEpsilon
 
 		var points = BreakPoints()
 		collectBreaks(root, into: &points)
+		let contentFragments = points.contentFragments.sorted { ($0.top, $0.bottom) < ($1.top, $1.bottom) }
+		let tableHeaders = repeatedTableHeaders(in: root)
 
 		// Drop breaks that would only produce a blank page — one with nothing
 		// painted above it (the common `h1 { break-before: page }` on a document
@@ -365,7 +390,7 @@ public enum HTMLRenderer {
 
 		// Short documents still need pagination if they carry a forced break.
 		guard columnHeight > contentHeight + epsilon || !forced.isEmpty else {
-			return [(0, columnHeight)]
+			return [PageSlice(top: 0, bottom: columnHeight, repeatedHeader: nil)]
 		}
 
 		// `break-inside: avoid` can only be honoured for blocks that would fit on
@@ -377,21 +402,38 @@ public enum HTMLRenderer {
 			atomic.contains { y > $0.top + epsilon && y < $0.bottom - epsilon }
 		}
 
-		var slices: [(top: Double, bottom: Double)] = []
+		var slices: [PageSlice] = []
 		var top = 0.0
 		while top < columnHeight - epsilon {
-			let target = top + contentHeight
+			let repeatedHeader = tableHeaders
+				.filter { header in
+					guard top >= header.box.y + header.box.height - epsilon,
+					      top < header.lastRowBottom - epsilon,
+					      header.reservedHeight < contentHeight - epsilon else { return false }
+					guard let nextFragment = contentFragments.first(where: {
+						$0.bottom > top + epsilon && $0.top < header.lastRowBottom - epsilon
+					}) else { return false }
+					let availableBottom = top + contentHeight - header.reservedHeight
+					let fragmentBottomLimit = forced.first {
+						$0 > top + epsilon && $0 <= availableBottom + epsilon
+					} ?? availableBottom
+					return nextFragment.top >= top - epsilon
+						&& nextFragment.bottom <= fragmentBottomLimit + epsilon
+				}
+				.min { ($0.lastRowBottom - $0.tableTop) < ($1.lastRowBottom - $1.tableTop) }
+			let reservedHeight = repeatedHeader?.reservedHeight ?? 0
+			let target = top + max(epsilon, contentHeight - reservedHeight)
 
 			// A mandatory break outranks everything, even when it leaves most of
 			// the page empty. The *earliest* one wins: we cannot page past it.
 			if let forcedBreak = forced.first(where: { $0 > top + epsilon && $0 <= target + epsilon }) {
-				slices.append((top, forcedBreak))
+				slices.append(PageSlice(top: top, bottom: forcedBreak, repeatedHeader: repeatedHeader))
 				top = forcedBreak
 				continue
 			}
 
 			if target >= columnHeight {
-				slices.append((top, columnHeight))
+				slices.append(PageSlice(top: top, bottom: columnHeight, repeatedHeader: repeatedHeader))
 				break
 			}
 
@@ -405,10 +447,49 @@ public enum HTMLRenderer {
 				?? reachable.last
 				?? target
 
-			slices.append((top, bottom))
+			slices.append(PageSlice(top: top, bottom: bottom, repeatedHeader: repeatedHeader))
 			top = bottom
 		}
-		return slices.isEmpty ? [(0, columnHeight)] : slices
+		return slices.isEmpty ? [PageSlice(top: 0, bottom: columnHeight, repeatedHeader: nil)] : slices
+	}
+
+	/// Find header groups that can be reused when their table crosses a page
+	/// boundary. The trailing gap is inferred from the first following row so the
+	/// repeated header reserves the table's existing border spacing too.
+	private static func repeatedTableHeaders(in root: BlockBox) -> [RepeatedTableHeader] {
+		var headers: [RepeatedTableHeader] = []
+		func visit(_ box: BlockBox) {
+			if box.style.display == .table {
+				var groups: [BlockBox] = []
+				var rows: [BlockBox] = []
+				func collectTableChildren(_ parent: BlockBox) {
+					for child in parent.children {
+						guard let block = child as? BlockBox else { continue }
+						if block.style.display == .table { continue }
+						if block.style.display == .tableHeaderGroup { groups.append(block) }
+						if block.style.display == .tableRow { rows.append(block) }
+						collectTableChildren(block)
+					}
+				}
+				collectTableChildren(box)
+				let lastRowBottom = rows.map { $0.y + $0.height }.max() ?? box.y
+				for group in groups where group.height > 0 {
+					let groupBottom = group.y + group.height
+					let followingRowTop = rows.lazy.map(\.y).filter { $0 >= groupBottom - breakEpsilon }.min()
+					let trailingGap = max(0, (followingRowTop ?? groupBottom) - groupBottom)
+					headers.append(RepeatedTableHeader(
+						box: group,
+						tableTop: box.y,
+						lastRowBottom: lastRowBottom,
+						reservedHeight: group.height + trailingGap))
+				}
+			}
+			for child in box.children {
+				if let block = child as? BlockBox { visit(block) }
+			}
+		}
+		visit(root)
+		return headers.filter { $0.reservedHeight < $0.lastRowBottom - $0.tableTop - breakEpsilon }
 	}
 
 	/// Whether this box draws anything of its own — a background or a visible
