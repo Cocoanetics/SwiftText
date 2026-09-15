@@ -53,7 +53,10 @@ public final class LayoutEngine {
 		let availableWidth = containingWidth - horizontalExtras
 		let unclampedWidth = explicitWidth ?? availableWidth
 		let maximumWidth = style.maxWidth?.resolved(percentageBasis: basis)
-		let contentWidth = max(0, min(unclampedWidth, maximumWidth ?? unclampedWidth))
+		// `min-width` wins over `max-width` when the two conflict (CSS 2.1 §10.4).
+		let minimumWidth = style.minWidth.resolved(percentageBasis: basis) ?? 0
+		let cappedWidth = min(unclampedWidth, maximumWidth ?? unclampedWidth)
+		let contentWidth = max(0, max(cappedWidth, minimumWidth))
 		let borderBoxWidth = contentWidth + paddingLeft + paddingRight + border.left + border.right
 
 		box.x = marginX + marginLeft
