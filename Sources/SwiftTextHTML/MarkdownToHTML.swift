@@ -38,8 +38,13 @@ public enum MarkdownToHTML {
 	}
 
 	/// Returns the plain-text content of the first top-level heading.
+	///
+	/// Parsed with `.disableSmartOpts` like every other entry point, so an
+	/// inferred document title keeps the literal source punctuation the
+	/// rendered body keeps — `--` does not become an en dash here while
+	/// staying `--` in the text under it.
 	public static func firstHeadingPlainText(_ markdown: String) -> String? {
-		let document = Document(parsing: markdown)
+		let document = Document(parsing: markdown, options: [.disableSmartOpts])
 		for child in document.children {
 			guard let heading = child as? Heading else { continue }
 			let text = swiftMarkdownPlainText(of: heading)
