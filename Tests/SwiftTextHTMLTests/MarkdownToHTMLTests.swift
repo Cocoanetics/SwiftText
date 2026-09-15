@@ -167,6 +167,22 @@ struct MarkdownToHTMLTests {
 		#expect(MarkdownToHTML.firstHeadingPlainText(markdown) == "Research & Development Plan 2026")
 	}
 
+	@Test func firstHeadingPlainTextKeepsLiteralPunctuation() {
+		// cmark-gfm applies smart punctuation by default. Every renderer here
+		// parses with `.disableSmartOpts`, so the inferred title must not be
+		// the one place where `--`, `...` and straight quotes get rewritten.
+		let markdown = "# Dashes -- and ellipsis... and \"quotes\"\n\nBody -- text... here.\n"
+		let title = MarkdownToHTML.firstHeadingPlainText(markdown)
+		#expect(title == "Dashes -- and ellipsis... and \"quotes\"")
+
+		// The title must follow the same convention as the rendered body.
+		let html = MarkdownToHTML.convert(markdown)
+		#expect(html.contains("Body -- text... here."))
+		for smart in ["\u{2013}", "\u{2014}", "\u{2026}", "\u{2018}", "\u{2019}", "\u{201C}", "\u{201D}"] {
+			#expect(title?.contains(smart) != true)
+		}
+	}
+
 	@Test func footnotes() {
 		let html = MarkdownToHTML.convert("Hello[^a].\n\n[^a]: The note")
 		#expect(html.contains("<sup><a href=\"#fn-1\" id=\"ref-1\">[1]</a></sup>"))
