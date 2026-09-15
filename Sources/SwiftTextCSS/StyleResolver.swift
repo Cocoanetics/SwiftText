@@ -460,6 +460,8 @@ private func applyLonghand(_ name: String, _ value: [ComponentValue], to style: 
 		}
 	case "width":
 		if let length = parseLength(value, fontSize: fontSize, rootFontSize: rootFontSize) { style.width = length }
+	case "min-width":
+		if let length = parseLength(value, fontSize: fontSize, rootFontSize: rootFontSize) { style.minWidth = length }
 	case "max-width":
 		if let token = significant(value).first, case .ident(let ident) = token.token,
 		   ident.asciiLowercased == "none" {
@@ -581,6 +583,7 @@ private func copyLonghand(_ name: String, from source: ComputedStyle, into style
 	case "border-spacing": style.borderSpacing = source.borderSpacing
 	case "direction": style.direction = source.direction
 	case "width": style.width = source.width
+	case "min-width": style.minWidth = source.minWidth
 	case "max-width": style.maxWidth = source.maxWidth
 	case "height": style.height = source.height
 	case "break-before": style.breakBefore = source.breakBefore

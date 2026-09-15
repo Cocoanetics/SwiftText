@@ -68,6 +68,33 @@ struct CascadeTests {
 		#expect(cellStyle.borderSpacing == BorderSpacing(horizontal: 3, vertical: 5))
 	}
 
+	@Test("min-width is computed, clamps independently of max-width, and does not inherit")
+	func minWidth() {
+		let resolver = StyleResolver(authorStyleSheets: [
+			"div { min-width: 120px; max-width: 75% }",
+			"section { min-width: 40% }"
+		])
+
+		let div = Element("div")
+		let child = Element("span")
+		div.adding(child)
+		let divStyle = style(div, resolver: resolver)
+		#expect(divStyle.minWidth == .px(120))
+		#expect(divStyle.maxWidth == .percent(75))
+
+		// min-width is not an inherited property: the child falls back to `auto`.
+		let childStyle = resolver.style(for: child, inheriting: divStyle, rootFontSize: 16)
+		#expect(childStyle.minWidth == .auto)
+
+		// Percentages are kept unresolved until a containing block is known.
+		let sectionStyle = style(Element("section"), resolver: resolver)
+		#expect(sectionStyle.minWidth == .percent(40))
+
+		// The initial value is `auto`, which resolves to no minimum.
+		#expect(ComputedStyle.initial.minWidth == .auto)
+		#expect(ComputedStyle.initial.minWidth.resolved(percentageBasis: 500) == nil)
+	}
+
 	@Test("User-agent headings: size and weight")
 	func uaHeadings() {
 		let resolver = StyleResolver()

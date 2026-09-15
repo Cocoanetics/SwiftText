@@ -233,6 +233,8 @@ public struct ComputedStyle: Equatable, Sendable {
 	/// Horizontal and vertical table-cell spacing (`border-spacing`; inherited).
 	public var borderSpacing: BorderSpacing
 	public var width: Length
+	/// The minimum content width (`auto` for the initial value).
+	public var minWidth: Length
 	/// The maximum content width, or `nil` for the initial `none` value.
 	public var maxWidth: Length?
 	public var height: Length
@@ -283,6 +285,7 @@ public struct ComputedStyle: Equatable, Sendable {
 		borderCollapse: .separate,
 		borderSpacing: BorderSpacing(horizontal: 0, vertical: 0),
 		width: .auto,
+		minWidth: .auto,
 		maxWidth: nil,
 		height: .auto,
 		breakBefore: .auto,
