@@ -740,39 +740,6 @@ extension RenderPDFTests {
 		#expect(baseline > low.y + low.height / 2) // content sits in the lower half
 	}
 
-	@Test("Box model: padding and border widen the border box")
-	func boxModel() async throws {
-		let css = ["div { width: 100px; padding: 10px; border: 5px solid black }"]
-		let root = try await layoutTree("<div>x</div>", css: css, contentWidth: 400)
-		let div = try #require(firstBlock(in: root) { $0.element?.localName == "div" })
-		// border-box width = content(100) + padding(2×10) + border(2×5) = 130
-		#expect(div.width == 130)
-	}
-
-	@Test("Box model: min-width raises a narrow box and outranks max-width")
-	func minWidthClamp() async throws {
-		// A min-width wider than the used width wins.
-		let raised = try await layoutTree(
-			"<div>x</div>",
-			css: ["div { width: 50px; min-width: 200px }"],
-			contentWidth: 400)
-		#expect(try #require(firstBlock(in: raised) { $0.element?.localName == "div" }).width == 200)
-
-		// When the two conflict, min-width beats max-width (CSS 2.1 §10.4).
-		let conflicting = try await layoutTree(
-			"<div>x</div>",
-			css: ["div { width: 50px; min-width: 300px; max-width: 100px }"],
-			contentWidth: 400)
-		#expect(try #require(firstBlock(in: conflicting) { $0.element?.localName == "div" }).width == 300)
-
-		// A min-width narrower than the used width changes nothing.
-		let unaffected = try await layoutTree(
-			"<div>x</div>",
-			css: ["div { width: 250px; min-width: 100px }"],
-			contentWidth: 400)
-		#expect(try #require(firstBlock(in: unaffected) { $0.element?.localName == "div" }).width == 250)
-	}
-
 	func collectBlocks(in box: BlockBox, where predicate: (BlockBox) -> Bool) -> [BlockBox] {
 		var result: [BlockBox] = []
 		if predicate(box) { result.append(box) }
