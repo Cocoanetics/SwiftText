@@ -25,12 +25,15 @@ public struct DocumentBlockMarkdownRenderer {
 	) -> Document {
 		let ordered = orderedBlocks(blocks, textLines: textLines)
 		let merged = mergeParagraphContinuations(ordered, pageBounds: boundsForPage(from: ordered, textLines: textLines))
+		// How this document sets its text decides which sizes are headings, so
+		// it is measured over every block before any of them is written.
+		let typography = DocumentTypography(blocks: merged)
 		let blockMarkup: [BlockMarkup] = merged.compactMap { block -> BlockMarkup? in
 			switch block.kind {
 			case .paragraph(let paragraph):
-				return makeParagraph(paragraph)
+				return makeParagraph(paragraph, typography: typography)
 			case .list(let list):
-				return makeList(list)
+				return makeList(list, typography: typography)
 			case .table(let table):
 				return makeTable(table)
 			case .image:
@@ -59,7 +62,11 @@ public struct DocumentBlockMarkdownRenderer {
 
 	// MARK: - Block builders
 
-	private static func makeParagraph(_ paragraph: DocumentBlock.Paragraph) -> Paragraph? {
+	private static func makeParagraph(
+		_ paragraph: DocumentBlock.Paragraph,
+		typography: DocumentTypography
+	) -> BlockMarkup? {
+		let runs = joinedRuns(of: paragraph.lines)
 		let lines = paragraph.lines
 			.map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }
 			.filter { !$0.isEmpty }
@@ -67,14 +74,62 @@ public struct DocumentBlockMarkdownRenderer {
 			? paragraph.text.trimmingCharacters(in: .whitespacesAndNewlines)
 			: lines.joined(separator: " ")
 		guard !text.isEmpty else { return nil }
-		return Paragraph(Text(text))
+
+		if let level = paragraph.headingLevel ?? headingLevel(for: runs, text: text, typography: typography) {
+			// A heading's own weight and size are what make it a heading, so its
+			// text is written plain under the level rather than emphasised again.
+			return Heading(level: level, Text(text))
+		}
+		guard !runs.isEmpty else { return Paragraph(Text(text)) }
+		return Paragraph(runs.inlineMarkup(bodySize: typography.bodySize))
 	}
 
-	private static func makeList(_ list: DocumentBlock.List) -> BlockMarkup? {
+	/// The heading level a paragraph's runs imply, or nil for body text.
+	///
+	/// A block counts as a heading only when *all* of it is set that way — one
+	/// large word in a sentence is emphasis, not a heading.
+	private static func headingLevel(
+		for runs: [StyleRun],
+		text: String,
+		typography: DocumentTypography
+	) -> Int? {
+		let styles = runs.filter { !$0.text.allSatisfy(\.isWhitespace) }.compactMap(\.style)
+		guard !styles.isEmpty, styles.count == runs.filter({ !$0.text.allSatisfy(\.isWhitespace) }).count,
+		      let first = styles.first else { return nil }
+
+		if styles.allSatisfy({ abs($0.fontSize - first.fontSize) < 0.5 }),
+		   let level = typography.headingLevel(forSize: first.fontSize) {
+			return level
+		}
+		// Set at body size, so only its shape can say it is a heading.
+		guard styles.allSatisfy({ $0.isBold && !$0.isMonospaced }),
+		      DocumentTypography.isBoldHeadingShape(text) else { return nil }
+		return typography.boldHeadingLevel
+	}
+
+	/// One line's runs per source line, joined the way their text is joined.
+	private static func joinedRuns(of lines: [DocumentBlock.TextLine]) -> [StyleRun] {
+		var result: [StyleRun] = []
+		for line in lines where !line.runs.isEmpty {
+			if !result.isEmpty { result.append(StyleRun(text: " ", style: result.last?.style)) }
+			result.append(contentsOf: line.runs)
+		}
+		// Style for some lines but not others would emphasise part of a
+		// paragraph and not the rest; take all of it or none.
+		let styled = lines.filter { !$0.runs.isEmpty }.count
+		return styled == lines.count ? result.coalesced() : []
+	}
+
+	private static func makeList(
+		_ list: DocumentBlock.List,
+		typography: DocumentTypography
+	) -> BlockMarkup? {
 		guard !list.items.isEmpty else { return nil }
 		let listItems: [ListItem] = list.items.map { item in
+			let runs = joinedRuns(of: item.lines)
 			let text = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
-			return ListItem(Paragraph(Text(text)))
+			guard !runs.isEmpty else { return ListItem(Paragraph(Text(text))) }
+			return ListItem(Paragraph(runs.inlineMarkup(bodySize: typography.bodySize)))
 		}
 		// OCR-detected markers (`iii.`, `(a)`, custom strings) are visual labels
 		// that don't survive Markdown's `-` / `1.` syntax. Normalize ordered

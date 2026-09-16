@@ -9,6 +9,11 @@ import Foundation
 import ImageIO
 import PDFKit
 import SwiftTextOCR
+#if canImport(AppKit)
+import AppKit
+#elseif canImport(UIKit)
+import UIKit
+#endif
 #if canImport(Vision)
 import Vision
 #endif
@@ -75,10 +80,16 @@ extension PDFPage {
 		let selectionsByLine = pageSelection.selectionsByLine()
 		guard !selectionsByLine.isEmpty else { return nil }
 
+		// The page's attributed string is indexed like `string`, so a fragment's
+		// range in one addresses the fonts in the other. That is where a text
+		// layer keeps the emphasis and heading sizes the plain string drops.
+		let attributed = attributedString
+
 		var fragments = [TextFragment]()
 
 		for lineSelection in selectionsByLine {
-			fragments.append(contentsOf: selectionFragments(from: lineSelection, pageHeight: pageHeight))
+			fragments.append(contentsOf: selectionFragments(
+				from: lineSelection, pageHeight: pageHeight, attributed: attributed))
 		}
 
 		return fragments.isEmpty ? nil : fragments.assembledLines(splitVerticalFragments: true)
@@ -125,7 +136,57 @@ extension PDFPage {
 		return try cgImage.performOCR(imageSize: pageBounds.size)
 	}
 
-	private func selectionFragments(from lineSelection: PDFSelection, pageHeight: CGFloat) -> [TextFragment] {
+	/// How a font found in a page's text layer is set.
+	///
+	/// A font's family carries what CSS splits across `font-weight` and
+	/// `font-style` — `Helvetica-Bold` is one family member, not Helvetica with
+	/// a weight — so the traits are read from the font rather than parsed out of
+	/// its name.
+	private static func textStyle(from value: Any?) -> TextStyle? {
+		#if canImport(AppKit)
+		guard let font = value as? NSFont else { return nil }
+		let traits = NSFontManager.shared.traits(of: font)
+		return TextStyle(
+			fontSize: font.pointSize,
+			isBold: traits.contains(.boldFontMask),
+			isItalic: traits.contains(.italicFontMask),
+			isMonospaced: font.isFixedPitch)
+		#elseif canImport(UIKit)
+		guard let font = value as? UIFont else { return nil }
+		let traits = font.fontDescriptor.symbolicTraits
+		return TextStyle(
+			fontSize: font.pointSize,
+			isBold: traits.contains(.traitBold),
+			isItalic: traits.contains(.traitItalic),
+			isMonospaced: traits.contains(.traitMonoSpace))
+		#else
+		return nil
+		#endif
+	}
+
+	/// The style runs covering `range` of the page's attributed string.
+	///
+	/// A font's family carries what CSS splits across `font-weight` and
+	/// `font-style`, so the traits are read through the font descriptor rather
+	/// than guessed from the PostScript name.
+	private func styleRuns(in range: NSRange, of attributed: NSAttributedString?) -> [StyleRun] {
+		guard let attributed, range.length > 0,
+		      NSMaxRange(range) <= attributed.length else { return [] }
+		let source = attributed.string as NSString
+		var runs: [StyleRun] = []
+		attributed.enumerateAttribute(.font, in: range) { value, runRange, _ in
+			runs.append(StyleRun(
+				text: source.substring(with: runRange),
+				style: Self.textStyle(from: value)))
+		}
+		return runs.coalesced()
+	}
+
+	private func selectionFragments(
+		from lineSelection: PDFSelection,
+		pageHeight: CGFloat,
+		attributed: NSAttributedString? = nil
+	) -> [TextFragment] {
 		guard let pageString = string, !pageString.isEmpty else {
 			return fragmentsFromFallbackSelection(lineSelection, pageHeight: pageHeight)
 		}
@@ -164,7 +225,8 @@ extension PDFPage {
 					in: nsRange,
 					from: nsString,
 					pageHeight: pageHeight,
-					lineBounds: lineBounds
+					lineBounds: lineBounds,
+					attributed: attributed
 				)
 			)
 		}
@@ -180,7 +242,8 @@ extension PDFPage {
 		in range: NSRange,
 		from sourceString: NSString,
 		pageHeight: CGFloat,
-		lineBounds: CGRect
+		lineBounds: CGRect,
+		attributed: NSAttributedString? = nil
 	) -> [TextFragment] {
 		guard range.length > 0 else { return [] }
 
@@ -213,7 +276,14 @@ extension PDFPage {
 
 			let flipped = flippedRect(from: currentBounds, pageHeight: pageHeight)
 			let aligned = alignedRect(flipped, to: lineBounds)
-			result.append(TextFragment(bounds: aligned, string: trimmed))
+			// `trimmed` dropped whitespace from both ends of the raw text, so the
+			// runs are read from the range that is actually kept.
+			let leading = rawText.prefix { $0.isWhitespace }.utf16.count
+			let trimmedRange = NSRange(location: start + leading, length: trimmed.utf16.count)
+			result.append(TextFragment(
+				bounds: aligned,
+				string: trimmed,
+				styleRuns: styleRuns(in: trimmedRange, of: attributed)))
 			currentStart = nil
 			currentLength = 0
 			currentBounds = .null

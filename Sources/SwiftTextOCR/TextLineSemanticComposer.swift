@@ -77,6 +77,8 @@ public enum TextLineSemanticComposer {
 private struct LineInfo {
 	let id: Int
 	let text: String
+	/// How `text` is set, empty when the source reports no style.
+	let runs: [StyleRun]
 	let normalizedBounds: NormalizedRect
 	let semanticBounds: CGRect
 	let actualBounds: CGRect
@@ -103,11 +105,14 @@ private func makeLineInfos(
 		let semanticBounds = normalized.scaled(to: referenceSize)
 		let text = line.combinedText.trimmingCharacters(in: .whitespacesAndNewlines)
 		guard !text.isEmpty else { continue }
+		// The runs cover the untrimmed text, so they are trimmed to match.
+		let runs = line.styleRuns.trimmedToMatch(text)
 
 		results.append(
 			LineInfo(
 				id: index,
 				text: text,
+				runs: runs,
 				normalizedBounds: normalized,
 				semanticBounds: semanticBounds,
 				actualBounds: bounds
@@ -169,7 +174,11 @@ private func composeBlock(
 			if !itemMatches.isEmpty, let first = finalLines.first {
 				let stripped = strippingListMarker(first.text, reportedMarker: item.markerString)
 				if stripped != first.text {
-					finalLines[0] = DocumentBlock.TextLine(text: stripped, bounds: first.bounds)
+					let removed = String(first.text.prefix(first.text.count - stripped.count))
+					finalLines[0] = DocumentBlock.TextLine(
+						text: stripped,
+						bounds: first.bounds,
+						runs: first.runs.removingPrefix(removed))
 				}
 			}
 			let text = finalLines.map(\.text).joined(separator: "\n")
@@ -467,7 +476,7 @@ private func consumeLines(
 
 private func makeDocumentLines(from infos: [LineInfo]) -> [DocumentBlock.TextLine] {
 	infos.map { info in
-		DocumentBlock.TextLine(text: info.text, bounds: info.semanticBounds)
+		DocumentBlock.TextLine(text: info.text, bounds: info.semanticBounds, runs: info.runs)
 	}
 }
 

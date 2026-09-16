@@ -17,6 +17,25 @@ public struct TextLine {
 		fragments.map { $0.string }.joined(separator: "\t")
 	}
 
+	/// ``combinedText`` split into runs by how each part is set, empty when no
+	/// fragment carries style. The tab that joins two fragments takes the style
+	/// of the fragment it follows, so the runs cover ``combinedText`` exactly.
+	public var styleRuns: [StyleRun] {
+		guard fragments.contains(where: { !$0.styleRuns.isEmpty }) else { return [] }
+		var result: [StyleRun] = []
+		for (index, fragment) in fragments.enumerated() {
+			if index > 0 {
+				result.append(StyleRun(text: "\t", style: result.last?.style))
+			}
+			if fragment.styleRuns.isEmpty {
+				result.append(StyleRun(text: fragment.string, style: nil))
+			} else {
+				result.append(contentsOf: fragment.styleRuns)
+			}
+		}
+		return result.coalesced()
+	}
+
 	/// The vertical position of the line, determined by the first fragment's minimum Y coordinate.
 	public var yPosition: CGFloat {
 		fragments.first?.bounds.minY ?? 0
@@ -31,10 +50,15 @@ public struct TextFragment {
 	/// The textual content of the fragment.
 	public let string: String
 
+	/// How the parts of ``string`` are set, covering it exactly. Empty when the
+	/// source cannot report style, as OCR cannot.
+	public let styleRuns: [StyleRun]
+
 	/// Creates a text fragment with a bounding rectangle and string value.
-	public init(bounds: CGRect, string: String) {
+	public init(bounds: CGRect, string: String, styleRuns: [StyleRun] = []) {
 		self.bounds = bounds
 		self.string = string
+		self.styleRuns = styleRuns
 	}
 }
 
