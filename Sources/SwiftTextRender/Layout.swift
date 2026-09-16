@@ -1105,19 +1105,35 @@ private extension LayoutEngine {
 	private func collectInline(_ box: Box, into tokens: inout [InlineToken], href: String?, decorations: TextDecorationRuns) {
 		if let text = box as? TextBox {
 			let style = text.style
-			if style.whiteSpace == .pre {
-				// Preserve spaces verbatim; only newlines break the line. (pre does
-				// not wrap, so each segment between newlines is one fragment.)
+			if style.whiteSpace == .pre || style.whiteSpace == .preWrap {
+				// Spaces and tabs are preserved verbatim and newlines break the line.
+				// They must travel inside word tokens: a `.space` token is a
+				// *collapsible* separator, of which a line keeps at most one.
+				//
+				// `pre` never wraps, so each segment between newlines is one
+				// fragment. `pre-wrap` does, so its segments are split at every
+				// transition between spaces and non-spaces, giving the line builder
+				// somewhere to break without discarding the spaces' width.
+				let splitsRuns = style.whiteSpace.wraps
 				var segment = ""
+				var segmentIsSpace = false
+				func flush() {
+					guard !segment.isEmpty else { return }
+					tokens.append(.word(segment, style, href: href, decorations: decorations))
+					segment = ""
+				}
 				for character in text.text {
 					if character == "\n" {
-						if !segment.isEmpty { tokens.append(.word(segment, style, href: href, decorations: decorations)); segment = "" }
+						flush()
 						tokens.append(.forcedBreak(style))
 					} else if character != "\r" {
+						let isSpace = character == " " || character == "\t"
+						if splitsRuns, isSpace != segmentIsSpace { flush() }
+						segmentIsSpace = isSpace
 						segment.append(character)
 					}
 				}
-				if !segment.isEmpty { tokens.append(.word(segment, style, href: href, decorations: decorations)) }
+				flush()
 				return
 			}
 			let content = style.whiteSpace.collapsesWhitespace ? collapseWhitespace(text.text) : text.text

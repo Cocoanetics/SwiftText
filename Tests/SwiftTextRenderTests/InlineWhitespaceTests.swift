@@ -71,6 +71,19 @@ struct InlineWhitespaceTests {
 			== ["Text mit fett", "und Fortsetzung."])
 	}
 
+	/// The whitespace between two inline siblings is the only thing separating
+	/// their words, whatever container they sit in.
+	@Test("Whitespace between inline siblings survives its container", arguments: [
+		"div", "blockquote", "section", "p", "td", "li"
+	])
+	func whitespaceBetweenInlineSiblings(_ container: String) async throws {
+		let html = "<\(container)><a href=\"/a\">Impressum</a>\n<strong>AGB</strong></\(container)>"
+		// A list item's line also carries its marker, so match the line's end.
+		let lines = try await lineTexts(html, blockName: container)
+		#expect(lines.count == 1)
+		#expect(lines.first?.hasSuffix("Impressum AGB") == true)
+	}
+
 	// MARK: - Helpers
 
 	private func singleLineText(_ html: String) async throws -> String {
@@ -79,16 +92,16 @@ struct InlineWhitespaceTests {
 		return texts.first ?? ""
 	}
 
-	/// The visible text of each line of the first `<p>`, with an inter-fragment
+	/// The visible text of each line of the named block, with an inter-fragment
 	/// gap reported as the space it paints as.
-	private func lineTexts(_ html: String) async throws -> [String] {
+	private func lineTexts(_ html: String, blockName: String = "p") async throws -> [String] {
 		let builder = try await DomBuilder(html: Data(html.utf8), baseURL: nil)
 		let root = try #require(builder.root)
 		let styled = StyledElement.build(domElement: root, resolver: StyleResolver())
 		let rootBox = try #require(BoxTreeBuilder.build(from: styled) as? BlockBox)
 		LayoutEngine(fonts: FontBook()).layout(
 			root: rootBox, contentWidth: 600, originX: 0, originY: 0)
-		let paragraph = try #require(firstBlock(in: rootBox) { $0.element?.localName == "p" })
+		let paragraph = try #require(firstBlock(in: rootBox) { $0.element?.localName == blockName })
 		return paragraph.lines.map { line in
 			var text = ""
 			var previousEnd: Double?

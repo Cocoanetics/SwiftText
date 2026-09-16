@@ -88,7 +88,7 @@ public class DOMElement: DOMNode, @unchecked Sendable {
 			result += cells.filter { !$0.isEmpty }.joined(separator: " | ")
 
 		default:
-			result += children.map { $0.text() }.joined()
+			result += childText()
 		}
 
 		if isBlockLevelElement {
@@ -96,6 +96,40 @@ public class DOMElement: DOMNode, @unchecked Sendable {
 		}
 
 		return result
+	}
+
+	/// The children's text, with insignificant whitespace between them dropped.
+	///
+	/// A run of whitespace on its own means two different things depending on
+	/// what it separates. Between two inline siblings — `<a>x</a>\n<a>y</a>` — it
+	/// is the only thing keeping the words apart, so it collapses to a space and
+	/// stays. Against a block boundary, including this element's own edges, no
+	/// text meets across it and it goes, the way a line box trims the start and
+	/// end of a block.
+	private func childText() -> String {
+		var parts: [String] = []
+		for (index, child) in children.enumerated() {
+			let text = child.text()
+			guard child is DOMText, text.allSatisfy(\.isWhitespace) else {
+				parts.append(text)
+				continue
+			}
+			guard let previous = children[..<index].last(where: separatesText),
+			      let next = children[(index + 1)...].first(where: separatesText),
+			      !previous.startsTextBlock, !next.startsTextBlock else { continue }
+			parts.append(text)
+		}
+		return parts.joined()
+	}
+
+	/// Whether a run of whitespace beside this node could be separating text
+	/// from it. A whitespace-only text node cannot, and neither can a node that
+	/// contributes nothing at all — a `<script>`, or an empty `<span>`. A `<br>`
+	/// can: its text is a newline, but it is a boundary, not a separator.
+	private func separatesText(_ node: DOMNode) -> Bool {
+		let text = node.text()
+		if text.isEmpty { return false }
+		return !(node is DOMText && text.allSatisfy(\.isWhitespace))
 	}
 
 	/// Every stylesheet reference in this subtree, in document order: inline
