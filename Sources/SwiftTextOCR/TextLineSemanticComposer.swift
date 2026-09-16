@@ -162,7 +162,16 @@ private func composeBlock(
 				lineInfos: lineInfos,
 				assigned: &assignedLines
 			)
-			let finalLines = itemMatches.isEmpty ? item.lines : makeDocumentLines(from: itemMatches)
+			// `item.lines` come from the segmenter with the marker already removed.
+			// Lines matched from the page do not: there the marker is painted
+			// text, and Markdown will add one of its own.
+			var finalLines = itemMatches.isEmpty ? item.lines : makeDocumentLines(from: itemMatches)
+			if !itemMatches.isEmpty, let first = finalLines.first {
+				let stripped = strippingListMarker(first.text, reportedMarker: item.markerString)
+				if stripped != first.text {
+					finalLines[0] = DocumentBlock.TextLine(text: stripped, bounds: first.bounds)
+				}
+			}
 			let text = finalLines.map(\.text).joined(separator: "\n")
 			items.append(
 				DocumentBlock.List.Item(

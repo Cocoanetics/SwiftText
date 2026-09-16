@@ -435,25 +435,7 @@ struct DocumentBlockExtractor {
 	}
 
 	private func cleanListItemText(_ text: String, marker: String) -> String {
-		let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-		guard !trimmed.isEmpty else { return trimmed }
-
-		if !marker.isEmpty {
-			let escaped = NSRegularExpression.escapedPattern(for: marker)
-			let pattern = "^\(escaped)[.)\\s]*"
-			if let range = trimmed.range(of: pattern, options: .regularExpression) {
-				let cleaned = trimmed.replacingCharacters(in: range, with: "")
-				return cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
-			}
-		}
-
-		let pattern = #"^[0-9]+[.)\s]+"#
-		if let range = trimmed.range(of: pattern, options: .regularExpression) {
-			let cleaned = trimmed.replacingCharacters(in: range, with: "")
-			return cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
-		}
-
-		return trimmed
+		strippingListMarker(text, reportedMarker: marker)
 	}
 
 	private func deduplicatedLines(_ lines: [DocumentBlock.TextLine]) -> [DocumentBlock.TextLine] {
