@@ -12,20 +12,45 @@ public struct TextLine {
 	/// The text fragments that make up the line.
 	public var fragments: [TextFragment]
 
-	/// The combined text of the line, constructed by joining all fragments with tabs.
+	/// The line's text, with each pair of fragments joined by what the space
+	/// between them means.
+	///
+	/// A fragment boundary is not always the same thing. A reader splits a line
+	/// where a gap is wide enough to be structural — the space between two table
+	/// columns — and that keeps its tab. But the OCR reader also splits a line
+	/// into its individual words, to give each one its own bounds, and those
+	/// fragments meet exactly where a single space stood. Joining *those* with a
+	/// tab put one inside every OCR'd heading: `Zweite\tEbene`.
 	public var combinedText: String {
-		fragments.map { $0.string }.joined(separator: "\t")
+		var result = ""
+		for (index, fragment) in fragments.enumerated() {
+			if index > 0 { result += Self.separator(between: fragments[index - 1], and: fragment) }
+			result += fragment.string
+		}
+		return result
+	}
+
+	/// What stood between two fragments of one line: a tab where the gap is too
+	/// wide to be a word space, otherwise the space itself.
+	static func separator(between previous: TextFragment, and next: TextFragment) -> String {
+		let height = Swift.max((previous.bounds.height + next.bounds.height) / 2, 1)
+		let gap = next.bounds.minX - previous.bounds.maxX
+		// A word space runs to about a third of the type size; anything past
+		// half of it is a gap someone put there on purpose.
+		return gap > Swift.max(height * 0.6, 4) ? "\t" : " "
 	}
 
 	/// ``combinedText`` split into runs by how each part is set, empty when no
-	/// fragment carries style. The tab that joins two fragments takes the style
-	/// of the fragment it follows, so the runs cover ``combinedText`` exactly.
+	/// fragment carries style. Whatever joins two fragments takes the style of
+	/// the fragment it follows, so the runs cover ``combinedText`` exactly.
 	public var styleRuns: [StyleRun] {
 		guard fragments.contains(where: { !$0.styleRuns.isEmpty }) else { return [] }
 		var result: [StyleRun] = []
 		for (index, fragment) in fragments.enumerated() {
 			if index > 0 {
-				result.append(StyleRun(text: "\t", style: result.last?.style))
+				result.append(StyleRun(
+					text: Self.separator(between: fragments[index - 1], and: fragment),
+					style: result.last?.style))
 			}
 			if fragment.styleRuns.isEmpty {
 				result.append(StyleRun(text: fragment.string, style: nil))

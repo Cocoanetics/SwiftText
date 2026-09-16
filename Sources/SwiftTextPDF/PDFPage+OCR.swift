@@ -197,24 +197,6 @@ extension PDFPage {
 			return fragmentsFromFallbackSelection(lineSelection, pageHeight: pageHeight)
 		}
 
-#if DEBUG
-		if let lineText = lineSelection.string {
-			let debugTargets = ["CRV*BILLA DANKT 000344"]
-			if debugTargets.contains(where: { lineText.contains($0) }) {
-				let pageSize = bounds(for: .mediaBox).size
-				logCharacterBounds(for: lineSelection, sourceString: nsString, pageSize: pageSize)
-				print("Line selection \"\(lineText.trimmingCharacters(in: .whitespacesAndNewlines))\" uses \(rangeCount) ranges")
-				for rangeIndex in 0..<rangeCount {
-					let nsRange = lineSelection.range(at: rangeIndex, on: self)
-					let snippet = nsString.substring(with: nsRange)
-					let rect = lineSelection.bounds(for: self)
-					print("  range[\(rangeIndex)] \(nsRange) snippet: \(snippet)")
-					print("    bounds: \(rect)")
-				}
-			}
-		}
-#endif
-
 		let lineBounds = flippedRect(from: lineSelection.bounds(for: self), pageHeight: pageHeight)
 		var fragments = [TextFragment]()
 
@@ -390,27 +372,4 @@ extension PDFPage {
 			height: rect.height
 		)
 	}
-#if DEBUG
-	private func logCharacterBounds(for selection: PDFSelection, sourceString: NSString, pageSize: CGSize) {
-		guard pageSize.width > 0, pageSize.height > 0 else { return }
-		print("Character bounds for selection: \(selection.string ?? "")")
-		let rangeCount = selection.numberOfTextRanges(on: self)
-		for rangeIndex in 0..<rangeCount {
-			let nsRange = selection.range(at: rangeIndex, on: self)
-			for offset in 0..<nsRange.length {
-				let globalIndex = nsRange.location + offset
-				let character = sourceString.character(at: globalIndex)
-				let scalar = UnicodeScalar(character).map(String.init) ?? "?"
-				let rect = resolvedBoundsForCharacter(at: globalIndex)
-				let normalized = NormalizedRect(
-					minX: rect.minX / pageSize.width,
-					minY: rect.minY / pageSize.height,
-					width: rect.width / pageSize.width,
-					height: rect.height / pageSize.height
-				)
-				print("  char[\(globalIndex)] \(scalar) (\(character)) bounds: \(rect) normalized: \(normalized)")
-			}
-		}
-	}
-#endif
 }
