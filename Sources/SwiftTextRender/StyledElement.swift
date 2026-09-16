@@ -92,7 +92,9 @@ public final class StyledElement: SelectorElement {
 				children.append(.element(child))
 				elementIndex += 1
 			} else if node.name == "#text" {
-				children.append(.text(node.text()))
+				// Verbatim: `collectInline` collapses it per `white-space`, and the
+				// line box drops what is left over at its edges.
+				children.append(.text(node.sourceText))
 			}
 		}
 

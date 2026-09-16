@@ -27,6 +27,8 @@ final class DOMText: DOMNode, @unchecked Sendable {
 		markdown()
 	}
 
+	var sourceText: String { textValue }
+
 	func text() -> String {
 		if preserveWhitespace {
 			return textValue
