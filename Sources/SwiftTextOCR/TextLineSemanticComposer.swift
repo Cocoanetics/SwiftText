@@ -133,7 +133,7 @@ private func composeBlock(
 	let block: DocumentBlock
 	let metadataBounds: NormalizedRect
 	switch semanticBlock.block.kind {
-	case .paragraph:
+	case .paragraph(let semanticParagraph):
 		let matched = consumeLines(
 			in: normalizedBounds,
 			lineInfos: lineInfos,
@@ -145,7 +145,10 @@ private func composeBlock(
 
 		let finalLines = makeDocumentLines(from: matched)
 		let text = finalLines.map(\.text).joined(separator: "\n")
-		let updated = DocumentBlock.Paragraph(text: text, lines: finalLines)
+		let updated = DocumentBlock.Paragraph(
+			text: text,
+			lines: finalLines,
+			headingLevel: semanticParagraph.headingLevel)
 		let resolvedBounds = unionRect(
 			matched.map(\.semanticBounds),
 			fallback: semanticBlock.block.bounds
@@ -289,7 +292,11 @@ private func mergeParagraphBlocks(
 			let combinedLines = previousParagraph.lines + currentParagraph.lines
 			let combinedText = combinedLines.map(\.text).joined(separator: "\n")
 			let combinedBounds = mergedBlocks[lastIndex].bounds.union(block.bounds)
-			let mergedParagraph = DocumentBlock(bounds: combinedBounds, kind: .paragraph(.init(text: combinedText, lines: combinedLines)))
+			let merged = DocumentBlock.Paragraph(
+				text: combinedText,
+				lines: combinedLines,
+				headingLevel: previousParagraph.headingLevel ?? currentParagraph.headingLevel)
+			let mergedParagraph = DocumentBlock(bounds: combinedBounds, kind: .paragraph(merged))
 			mergedBlocks[lastIndex] = mergedParagraph
 
 			let newNormalized = mergedMetadata[lastIndex].normalizedBounds.union(meta.normalizedBounds)
@@ -381,8 +388,11 @@ private func splitParagraphSegment(
 		}
 		let bounds = unionRect.isNull ? referenceBounds : unionRect
 		let text = segment.map(\.text).joined(separator: "\n")
-		let paragraph = DocumentBlock.Paragraph(text: text, lines: segment)
-		let block = DocumentBlock(bounds: bounds, kind: .paragraph(paragraph))
+		let splitParagraph = DocumentBlock.Paragraph(
+			text: text,
+			lines: segment,
+			headingLevel: paragraph.headingLevel)
+		let block = DocumentBlock(bounds: bounds, kind: .paragraph(splitParagraph))
 		let normalized = bounds.normalized(in: referenceSize)
 		return (block, BlockMetadata(normalizedBounds: normalized))
 	}
@@ -426,6 +436,11 @@ private func shouldPreventMerge(
 	previous: DocumentBlock.Paragraph,
 	current: DocumentBlock.Paragraph
 ) -> Bool {
+	// An explicit heading is a structural boundary, not a geometric paragraph
+	// continuation. Preserve it even when it sits close to body text.
+	if previous.headingLevel != nil || current.headingLevel != nil {
+		return true
+	}
 	let candidates = [previous.text, current.text]
 	return candidates.contains { text in
 		let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -533,11 +548,18 @@ private func append(
 ) {
 	guard case .paragraph(let paragraph) = blocks[index].kind else { return }
 	var newLines = paragraph.lines
-	newLines.append(DocumentBlock.TextLine(text: line.text, bounds: line.semanticBounds))
+	newLines.append(DocumentBlock.TextLine(
+		text: line.text,
+		bounds: line.semanticBounds,
+		runs: line.runs))
 	let text = newLines.map(\.text).joined(separator: "\n")
 	let normalizedUnion = metadata[index].normalizedBounds.union(line.normalizedBounds)
 	let updatedBounds = normalizedUnion.scaled(to: referenceSize)
-	let updated = DocumentBlock(bounds: updatedBounds, kind: .paragraph(.init(text: text, lines: newLines)))
+	let updatedParagraph = DocumentBlock.Paragraph(
+		text: text,
+		lines: newLines,
+		headingLevel: paragraph.headingLevel)
+	let updated = DocumentBlock(bounds: updatedBounds, kind: .paragraph(updatedParagraph))
 	blocks[index] = updated
 	metadata[index].normalizedBounds = normalizedUnion
 }
@@ -548,7 +570,10 @@ private func makeStandaloneParagraph(
 ) -> (block: DocumentBlock, metadata: BlockMetadata) {
 	let normalized = line.normalizedBounds
 	let bounds = normalized.scaled(to: referenceSize)
-	let docLine = DocumentBlock.TextLine(text: line.text, bounds: line.semanticBounds)
+	let docLine = DocumentBlock.TextLine(
+		text: line.text,
+		bounds: line.semanticBounds,
+		runs: line.runs)
 	let paragraph = DocumentBlock.Paragraph(text: line.text, lines: [docLine])
 	let block = DocumentBlock(bounds: bounds, kind: .paragraph(paragraph))
 	let meta = BlockMetadata(normalizedBounds: normalized)

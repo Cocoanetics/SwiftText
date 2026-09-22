@@ -71,6 +71,35 @@ struct TypographyMarkdownTests {
 		#expect(!markdown.contains("#"))
 	}
 
+	@Test("A nearby large title is not merged into body text")
+	func nearbyTitleStaysSeparate() {
+		let titleBounds = CGRect(x: 0, y: 0, width: 400, height: 20)
+		let bodyBounds = CGRect(x: 0, y: 23, width: 400, height: 20)
+		let markdown = render([
+			DocumentBlock(bounds: titleBounds, kind: .paragraph(.init(
+				text: "", lines: [.init(runs: [run("Titel", size: 22, bold: true)], bounds: titleBounds)]))),
+			DocumentBlock(bounds: bodyBounds, kind: .paragraph(.init(
+				text: "", lines: [.init(runs: [run(
+					"Ein deutlich längerer Absatz bestimmt die Grundschrift.", size: 11)], bounds: bodyBounds)])))
+		])
+		#expect(markdown.contains("# Titel\n\nEin deutlich längerer Absatz"))
+	}
+
+	@Test("An explicit heading level survives continuation reconstruction")
+	func explicitHeadingLevelSurvives() {
+		let headingBounds = CGRect(x: 0, y: 0, width: 400, height: 20)
+		let bodyBounds = CGRect(x: 0, y: 23, width: 400, height: 20)
+		let headingLine = DocumentBlock.TextLine(text: "Explizite Ebene", bounds: headingBounds)
+		let bodyLine = DocumentBlock.TextLine(text: "Body text.", bounds: bodyBounds)
+		let markdown = render([
+			DocumentBlock(bounds: headingBounds, kind: .paragraph(.init(
+				text: headingLine.text, lines: [headingLine], headingLevel: 3))),
+			DocumentBlock(bounds: bodyBounds, kind: .paragraph(.init(
+				text: bodyLine.text, lines: [bodyLine])))
+		])
+		#expect(markdown.contains("### Explizite Ebene\n\nBody text."))
+	}
+
 	// MARK: - Headings at body size
 
 	/// A stylesheet often stops scaling at `h4`, leaving it bold body text —
@@ -114,6 +143,32 @@ struct TypographyMarkdownTests {
 		#expect(!markdown.contains("#"))
 	}
 
+	@Test("A smaller bold caption is not a body-size heading")
+	func smallerBoldCaptionStaysAParagraph() {
+		let markdown = render([
+			body("Ein Absatz mit genug Text, damit elf Punkt die Grundschrift ist."),
+			DocumentBlock(bounds: rect(3), kind: .paragraph(.init(
+				text: "", lines: [line([run("Figure 1", size: 9, bold: true)], at: 3)])))
+		])
+		#expect(markdown.contains("**Figure 1**"))
+		#expect(!markdown.contains("# Figure 1"))
+	}
+
+	@Test("A two-line bold body paragraph is not a heading")
+	func multilineBoldBodyStaysAParagraph() {
+		let markdown = render([
+			body("Ein Absatz mit genug Text, damit elf Punkt die Grundschrift ist."),
+			DocumentBlock(bounds: rect(3), kind: .paragraph(.init(
+				text: "",
+				lines: [
+					line([run("Important information", size: 11, bold: true)], at: 3),
+					line([run("please read carefully", size: 11, bold: true)], at: 4)
+				])))
+		])
+		#expect(markdown.contains("**Important information please read carefully**"))
+		#expect(!markdown.contains("# Important information"))
+	}
+
 	// MARK: - Inline emphasis
 
 	@Test("Bold, italic and monospaced runs become emphasis")
@@ -131,6 +186,24 @@ struct TypographyMarkdownTests {
 				])])))
 		])
 		#expect(markdown.contains("Dies ist **fett** und *kursiv* und `code`."))
+	}
+
+	@Test("Larger inline styles survive when their paragraph is not a heading")
+	func largerInlineStylesSurvive() {
+		let markdown = render([
+			DocumentBlock(bounds: rect(0), kind: .paragraph(.init(
+				text: "", lines: [line([
+					run("Mit ", size: 11),
+					run("groß", size: 16, bold: true),
+					run(", ", size: 11),
+					run("schräg", size: 16, italic: true),
+					run(" und ", size: 11),
+					run("Code", size: 16, monospaced: true),
+					run(" im Satz.", size: 11)
+				])]))),
+			body("Noch ein längerer Absatz bestimmt eindeutig die Grundschrift.")
+		])
+		#expect(markdown.contains("Mit **groß**, *schräg* und `Code` im Satz."))
 	}
 
 	@Test("Bold italic nests both emphases")

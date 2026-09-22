@@ -17,10 +17,10 @@ extension Array where Element == StyleRun {
 	/// a page hands the run over — would not be emphasis at all. Monospaced
 	/// text becomes inline code and takes no further emphasis, because code
 	/// spans hold no markup.
-	func inlineMarkup(bodySize: CGFloat?) -> [InlineMarkup] {
+	func inlineMarkup() -> [InlineMarkup] {
 		var result: [InlineMarkup] = []
 		for run in coalesced() {
-			guard let style = run.style, isEmphasised(style, bodySize: bodySize) else {
+			guard let style = run.style, isEmphasised(style) else {
 				result.append(Text(run.text))
 				continue
 			}
@@ -47,11 +47,10 @@ extension Array where Element == StyleRun {
 
 	/// Whether a run differs from body text in a way Markdown can write.
 	///
-	/// A heading's own bold is not emphasis — it is what makes it a heading —
-	/// so a run larger than body text is left plain and the block carries the
-	/// level instead.
-	private func isEmphasised(_ style: TextStyle, bodySize: CGFloat?) -> Bool {
-		if let bodySize, style.fontSize > bodySize + 0.5 { return false }
+	/// Heading blocks suppress their uniform style before reaching this method.
+	/// A larger run in a block that failed heading detection is still ordinary
+	/// inline emphasis and must retain its bold, italic, or monospaced meaning.
+	private func isEmphasised(_ style: TextStyle) -> Bool {
 		return style.isBold || style.isItalic || style.isMonospaced
 	}
 }

@@ -1,0 +1,112 @@
+//
+//  TextLineSemanticComposerStyleTests.swift
+//  SwiftTextOCRTests
+//
+
+import Foundation
+import Testing
+
+@testable import SwiftTextOCR
+
+struct TextLineSemanticComposerStyleTests {
+	private let pageSize = CGSize(width: 600, height: 800)
+
+	@Test("An unmatched standalone text-layer line keeps its heading style")
+	func standaloneLineKeepsStyleRuns() {
+		let titleBounds = CGRect(x: 50, y: 20, width: 200, height: 20)
+		let bodyBounds = CGRect(x: 50, y: 100, width: 400, height: 20)
+		let lines = [
+			textLine("Title", bounds: titleBounds, size: 22, bold: true),
+			textLine(
+				"A much longer body line establishes the document body size.",
+				bounds: bodyBounds,
+				size: 11)
+		]
+		let semantics = semanticsForParagraph(text: lines[1].combinedText, bounds: bodyBounds)
+
+		let blocks = TextLineSemanticComposer.composeBlocks(
+			from: lines, semantics: semantics, layoutSize: pageSize)
+		let markdown = DocumentBlockMarkdownRenderer.markdown(from: blocks)
+
+		#expect(markdown.contains("# Title"))
+	}
+
+	@Test("A text-layer line appended to a paragraph keeps its emphasis")
+	func appendedLineKeepsStyleRuns() throws {
+		let firstBounds = CGRect(x: 50, y: 100, width: 180, height: 20)
+		let secondBounds = CGRect(x: 50, y: 121, width: 120, height: 20)
+		let first = textLine("Normal text", bounds: firstBounds, size: 11)
+		let second = textLine("important.", bounds: secondBounds, size: 11, bold: true)
+		let semantics = semanticsForParagraph(text: first.combinedText, bounds: firstBounds)
+
+		let blocks = TextLineSemanticComposer.composeBlocks(
+			from: [first, second], semantics: semantics, layoutSize: pageSize)
+		let paragraph = try #require(blocks.compactMap { block -> DocumentBlock.Paragraph? in
+			guard case .paragraph(let paragraph) = block.kind else { return nil }
+			return paragraph
+		}.first)
+
+		#expect(paragraph.lines.count == 2)
+		#expect(!paragraph.lines[1].runs.isEmpty)
+		#expect(DocumentBlockMarkdownRenderer.markdown(from: blocks)
+			.contains("Normal text **important.**"))
+	}
+
+	@Test("Semantic paragraph heading metadata survives composition")
+	func explicitHeadingLevelSurvivesComposition() throws {
+		let bounds = CGRect(x: 50, y: 50, width: 200, height: 20)
+		let line = textLine("Known heading", bounds: bounds, size: 11)
+		let semantics = semanticsForParagraph(
+			text: line.combinedText,
+			bounds: bounds,
+			headingLevel: 3)
+
+		let blocks = TextLineSemanticComposer.composeBlocks(
+			from: [line], semantics: semantics, layoutSize: pageSize)
+		let paragraph = try #require(blocks.compactMap { block -> DocumentBlock.Paragraph? in
+			guard case .paragraph(let paragraph) = block.kind else { return nil }
+			return paragraph
+		}.first)
+
+		#expect(paragraph.headingLevel == 3)
+		#expect(DocumentBlockMarkdownRenderer.markdown(from: blocks).contains("### Known heading"))
+	}
+
+	private func textLine(
+		_ text: String,
+		bounds: CGRect,
+		size: CGFloat,
+		bold: Bool = false
+	) -> TextLine {
+		let style = TextStyle(fontSize: size, isBold: bold, isItalic: false, isMonospaced: false)
+		let run = StyleRun(text: text, style: style)
+		return TextLine(fragments: [TextFragment(bounds: bounds, string: text, styleRuns: [run])])
+	}
+
+	private func semanticsForParagraph(
+		text: String,
+		bounds: CGRect,
+		headingLevel: Int? = nil
+	) -> DocumentSemantics {
+		let line = DocumentBlock.TextLine(text: text, bounds: bounds)
+		let paragraph = DocumentBlock.Paragraph(
+			text: text,
+			lines: [line],
+			headingLevel: headingLevel)
+		let block = DocumentBlock(bounds: bounds, kind: .paragraph(paragraph))
+		return DocumentSemantics(
+			referenceSize: pageSize,
+			blocks: [NormalizedDocumentBlock(
+				block: block,
+				normalizedBounds: normalized(bounds))],
+			images: [])
+	}
+
+	private func normalized(_ rect: CGRect) -> NormalizedRect {
+		NormalizedRect(
+			minX: rect.minX / pageSize.width,
+			minY: rect.minY / pageSize.height,
+			width: rect.width / pageSize.width,
+			height: rect.height / pageSize.height)
+	}
+}

@@ -625,12 +625,25 @@ struct DOMMarkupConverter {
 		var steps = 0
 		while steps < 10_000,
 			  current.isTransparentWrapper,
-			  current.children.count == 1,
-			  let only = current.children.first as? DOMElement,
-			  only.isTransparentWrapper {
+			  let only = soleTransparentChild(of: current) {
 			current = only
 			steps += 1
 		}
 		return current
+	}
+
+	/// The only meaningful child of a wrapper. Pretty-printed HTML commonly
+	/// puts indentation around that child; those edge-only whitespace nodes do
+	/// not make the wrapper semantically branch and must not disable iterative
+	/// unwrapping of deep email-style wrapper towers.
+	private func soleTransparentChild(of element: DOMElement) -> DOMElement? {
+		let meaningful = element.children.filter { child in
+			guard let text = child as? DOMText else { return true }
+			return !text.textValue.allSatisfy(\.isWhitespace)
+		}
+		guard meaningful.count == 1,
+		      let child = meaningful[0] as? DOMElement,
+		      child.isTransparentWrapper else { return nil }
+		return child
 	}
 }

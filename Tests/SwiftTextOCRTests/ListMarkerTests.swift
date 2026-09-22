@@ -63,6 +63,15 @@ struct ListMarkerTests {
 		#expect(itemTexts(of: blocks) == [testCase.expected])
 	}
 
+	@Test("An inaccurate reported ordinal does not consume decimal content")
+	func reportedOrdinalDoesNotConsumeDecimal() {
+		let blocks = composeList(
+			itemTexts: ["1.5 Millionen", "1. Punkt"],
+			markerString: "1",
+			marker: .decimal)
+		#expect(itemTexts(of: blocks) == ["1.5 Millionen", "Punkt"])
+	}
+
 	@Test("Only the first line of a multi-line item loses a marker")
 	func onlyTheFirstLineLosesAMarker() {
 		let blocks = composeList(

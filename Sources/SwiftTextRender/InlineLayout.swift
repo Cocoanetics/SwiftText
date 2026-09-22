@@ -81,7 +81,10 @@ extension LayoutEngine {
 
 			var total = 0.0
 			for (k, fragment) in ordered.enumerated() {
-				if k > 0 { total += spaceWidth(ordered[k - 1].style) }
+				if k > 0, !ordered[k - 1].carriesPreservedWhitespace,
+				   !fragment.carriesPreservedWhitespace {
+					total += spaceWidth(ordered[k - 1].style)
+				}
 				total += fragment.width
 			}
 			let extra = max(0, contentWidth - total)
@@ -99,7 +102,10 @@ extension LayoutEngine {
 
 			line.width = total
 			for (k, fragment) in ordered.enumerated() {
-				if k > 0 { x += spaceWidth(ordered[k - 1].style) }
+				if k > 0, !ordered[k - 1].carriesPreservedWhitespace,
+				   !fragment.carriesPreservedWhitespace {
+					x += spaceWidth(ordered[k - 1].style)
+				}
 				var positioned = fragment
 				positioned.x = contentX + x
 				positioned.y = lineTop
@@ -448,5 +454,11 @@ extension LayoutEngine {
 			}
 		}
 		return result
+	}
+}
+
+private extension TextFragment {
+	var carriesPreservedWhitespace: Bool {
+		!text.isEmpty && text.allSatisfy { $0 == " " || $0 == "\t" }
 	}
 }

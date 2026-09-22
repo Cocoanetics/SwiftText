@@ -60,6 +60,14 @@ struct PreservedWhitespaceTests {
 		#expect(try await lineTexts(html, contentWidth: 60).count > 1)
 	}
 
+	@Test("RTL pre-wrap does not add gaps around preserved spaces")
+	func rtlPreWrapPreservesExactSpacesAcrossStyles() async throws {
+		let html = "<p style=\"direction: rtl; white-space: pre-wrap\"><strong>אב</strong>  <em>גד</em></p>"
+		let text = try #require(await lineTexts(html).first)
+		#expect(!text.contains("·"))
+		#expect(text.filter { $0 == " " }.count == 2)
+	}
+
 	// MARK: - Helpers
 
 	/// Each line's text with the spaces its fragments carry, and a gap the line

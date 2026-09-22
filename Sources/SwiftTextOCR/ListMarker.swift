@@ -27,7 +27,19 @@ func strippingListMarker(_ text: String, reportedMarker: String) -> String {
 	let reported = reportedMarker.trimmingCharacters(in: .whitespacesAndNewlines)
 	if !reported.isEmpty {
 		let escaped = NSRegularExpression.escapedPattern(for: reported)
-		if let stripped = trimmed.removingPrefix(matching: "^\(escaped)[.)\\s]*") { return stripped }
+		let pattern: String
+		if reported.unicodeScalars.allSatisfy(reportedBulletScalars.contains) {
+			pattern = "^\(escaped)[ \\t]*"
+		} else if reported.last == "." || reported.last == ")" {
+			pattern = "^\(escaped)[ \\t]+"
+		} else {
+			// A reported bare ordinal (for example "1") may omit its painted
+			// punctuation, but that punctuation is a marker only with whitespace
+			// after it. This prevents an inaccurate report from eating "1." in
+			// decimal content such as "1.5 Millionen".
+			pattern = "^\(escaped)(?:[.)][ \\t]+|[ \\t]+)"
+		}
+		if let stripped = trimmed.removingPrefix(matching: pattern) { return stripped }
 	}
 
 	for pattern in markerPatterns {
@@ -46,6 +58,8 @@ private let markerPatterns = [
 	"^[-\u{2013}\u{2014}*+][ \t]+",
 	"^\\(?[0-9]+[.)][ \t]+"
 ]
+
+private let reportedBulletScalars = Set("\u{2022}\u{2023}\u{25AA}\u{25AB}\u{25CF}\u{25CB}\u{25E6}\u{2219}\u{00B7}".unicodeScalars)
 
 private extension String {
 	/// Self without a leading match for `pattern`, or nil when it does not match.

@@ -20,3 +20,22 @@ func htmlDeepWrapperChainDoesNotCrash() async throws {
 	let md = document.markdown()
 	#expect(md.contains("Hello ü"))
 }
+
+@Test
+func prettyPrintedDeepWrapperChainDoesNotCrash() async throws {
+	// Indentation-only text nodes around each child are not meaningful branches
+	// and must not defeat iterative transparent-wrapper unwrapping.
+	let depth = 400
+	var html = "<html><body>"
+	for _ in 0..<depth {
+		html += "\n<div class=\"w\">"
+	}
+	html += "\nHello ü\n"
+	for _ in 0..<depth {
+		html += "</div>\n"
+	}
+	html += "</body></html>"
+
+	let document = try await HTMLDocument(data: Data(html.utf8), baseURL: nil)
+	#expect(document.markdown().contains("Hello ü"))
+}
