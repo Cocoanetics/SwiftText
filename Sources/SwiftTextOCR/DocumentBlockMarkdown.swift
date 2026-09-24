@@ -80,69 +80,22 @@ public struct DocumentBlockMarkdownRenderer {
 			: lines.joined(separator: " ")
 		guard !text.isEmpty else { return nil }
 
-		if let level = paragraph.headingLevel ?? headingLevel(
-			for: runs,
-			text: text,
-			sourceLineCount: lines.count,
-			typography: typography
-		) {
-			// A heading's own weight and size are what make it a heading, so its
-			// text is written plain under the level rather than emphasised again.
-			return Heading(level: level, Text(text))
+		if let level = typography.headingLevel(for: paragraph) {
+			guard !runs.isEmpty else { return Heading(level: level, Text(text)) }
+			// Suppress only traits shared by the whole heading. Its ordinary bold
+			// face should not become redundant Markdown emphasis, while an italic
+			// word or monospaced span that differs from the rest must survive.
+			return Heading(level: level, runs.inlineMarkup(suppressingUniformEmphasis: true))
 		}
 		guard !runs.isEmpty else { return Paragraph(Text(text)) }
 		return Paragraph(runs.inlineMarkup())
-	}
-
-	/// The heading level a paragraph's runs imply, or nil for body text.
-	///
-	/// A block counts as a heading only when *all* of it is set that way — one
-	/// large word in a sentence is emphasis, not a heading.
-	private static func headingLevel(
-		for runs: [StyleRun],
-		text: String,
-		sourceLineCount: Int,
-		typography: DocumentTypography
-	) -> Int? {
-		let styles = runs.filter { !$0.text.allSatisfy(\.isWhitespace) }.compactMap(\.style)
-		guard !styles.isEmpty, styles.count == runs.filter({ !$0.text.allSatisfy(\.isWhitespace) }).count,
-		      let first = styles.first else { return nil }
-
-		if styles.allSatisfy({ abs($0.fontSize - first.fontSize) < 0.5 }),
-		   let level = typography.headingLevel(forSize: first.fontSize) {
-			return level
-		}
-		// Set at body size and confined to one source line, so only its shape can
-		// say it is a heading. Joining lines for Markdown must not erase that
-		// structural distinction, and smaller captions are not headings.
-		guard sourceLineCount == 1,
-		      let bodySize = typography.bodySize,
-		      abs(first.fontSize - bodySize) < 0.5,
-		      styles.allSatisfy({
-			      abs($0.fontSize - first.fontSize) < 0.5
-			      && $0.isBold && !$0.isMonospaced
-		      }),
-		      DocumentTypography.isBoldHeadingShape(text) else { return nil }
-		return typography.boldHeadingLevel
 	}
 
 	private static func inferredHeadingLevel(
 		for paragraph: DocumentBlock.Paragraph,
 		typography: DocumentTypography
 	) -> Int? {
-		if let level = paragraph.headingLevel { return level }
-		let lines = paragraph.lines
-			.map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }
-			.filter { !$0.isEmpty }
-		let text = lines.isEmpty
-			? paragraph.text.trimmingCharacters(in: .whitespacesAndNewlines)
-			: lines.joined(separator: " ")
-		guard !text.isEmpty else { return nil }
-		return headingLevel(
-			for: joinedRuns(of: paragraph.lines),
-			text: text,
-			sourceLineCount: lines.count,
-			typography: typography)
+		typography.headingLevel(for: paragraph)
 	}
 
 	/// One line's runs per source line, joined the way their text is joined.

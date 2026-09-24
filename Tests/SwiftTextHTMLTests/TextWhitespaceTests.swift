@@ -43,6 +43,11 @@ struct TextWhitespaceTests {
 		#expect(try await text("<p>\n  Wort A <strong>fett</strong>\n</p>") == "Wort A fett")
 	}
 
+	@Test("Whitespace inside an inline wrapper separates surrounding words")
+	func inlineWrapperWhitespaceSeparatesWords() async throws {
+		#expect(try await text("<p>Hello<span> </span>world</p>") == "Hello world")
+	}
+
 	@Test("A <br> is a boundary, not a separator")
 	func lineBreakIsABoundary() async throws {
 		#expect(try await text("<p>Wort A<br>\n<strong>fett</strong></p>") == "Wort A\nfett")

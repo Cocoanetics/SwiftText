@@ -39,3 +39,10 @@ func prettyPrintedDeepWrapperChainDoesNotCrash() async throws {
 	let document = try await HTMLDocument(data: Data(html.utf8), baseURL: nil)
 	#expect(document.markdown().contains("Hello ü"))
 }
+
+@Test
+func inlineWrapperUnwrappingPreservesItsTrailingSeparator() async throws {
+	let html = "<p><span><span>Hello</span> </span><em>world</em></p>"
+	let document = try await HTMLDocument(data: Data(html.utf8), baseURL: nil)
+	#expect(document.markdown() == "Hello *world*")
+}

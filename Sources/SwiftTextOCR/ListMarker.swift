@@ -29,15 +29,15 @@ func strippingListMarker(_ text: String, reportedMarker: String) -> String {
 		let escaped = NSRegularExpression.escapedPattern(for: reported)
 		let pattern: String
 		if reported.unicodeScalars.allSatisfy(reportedBulletScalars.contains) {
-			pattern = "^\(escaped)[ \\t]*"
+			pattern = "^\(escaped)\\s*"
 		} else if reported.last == "." || reported.last == ")" {
-			pattern = "^\(escaped)[ \\t]+"
+			pattern = "^\(escaped)\\s+"
 		} else {
 			// A reported bare ordinal (for example "1") may omit its painted
 			// punctuation, but that punctuation is a marker only with whitespace
 			// after it. This prevents an inaccurate report from eating "1." in
 			// decimal content such as "1.5 Millionen".
-			pattern = "^\(escaped)(?:[.)][ \\t]+|[ \\t]+)"
+			pattern = "^\(escaped)(?:[.)]\\s+|\\s+)"
 		}
 		if let stripped = trimmed.removingPrefix(matching: pattern) { return stripped }
 	}
@@ -54,9 +54,11 @@ func strippingListMarker(_ text: String, reportedMarker: String) -> String {
 /// that double as punctuation — a hyphen, a dash, an asterisk, a digit — do,
 /// otherwise `E-Mail schreiben` and `1.5 Millionen` would lose their opening.
 private let markerPatterns = [
-	"^[\u{2022}\u{2023}\u{25AA}\u{25AB}\u{25CF}\u{25CB}\u{25E6}\u{2219}\u{00B7}][ \t]*",
-	"^[-\u{2013}\u{2014}*+][ \t]+",
-	"^\\(?[0-9]+[.)][ \t]+"
+	"^[\u{2022}\u{2023}\u{25AA}\u{25AB}\u{25CF}\u{25CB}\u{25E6}\u{2219}\u{00B7}]\\s*",
+	"^[-\u{2013}\u{2014}*+]\\s+",
+	"^\\(?[0-9]+(?:\\.[0-9]+)+[.)]\\s+",
+	"^\\(?[0-9]+[.)]\\s+",
+	"^\\(?[A-Za-z][.)]\\s+"
 ]
 
 private let reportedBulletScalars = Set("\u{2022}\u{2023}\u{25AA}\u{25AB}\u{25CF}\u{25CB}\u{25E6}\u{2219}\u{00B7}".unicodeScalars)

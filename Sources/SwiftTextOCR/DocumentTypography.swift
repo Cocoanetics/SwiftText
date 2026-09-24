@@ -51,9 +51,16 @@ struct DocumentTypography {
 			return
 		}
 		bodySize = body
-		headingSizes = charactersPerSize.keys
-			.filter { $0 >= body * Self.headingRatio }
-			.sorted(by: >)
+		// Only sizes that uniformly set a paragraph can define a heading level.
+		// A large inline word in otherwise body-sized text is emphasis, not an
+		// extra level that should push every real heading down the hierarchy.
+		let candidates = blocks.compactMap { block -> CGFloat? in
+			guard case .paragraph(let paragraph) = block.kind,
+			      let size = Self.uniformFontSize(in: paragraph),
+			      size >= body * Self.headingRatio else { return nil }
+			return size.rounded(toNearest: Self.sizeTolerance)
+		}
+		headingSizes = Array(Set(candidates)).sorted(by: >)
 	}
 
 	/// The heading level for `size`, or nil when it is body text or smaller.
@@ -61,6 +68,46 @@ struct DocumentTypography {
 		let rounded = size.rounded(toNearest: Self.sizeTolerance)
 		guard let index = headingSizes.firstIndex(where: { abs($0 - rounded) < 0.01 }) else { return nil }
 		return Swift.min(index + 1, Self.deepestLevel)
+	}
+
+	/// The explicit or typography-derived heading level for a paragraph.
+	///
+	/// Keeping this decision beside the document-wide size scale lets both the
+	/// semantic composer and the Markdown renderer apply the same boundary
+	/// before either one joins adjacent paragraphs.
+	func headingLevel(for paragraph: DocumentBlock.Paragraph) -> Int? {
+		if let level = paragraph.headingLevel { return level }
+
+		let lines = paragraph.lines
+			.map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }
+			.filter { !$0.isEmpty }
+		let text = lines.isEmpty
+			? paragraph.text.trimmingCharacters(in: .whitespacesAndNewlines)
+			: lines.joined(separator: " ")
+		guard !text.isEmpty else { return nil }
+
+		let contentRuns = paragraph.lines.flatMap(\.runs)
+			.filter { !$0.text.allSatisfy(\.isWhitespace) }
+		let styles = contentRuns.compactMap(\.style)
+		guard !styles.isEmpty, styles.count == contentRuns.count,
+		      let first = styles.first else { return nil }
+
+		if styles.allSatisfy({ abs($0.fontSize - first.fontSize) < Self.sizeTolerance }),
+		   let level = headingLevel(forSize: first.fontSize) {
+			return level
+		}
+
+		// At body size, a single all-bold source line can only be distinguished
+		// from an emphasised sentence by its shape.
+		guard lines.count == 1,
+		      let bodySize,
+		      abs(first.fontSize - bodySize) < Self.sizeTolerance,
+		      styles.allSatisfy({
+			      abs($0.fontSize - first.fontSize) < Self.sizeTolerance
+			      && $0.isBold && !$0.isMonospaced
+		      }),
+		      Self.isBoldHeadingShape(text) else { return nil }
+		return boldHeadingLevel
 	}
 
 	/// The level a heading gets when it is set at body size and can only be
@@ -93,6 +140,17 @@ struct DocumentTypography {
 	private static let sentenceEndings: Set<Character> = [".", "!", "?", ";", ",", ":"]
 	private static let maximumHeadingCharacters = 80
 	private static let maximumHeadingWords = 12
+
+	private static func uniformFontSize(in paragraph: DocumentBlock.Paragraph) -> CGFloat? {
+		let contentRuns = paragraph.lines.flatMap(\.runs)
+			.filter { !$0.text.allSatisfy(\.isWhitespace) }
+		let styles = contentRuns.compactMap(\.style)
+		guard !styles.isEmpty, styles.count == contentRuns.count,
+		      let first = styles.first,
+		      styles.allSatisfy({ abs($0.fontSize - first.fontSize) < sizeTolerance })
+		else { return nil }
+		return first.fontSize
+	}
 }
 
 extension DocumentBlock {

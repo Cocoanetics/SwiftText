@@ -42,12 +42,20 @@ public enum TextLineSemanticComposer {
 		}
 
 		let remaining = lineInfos.filter { !assigned.contains($0.id) }
+		// Classify typography before attaching unmatched lines. A title is a
+		// structural boundary even when Vision did not provide heading metadata,
+		// and must not absorb (or be absorbed by) a nearby body line.
+		let typographyCandidates = blocks + remaining.map {
+			makeStandaloneParagraph(from: $0, referenceSize: semantics.referenceSize).block
+		}
+		let typography = DocumentTypography(blocks: typographyCandidates)
 		let appended = appendRemainingLines(
 			remaining,
 			to: &blocks,
 			metadata: &metadata,
 			layoutSize: layoutSize,
-			referenceSize: semantics.referenceSize
+			referenceSize: semantics.referenceSize,
+			typography: typography
 		)
 
 		let newParagraphs = appended.filter { !$0.assigned }.map {
@@ -66,7 +74,8 @@ public enum TextLineSemanticComposer {
 		let (mergedBlocks, _) = mergeParagraphBlocks(
 			splitBlocks,
 			metadata: splitMetadata,
-			referenceSize: semantics.referenceSize
+			referenceSize: semantics.referenceSize,
+			typography: DocumentTypography(blocks: splitBlocks)
 		)
 		return mergedBlocks
 	}
@@ -265,7 +274,8 @@ private func unionNormalizedRect(_ rects: [NormalizedRect], fallback: Normalized
 private func mergeParagraphBlocks(
 	_ blocks: [DocumentBlock],
 	metadata: [BlockMetadata],
-	referenceSize: CGSize
+	referenceSize: CGSize,
+	typography: DocumentTypography
 ) -> ([DocumentBlock], [BlockMetadata]) {
 	guard !blocks.isEmpty else { return (blocks, metadata) }
 	var mergedBlocks: [DocumentBlock] = []
@@ -287,7 +297,8 @@ private func mergeParagraphBlocks(
 			current: currentParagraph,
 			currentBounds: block.bounds,
 			currentMetadata: meta,
-			referenceSize: referenceSize
+			referenceSize: referenceSize,
+			typography: typography
 		   ) {
 			let combinedLines = previousParagraph.lines + currentParagraph.lines
 			let combinedText = combinedLines.map(\.text).joined(separator: "\n")
@@ -405,9 +416,10 @@ private func shouldMergeParagraphs(
 	current: DocumentBlock.Paragraph,
 	currentBounds: CGRect,
 	currentMetadata: BlockMetadata,
-	referenceSize: CGSize
+	referenceSize: CGSize,
+	typography: DocumentTypography
 ) -> Bool {
-	if shouldPreventMerge(previous: previous, current: current) {
+	if shouldPreventMerge(previous: previous, current: current, typography: typography) {
 		return false
 	}
 
@@ -434,11 +446,14 @@ private func shouldMergeParagraphs(
 
 private func shouldPreventMerge(
 	previous: DocumentBlock.Paragraph,
-	current: DocumentBlock.Paragraph
+	current: DocumentBlock.Paragraph,
+	typography: DocumentTypography
 ) -> Bool {
-	// An explicit heading is a structural boundary, not a geometric paragraph
-	// continuation. Preserve it even when it sits close to body text.
-	if previous.headingLevel != nil || current.headingLevel != nil {
+	// A heading is a structural boundary, not a geometric paragraph
+	// continuation. Infer it here, before a merge can mix its runs with body
+	// text and erase the typography that identifies it.
+	if typography.headingLevel(for: previous) != nil
+		|| typography.headingLevel(for: current) != nil {
 		return true
 	}
 	let candidates = [previous.text, current.text]
@@ -505,7 +520,8 @@ private func appendRemainingLines(
 	to blocks: inout [DocumentBlock],
 	metadata: inout [BlockMetadata],
 	layoutSize: CGSize,
-	referenceSize: CGSize
+	referenceSize: CGSize,
+	typography: DocumentTypography
 ) -> [RemainingLine] {
 	guard !remaining.isEmpty else { return [] }
 
@@ -513,8 +529,16 @@ private func appendRemainingLines(
 
 	for index in leftovers.indices {
 		let line = leftovers[index].info
+		let lineParagraph = DocumentBlock.Paragraph(
+			text: line.text,
+			lines: [DocumentBlock.TextLine(
+				text: line.text,
+				bounds: line.semanticBounds,
+				runs: line.runs)])
+		guard typography.headingLevel(for: lineParagraph) == nil else { continue }
 		let candidates = blocks.enumerated().compactMap { idx, block -> (Int, CGRect)? in
-			guard case .paragraph = block.kind else { return nil }
+			guard case .paragraph(let paragraph) = block.kind,
+			      typography.headingLevel(for: paragraph) == nil else { return nil }
 			let normalized = metadata[idx].normalizedBounds
 			let rect = normalized.scaled(to: layoutSize)
 			guard rect.maxY <= line.actualBounds.minY + line.actualBounds.height else { return nil }

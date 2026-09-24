@@ -71,6 +71,22 @@ struct TypographyMarkdownTests {
 		#expect(!markdown.contains("#"))
 	}
 
+	@Test("A large inline word does not consume a heading level")
+	func inlineSizeDoesNotPolluteHeadingLevels() {
+		let markdown = render([
+			DocumentBlock(bounds: rect(0), kind: .paragraph(.init(
+				text: "", lines: [line([
+					run("Ein Satz mit ", size: 11),
+					run("Dekoration", size: 24, bold: true),
+					run(" im Fließtext.", size: 11)
+				])]))),
+			heading("Echte Überschrift", size: 18),
+			body("Noch ein längerer Absatz bestimmt eindeutig die Grundschrift.")
+		])
+		#expect(markdown.contains("# Echte Überschrift"))
+		#expect(!markdown.contains("## Echte Überschrift"))
+	}
+
 	@Test("A nearby large title is not merged into body text")
 	func nearbyTitleStaysSeparate() {
 		let titleBounds = CGRect(x: 0, y: 0, width: 400, height: 20)
@@ -243,6 +259,36 @@ struct TypographyMarkdownTests {
 		])
 		#expect(markdown.contains("# Hauptüberschrift"))
 		#expect(!markdown.contains("**Hauptüberschrift**"))
+	}
+
+	@Test("Distinct inline styles survive inside an inferred heading")
+	func inlineStylesSurviveInsideInferredHeading() {
+		let markdown = render([
+			DocumentBlock(bounds: rect(0), kind: .paragraph(.init(
+				text: "", lines: [line([
+					run("Titel mit ", size: 22, bold: true),
+					run("Betonung", size: 22, bold: true, italic: true),
+					run(" und ", size: 22, bold: true),
+					run("Code", size: 22, bold: true, monospaced: true)
+				])]))),
+			body("Ein Absatz mit genug Text, damit elf Punkt die Grundschrift ist.")
+		])
+		#expect(markdown.contains("# Titel mit *Betonung* und `Code`"))
+		#expect(!markdown.contains("**Titel mit"))
+	}
+
+	@Test("Distinct inline emphasis survives inside an explicit heading")
+	func inlineEmphasisSurvivesInsideExplicitHeading() {
+		let headingLine = line([
+			run("Explizit mit ", size: 11),
+			run("Betonung", size: 11, italic: true)
+		])
+		let markdown = render([
+			DocumentBlock(bounds: rect(0), kind: .paragraph(.init(
+				text: "", lines: [headingLine], headingLevel: 3))),
+			body("Ein Absatz mit genug Text, damit elf Punkt die Grundschrift ist.")
+		])
+		#expect(markdown.contains("### Explizit mit *Betonung*"))
 	}
 
 	@Test("Emphasis survives inside a list item")

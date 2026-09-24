@@ -41,6 +41,9 @@ struct ListMarkerTests {
 		("– Punkt", "Punkt"),
 		("* Punkt", "Punkt"),
 		("1) Punkt", "Punkt"),
+		("a) Punkt", "Punkt"),
+		("B. Punkt", "Punkt"),
+		("1.2. Punkt", "Punkt"),
 		("•Punkt", "Punkt")
 	])
 	func paintedMarkerWithoutAReportedOne(_ testCase: (painted: String, expected: String)) {
@@ -70,6 +73,20 @@ struct ListMarkerTests {
 			markerString: "1",
 			marker: .decimal)
 		#expect(itemTexts(of: blocks) == ["1.5 Millionen", "Punkt"])
+	}
+
+	@Test("A non-breaking space separates a reported or inferred marker", arguments: [
+		("1.\u{00A0}Punkt", "1."),
+		("1.\u{00A0}Punkt", ""),
+		("a)\u{00A0}Punkt", ""),
+		("1.2.\u{00A0}Punkt", "")
+	])
+	func nonBreakingSpaceAfterMarker(_ testCase: (painted: String, reported: String)) {
+		let blocks = composeList(
+			itemTexts: [testCase.painted],
+			markerString: testCase.reported,
+			marker: .decimal)
+		#expect(itemTexts(of: blocks) == ["Punkt"])
 	}
 
 	@Test("Only the first line of a multi-line item loses a marker")

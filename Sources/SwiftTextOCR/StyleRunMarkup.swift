@@ -17,10 +17,28 @@ extension Array where Element == StyleRun {
 	/// a page hands the run over — would not be emphasis at all. Monospaced
 	/// text becomes inline code and takes no further emphasis, because code
 	/// spans hold no markup.
-	func inlineMarkup() -> [InlineMarkup] {
+	func inlineMarkup(suppressingUniformEmphasis: Bool = false) -> [InlineMarkup] {
 		var result: [InlineMarkup] = []
+		let contentRuns = filter { !$0.text.allSatisfy(\.isWhitespace) }
+		let contentStyles = contentRuns.compactMap(\.style)
+		let allContentIsStyled = contentStyles.count == contentRuns.count
+		let suppressBold = suppressingUniformEmphasis
+			&& allContentIsStyled && !contentStyles.isEmpty && contentStyles.allSatisfy(\.isBold)
+		let suppressItalic = suppressingUniformEmphasis
+			&& allContentIsStyled && !contentStyles.isEmpty && contentStyles.allSatisfy(\.isItalic)
+		let suppressMonospaced = suppressingUniformEmphasis
+			&& allContentIsStyled && !contentStyles.isEmpty && contentStyles.allSatisfy(\.isMonospaced)
 		for run in coalesced() {
-			guard let style = run.style, isEmphasised(style) else {
+			guard let originalStyle = run.style else {
+				result.append(Text(run.text))
+				continue
+			}
+			let style = TextStyle(
+				fontSize: originalStyle.fontSize,
+				isBold: originalStyle.isBold && !suppressBold,
+				isItalic: originalStyle.isItalic && !suppressItalic,
+				isMonospaced: originalStyle.isMonospaced && !suppressMonospaced)
+			guard isEmphasised(style) else {
 				result.append(Text(run.text))
 				continue
 			}

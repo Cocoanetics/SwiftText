@@ -31,6 +31,48 @@ struct TextLineSemanticComposerStyleTests {
 		#expect(markdown.contains("# Title"))
 	}
 
+	@Test("Typography-derived heading remains separate during semantic composition")
+	func inferredHeadingIsAMergeBarrier() {
+		let titleBounds = CGRect(x: 50, y: 20, width: 200, height: 20)
+		let bodyBounds = CGRect(x: 50, y: 43, width: 400, height: 20)
+		let title = textLine("Title", bounds: titleBounds, size: 22, bold: true)
+		let body = textLine(
+			"A much longer body line establishes the document body size.",
+			bounds: bodyBounds,
+			size: 11)
+		let semantics = DocumentSemantics(
+			referenceSize: pageSize,
+			blocks: [
+				normalizedParagraph(text: title.combinedText, bounds: titleBounds),
+				normalizedParagraph(text: body.combinedText, bounds: bodyBounds)
+			],
+			images: [])
+
+		let blocks = TextLineSemanticComposer.composeBlocks(
+			from: [title, body], semantics: semantics, layoutSize: pageSize)
+		let markdown = DocumentBlockMarkdownRenderer.markdown(from: blocks)
+
+		#expect(markdown.contains("# Title\n\nA much longer body line"))
+	}
+
+	@Test("An explicit heading does not absorb an unmatched body line")
+	func explicitHeadingDoesNotAbsorbRemainingLine() {
+		let titleBounds = CGRect(x: 50, y: 20, width: 200, height: 20)
+		let bodyBounds = CGRect(x: 50, y: 43, width: 400, height: 20)
+		let title = textLine("Known heading", bounds: titleBounds, size: 11, bold: true)
+		let body = textLine("Body line remains a paragraph.", bounds: bodyBounds, size: 11)
+		let semantics = semanticsForParagraph(
+			text: title.combinedText,
+			bounds: titleBounds,
+			headingLevel: 2)
+
+		let blocks = TextLineSemanticComposer.composeBlocks(
+			from: [title, body], semantics: semantics, layoutSize: pageSize)
+		let markdown = DocumentBlockMarkdownRenderer.markdown(from: blocks)
+
+		#expect(markdown.contains("## Known heading\n\nBody line remains a paragraph."))
+	}
+
 	@Test("A text-layer line appended to a paragraph keeps its emphasis")
 	func appendedLineKeepsStyleRuns() throws {
 		let firstBounds = CGRect(x: 50, y: 100, width: 180, height: 20)
@@ -96,10 +138,23 @@ struct TextLineSemanticComposerStyleTests {
 		let block = DocumentBlock(bounds: bounds, kind: .paragraph(paragraph))
 		return DocumentSemantics(
 			referenceSize: pageSize,
-			blocks: [NormalizedDocumentBlock(
-				block: block,
-				normalizedBounds: normalized(bounds))],
+			blocks: [NormalizedDocumentBlock(block: block, normalizedBounds: normalized(bounds))],
 			images: [])
+	}
+
+	private func normalizedParagraph(
+		text: String,
+		bounds: CGRect,
+		headingLevel: Int? = nil
+	) -> NormalizedDocumentBlock {
+		let line = DocumentBlock.TextLine(text: text, bounds: bounds)
+		let paragraph = DocumentBlock.Paragraph(
+			text: text,
+			lines: [line],
+			headingLevel: headingLevel)
+		return NormalizedDocumentBlock(
+			block: DocumentBlock(bounds: bounds, kind: .paragraph(paragraph)),
+			normalizedBounds: normalized(bounds))
 	}
 
 	private func normalized(_ rect: CGRect) -> NormalizedRect {

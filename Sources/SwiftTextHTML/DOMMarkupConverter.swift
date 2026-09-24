@@ -644,6 +644,13 @@ struct DOMMarkupConverter {
 		guard meaningful.count == 1,
 		      let child = meaningful[0] as? DOMElement,
 		      child.isTransparentWrapper else { return nil }
+		// Whitespace at a block edge is indentation. At an inline edge it can be
+		// the only separator from text outside this wrapper, so unwrapping must
+		// retain the wrapper (and therefore that whitespace) in the inline case.
+		let discardedWhitespace = meaningful.count != element.children.count
+		if discardedWhitespace && !isBlockLevel(element) && !isBlockLevel(child) {
+			return nil
+		}
 		return child
 	}
 }

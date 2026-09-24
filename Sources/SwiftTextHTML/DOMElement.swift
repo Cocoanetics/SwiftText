@@ -103,9 +103,10 @@ public class DOMElement: DOMNode, @unchecked Sendable {
 	/// A run of whitespace on its own means two different things depending on
 	/// what it separates. Between two inline siblings — `<a>x</a>\n<a>y</a>` — it
 	/// is the only thing keeping the words apart, so it collapses to a space and
-	/// stays. Against a block boundary, including this element's own edges, no
-	/// text meets across it and it goes, the way a line box trims the start and
-	/// end of a block.
+	/// stays. Against a block boundary, including a block element's own edges,
+	/// no text meets across it and it goes, the way a line box trims the start
+	/// and end of a block. An inline element's edges are not text boundaries:
+	/// `<span> </span>` may itself be the separator between surrounding words.
 	private func childText() -> String {
 		var parts: [String] = []
 		for (index, child) in children.enumerated() {
@@ -114,9 +115,14 @@ public class DOMElement: DOMNode, @unchecked Sendable {
 				parts.append(text)
 				continue
 			}
-			guard let previous = children[..<index].last(where: separatesText),
-			      let next = children[(index + 1)...].first(where: separatesText),
-			      !previous.startsTextBlock, !next.startsTextBlock else { continue }
+			let previous = children[..<index].last(where: separatesText)
+			let next = children[(index + 1)...].first(where: separatesText)
+			if startsTextBlock {
+				guard let previous, let next,
+				      !previous.startsTextBlock, !next.startsTextBlock else { continue }
+			} else if previous?.startsTextBlock == true || next?.startsTextBlock == true {
+				continue
+			}
 			parts.append(text)
 		}
 		return parts.joined()
