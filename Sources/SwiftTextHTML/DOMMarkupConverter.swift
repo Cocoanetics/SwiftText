@@ -112,6 +112,14 @@ struct DOMMarkupConverter {
 	private func blockChildren(of element: DOMElement) -> [BlockMarkup] {
 		var blocks: [BlockMarkup] = []
 		var inlineBuffer: [InlineMarkup] = []
+		let meaningfulIndices = element.children.indices.filter { index in
+			guard let text = element.children[index] as? DOMText else { return true }
+			return !text.textValue.allSatisfy(\.isWhitespace)
+		}
+		let soleInlineIndex = meaningfulIndices.count == 1
+			&& !isBlockLevel(element.children[meaningfulIndices[0]])
+			? meaningfulIndices[0]
+			: nil
 
 		func flush() {
 			let trimmed = trimInlines(inlineBuffer)
@@ -120,7 +128,7 @@ struct DOMMarkupConverter {
 			blocks.append(Paragraph(trimmed))
 		}
 
-		for child in element.children {
+		for (index, child) in element.children.enumerated() {
 			// Footnote definition containers are rendered separately (appended as
 			// `[^id]: …` blocks), so skip them in the normal block flow.
 			if let childElement = child as? DOMElement,
@@ -131,7 +139,9 @@ struct DOMMarkupConverter {
 				flush()
 				blocks.append(contentsOf: blockMarkup(from: child))
 			} else {
-				inlineBuffer.append(contentsOf: inlineMarkup(from: child))
+				inlineBuffer.append(contentsOf: inlineMarkup(
+					from: child,
+					discardingEdgeWhitespace: index == soleInlineIndex))
 			}
 		}
 		flush()
@@ -145,7 +155,7 @@ struct DOMMarkupConverter {
 
 		// Collapse single-child transparent wrapper chains (e.g. deeply nested
 		// div/span towers) iteratively to avoid pathological recursion depth.
-		let element = unwrapTransparent(original)
+		let element = unwrapTransparent(original, discardingEdgeWhitespace: true)
 		let name = element.name.lowercased()
 
 		switch name {
@@ -193,7 +203,10 @@ struct DOMMarkupConverter {
 	}
 
 	/// Converts a single DOM node into zero or more inline markups.
-	private func inlineMarkup(from node: DOMNode) -> [InlineMarkup] {
+	private func inlineMarkup(
+		from node: DOMNode,
+		discardingEdgeWhitespace: Bool = false
+	) -> [InlineMarkup] {
 		if let text = node as? DOMText {
 			let string = collapsedText(text)
 			return string.isEmpty ? [] : [Text(string)]
@@ -202,7 +215,9 @@ struct DOMMarkupConverter {
 		guard let original = node as? DOMElement else { return [] }
 		if Self.skippedTags.contains(original.name.lowercased()) { return [] }
 
-		let element = unwrapTransparent(original)
+		let element = unwrapTransparent(
+			original,
+			discardingEdgeWhitespace: discardingEdgeWhitespace)
 		let name = element.name.lowercased()
 
 		switch name {
@@ -619,13 +634,18 @@ struct DOMMarkupConverter {
 	/// nested div/span/font towers from HTML email) to avoid stack-overflow-depth
 	/// recursion. Stops at the innermost wrapper whose child isn't another
 	/// transparent wrapper.
-	private func unwrapTransparent(_ element: DOMElement) -> DOMElement {
+	private func unwrapTransparent(
+		_ element: DOMElement,
+		discardingEdgeWhitespace: Bool
+	) -> DOMElement {
 		guard element.isTransparentWrapper else { return element }
 		var current = element
 		var steps = 0
 		while steps < 10_000,
 			  current.isTransparentWrapper,
-			  let only = soleTransparentChild(of: current) {
+			  let only = soleTransparentChild(
+				of: current,
+				discardingEdgeWhitespace: discardingEdgeWhitespace) {
 			current = only
 			steps += 1
 		}
@@ -636,7 +656,10 @@ struct DOMMarkupConverter {
 	/// puts indentation around that child; those edge-only whitespace nodes do
 	/// not make the wrapper semantically branch and must not disable iterative
 	/// unwrapping of deep email-style wrapper towers.
-	private func soleTransparentChild(of element: DOMElement) -> DOMElement? {
+	private func soleTransparentChild(
+		of element: DOMElement,
+		discardingEdgeWhitespace: Bool
+	) -> DOMElement? {
 		let meaningful = element.children.filter { child in
 			guard let text = child as? DOMText else { return true }
 			return !text.textValue.allSatisfy(\.isWhitespace)
@@ -648,7 +671,8 @@ struct DOMMarkupConverter {
 		// the only separator from text outside this wrapper, so unwrapping must
 		// retain the wrapper (and therefore that whitespace) in the inline case.
 		let discardedWhitespace = meaningful.count != element.children.count
-		if discardedWhitespace && !isBlockLevel(element) && !isBlockLevel(child) {
+		if discardedWhitespace && !discardingEdgeWhitespace
+			&& !isBlockLevel(element) && !isBlockLevel(child) {
 			return nil
 		}
 		return child

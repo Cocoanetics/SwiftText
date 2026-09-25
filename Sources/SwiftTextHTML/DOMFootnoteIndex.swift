@@ -119,30 +119,38 @@ private struct FootnoteScanner {
 	// MARK: Indexing
 
 	private mutating func indexTree(_ element: DOMElement, parent: DOMElement?) {
-		let oid = ObjectIdentifier(element)
-		order[oid] = counter
-		counter += 1
-		if let parent { parents[oid] = parent }
-		if let id = element.attributes["id"] as? String, byID[id] == nil { byID[id] = element }
-		for child in element.children {
-			if let childElement = child as? DOMElement { indexTree(childElement, parent: element) }
+		var stack: [(element: DOMElement, parent: DOMElement?)] = [(element, parent)]
+		while let entry = stack.popLast() {
+			let oid = ObjectIdentifier(entry.element)
+			order[oid] = counter
+			counter += 1
+			if let parent = entry.parent { parents[oid] = parent }
+			if let id = entry.element.attributes["id"] as? String, byID[id] == nil {
+				byID[id] = entry.element
+			}
+			for child in entry.element.children.reversed() {
+				if let childElement = child as? DOMElement {
+					stack.append((childElement, entry.element))
+				}
+			}
 		}
 	}
 
 	// MARK: Reference acceptance
 
 	private func collectReferences(in element: DOMElement, labelForID: inout [String: String], refIDs: inout Set<String>) {
-		if element.name.lowercased() == "a",
-		   let fragment = fragment(of: element),
-		   let def = byID[fragment],
-		   let n = markerNumber(of: element),
-		   accept(reference: element, definition: def, number: n) {
-			if labelForID[fragment] == nil { labelForID[fragment] = String(n) }
-			if let rid = element.attributes["id"] as? String { refIDs.insert(rid) }
-		}
-		for child in element.children {
-			if let childElement = child as? DOMElement {
-				collectReferences(in: childElement, labelForID: &labelForID, refIDs: &refIDs)
+		var stack = [element]
+		while let current = stack.popLast() {
+			if current.name.lowercased() == "a",
+			   let fragment = fragment(of: current),
+			   let def = byID[fragment],
+			   let n = markerNumber(of: current),
+			   accept(reference: current, definition: def, number: n) {
+				if labelForID[fragment] == nil { labelForID[fragment] = String(n) }
+				if let rid = current.attributes["id"] as? String { refIDs.insert(rid) }
+			}
+			for child in current.children.reversed() {
+				if let childElement = child as? DOMElement { stack.append(childElement) }
 			}
 		}
 	}

@@ -181,15 +181,13 @@ struct DocumentBlockExtractor {
 			let combinedLines: [DocumentBlock.TextLine]
 
 			if paragraphs.isEmpty {
-				let cleaned = cleanListItemText(item.itemString, marker: item.markerString)
-				combinedText = cleaned
-				combinedLines = [DocumentBlock.TextLine(text: cleaned, bounds: item.content.boundingRegion.rect(in: pageSize))]
+				combinedText = item.itemString
+				combinedLines = [DocumentBlock.TextLine(text: item.itemString, bounds: item.content.boundingRegion.rect(in: pageSize))]
 			} else {
-				let joined = paragraphs.map(\.text).joined(separator: "\n")
-				combinedText = cleanListItemText(joined, marker: item.markerString)
+				combinedText = paragraphs.map(\.text).joined(separator: "\n")
 				let rawLines = paragraphs.flatMap(\.lines).map {
 					DocumentBlock.TextLine(
-						text: cleanListItemText($0.text, marker: item.markerString),
+						text: $0.text,
 						bounds: $0.bounds
 					)
 				}
@@ -432,10 +430,6 @@ struct DocumentBlockExtractor {
 		let verticalGap = rhs.bounds.minY - lhs.bounds.maxY
 		let maxHeight = max(lhs.bounds.height, rhs.bounds.height)
 		return verticalGap <= max(maxHeight * 1.2, 12)
-	}
-
-	private func cleanListItemText(_ text: String, marker: String) -> String {
-		strippingListMarker(text, reportedMarker: marker)
 	}
 
 	private func deduplicatedLines(_ lines: [DocumentBlock.TextLine]) -> [DocumentBlock.TextLine] {

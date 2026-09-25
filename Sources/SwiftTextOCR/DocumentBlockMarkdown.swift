@@ -82,10 +82,10 @@ public struct DocumentBlockMarkdownRenderer {
 
 		if let level = typography.headingLevel(for: paragraph) {
 			guard !runs.isEmpty else { return Heading(level: level, Text(text)) }
-			// Suppress only traits shared by the whole heading. Its ordinary bold
-			// face should not become redundant Markdown emphasis, while an italic
-			// word or monospaced span that differs from the rest must survive.
-			return Heading(level: level, runs.inlineMarkup(suppressingUniformEmphasis: true))
+			// Suppress only bold shared by the whole heading: Markdown heading
+			// syntax already implies that weight. Italic and monospaced traits are
+			// independent meaning and must survive even when they cover the title.
+			return Heading(level: level, runs.inlineMarkup(suppressingUniformBold: true))
 		}
 		guard !runs.isEmpty else { return Paragraph(Text(text)) }
 		return Paragraph(runs.inlineMarkup())

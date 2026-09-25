@@ -68,6 +68,14 @@ struct PreservedWhitespaceTests {
 		#expect(text.filter { $0 == " " }.count == 2)
 	}
 
+	@Test("RTL pre-wrap keeps coalescible leading text separate from preserved spaces")
+	func rtlPreWrapPreservesSpacesAfterPlainText() async throws {
+		let html = "<p style=\"direction: rtl; white-space: pre-wrap\">אב  <em>גד</em></p>"
+		let text = try #require(await lineTexts(html).first)
+		#expect(!text.contains("·"))
+		#expect(text.filter { $0 == " " }.count == 2)
+	}
+
 	// MARK: - Helpers
 
 	/// Each line's text with the spaces its fragments carry, and a gap the line

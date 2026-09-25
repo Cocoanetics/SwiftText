@@ -223,6 +223,8 @@ extension LayoutEngine {
 				func append(_ pieces: [Piece]) {
 					for piece in pieces {
 						if let last = fragments.indices.last,
+						   !fragments[last].carriesPreservedWhitespace,
+						   !piece.text.allSatisfy({ $0 == " " || $0 == "\t" }),
 						   fragments[last].font?.key == piece.font.key,
 						   fragments[last].style == style,
 						   fragments[last].href == href,

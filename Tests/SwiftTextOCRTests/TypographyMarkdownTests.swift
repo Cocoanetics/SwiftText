@@ -291,6 +291,21 @@ struct TypographyMarkdownTests {
 		#expect(markdown.contains("### Explizit mit *Betonung*"))
 	}
 
+	@Test("Uniform italic and code styling survive on headings")
+	func uniformNonBoldStylesSurviveOnHeadings() {
+		let italic = render([
+			DocumentBlock(bounds: rect(0), kind: .paragraph(.init(
+				text: "", lines: [line([run("Italic heading", size: 11, italic: true)])], headingLevel: 2)))
+		])
+		let code = render([
+			DocumentBlock(bounds: rect(0), kind: .paragraph(.init(
+				text: "", lines: [line([run("code-heading", size: 11, monospaced: true)])], headingLevel: 3)))
+		])
+
+		#expect(italic.contains("## *Italic heading*"))
+		#expect(code.contains("### `code-heading`"))
+	}
+
 	@Test("Emphasis survives inside a list item")
 	func emphasisInsideAListItem() {
 		let item = DocumentBlock.List.Item(
