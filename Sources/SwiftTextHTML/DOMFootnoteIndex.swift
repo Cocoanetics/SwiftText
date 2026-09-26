@@ -119,30 +119,38 @@ private struct FootnoteScanner {
 	// MARK: Indexing
 
 	private mutating func indexTree(_ element: DOMElement, parent: DOMElement?) {
-		let oid = ObjectIdentifier(element)
-		order[oid] = counter
-		counter += 1
-		if let parent { parents[oid] = parent }
-		if let id = element.attributes["id"] as? String, byID[id] == nil { byID[id] = element }
-		for child in element.children {
-			if let childElement = child as? DOMElement { indexTree(childElement, parent: element) }
+		var stack: [(element: DOMElement, parent: DOMElement?)] = [(element, parent)]
+		while let entry = stack.popLast() {
+			let oid = ObjectIdentifier(entry.element)
+			order[oid] = counter
+			counter += 1
+			if let parent = entry.parent { parents[oid] = parent }
+			if let id = entry.element.attributes["id"] as? String, byID[id] == nil {
+				byID[id] = entry.element
+			}
+			for child in entry.element.children.reversed() {
+				if let childElement = child as? DOMElement {
+					stack.append((childElement, entry.element))
+				}
+			}
 		}
 	}
 
 	// MARK: Reference acceptance
 
 	private func collectReferences(in element: DOMElement, labelForID: inout [String: String], refIDs: inout Set<String>) {
-		if element.name.lowercased() == "a",
-		   let fragment = fragment(of: element),
-		   let def = byID[fragment],
-		   let n = markerNumber(of: element),
-		   accept(reference: element, definition: def, number: n) {
-			if labelForID[fragment] == nil { labelForID[fragment] = String(n) }
-			if let rid = element.attributes["id"] as? String { refIDs.insert(rid) }
-		}
-		for child in element.children {
-			if let childElement = child as? DOMElement {
-				collectReferences(in: childElement, labelForID: &labelForID, refIDs: &refIDs)
+		var stack = [element]
+		while let current = stack.popLast() {
+			if current.name.lowercased() == "a",
+			   let fragment = fragment(of: current),
+			   let def = byID[fragment],
+			   let n = markerNumber(of: current),
+			   accept(reference: current, definition: def, number: n) {
+				if labelForID[fragment] == nil { labelForID[fragment] = String(n) }
+				if let rid = current.attributes["id"] as? String { refIDs.insert(rid) }
+			}
+			for child in current.children.reversed() {
+				if let childElement = child as? DOMElement { stack.append(childElement) }
 			}
 		}
 	}
@@ -272,13 +280,16 @@ private struct FootnoteScanner {
 		element.children.compactMap { $0 as? DOMElement }.filter { $0.name.lowercased() == "li" }
 	}
 
+	/// The items of every list under `element` that is not itself inside
+	/// another such list, in document order.
 	private func allListItems(under element: DOMElement) -> [DOMElement] {
 		var result: [DOMElement] = []
-		for child in element.children.compactMap({ $0 as? DOMElement }) {
+		var pending = Array(element.children.compactMap { $0 as? DOMElement }.reversed())
+		while let child = pending.popLast() {
 			if ["ol", "ul"].contains(child.name.lowercased()) {
 				result.append(contentsOf: listItems(of: child))
 			} else {
-				result.append(contentsOf: allListItems(under: child))
+				pending.append(contentsOf: child.children.compactMap { $0 as? DOMElement }.reversed())
 			}
 		}
 		return result
@@ -290,15 +301,25 @@ private struct FootnoteScanner {
 	}
 
 	private func rawText(of node: DOMNode) -> String {
-		if let text = node as? DOMText { return text.textValue }
-		guard let element = node as? DOMElement else { return "" }
-		return element.children.map { rawText(of: $0) }.joined()
+		var result = ""
+		var stack = [node]
+		while let current = stack.popLast() {
+			if let text = current as? DOMText {
+				result += text.textValue
+			} else if let element = current as? DOMElement {
+				stack.append(contentsOf: element.children.reversed())
+			}
+		}
+		return result
 	}
 
 	private func forEachAnchor(in element: DOMElement, _ body: (DOMElement) -> Void) {
-		if element.name.lowercased() == "a" { body(element) }
-		for child in element.children {
-			if let childElement = child as? DOMElement { forEachAnchor(in: childElement, body) }
+		var stack = [element]
+		while let current = stack.popLast() {
+			if current.name.lowercased() == "a" { body(current) }
+			for child in current.children.reversed() {
+				if let childElement = child as? DOMElement { stack.append(childElement) }
+			}
 		}
 	}
 }

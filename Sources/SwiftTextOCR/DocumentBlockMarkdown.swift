@@ -24,11 +24,19 @@ public struct DocumentBlockMarkdownRenderer {
 		imageResolver: ((DocumentBlock) -> String?)? = nil
 	) -> Document {
 		let ordered = orderedBlocks(blocks, textLines: textLines)
-		let merged = mergeParagraphContinuations(ordered, pageBounds: boundsForPage(from: ordered, textLines: textLines))
+		// How this document sets its text decides which sizes are headings, so
+		// it is measured before geometric continuation merging. Otherwise a
+		// nearby title and body paragraph become one mixed-style paragraph before
+		// the title can be recognised.
+		let typography = DocumentTypography(blocks: ordered)
+		let merged = mergeParagraphContinuations(
+			ordered,
+			pageBounds: boundsForPage(from: ordered, textLines: textLines),
+			typography: typography)
 		let blockMarkup: [BlockMarkup] = merged.compactMap { block -> BlockMarkup? in
 			switch block.kind {
 			case .paragraph(let paragraph):
-				return makeParagraph(paragraph)
+				return makeParagraph(paragraph, typography: typography)
 			case .list(let list):
 				return makeList(list)
 			case .table(let table):
@@ -59,7 +67,11 @@ public struct DocumentBlockMarkdownRenderer {
 
 	// MARK: - Block builders
 
-	private static func makeParagraph(_ paragraph: DocumentBlock.Paragraph) -> Paragraph? {
+	private static func makeParagraph(
+		_ paragraph: DocumentBlock.Paragraph,
+		typography: DocumentTypography
+	) -> BlockMarkup? {
+		let runs = joinedRuns(of: paragraph.lines)
 		let lines = paragraph.lines
 			.map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }
 			.filter { !$0.isEmpty }
@@ -67,14 +79,38 @@ public struct DocumentBlockMarkdownRenderer {
 			? paragraph.text.trimmingCharacters(in: .whitespacesAndNewlines)
 			: lines.joined(separator: " ")
 		guard !text.isEmpty else { return nil }
-		return Paragraph(Text(text))
+
+		if let level = typography.headingLevel(for: paragraph) {
+			guard !runs.isEmpty else { return Heading(level: level, Text(text)) }
+			// Suppress only bold shared by the whole heading: Markdown heading
+			// syntax already implies that weight. Italic and monospaced traits are
+			// independent meaning and must survive even when they cover the title.
+			return Heading(level: level, runs.inlineMarkup(suppressingUniformBold: true))
+		}
+		guard !runs.isEmpty else { return Paragraph(Text(text)) }
+		return Paragraph(runs.inlineMarkup())
+	}
+
+	/// One line's runs per source line, joined the way their text is joined.
+	private static func joinedRuns(of lines: [DocumentBlock.TextLine]) -> [StyleRun] {
+		var result: [StyleRun] = []
+		for line in lines where !line.runs.isEmpty {
+			if !result.isEmpty { result.append(StyleRun(text: " ", style: result.last?.style)) }
+			result.append(contentsOf: line.runs)
+		}
+		// Style for some lines but not others would emphasise part of a
+		// paragraph and not the rest; take all of it or none.
+		let styled = lines.filter { !$0.runs.isEmpty }.count
+		return styled == lines.count ? result.coalesced() : []
 	}
 
 	private static func makeList(_ list: DocumentBlock.List) -> BlockMarkup? {
 		guard !list.items.isEmpty else { return nil }
 		let listItems: [ListItem] = list.items.map { item in
+			let runs = joinedRuns(of: item.lines)
 			let text = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
-			return ListItem(Paragraph(Text(text)))
+			guard !runs.isEmpty else { return ListItem(Paragraph(Text(text))) }
+			return ListItem(Paragraph(runs.inlineMarkup()))
 		}
 		// OCR-detected markers (`iii.`, `(a)`, custom strings) are visual labels
 		// that don't survive Markdown's `-` / `1.` syntax. Normalize ordered
@@ -195,10 +231,15 @@ public struct DocumentBlockMarkdownRenderer {
 		)
 	}
 
-	private static func mergeParagraphContinuations(_ blocks: [DocumentBlock], pageBounds: CGRect) -> [DocumentBlock] {
+	private static func mergeParagraphContinuations(
+		_ blocks: [DocumentBlock],
+		pageBounds: CGRect,
+		typography: DocumentTypography
+	) -> [DocumentBlock] {
 		guard !blocks.isEmpty else { return blocks }
 		var result: [DocumentBlock] = []
 		let maxLeftDelta = max(pageBounds.width * 0.02, 8)
+		let columns = TextColumns(blocks: blocks, tolerance: maxLeftDelta)
 
 		for block in blocks {
 			guard
@@ -215,13 +256,23 @@ public struct DocumentBlockMarkdownRenderer {
 			let maxGap = max(avgHeight * 0.8, 6)
 			let leftDelta = abs(block.bounds.minX - last.bounds.minX)
 
-			let isContinuation = verticalGap >= -4 && verticalGap <= maxGap && leftDelta <= maxLeftDelta
+			// Wrapped heading lines arrive as lines of one paragraph. Separate
+			// paragraph blocks that are headings are structural boundaries, even
+			// when their geometry resembles a continuation — unless they are the
+			// split lines of one bold body paragraph.
+			let isContinuation = !typography.isHeadingBoundary(
+				between: previousParagraph, and: currentParagraph, columns: columns)
+				&& verticalGap >= -4 && verticalGap <= maxGap && leftDelta <= maxLeftDelta
 
 			if isContinuation {
 				let combinedLines = previousParagraph.lines + currentParagraph.lines
 				let combinedText = combinedLines.map(\.text).joined(separator: "\n")
 				let combinedBounds = last.bounds.union(block.bounds)
-				let merged = DocumentBlock(bounds: combinedBounds, kind: .paragraph(.init(text: combinedText, lines: combinedLines)))
+				let mergedParagraph = DocumentBlock.Paragraph(
+					text: combinedText,
+					lines: combinedLines,
+					headingLevel: previousParagraph.headingLevel ?? currentParagraph.headingLevel)
+				let merged = DocumentBlock(bounds: combinedBounds, kind: .paragraph(mergedParagraph))
 				result[result.count - 1] = merged
 			} else {
 				result.append(block)

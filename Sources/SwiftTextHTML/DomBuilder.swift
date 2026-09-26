@@ -166,18 +166,17 @@ private extension DOMBuilderState {
 			return
 		}
 
-		let isWhitespace = string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-
 		if ["pre", "code"].contains(currentElement.name) {
 			currentElement.addChild(DOMText(text: string, preserveWhitespace: true))
 			return
 		}
 
-		if isWhitespace,
-		   ["ul", "ol", "body", "div", "blockquote", "tr", "table", "document"].contains(currentElement.name) {
-			return
-		}
-
+		// A whitespace-only run is kept. Between block-level children it is
+		// insignificant, but between two inline siblings — `<a>x</a>\n<a>y</a>` —
+		// it is the only thing separating the words, and dropping it here left the
+		// consumer no way to recover it. Collapsing and trimming belong to whoever
+		// reassembles the nodes: the box tree drops it at the edges of an inline
+		// run, and `text()` trims each block.
 		currentElement.addChild(DOMText(text: string, preserveWhitespace: false))
 	}
 

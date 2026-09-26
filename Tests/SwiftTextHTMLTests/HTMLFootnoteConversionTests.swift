@@ -43,6 +43,29 @@ struct HTMLFootnoteConversionTests {
 		#expect(restored == "Text with a ref[^1].\n\n[^1]: The footnote body.")
 	}
 
+	/// A dedicated footnote section is searched for its lists without recursion,
+	/// so a heading buried in a deep wrapper tower cannot exhaust the stack.
+	@Test func deeplyWrappedFootnoteSectionHeading() async throws {
+		let depth = 2_000
+		let html = """
+		<p>Text with a ref<sup><a href="#fn-1" id="fnref-1" data-footnote-ref>1</a></sup>.</p>
+		<section data-footnotes class="footnotes"><h2>\(String(repeating: "<span>", count: depth))Footnotes\(
+			String(repeating: "</span>", count: depth))</h2><ol>
+		<li id="fn-1"><p>The footnote body. <a href="#fnref-1" data-footnote-backref>↩</a></p></li>
+		</ol></section>
+		"""
+		let document = try await HTMLDocument(data: Data(html.utf8))
+		#expect(document.markdown() == "Text with a ref[^1].\n\n[^1]: The footnote body.")
+
+		var elements = [document.root]
+		var index = 0
+		while index < elements.count {
+			elements.append(contentsOf: elements[index].children.compactMap { $0 as? DOMElement })
+			index += 1
+		}
+		for element in elements { element.children.removeAll() }
+	}
+
 	/// Pandoc-rendered footnotes (`role="doc-noteref"`, `<sup>` inside the `<a>`,
 	/// `role="doc-endnotes"` section with a leading `<hr>`).
 	@Test func pandocFootnotesRestored() async throws {
@@ -93,5 +116,29 @@ struct HTMLFootnoteConversionTests {
 		#expect(!restored.contains("[^"))
 		#expect(restored.contains("## Intro"))
 		#expect(restored.contains("## Methods"))
+	}
+
+	@Test func deeplyWrappedReferenceAndBacklinkDoNotRecurse() async throws {
+		let depth = 2_000
+		var html = "<html><body><p>Claim<a href=\"#fn\" id=\"ref\">"
+		for _ in 0..<depth { html += "<span>" }
+		html += "1"
+		for _ in 0..<depth { html += "</span>" }
+		html += "</a>.</p><div id=\"fn\">The note. "
+		for _ in 0..<depth { html += "<span>" }
+		html += "<a href=\"#ref\">↩</a>"
+		for _ in 0..<depth { html += "</span>" }
+		html += "</div></body></html>"
+
+		let document = try await HTMLDocument(data: Data(html.utf8))
+		#expect(document.markdown() == "Claim[^1].\n\n[^1]: The note.")
+
+		var elements = [document.root]
+		var index = 0
+		while index < elements.count {
+			elements.append(contentsOf: elements[index].children.compactMap { $0 as? DOMElement })
+			index += 1
+		}
+		for element in elements { element.children.removeAll() }
 	}
 }

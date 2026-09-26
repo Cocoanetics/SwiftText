@@ -42,16 +42,35 @@ public extension DocumentBlock {
 	struct TextLine: Equatable, Sendable {
 		public let text: String
 		public let bounds: CGRect
+		/// How the parts of ``text`` are set, covering it exactly. Empty when the
+		/// source cannot report style, as OCR cannot.
+		public let runs: [StyleRun]
 
-		public init(text: String, bounds: CGRect) {
+		public init(text: String, bounds: CGRect, runs: [StyleRun] = []) {
 			self.text = text
 			self.bounds = bounds
+			self.runs = runs
+		}
+
+		/// A line whose text is exactly what `runs` cover.
+		public init(runs: [StyleRun], bounds: CGRect) {
+			self.init(text: runs.text, bounds: bounds, runs: runs)
 		}
 	}
 
 	struct Paragraph: Equatable, Sendable {
 		public let text: String
 		public let lines: [TextLine]
+		/// 1...6 when the page sets this paragraph as a heading, else nil.
+		/// Assigned when the blocks are read, from how the text is set relative
+		/// to the rest of the document.
+		public let headingLevel: Int?
+
+		public init(text: String, lines: [TextLine], headingLevel: Int? = nil) {
+			self.text = text
+			self.lines = lines
+			self.headingLevel = headingLevel
+		}
 	}
 
 	struct List: Equatable, Sendable {
