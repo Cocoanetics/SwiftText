@@ -42,7 +42,19 @@ func strippingListMarker(_ text: String, reportedMarker: String) -> String {
 		if let stripped = trimmed.removingPrefix(matching: pattern) { return stripped }
 	}
 
-	for pattern in markerPatterns {
+	let fallbackPatterns: [String]
+	if reported.isEmpty {
+		fallbackPatterns = bulletMarkerPatterns + numericMarkerPatterns + latinMarkerPatterns
+	} else if reported.unicodeScalars.allSatisfy(reportedBulletScalars.contains) {
+		fallbackPatterns = bulletMarkerPatterns
+	} else if reported.contains(where: \.isNumber) && !reported.contains(where: \.isLetter) {
+		fallbackPatterns = numericMarkerPatterns
+	} else if reported.contains(where: \.isLetter) && !reported.contains(where: \.isNumber) {
+		fallbackPatterns = latinMarkerPatterns
+	} else {
+		fallbackPatterns = []
+	}
+	for pattern in fallbackPatterns {
 		if let stripped = trimmed.removingPrefix(matching: pattern) { return stripped }
 	}
 	return trimmed
@@ -53,15 +65,21 @@ func strippingListMarker(_ text: String, reportedMarker: String) -> String {
 /// A bullet glyph is unambiguous, so it needs no trailing space. The characters
 /// that double as punctuation — a hyphen, a dash, an asterisk, a digit — do,
 /// otherwise `E-Mail schreiben` and `1.5 Millionen` would lose their opening.
-private let markerPatterns = [
+private let bulletMarkerPatterns = [
 	"^[\u{2022}\u{2023}\u{25AA}\u{25AB}\u{25CF}\u{25CB}\u{25E6}\u{2219}\u{00B7}]\\s*",
-	"^[-\u{2013}\u{2014}*+]\\s+",
+	"^[-\u{2013}\u{2014}*+]\\s+"
+]
+
+private let numericMarkerPatterns = [
 	"^\\(?[0-9]+(?:\\.[0-9]+)+[.)]\\s+",
-	"^\\(?[0-9]+[.)]\\s+",
+	"^\\(?[0-9]+[.)]\\s+"
+]
+
+private let latinMarkerPatterns = [
 	"^\\(?[A-Za-z][.)]\\s+"
 ]
 
-private let reportedBulletScalars = Set("\u{2022}\u{2023}\u{25AA}\u{25AB}\u{25CF}\u{25CB}\u{25E6}\u{2219}\u{00B7}".unicodeScalars)
+private let reportedBulletScalars = Set("\u{2022}\u{2023}\u{25AA}\u{25AB}\u{25CF}\u{25CB}\u{25E6}\u{2219}\u{00B7}-\u{2013}\u{2014}*+".unicodeScalars)
 
 private extension String {
 	/// Self without a leading match for `pattern`, or nil when it does not match.

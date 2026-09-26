@@ -108,11 +108,21 @@ public class DOMElement: DOMNode, @unchecked Sendable {
 	/// and end of a block. An inline element's edges are not text boundaries:
 	/// `<span> </span>` may itself be the separator between surrounding words.
 	private func childText() -> String {
-		var parts: [String] = []
+		var result = ""
+		var previousNode: DOMNode?
 		for (index, child) in children.enumerated() {
-			let text = child.text()
+			var text = child.text()
 			guard child is DOMText, text.allSatisfy(\.isWhitespace) else {
-				parts.append(text)
+				if let previousNode,
+				   !previousNode.startsTextBlock, !child.startsTextBlock,
+				   trailingWhitespaceIsCollapsible(in: previousNode),
+				   leadingWhitespaceIsCollapsible(in: child),
+				   result.last?.isWhitespace == true,
+				   text.first?.isWhitespace == true {
+					text = String(text.drop(while: \.isWhitespace))
+				}
+				result += text
+				if !text.isEmpty { previousNode = child }
 				continue
 			}
 			let previous = children[..<index].last(where: separatesText)
@@ -123,9 +133,28 @@ public class DOMElement: DOMNode, @unchecked Sendable {
 			} else if previous?.startsTextBlock == true || next?.startsTextBlock == true {
 				continue
 			}
-			parts.append(text)
+			result += text
+			previousNode = child
 		}
-		return parts.joined()
+		return result
+	}
+
+	private func leadingWhitespaceIsCollapsible(in node: DOMNode) -> Bool {
+		if let text = node as? DOMText { return !text.preserveWhitespace }
+		guard let element = node as? DOMElement else { return false }
+		for child in element.children where !child.text().isEmpty {
+			return leadingWhitespaceIsCollapsible(in: child)
+		}
+		return false
+	}
+
+	private func trailingWhitespaceIsCollapsible(in node: DOMNode) -> Bool {
+		if let text = node as? DOMText { return !text.preserveWhitespace }
+		guard let element = node as? DOMElement else { return false }
+		for child in element.children.reversed() where !child.text().isEmpty {
+			return trailingWhitespaceIsCollapsible(in: child)
+		}
+		return false
 	}
 
 	/// Whether a run of whitespace beside this node could be separating text

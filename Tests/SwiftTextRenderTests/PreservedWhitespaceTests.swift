@@ -76,6 +76,14 @@ struct PreservedWhitespaceTests {
 		#expect(text.filter { $0 == " " }.count == 2)
 	}
 
+	@Test("RTL pre keeps plain text separate from preserved spaces")
+	func rtlPrePreservesSpacesAfterPlainText() async throws {
+		let html = "<p style=\"direction: rtl; white-space: pre\">אב  <em>גד</em></p>"
+		let text = try #require(await lineTexts(html).first)
+		#expect(!text.contains("·"))
+		#expect(text.filter { $0 == " " }.count == 2)
+	}
+
 	// MARK: - Helpers
 
 	/// Each line's text with the spaces its fragments carry, and a gap the line

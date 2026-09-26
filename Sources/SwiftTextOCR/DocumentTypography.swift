@@ -100,14 +100,25 @@ struct DocumentTypography {
 		// At body size, a single all-bold source line can only be distinguished
 		// from an emphasised sentence by its shape.
 		guard lines.count == 1,
-		      let bodySize,
-		      abs(first.fontSize - bodySize) < Self.sizeTolerance,
-		      styles.allSatisfy({
-			      abs($0.fontSize - first.fontSize) < Self.sizeTolerance
-			      && $0.isBold && !$0.isMonospaced
-		      }),
+		      isUniformBoldBodyText(paragraph),
 		      Self.isBoldHeadingShape(text) else { return nil }
 		return boldHeadingLevel
+	}
+
+	/// Whether every styled character in `paragraph` is bold body text. Adjacent
+	/// semantic blocks with this same typography may be two lines of one body
+	/// paragraph, so the composer uses this before treating either line's shape
+	/// as a structural heading boundary.
+	func isUniformBoldBodyText(_ paragraph: DocumentBlock.Paragraph) -> Bool {
+		guard let bodySize else { return false }
+		let contentRuns = paragraph.lines.flatMap(\.runs)
+			.filter { !$0.text.allSatisfy(\.isWhitespace) }
+		let styles = contentRuns.compactMap(\.style)
+		guard !styles.isEmpty, styles.count == contentRuns.count else { return false }
+		return styles.allSatisfy {
+			abs($0.fontSize - bodySize) < Self.sizeTolerance
+				&& $0.isBold && !$0.isMonospaced
+		}
 	}
 
 	/// The level a heading gets when it is set at body size and can only be

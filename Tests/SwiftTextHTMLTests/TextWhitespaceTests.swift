@@ -48,6 +48,14 @@ struct TextWhitespaceTests {
 		#expect(try await text("<p>Hello<span> </span>world</p>") == "Hello world")
 	}
 
+	@Test("Collapsed whitespace is coalesced across inline boundaries", arguments: [
+		"<p>Hello <span> world</span></p>",
+		"<p>Hello <span><span> </span> world</span></p>"
+	])
+	func boundaryWhitespaceCollapsesOnce(_ html: String) async throws {
+		#expect(try await text(html) == "Hello world")
+	}
+
 	@Test("A <br> is a boundary, not a separator")
 	func lineBreakIsABoundary() async throws {
 		#expect(try await text("<p>Wort A<br>\n<strong>fett</strong></p>") == "Wort A\nfett")

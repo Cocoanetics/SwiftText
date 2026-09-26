@@ -94,4 +94,28 @@ struct HTMLFootnoteConversionTests {
 		#expect(restored.contains("## Intro"))
 		#expect(restored.contains("## Methods"))
 	}
+
+	@Test func deeplyWrappedReferenceAndBacklinkDoNotRecurse() async throws {
+		let depth = 2_000
+		var html = "<html><body><p>Claim<a href=\"#fn\" id=\"ref\">"
+		for _ in 0..<depth { html += "<span>" }
+		html += "1"
+		for _ in 0..<depth { html += "</span>" }
+		html += "</a>.</p><div id=\"fn\">The note. "
+		for _ in 0..<depth { html += "<span>" }
+		html += "<a href=\"#ref\">↩</a>"
+		for _ in 0..<depth { html += "</span>" }
+		html += "</div></body></html>"
+
+		let document = try await HTMLDocument(data: Data(html.utf8))
+		#expect(document.markdown() == "Claim[^1].\n\n[^1]: The note.")
+
+		var elements = [document.root]
+		var index = 0
+		while index < elements.count {
+			elements.append(contentsOf: elements[index].children.compactMap { $0 as? DOMElement })
+			index += 1
+		}
+		for element in elements { element.children.removeAll() }
+	}
 }

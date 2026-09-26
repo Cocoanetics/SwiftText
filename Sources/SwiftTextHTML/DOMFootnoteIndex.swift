@@ -298,15 +298,25 @@ private struct FootnoteScanner {
 	}
 
 	private func rawText(of node: DOMNode) -> String {
-		if let text = node as? DOMText { return text.textValue }
-		guard let element = node as? DOMElement else { return "" }
-		return element.children.map { rawText(of: $0) }.joined()
+		var result = ""
+		var stack = [node]
+		while let current = stack.popLast() {
+			if let text = current as? DOMText {
+				result += text.textValue
+			} else if let element = current as? DOMElement {
+				stack.append(contentsOf: element.children.reversed())
+			}
+		}
+		return result
 	}
 
 	private func forEachAnchor(in element: DOMElement, _ body: (DOMElement) -> Void) {
-		if element.name.lowercased() == "a" { body(element) }
-		for child in element.children {
-			if let childElement = child as? DOMElement { forEachAnchor(in: childElement, body) }
+		var stack = [element]
+		while let current = stack.popLast() {
+			if current.name.lowercased() == "a" { body(current) }
+			for child in current.children.reversed() {
+				if let childElement = child as? DOMElement { stack.append(childElement) }
+			}
 		}
 	}
 }

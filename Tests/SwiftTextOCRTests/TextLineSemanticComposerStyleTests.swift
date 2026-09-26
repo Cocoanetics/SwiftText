@@ -73,6 +73,35 @@ struct TextLineSemanticComposerStyleTests {
 		#expect(markdown.contains("## Known heading\n\nBody line remains a paragraph."))
 	}
 
+	@Test("Adjacent bold body lines are reconstructed before heading inference")
+	func splitBoldBodyParagraphIsNotAHeading() throws {
+		let firstBounds = CGRect(x: 50, y: 100, width: 180, height: 20)
+		let secondBounds = CGRect(x: 50, y: 121, width: 180, height: 20)
+		let first = textLine("Important information", bounds: firstBounds, size: 11, bold: true)
+		let second = textLine("please read carefully.", bounds: secondBounds, size: 11, bold: true)
+		let semantics = DocumentSemantics(
+			referenceSize: pageSize,
+			blocks: [
+				normalizedParagraph(text: first.combinedText, bounds: firstBounds),
+				normalizedParagraph(text: second.combinedText, bounds: secondBounds)
+			],
+			images: [])
+
+		let blocks = TextLineSemanticComposer.composeBlocks(
+			from: [first, second], semantics: semantics, layoutSize: pageSize)
+		let paragraphs = blocks.compactMap { block -> DocumentBlock.Paragraph? in
+			guard case .paragraph(let paragraph) = block.kind else { return nil }
+			return paragraph
+		}
+		let paragraph = try #require(paragraphs.first)
+		let markdown = DocumentBlockMarkdownRenderer.markdown(from: blocks)
+
+		#expect(paragraphs.count == 1)
+		#expect(paragraph.lines.count == 2)
+		#expect(markdown.contains("**Important information please read carefully.**"))
+		#expect(!markdown.contains("# Important information"))
+	}
+
 	@Test("A text-layer line appended to a paragraph keeps its emphasis")
 	func appendedLineKeepsStyleRuns() throws {
 		let firstBounds = CGRect(x: 50, y: 100, width: 180, height: 20)

@@ -113,8 +113,13 @@ struct DOMMarkupConverter {
 		var blocks: [BlockMarkup] = []
 		var inlineBuffer: [InlineMarkup] = []
 		let meaningfulIndices = element.children.indices.filter { index in
-			guard let text = element.children[index] as? DOMText else { return true }
-			return !text.textValue.allSatisfy(\.isWhitespace)
+			let child = element.children[index]
+			if let text = child as? DOMText {
+				return !text.textValue.allSatisfy(\.isWhitespace)
+			}
+			guard let childElement = child as? DOMElement else { return false }
+			if Self.skippedTags.contains(childElement.name.lowercased()) { return false }
+			return footnotes?.skip.contains(ObjectIdentifier(childElement)) != true
 		}
 		let soleInlineIndex = meaningfulIndices.count == 1
 			&& !isBlockLevel(element.children[meaningfulIndices[0]])

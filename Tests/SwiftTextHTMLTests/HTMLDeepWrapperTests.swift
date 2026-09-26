@@ -74,3 +74,28 @@ func prettyPrintedDeepInlineWrapperChainDoesNotCrash() async throws {
 	}
 	for element in elements { element.children.removeAll() }
 }
+
+@Test
+func skippedSiblingDoesNotDefeatDeepInlineUnwrapping() async throws {
+	let depth = 2_000
+	var html = "<html><body><p><input>"
+	for _ in 0..<depth {
+		html += "\n<span>"
+	}
+	html += "\nHello ü\n"
+	for _ in 0..<depth {
+		html += "</span>\n"
+	}
+	html += "</p></body></html>"
+
+	let document = try await HTMLDocument(data: Data(html.utf8), baseURL: nil)
+	#expect(document.markdown().contains("Hello ü"))
+
+	var elements = [document.root]
+	var index = 0
+	while index < elements.count {
+		elements.append(contentsOf: elements[index].children.compactMap { $0 as? DOMElement })
+		index += 1
+	}
+	for element in elements { element.children.removeAll() }
+}

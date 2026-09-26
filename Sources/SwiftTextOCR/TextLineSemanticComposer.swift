@@ -452,9 +452,19 @@ private func shouldPreventMerge(
 	// A heading is a structural boundary, not a geometric paragraph
 	// continuation. Infer it here, before a merge can mix its runs with body
 	// text and erase the typography that identifies it.
-	if typography.headingLevel(for: previous) != nil
-		|| typography.headingLevel(for: current) != nil {
+	if previous.headingLevel != nil || current.headingLevel != nil {
 		return true
+	}
+	let previousLevel = typography.headingLevel(for: previous)
+	let currentLevel = typography.headingLevel(for: current)
+	if previousLevel != nil || currentLevel != nil {
+		// Vision can split two lines of one all-bold body paragraph into separate
+		// semantic blocks. Each short line may look like a heading by itself, but
+		// matching body typography on both sides means geometry must still get the
+		// chance to reconstruct the paragraph.
+		let continuedBoldBody = typography.isUniformBoldBodyText(previous)
+			&& typography.isUniformBoldBodyText(current)
+		if !continuedBoldBody { return true }
 	}
 	let candidates = [previous.text, current.text]
 	return candidates.contains { text in

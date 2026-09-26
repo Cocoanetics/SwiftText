@@ -75,6 +75,15 @@ struct ListMarkerTests {
 		#expect(itemTexts(of: blocks) == ["1.5 Millionen", "Punkt"])
 	}
 
+	@Test("A reported bullet does not make clean Latin content a marker")
+	func omittedPaintedBulletKeepsCleanContent() {
+		let blocks = composeList(
+			itemTexts: ["A. Smith"],
+			markerString: "•",
+			marker: .bullet)
+		#expect(itemTexts(of: blocks) == ["A. Smith"])
+	}
+
 	@Test("A non-breaking space separates a reported or inferred marker", arguments: [
 		("1.\u{00A0}Punkt", "1."),
 		("1.\u{00A0}Punkt", ""),

@@ -461,6 +461,7 @@ extension LayoutEngine {
 
 private extension TextFragment {
 	var carriesPreservedWhitespace: Bool {
-		!text.isEmpty && text.allSatisfy { $0 == " " || $0 == "\t" }
+		guard style.whiteSpace == .pre || style.whiteSpace == .preWrap else { return false }
+		return text.first == " " || text.first == "\t" || text.last == " " || text.last == "\t"
 	}
 }
