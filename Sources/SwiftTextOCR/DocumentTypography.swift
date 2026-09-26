@@ -105,6 +105,31 @@ struct DocumentTypography {
 		return boldHeadingLevel
 	}
 
+	/// Whether a heading stands on either side of the break between two
+	/// adjacent paragraphs, making the break a boundary that no geometric
+	/// continuation may cross.
+	///
+	/// The segmenter can split the lines of one all-bold body paragraph into
+	/// separate blocks, and a short line of it then looks like a heading on its
+	/// own. Bold body text on both sides cannot tell the two apart; the line
+	/// break between them can — see ``TextColumns/wraps(from:to:)``. `Safety`
+	/// above `Wear gloves.` was ended on purpose and stays a heading, while a
+	/// line that ran out of room continues into the next block.
+	func isHeadingBoundary(
+		between previous: DocumentBlock.Paragraph,
+		and current: DocumentBlock.Paragraph,
+		columns: TextColumns
+	) -> Bool {
+		if previous.headingLevel != nil || current.headingLevel != nil { return true }
+		guard headingLevel(for: previous) != nil || headingLevel(for: current) != nil else {
+			return false
+		}
+		guard isUniformBoldBodyText(previous), isUniformBoldBodyText(current),
+		      let lastLine = previous.lines.last, let nextLine = current.lines.first
+		else { return true }
+		return !columns.wraps(from: lastLine, to: nextLine)
+	}
+
 	/// Whether every styled character in `paragraph` is bold body text. Adjacent
 	/// semantic blocks with this same typography may be two lines of one body
 	/// paragraph, so the composer uses this before treating either line's shape
@@ -165,12 +190,14 @@ struct DocumentTypography {
 }
 
 extension DocumentBlock {
-	/// Every style run this block's text is made of.
+	/// Every style run this block's text is made of. A table counts: on a page
+	/// of tabular content, the cells are what the body text is set in.
 	var styleRuns: [StyleRun] {
 		switch kind {
 		case .paragraph(let paragraph): return paragraph.lines.flatMap(\.runs)
 		case .list(let list): return list.items.flatMap { $0.lines.flatMap(\.runs) }
-		case .table, .image: return []
+		case .table(let table): return table.rows.flatMap { $0.flatMap { $0.lines.flatMap(\.runs) } }
+		case .image: return []
 		}
 	}
 }

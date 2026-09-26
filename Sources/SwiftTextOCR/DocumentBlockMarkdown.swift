@@ -91,13 +91,6 @@ public struct DocumentBlockMarkdownRenderer {
 		return Paragraph(runs.inlineMarkup())
 	}
 
-	private static func inferredHeadingLevel(
-		for paragraph: DocumentBlock.Paragraph,
-		typography: DocumentTypography
-	) -> Int? {
-		typography.headingLevel(for: paragraph)
-	}
-
 	/// One line's runs per source line, joined the way their text is joined.
 	private static func joinedRuns(of lines: [DocumentBlock.TextLine]) -> [StyleRun] {
 		var result: [StyleRun] = []
@@ -246,6 +239,7 @@ public struct DocumentBlockMarkdownRenderer {
 		guard !blocks.isEmpty else { return blocks }
 		var result: [DocumentBlock] = []
 		let maxLeftDelta = max(pageBounds.width * 0.02, 8)
+		let columns = TextColumns(blocks: blocks, tolerance: maxLeftDelta)
 
 		for block in blocks {
 			guard
@@ -261,13 +255,13 @@ public struct DocumentBlockMarkdownRenderer {
 			let avgHeight = max((block.bounds.height + last.bounds.height) / 2, 1)
 			let maxGap = max(avgHeight * 0.8, 6)
 			let leftDelta = abs(block.bounds.minX - last.bounds.minX)
-			let previousHeading = inferredHeadingLevel(for: previousParagraph, typography: typography)
-			let currentHeading = inferredHeadingLevel(for: currentParagraph, typography: typography)
 
 			// Wrapped heading lines arrive as lines of one paragraph. Separate
 			// paragraph blocks that are headings are structural boundaries, even
-			// when their geometry resembles a continuation.
-			let isContinuation = previousHeading == nil && currentHeading == nil
+			// when their geometry resembles a continuation — unless they are the
+			// split lines of one bold body paragraph.
+			let isContinuation = !typography.isHeadingBoundary(
+				between: previousParagraph, and: currentParagraph, columns: columns)
 				&& verticalGap >= -4 && verticalGap <= maxGap && leftDelta <= maxLeftDelta
 
 			if isContinuation {

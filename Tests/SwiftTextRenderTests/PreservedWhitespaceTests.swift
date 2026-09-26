@@ -84,6 +84,22 @@ struct PreservedWhitespaceTests {
 		#expect(text.filter { $0 == " " }.count == 2)
 	}
 
+	/// Right-to-left placement keeps exactly the gaps the line builder opened:
+	/// none where two styles meet inside a word, one per collapsed space.
+	@Test("RTL placement adds no space the source did not have", arguments: [
+		("pre", "<p style=\"direction: rtl; white-space: pre\">אב<em>גד</em></p>", 0, 0),
+		("pre-wrap", "<p style=\"direction: rtl; white-space: pre-wrap\">אב<em>גד</em></p>", 0, 0),
+		("normal", "<p style=\"direction: rtl\">אב<em>גד</em> הו</p>", 1, 0),
+		("mixed", "<p style=\"direction: rtl\">אב abc<em>def</em> גד</p>", 2, 0)
+	])
+	func rtlPlacementKeepsSourceGaps(
+		_ testCase: (mode: String, html: String, gaps: Int, spaces: Int)
+	) async throws {
+		let text = try #require(await lineTexts(testCase.html).first)
+		#expect(text.filter { $0 == "·" }.count == testCase.gaps)
+		#expect(text.filter { $0 == " " }.count == testCase.spaces)
+	}
+
 	// MARK: - Helpers
 
 	/// Each line's text with the spaces its fragments carry, and a gap the line

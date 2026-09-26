@@ -50,16 +50,38 @@ public class DOMElement: DOMNode, @unchecked Sendable {
 	}
 
 	public func text() -> String {
+		text(depth: 0)
+	}
+
+	/// Elements whose content is not document text.
+	private static let nonTextTags: Set<String> = [
+		"script", "style", "iframe", "nav", "meta", "link", "title", "select", "input", "button", "noscript", "footer"
+	]
+
+	/// How deeply text assembly recurses before a subtree is gathered flat.
+	///
+	/// Assembly recurses once per element, and markup nested a few hundred
+	/// elements deep exhausts the stack of the thread reading it. Past this
+	/// depth the rest of a subtree keeps its words and line breaks but loses
+	/// the list and table layout, gathered without recursion. Real documents
+	/// stay far below it.
+	private static let maximumTextDepth = 100
+
+	private func text(depth: Int) -> String {
 		var builder = PlainTextBuilder()
-		appendText(to: &builder)
+		appendText(to: &builder, depth: depth)
 		return builder.text
 	}
 
 	/// Writes this element's text into `builder`, which sees the characters of
 	/// every node in order and so can collapse whitespace across their
 	/// boundaries — something no node can do from its own text alone.
-	private func appendText(to builder: inout PlainTextBuilder) {
-		if ["script", "style", "iframe", "nav", "meta", "link", "title", "select", "input", "button", "noscript", "footer"].contains(name) {
+	private func appendText(to builder: inout PlainTextBuilder, depth: Int) {
+		if Self.nonTextTags.contains(name) {
+			return
+		}
+		guard depth < Self.maximumTextDepth else {
+			appendFlattenedText(to: &builder)
 			return
 		}
 
@@ -70,7 +92,8 @@ public class DOMElement: DOMNode, @unchecked Sendable {
 		case "ul", "ol":
 			var result = ""
 			for child in children {
-				let childText = child.text().trimmingCharacters(in: .whitespacesAndNewlines)
+				let childText = Self.text(of: child, depth: depth + 1)
+					.trimmingCharacters(in: .whitespacesAndNewlines)
 				guard !childText.isEmpty else { continue }
 				result += childText
 				result.ensureTwoTrailingNewlines()
@@ -80,26 +103,28 @@ public class DOMElement: DOMNode, @unchecked Sendable {
 		case "li":
 			var item = PlainTextBuilder()
 			for child in children {
-				Self.append(child, to: &item)
+				Self.append(child, to: &item, depth: depth + 1)
 			}
 			builder.append(item.text.trimmingCharacters(in: .whitespacesAndNewlines))
 
 		case "table":
 			var result = ""
 			for row in collectTableRows() {
-				let rowText = row.text().trimmingCharacters(in: .whitespacesAndNewlines)
+				let rowText = row.text(depth: depth + 1).trimmingCharacters(in: .whitespacesAndNewlines)
 				guard !rowText.isEmpty else { continue }
 				result += rowText + "\n"
 			}
 			builder.append(result)
 
 		case "tr":
-			let cells = children.map { $0.text().trimmingCharacters(in: .whitespacesAndNewlines) }
+			let cells = children.map {
+				Self.text(of: $0, depth: depth + 1).trimmingCharacters(in: .whitespacesAndNewlines)
+			}
 			builder.append(cells.filter { !$0.isEmpty }.joined(separator: " | "))
 
 		default:
 			for child in children {
-				Self.append(child, to: &builder)
+				Self.append(child, to: &builder, depth: depth + 1)
 			}
 		}
 
@@ -108,13 +133,47 @@ public class DOMElement: DOMNode, @unchecked Sendable {
 		}
 	}
 
-	private static func append(_ node: DOMNode, to builder: inout PlainTextBuilder) {
+	private static func text(of node: DOMNode, depth: Int) -> String {
+		(node as? DOMElement)?.text(depth: depth) ?? node.text()
+	}
+
+	private static func append(_ node: DOMNode, to builder: inout PlainTextBuilder, depth: Int) {
 		if let element = node as? DOMElement {
-			element.appendText(to: &builder)
+			element.appendText(to: &builder, depth: depth)
 		} else if let text = node as? DOMText, !text.preserveWhitespace {
 			builder.appendCollapsing(text.textValue)
 		} else {
 			builder.append(node.text())
+		}
+	}
+
+	/// This subtree's text gathered without recursion: words, line breaks and
+	/// block boundaries, with list items and table cells kept apart as blocks.
+	private func appendFlattenedText(to builder: inout PlainTextBuilder) {
+		// A nil entry marks the end of an element that closes a block.
+		var pending: [DOMNode?] = [self]
+		while let entry = pending.popLast() {
+			guard let node = entry else {
+				builder.endBlock()
+				continue
+			}
+			guard let element = node as? DOMElement else {
+				if let text = node as? DOMText, !text.preserveWhitespace {
+					builder.appendCollapsing(text.textValue)
+				} else {
+					builder.append(node.text())
+				}
+				continue
+			}
+			if Self.nonTextTags.contains(element.name) { continue }
+			if element.name == "br" {
+				builder.appendLineBreak()
+				continue
+			}
+			if element.isBlockLevelElement || ["li", "tr", "td", "th", "dt", "dd"].contains(element.name) {
+				pending.append(nil)
+			}
+			pending.append(contentsOf: element.children.reversed().map { Optional($0) })
 		}
 	}
 

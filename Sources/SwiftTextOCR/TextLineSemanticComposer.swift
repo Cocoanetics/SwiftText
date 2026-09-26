@@ -180,14 +180,16 @@ private func composeBlock(
 				assigned: &assignedLines
 			)
 			// `item.lines` come from the segmenter with the marker already removed.
-			// Lines matched from the page do not: there the marker is painted
-			// text, and Markdown will add one of its own.
+			// Lines matched from the page may not: there the marker is painted
+			// text, and Markdown will add one of its own. The segmenter's reading
+			// shows whether one is there.
 			var finalLines = itemMatches.isEmpty ? item.lines : makeDocumentLines(from: itemMatches)
 			if !itemMatches.isEmpty, let first = finalLines.first {
 				let stripped = strippingListMarker(
 					first.text,
 					reportedMarker: item.markerString,
-					listMarker: list.marker)
+					listMarker: list.marker,
+					segmentedContent: item.lines.first?.text)
 				if stripped != first.text {
 					let removed = String(first.text.prefix(first.text.count - stripped.count))
 					finalLines[0] = DocumentBlock.TextLine(
@@ -211,27 +213,29 @@ private func composeBlock(
 		metadataBounds = normalizedBounds
 
 	case .table(let table):
+		// Every cell consumes the page lines it covers first. A page often sets
+		// a whole row as one line, which only one cell consumes but every cell
+		// of that row reads its style from.
+		let cellMatches = table.rows.enumerated().map { rowIndex, row in
+			row.enumerated().map { columnIndex, cell in
+				let normalizedCell = semanticBlock.tableRows.indices.contains(rowIndex) && semanticBlock.tableRows[rowIndex].indices.contains(columnIndex)
+					? semanticBlock.tableRows[rowIndex][columnIndex].normalizedBounds
+					: cell.bounds.normalized(in: referenceSize)
+				return consumeLines(in: normalizedCell, lineInfos: lineInfos, assigned: &assignedLines)
+			}
+		}
+		let tableLines = makeDocumentLines(from: cellMatches.flatMap { $0.flatMap { $0 } })
 		var rows = [[DocumentBlock.Table.Cell]]()
 		for (rowIndex, row) in table.rows.enumerated() {
 			var newRow = [DocumentBlock.Table.Cell]()
 			for (columnIndex, cell) in row.enumerated() {
-				let normalizedCell = semanticBlock.tableRows.indices.contains(rowIndex) && semanticBlock.tableRows[rowIndex].indices.contains(columnIndex)
-					? semanticBlock.tableRows[rowIndex][columnIndex].normalizedBounds
-					: cell.bounds.normalized(in: referenceSize)
-				let cellMatches = consumeLines(
-					in: normalizedCell,
-					lineInfos: lineInfos,
-					assigned: &assignedLines
-				)
-				let matchedLines = makeDocumentLines(from: cellMatches)
 				var finalLines = cell.lines
-				if finalLines.isEmpty {
-					if !cell.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-						finalLines = [DocumentBlock.TextLine(text: cell.text, bounds: cell.bounds)]
-					} else {
-						finalLines = matchedLines
-					}
+				if finalLines.isEmpty, !cell.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+					finalLines = [DocumentBlock.TextLine(text: cell.text, bounds: cell.bounds)]
 				}
+				finalLines = finalLines.isEmpty
+					? makeDocumentLines(from: cellMatches[rowIndex][columnIndex])
+					: styled(finalLines, from: tableLines)
 				let text = cell.text.isEmpty ? finalLines.map(\.text).joined(separator: "\n") : cell.text
 				newRow.append(
 					DocumentBlock.Table.Cell(
@@ -283,7 +287,7 @@ private func mergeParagraphBlocks(
 	guard !blocks.isEmpty else { return (blocks, metadata) }
 	var mergedBlocks: [DocumentBlock] = []
 	var mergedMetadata: [BlockMetadata] = []
-	let lineExtents = LineExtents(blocks: blocks)
+	let columns = TextColumns(blocks: blocks, tolerance: max(referenceSize.width * 0.015, 4))
 
 	for (block, meta) in zip(blocks, metadata) {
 		guard case .paragraph(let currentParagraph) = block.kind else {
@@ -303,7 +307,7 @@ private func mergeParagraphBlocks(
 			currentMetadata: meta,
 			referenceSize: referenceSize,
 			typography: typography,
-			lineExtents: lineExtents
+			columns: columns
 		   ) {
 			let combinedLines = previousParagraph.lines + currentParagraph.lines
 			let combinedText = combinedLines.map(\.text).joined(separator: "\n")
@@ -423,16 +427,9 @@ private func shouldMergeParagraphs(
 	currentMetadata: BlockMetadata,
 	referenceSize: CGSize,
 	typography: DocumentTypography,
-	lineExtents: LineExtents
+	columns: TextColumns
 ) -> Bool {
-	let columnTolerance = max(referenceSize.width * 0.015, 4)
-	if shouldPreventMerge(
-		previous: previous,
-		current: current,
-		typography: typography,
-		columnRight: previous.lines.last.flatMap {
-			lineExtents.rightEdge(ofTextStartingAt: $0.bounds.minX, tolerance: columnTolerance)
-		}) {
+	if shouldPreventMerge(previous: previous, current: current, typography: typography, columns: columns) {
 		return false
 	}
 
@@ -461,74 +458,18 @@ private func shouldPreventMerge(
 	previous: DocumentBlock.Paragraph,
 	current: DocumentBlock.Paragraph,
 	typography: DocumentTypography,
-	columnRight: CGFloat?
+	columns: TextColumns
 ) -> Bool {
 	// A heading is a structural boundary, not a geometric paragraph
 	// continuation. Infer it here, before a merge can mix its runs with body
 	// text and erase the typography that identifies it.
-	if previous.headingLevel != nil || current.headingLevel != nil {
+	if typography.isHeadingBoundary(between: previous, and: current, columns: columns) {
 		return true
-	}
-	let previousLevel = typography.headingLevel(for: previous)
-	let currentLevel = typography.headingLevel(for: current)
-	if previousLevel != nil || currentLevel != nil {
-		// Vision can split the lines of one all-bold body paragraph into
-		// separate semantic blocks, and a short line of it looks like a heading
-		// on its own. Bold body text on both sides cannot tell the two apart;
-		// the line break between them can.
-		let continuedBoldBody = typography.isUniformBoldBodyText(previous)
-			&& typography.isUniformBoldBodyText(current)
-			&& breaksLikeAWrappedLine(from: previous, to: current, columnRight: columnRight)
-		if !continuedBoldBody { return true }
 	}
 	let candidates = [previous.text, current.text]
 	return candidates.contains { text in
 		let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
 		return isLikelyHeading(trimmed)
-	}
-}
-
-/// Whether `previous` ends where its last line ran out of room, so that
-/// `current` continues it.
-///
-/// A line breaker moves a word to the next line only when it does not fit. If
-/// the first word of `current` would have fitted at the end of `previous`'s
-/// last line, that line was ended on purpose, the way a heading ends — `Safety`
-/// above `Wear gloves.` — rather than wrapped.
-private func breaksLikeAWrappedLine(
-	from previous: DocumentBlock.Paragraph,
-	to current: DocumentBlock.Paragraph,
-	columnRight: CGFloat?
-) -> Bool {
-	guard let lastLine = previous.lines.last, let nextLine = current.lines.first else {
-		return false
-	}
-	let nextText = nextLine.text.trimmingCharacters(in: .whitespacesAndNewlines)
-	guard !nextText.isEmpty, nextLine.bounds.width > 0 else { return false }
-	let right = max(columnRight ?? 0, lastLine.bounds.maxX, nextLine.bounds.maxX)
-	// Both lines are set in the same body face, so the next line's average
-	// advance estimates what its first word, and the space before it, needs.
-	let advance = nextLine.bounds.width / CGFloat(nextText.count)
-	let firstWord = nextText.prefix { !$0.isWhitespace }
-	return lastLine.bounds.maxX + CGFloat(firstWord.count + 1) * advance > right
-}
-
-/// How far the text on a page runs, so a line that ends early can be told
-/// from a full one. Lines starting at the same left edge share a column, and
-/// the longest of them shows where that column ends.
-private struct LineExtents {
-	private let extents: [(minX: CGFloat, maxX: CGFloat)]
-
-	init(blocks: [DocumentBlock]) {
-		extents = blocks.flatMap { block -> [(minX: CGFloat, maxX: CGFloat)] in
-			guard case .paragraph(let paragraph) = block.kind else { return [] }
-			return paragraph.lines.map { (minX: $0.bounds.minX, maxX: $0.bounds.maxX) }
-		}
-	}
-
-	/// The furthest any line starting at `minX` runs, give or take `tolerance`.
-	func rightEdge(ofTextStartingAt minX: CGFloat, tolerance: CGFloat) -> CGFloat? {
-		extents.filter { abs($0.minX - minX) <= tolerance }.map(\.maxX).max()
 	}
 }
 
@@ -571,6 +512,28 @@ private func consumeLines(
 		}
 		return lhs.semanticBounds.minX < rhs.semanticBounds.minX
 	}
+}
+
+/// `lines` with the style runs the page sets them in, taken from the page
+/// lines that contain their text — so a table's text counts toward the
+/// document's body size like any other text. The page sets each line of a
+/// cell somewhere beside it, often within a line that runs across the whole
+/// row. Lines stay unstyled unless every one of them is found.
+private func styled(
+	_ lines: [DocumentBlock.TextLine],
+	from pageLines: [DocumentBlock.TextLine]
+) -> [DocumentBlock.TextLine] {
+	var result: [DocumentBlock.TextLine] = []
+	for line in lines {
+		let text = line.text.trimmingCharacters(in: .whitespacesAndNewlines)
+		let runs = pageLines.lazy
+			.filter { $0.bounds.minY < line.bounds.maxY && $0.bounds.maxY > line.bounds.minY }
+			.compactMap { $0.runs(setting: text) }
+			.first
+		guard !text.isEmpty, let runs else { return lines }
+		result.append(DocumentBlock.TextLine(text: text, bounds: line.bounds, runs: runs))
+	}
+	return result
 }
 
 private func makeDocumentLines(from infos: [LineInfo]) -> [DocumentBlock.TextLine] {

@@ -200,10 +200,12 @@ struct DocumentBlockExtractor {
 				: combinedLines
 			// Vision's item content still begins with the marker it reports
 			// separately — `• Punkt eins`, marker `• ` — and Markdown writes a
-			// marker of its own. Only that reported marker goes, and only from
-			// the first line: anything else marker-shaped is the item's content.
+			// marker of its own. Only that reported marker goes, or a bullet
+			// glyph spelled differently from it, and only from the first line:
+			// anything else marker-shaped is the item's content.
 			if let first = finalLines.first,
-			   let stripped = strippingReportedMarker(first.text, reportedMarker: item.markerString) {
+			   let stripped = strippingReportedMarker(first.text, reportedMarker: item.markerString)
+			   ?? strippingBulletGlyph(first.text) {
 				finalLines[0] = DocumentBlock.TextLine(text: stripped, bounds: first.bounds)
 			}
 

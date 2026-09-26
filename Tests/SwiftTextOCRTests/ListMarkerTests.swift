@@ -79,6 +79,51 @@ struct ListMarkerTests {
 		#expect(itemTexts(of: blocks) == [testCase.expected])
 	}
 
+	/// The segmenter reads an item's content apart from its marker. A text-layer
+	/// line that already begins with that reading carries no marker, however
+	/// marker-shaped its opening — a PDF can leave the painted marker out of its
+	/// text layer — and otherwise loses exactly what stands in front of it.
+	@Test("The segmenter's reading decides whether a marker is there", arguments: [
+		("A. Smith", "A. Smith", "A.", DocumentBlock.List.Marker.uppercaseLatin, "A. Smith"),
+		("A. A. Smith", "A. Smith", "A.", .uppercaseLatin, "A. Smith"),
+		("1. Introduction", "1. Introduction", "1.", .decimal, "1. Introduction"),
+		("1. 1. Introduction", "1. Introduction", "1.", .decimal, "1. Introduction"),
+		("• Punkt eins", "Punkt eins", "•", .bullet, "Punkt eins"),
+		("• geprüft wird", "gepruft wird", "•", .bullet, "geprüft wird")
+	])
+	func segmentedReadingDecides(
+		_ testCase: (text: String, segmented: String, reported: String, marker: DocumentBlock.List.Marker, expected: String)
+	) {
+		let blocks = composeList(
+			itemTexts: [testCase.text],
+			segmentedTexts: [testCase.segmented],
+			markerString: testCase.reported,
+			marker: testCase.marker)
+		#expect(itemTexts(of: blocks) == [testCase.expected])
+	}
+
+	/// When the two readings cannot be matched up — a recognition error in the
+	/// segmenter's — the reported marker and the list's kind decide as before.
+	@Test("A reading that does not match falls back to the reported marker")
+	func unmatchedReadingFallsBack() {
+		let blocks = composeList(
+			itemTexts: ["• Pnkt eins"],
+			segmentedTexts: ["Punkt eins"],
+			markerString: "•",
+			marker: .bullet)
+		#expect(itemTexts(of: blocks) == ["Pnkt eins"])
+	}
+
+	@Test("A bullet glyph is dropped from segmented content whatever was reported", arguments: [
+		("● Punkt", "Punkt" as String?),
+		("•Punkt", "Punkt"),
+		("A. Smith", nil),
+		("- Punkt", nil)
+	])
+	func bulletGlyphIsDroppedFromSegmentedContent(_ testCase: (content: String, expected: String?)) {
+		#expect(strippingBulletGlyph(testCase.content) == testCase.expected)
+	}
+
 	/// A hyphen doubles as a minus sign, so even a reported one is a marker only
 	/// with a space after it.
 	@Test("A reported hyphen marker needs a space after it", arguments: [
@@ -173,9 +218,11 @@ struct ListMarkerTests {
 	// MARK: - Helpers
 
 	/// Compose a one-list page whose text lines carry `itemTexts` verbatim, the
-	/// way a PDF text layer delivers them.
+	/// way a PDF text layer delivers them. `segmentedTexts`, when given, are the
+	/// segmenter's own marker-free readings of the items.
 	private func composeList(
 		itemTexts: [String],
+		segmentedTexts: [String]? = nil,
 		markerString: String,
 		marker: DocumentBlock.List.Marker
 	) -> [DocumentBlock] {
@@ -186,7 +233,7 @@ struct ListMarkerTests {
 		var normalizedItems: [NormalizedDocumentBlock.NormalizedListItem] = []
 		var y: CGFloat = 100
 
-		for itemText in itemTexts {
+		for (index, itemText) in itemTexts.enumerated() {
 			let itemTop = y
 			for line in itemText.components(separatedBy: "\n") {
 				let bounds = CGRect(x: 50, y: y, width: 400, height: lineHeight)
@@ -194,8 +241,12 @@ struct ListMarkerTests {
 				y += lineHeight
 			}
 			let itemBounds = CGRect(x: 50, y: itemTop, width: 400, height: y - itemTop)
+			let segmented = segmentedTexts?[index] ?? ""
 			let item = DocumentBlock.List.Item(
-				text: "", markerString: markerString, bounds: itemBounds, lines: [])
+				text: segmented,
+				markerString: markerString,
+				bounds: itemBounds,
+				lines: segmented.isEmpty ? [] : [DocumentBlock.TextLine(text: segmented, bounds: itemBounds)])
 			items.append(item)
 			normalizedItems.append(.init(normalizedBounds: normalized(itemBounds, in: pageSize), item: item))
 		}

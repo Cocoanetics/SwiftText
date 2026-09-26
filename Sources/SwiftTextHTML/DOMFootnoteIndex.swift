@@ -280,13 +280,16 @@ private struct FootnoteScanner {
 		element.children.compactMap { $0 as? DOMElement }.filter { $0.name.lowercased() == "li" }
 	}
 
+	/// The items of every list under `element` that is not itself inside
+	/// another such list, in document order.
 	private func allListItems(under element: DOMElement) -> [DOMElement] {
 		var result: [DOMElement] = []
-		for child in element.children.compactMap({ $0 as? DOMElement }) {
+		var pending = Array(element.children.compactMap { $0 as? DOMElement }.reversed())
+		while let child = pending.popLast() {
 			if ["ol", "ul"].contains(child.name.lowercased()) {
 				result.append(contentsOf: listItems(of: child))
 			} else {
-				result.append(contentsOf: allListItems(under: child))
+				pending.append(contentsOf: child.children.compactMap { $0 as? DOMElement }.reversed())
 			}
 		}
 		return result

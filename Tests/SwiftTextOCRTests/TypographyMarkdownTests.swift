@@ -185,6 +185,62 @@ struct TypographyMarkdownTests {
 		#expect(!markdown.contains("# Important information"))
 	}
 
+	/// The renderer decides the same boundary as the composer, for callers that
+	/// hand it the segmenter's blocks directly: a bold line that ran out of room
+	/// continues into the next block rather than becoming a heading.
+	@Test("The renderer rejoins a bold paragraph split into two blocks")
+	func rendererRejoinsASplitBoldParagraph() {
+		let first = CGRect(x: 0, y: 100, width: 180, height: 20)
+		let second = CGRect(x: 0, y: 121, width: 180, height: 20)
+		let markdown = render([
+			DocumentBlock(bounds: first, kind: .paragraph(.init(
+				text: "", lines: [.init(runs: [run("Important information", size: 11, bold: true)], bounds: first)]))),
+			DocumentBlock(bounds: second, kind: .paragraph(.init(
+				text: "", lines: [.init(runs: [run("please read carefully.", size: 11, bold: true)], bounds: second)])))
+		])
+		#expect(markdown.contains("**Important information please read carefully.**"))
+		#expect(!markdown.contains("#"))
+	}
+
+	@Test("The renderer keeps a bold heading apart from a bold sentence below it")
+	func rendererKeepsABoldHeadingApart() {
+		let body = CGRect(x: 0, y: 0, width: 400, height: 20)
+		let heading = CGRect(x: 0, y: 100, width: 45, height: 20)
+		let sentence = CGRect(x: 0, y: 121, width: 90, height: 20)
+		let markdown = render([
+			DocumentBlock(bounds: body, kind: .paragraph(.init(
+				text: "", lines: [.init(runs: [run(
+					"A body paragraph long enough to establish the width of the column.", size: 11)], bounds: body)]))),
+			DocumentBlock(bounds: heading, kind: .paragraph(.init(
+				text: "", lines: [.init(runs: [run("Safety", size: 11, bold: true)], bounds: heading)]))),
+			DocumentBlock(bounds: sentence, kind: .paragraph(.init(
+				text: "", lines: [.init(runs: [run("Wear gloves.", size: 11, bold: true)], bounds: sentence)])))
+		])
+		#expect(markdown.contains("# Safety\n\n**Wear gloves.**"))
+	}
+
+	/// On a title-plus-table page the table is the running text, so its size is
+	/// the body size and the larger title is a heading.
+	@Test("Table text counts toward the body size")
+	func tableTextCountsTowardTheBodySize() {
+		func cell(_ text: String, row: Int, column: Int) -> DocumentBlock.Table.Cell {
+			let bounds = CGRect(x: CGFloat(column) * 200, y: 100 + CGFloat(row) * 30, width: 150, height: 20)
+			return DocumentBlock.Table.Cell(
+				rowRange: row...row, columnRange: column...column, text: text, bounds: bounds,
+				lines: [.init(runs: [run(text, size: 11)], bounds: bounds)])
+		}
+		let table = DocumentBlock.Table(rows: [
+			[cell("Umsatz", row: 0, column: 0), cell("1.200.000 Euro", row: 0, column: 1)],
+			[cell("Gewinn", row: 1, column: 0), cell("300.000 Euro", row: 1, column: 1)]
+		])
+		let markdown = render([
+			DocumentBlock(bounds: rect(0), kind: .paragraph(.init(
+				text: "", lines: [line([run("Quartalsbericht", size: 22)])]))),
+			DocumentBlock(bounds: CGRect(x: 0, y: 100, width: 350, height: 50), kind: .table(table))
+		])
+		#expect(markdown.contains("# Quartalsbericht"))
+	}
+
 	// MARK: - Inline emphasis
 
 	@Test("Bold, italic and monospaced runs become emphasis")

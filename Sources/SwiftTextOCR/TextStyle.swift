@@ -124,3 +124,27 @@ private func styleMatches(_ lhs: TextStyle?, _ rhs: TextStyle?) -> Bool {
 	default: return false
 	}
 }
+
+extension DocumentBlock.TextLine {
+	/// The runs that set `text` where it occurs in this line, or nil when the
+	/// line does not contain it or carries no style.
+	func runs(setting text: String) -> [StyleRun]? {
+		guard !runs.isEmpty, !text.isEmpty, let range = self.text.range(of: text) else { return nil }
+		let start = self.text.distance(from: self.text.startIndex, to: range.lowerBound)
+		let end = start + text.count
+		var result: [StyleRun] = []
+		var offset = 0
+		for run in runs {
+			let count = run.text.count
+			let lower = max(start, offset)
+			let upper = min(end, offset + count)
+			if lower < upper {
+				let from = run.text.index(run.text.startIndex, offsetBy: lower - offset)
+				let to = run.text.index(run.text.startIndex, offsetBy: upper - offset)
+				result.append(StyleRun(text: String(run.text[from..<to]), style: run.style))
+			}
+			offset += count
+		}
+		return result.text == text ? result : nil
+	}
+}

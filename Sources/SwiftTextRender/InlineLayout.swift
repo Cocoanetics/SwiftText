@@ -66,27 +66,35 @@ extension LayoutEngine {
 
 		// Place a line's fragments in bidi visual order: reorder by level, reverse
 		// RTL runs, and resolve start/end alignment against the base direction.
+		//
+		// The line builder placed the fragments in logical order with the gaps it
+		// opened between them: a collapsed space, or none at all where two
+		// fragments meet inside a word or preserved whitespace travels inside a
+		// fragment. Each gap is reordered along with its neighbours, at their
+		// level when they share one and otherwise at the lower of the two — the
+		// level of the embedding that separates them.
 		func placeBidiLine(_ line: LineBox, _ logical: [TextFragment], baselineFromTop: Double, isFirstLine: Bool) {
-			let levels = logical.map { $0.bidiLevel }
-			let visual = Bidi.visualOrder(levels: levels)
-			var ordered: [TextFragment] = []
-			ordered.reserveCapacity(visual.count)
-			for index in visual {
-				var fragment = logical[index]
-				if levels[index] % 2 == 1 {
-					fragment.text = String(String.UnicodeScalarView(fragment.text.unicodeScalars.reversed()))
+			var items: [(fragment: TextFragment?, width: Double)] = []
+			var levels: [UInt8] = []
+			for (index, fragment) in logical.enumerated() {
+				if index > 0 {
+					let previous = logical[index - 1]
+					let gap = fragment.x - (previous.x + previous.width)
+					if gap > 0.001 {
+						items.append((nil, gap))
+						levels.append(min(previous.bidiLevel, fragment.bidiLevel))
+					}
 				}
-				ordered.append(fragment)
+				var visualFragment = fragment
+				if fragment.bidiLevel % 2 == 1 {
+					visualFragment.text = String(String.UnicodeScalarView(fragment.text.unicodeScalars.reversed()))
+				}
+				items.append((visualFragment, fragment.width))
+				levels.append(fragment.bidiLevel)
 			}
+			let ordered = Bidi.visualOrder(levels: levels).map { items[$0] }
 
-			var total = 0.0
-			for (k, fragment) in ordered.enumerated() {
-				if k > 0, !ordered[k - 1].carriesPreservedWhitespace,
-				   !fragment.carriesPreservedWhitespace {
-					total += spaceWidth(ordered[k - 1].style)
-				}
-				total += fragment.width
-			}
+			let total = ordered.reduce(0) { $0 + $1.width }
 			let extra = max(0, contentWidth - total)
 			let rtl = box.style.direction == .rtl
 			let indent = isFirstLine ? box.style.textIndent : 0
@@ -101,17 +109,14 @@ extension LayoutEngine {
 			}
 
 			line.width = total
-			for (k, fragment) in ordered.enumerated() {
-				if k > 0, !ordered[k - 1].carriesPreservedWhitespace,
-				   !fragment.carriesPreservedWhitespace {
-					x += spaceWidth(ordered[k - 1].style)
+			for item in ordered {
+				if var positioned = item.fragment {
+					positioned.x = contentX + x
+					positioned.y = lineTop
+					positioned.baseline = lineTop + baselineFromTop
+					line.fragments.append(positioned)
 				}
-				var positioned = fragment
-				positioned.x = contentX + x
-				positioned.y = lineTop
-				positioned.baseline = lineTop + baselineFromTop
-				line.fragments.append(positioned)
-				x += fragment.width
+				x += item.width
 			}
 		}
 

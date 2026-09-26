@@ -28,6 +28,19 @@ struct DOMMarkupConverter {
 	/// footnotes (in which case the converter behaves exactly as before).
 	var footnotes: DOMFootnoteIndex?
 
+	/// How many elements the conversion is currently nested inside.
+	private let nesting = NestingDepth()
+
+	/// How deeply conversion recurses before a subtree is flattened to its text.
+	///
+	/// Every element that is not stepped over as a transparent wrapper costs a
+	/// level of recursion, and markup nested a few hundred elements deep — a
+	/// tower that branches at every level, so no unwrapping applies — exhausts
+	/// the stack of the thread converting it. Past this depth the rest of a
+	/// subtree keeps its words and loses its structure, gathered without
+	/// recursion. Real documents stay far below it.
+	static let maximumNestingDepth = 100
+
 	/// Formatting options for `MarkupFormatter`. Most defaults already match the
 	/// previous renderer (`-` bullets, `*`/`**` emphasis, fenced code blocks,
 	/// ATX `#` headings); we additionally request incrementing ordered-list
@@ -142,6 +155,11 @@ struct DOMMarkupConverter {
 	private func blockMarkup(from node: DOMNode) -> [BlockMarkup] {
 		guard let original = node as? DOMElement else { return [] }
 		if Self.skippedTags.contains(original.name.lowercased()) { return [] }
+		guard nesting.enter() else {
+			let text = flattenedText(of: original).trimmingCharacters(in: .whitespaces)
+			return text.isEmpty ? [] : [Paragraph(Text(text))]
+		}
+		defer { nesting.leave() }
 
 		// Collapse single-child transparent wrapper chains (e.g. deeply nested
 		// div/span towers) iteratively to avoid pathological recursion depth.
@@ -203,6 +221,11 @@ struct DOMMarkupConverter {
 
 		guard let original = node as? DOMElement else { return [] }
 		if Self.skippedTags.contains(original.name.lowercased()) { return [] }
+		guard nesting.enter() else {
+			let text = flattenedText(of: original)
+			return text.isEmpty ? [] : [Text(text)]
+		}
+		defer { nesting.leave() }
 
 		// Whitespace at the edges of a wrapper chain can be the only thing
 		// separating its content from the text around it, so what unwrapping
@@ -413,23 +436,55 @@ struct DOMMarkupConverter {
 	/// Used for code blocks and inline code, where collapsing must not happen.
 	private func rawText(of element: DOMElement) -> String {
 		var result = ""
-		appendRawText(of: element, into: &result)
+		var pending: [DOMNode] = [element]
+		while let node = pending.popLast() {
+			if let text = node as? DOMText {
+				result += text.textValue
+			} else if let element = node as? DOMElement {
+				if element.name.lowercased() == "br" {
+					result += "\n"
+				} else {
+					pending.append(contentsOf: element.children.reversed())
+				}
+			}
+		}
 		return result
 	}
 
-	private func appendRawText(of node: DOMNode, into result: inout String) {
-		if let text = node as? DOMText {
-			result += text.textValue
-			return
+	/// The words of a subtree nested too deeply to convert, gathered without
+	/// recursion. Block boundaries and line breaks separate words; a space at
+	/// either edge is kept, since it may separate the subtree from its
+	/// surroundings.
+	private func flattenedText(of element: DOMElement) -> String {
+		var raw = ""
+		// A nil entry marks the end of a block element.
+		var pending: [DOMNode?] = [element]
+		while let entry = pending.popLast() {
+			guard let node = entry else {
+				raw += " "
+				continue
+			}
+			if let text = node as? DOMText {
+				raw += text.textValue
+				continue
+			}
+			guard let child = node as? DOMElement else { continue }
+			let name = child.name.lowercased()
+			if Self.skippedTags.contains(name)
+				|| footnotes?.skip.contains(ObjectIdentifier(child)) == true {
+				continue
+			}
+			if name == "br" || Self.blockTags.contains(name) {
+				raw += " "
+				pending.append(nil)
+			}
+			pending.append(contentsOf: child.children.reversed())
 		}
-		guard let element = node as? DOMElement else { return }
-		if element.name.lowercased() == "br" {
-			result += "\n"
-			return
-		}
-		for child in element.children {
-			appendRawText(of: child, into: &result)
-		}
+		let words = raw.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+		guard !words.isEmpty else { return raw.isEmpty ? "" : " " }
+		let leading = raw.first?.isWhitespace == true ? " " : ""
+		let trailing = raw.last?.isWhitespace == true ? " " : ""
+		return leading + words + trailing
 	}
 
 	// MARK: - Text
@@ -721,16 +776,17 @@ struct DOMMarkupConverter {
 		case nothing, space, content
 	}
 
-	/// Tags that produce output with no text inside them: an image, a break, a
-	/// rule, a footnote reference, a code span or block, a table, a list.
+	/// Tags that produce output with no text inside them: a break, a rule, a
+	/// code block, a table, a list.
 	private static let rendersWithoutText: Set<String> = [
-		"img", "br", "hr", "a", "code", "pre",
+		"br", "hr", "pre",
 		"table", "thead", "tbody", "tfoot", "tr", "td", "th",
 		"ul", "ol", "li"
 	]
 
 	/// What a node contributes to the output — nothing at all, a collapsible
-	/// space, or content — judged without converting it.
+	/// space, or content — judged without converting it, by the same rules the
+	/// conversion applies.
 	///
 	/// Only a few nodes are inspected. A larger subtree counts as content,
 	/// which keeps the wrapper around it and so falls back to the ordinary
@@ -753,9 +809,43 @@ struct DOMMarkupConverter {
 				|| footnotes?.skip.contains(ObjectIdentifier(element)) == true {
 				continue
 			}
-			if Self.rendersWithoutText.contains(name) { return .content }
+			switch name {
+			case "a":
+				// A footnote reference renders its label and a backref nothing;
+				// any other anchor renders exactly its content.
+				let href = (element.attributes["href"] as? String) ?? ""
+				if let footnotes, let fragment = URLComponents(string: href)?.fragment {
+					if footnotes.labelForID[fragment] != nil { return .content }
+					if footnotes.refIDs.contains(fragment) { continue }
+				}
+			case "img":
+				if !imageInlines(element).isEmpty { return .content }
+				continue
+			case "code":
+				if !rawText(of: element).isEmpty { return .content }
+				continue
+			default:
+				if Self.rendersWithoutText.contains(name) { return .content }
+			}
 			pending.append(contentsOf: element.children)
 		}
 		return result
+	}
+}
+
+/// How deeply a conversion is nested, shared by its recursive calls, which
+/// are otherwise free of state.
+private final class NestingDepth {
+	private var depth = 0
+
+	/// Enters one more level, or returns false at the limit without entering.
+	func enter() -> Bool {
+		guard depth < DOMMarkupConverter.maximumNestingDepth else { return false }
+		depth += 1
+		return true
+	}
+
+	func leave() {
+		depth -= 1
 	}
 }

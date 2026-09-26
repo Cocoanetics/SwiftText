@@ -132,6 +132,147 @@ struct TextLineSemanticComposerStyleTests {
 		#expect(markdown.contains("# Safety\n\n**Wear gloves.**"))
 	}
 
+	/// A title and a banner share the column's left edge but run wider than it.
+	/// Neither is a wrapped line of body text, so neither says where the column
+	/// ends: the body paragraph's wrapped line does.
+	@Test("A wide title or banner does not stretch the column a bold paragraph wraps in")
+	func wideTitleDoesNotWidenTheColumn() {
+		let lines = [
+			textLine("Quarterly report for our partners", bounds: CGRect(x: 50, y: 20, width: 500, height: 26), size: 22),
+			textLine(
+				"Confidential and for internal use only, please do not forward",
+				bounds: CGRect(x: 50, y: 80, width: 500, height: 20), size: 11),
+			textLine("Body text in the narrow column that", bounds: CGRect(x: 50, y: 130, width: 200, height: 20), size: 11),
+			textLine("wraps onto a second line.", bounds: CGRect(x: 50, y: 151, width: 140, height: 20), size: 11),
+			textLine("Important information", bounds: CGRect(x: 50, y: 220, width: 190, height: 20), size: 11, bold: true),
+			textLine("please read carefully.", bounds: CGRect(x: 50, y: 241, width: 180, height: 20), size: 11, bold: true)
+		]
+		let markdown = composedMarkdown(lines, paragraphs: [[0], [1], [2, 3], [4], [5]])
+
+		#expect(markdown.contains("**Important information please read carefully.**"))
+		#expect(!markdown.contains("# Important information"))
+	}
+
+	/// A full-width passage above a two-column page shares the left column's
+	/// edge, and its lines wrapped too — but the right column starts where it
+	/// runs on, so it cannot be the left column's width.
+	@Test("A full-width passage does not stretch a column that text stands beside")
+	func fullWidthPassageDoesNotWidenAColumnBesideAnother() {
+		let lines = [
+			textLine(
+				"A full-width abstract that spans both of the columns below it and",
+				bounds: CGRect(x: 50, y: 20, width: 500, height: 20), size: 11),
+			textLine("wraps onto a second line.", bounds: CGRect(x: 50, y: 41, width: 150, height: 20), size: 11),
+			textLine("The right column starts beside", bounds: CGRect(x: 320, y: 200, width: 200, height: 20), size: 11),
+			textLine("the left one and runs on down", bounds: CGRect(x: 320, y: 221, width: 200, height: 20), size: 11),
+			textLine("the page.", bounds: CGRect(x: 320, y: 242, width: 60, height: 20), size: 11),
+			textLine("Important information", bounds: CGRect(x: 50, y: 221, width: 190, height: 20), size: 11, bold: true),
+			textLine("please read carefully.", bounds: CGRect(x: 50, y: 242, width: 180, height: 20), size: 11, bold: true)
+		]
+		let markdown = composedMarkdown(lines, paragraphs: [[0, 1], [2, 3, 4], [5], [6]])
+
+		#expect(markdown.contains("**Important information please read carefully.**"))
+		#expect(!markdown.contains("# Important information"))
+	}
+
+	/// On a title-plus-table page the table is the running text. Its cells take
+	/// the page's own lines, and with them the size they are set at.
+	@Test("Table text counts toward the body size")
+	func tableTextCountsTowardTheBodySize() throws {
+		let titleBounds = CGRect(x: 50, y: 20, width: 200, height: 26)
+		let title = textLine("Quartalsbericht", bounds: titleBounds, size: 22)
+		let cellTexts = [["Umsatz", "1.200.000 Euro"], ["Gewinn", "300.000 Euro"]]
+		var cellLines: [TextLine] = []
+		var rows: [[DocumentBlock.Table.Cell]] = []
+		var normalizedRows: [[NormalizedDocumentBlock.NormalizedTableCell]] = []
+		for (rowIndex, row) in cellTexts.enumerated() {
+			var cells: [DocumentBlock.Table.Cell] = []
+			var normalizedCells: [NormalizedDocumentBlock.NormalizedTableCell] = []
+			for (columnIndex, text) in row.enumerated() {
+				let bounds = CGRect(
+					x: 50 + CGFloat(columnIndex) * 200, y: 100 + CGFloat(rowIndex) * 30, width: 150, height: 20)
+				cellLines.append(textLine(text, bounds: bounds, size: 11))
+				let cell = DocumentBlock.Table.Cell(
+					rowRange: rowIndex...rowIndex,
+					columnRange: columnIndex...columnIndex,
+					text: text,
+					bounds: bounds,
+					lines: [DocumentBlock.TextLine(text: text, bounds: bounds)])
+				cells.append(cell)
+				normalizedCells.append(.init(normalizedBounds: normalized(bounds), cell: cell))
+			}
+			rows.append(cells)
+			normalizedRows.append(normalizedCells)
+		}
+		let tableBounds = CGRect(x: 50, y: 100, width: 350, height: 50)
+		let table = DocumentBlock(bounds: tableBounds, kind: .table(.init(rows: rows)))
+		let semantics = DocumentSemantics(
+			referenceSize: pageSize,
+			blocks: [
+				normalizedParagraph(text: title.combinedText, bounds: titleBounds),
+				NormalizedDocumentBlock(
+					block: table, normalizedBounds: normalized(tableBounds), tableRows: normalizedRows)
+			],
+			images: [])
+
+		let blocks = TextLineSemanticComposer.composeBlocks(
+			from: [title] + cellLines, semantics: semantics, layoutSize: pageSize)
+		let markdown = DocumentBlockMarkdownRenderer.markdown(from: blocks)
+
+		#expect(markdown.contains("# Quartalsbericht"))
+		#expect(markdown.contains("|Umsatz|1.200.000 Euro|"))
+	}
+
+	/// A PDF text layer usually sets a whole table row as one line. Only one
+	/// cell consumes it, but every cell of the row finds its text there.
+	@Test("Table cells take their style from a line spanning the whole row")
+	func tableCellsReadTheirStyleFromARowLine() throws {
+		let titleBounds = CGRect(x: 50, y: 20, width: 200, height: 26)
+		let title = textLine("Quartalsbericht", bounds: titleBounds, size: 22)
+		let rowTexts = [("Umsatz", "1.200.000 Euro"), ("Gewinn", "300.000 Euro")]
+		var rowLines: [TextLine] = []
+		var rows: [[DocumentBlock.Table.Cell]] = []
+		var normalizedRows: [[NormalizedDocumentBlock.NormalizedTableCell]] = []
+		for (rowIndex, texts) in rowTexts.enumerated() {
+			let y = 100 + CGFloat(rowIndex) * 30
+			let left = CGRect(x: 50, y: y, width: 60, height: 20)
+			let right = CGRect(x: 250, y: y, width: 110, height: 20)
+			let style = TextStyle(fontSize: 11)
+			rowLines.append(TextLine(fragments: [
+				TextFragment(bounds: left, string: texts.0, styleRuns: [StyleRun(text: texts.0, style: style)]),
+				TextFragment(bounds: right, string: texts.1, styleRuns: [StyleRun(text: texts.1, style: style)])
+			]))
+			let cells = [(texts.0, left, 0), (texts.1, right, 1)].map { text, bounds, column in
+				DocumentBlock.Table.Cell(
+					rowRange: rowIndex...rowIndex, columnRange: column...column, text: text, bounds: bounds,
+					lines: [DocumentBlock.TextLine(text: text, bounds: bounds)])
+			}
+			rows.append(cells)
+			normalizedRows.append(cells.map { .init(normalizedBounds: normalized($0.bounds), cell: $0) })
+		}
+		let tableBounds = CGRect(x: 50, y: 100, width: 310, height: 50)
+		let table = DocumentBlock(bounds: tableBounds, kind: .table(.init(rows: rows)))
+		let semantics = DocumentSemantics(
+			referenceSize: pageSize,
+			blocks: [
+				normalizedParagraph(text: title.combinedText, bounds: titleBounds),
+				NormalizedDocumentBlock(
+					block: table, normalizedBounds: normalized(tableBounds), tableRows: normalizedRows)
+			],
+			images: [])
+
+		let blocks = TextLineSemanticComposer.composeBlocks(
+			from: [title] + rowLines, semantics: semantics, layoutSize: pageSize)
+		let cells = blocks.flatMap { block -> [DocumentBlock.Table.Cell] in
+			guard case .table(let table) = block.kind else { return [] }
+			return table.rows.flatMap { $0 }
+		}
+
+		#expect(cells.count == 4)
+		#expect(cells.allSatisfy { cell in cell.lines.allSatisfy { !$0.runs.isEmpty } })
+		#expect(DocumentBlockMarkdownRenderer.markdown(from: blocks).contains("# Quartalsbericht"))
+	}
+
 	@Test("A text-layer line appended to a paragraph keeps its emphasis")
 	func appendedLineKeepsStyleRuns() throws {
 		let firstBounds = CGRect(x: 50, y: 100, width: 180, height: 20)
@@ -171,6 +312,20 @@ struct TextLineSemanticComposerStyleTests {
 
 		#expect(paragraph.headingLevel == 3)
 		#expect(DocumentBlockMarkdownRenderer.markdown(from: blocks).contains("### Known heading"))
+	}
+
+	/// Composes `lines` with one semantic paragraph per group of line indices,
+	/// the way the segmenter would report them, and renders the result.
+	private func composedMarkdown(_ lines: [TextLine], paragraphs: [[Int]]) -> String {
+		let blocks = paragraphs.map { group -> NormalizedDocumentBlock in
+			let bounds = group.map { lines[$0].fragments[0].bounds }.reduce(CGRect.null) { $0.union($1) }
+			let text = group.map { lines[$0].combinedText }.joined(separator: "\n")
+			return normalizedParagraph(text: text, bounds: bounds)
+		}
+		let semantics = DocumentSemantics(referenceSize: pageSize, blocks: blocks, images: [])
+		let composed = TextLineSemanticComposer.composeBlocks(
+			from: lines, semantics: semantics, layoutSize: pageSize)
+		return DocumentBlockMarkdownRenderer.markdown(from: composed)
 	}
 
 	private func textLine(
