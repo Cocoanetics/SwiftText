@@ -102,6 +102,36 @@ struct TextLineSemanticComposerStyleTests {
 		#expect(!markdown.contains("# Important information"))
 	}
 
+	/// Bold body text on both sides, but `Wear` would have fitted after
+	/// `Safety`: that line was ended on purpose, so it is a heading, not the
+	/// first line of a wrapped bold paragraph.
+	@Test("A bold body-size heading stays separate from a bold sentence below it")
+	func boldHeadingAboveBoldSentenceStaysAHeading() {
+		let bodyBounds = CGRect(x: 50, y: 40, width: 400, height: 20)
+		let headingBounds = CGRect(x: 50, y: 100, width: 45, height: 20)
+		let sentenceBounds = CGRect(x: 50, y: 121, width: 90, height: 20)
+		let body = textLine(
+			"A body paragraph long enough to establish the width of the column.",
+			bounds: bodyBounds,
+			size: 11)
+		let heading = textLine("Safety", bounds: headingBounds, size: 11, bold: true)
+		let sentence = textLine("Wear gloves.", bounds: sentenceBounds, size: 11, bold: true)
+		let semantics = DocumentSemantics(
+			referenceSize: pageSize,
+			blocks: [
+				normalizedParagraph(text: body.combinedText, bounds: bodyBounds),
+				normalizedParagraph(text: heading.combinedText, bounds: headingBounds),
+				normalizedParagraph(text: sentence.combinedText, bounds: sentenceBounds)
+			],
+			images: [])
+
+		let blocks = TextLineSemanticComposer.composeBlocks(
+			from: [body, heading, sentence], semantics: semantics, layoutSize: pageSize)
+		let markdown = DocumentBlockMarkdownRenderer.markdown(from: blocks)
+
+		#expect(markdown.contains("# Safety\n\n**Wear gloves.**"))
+	}
+
 	@Test("A text-layer line appended to a paragraph keeps its emphasis")
 	func appendedLineKeepsStyleRuns() throws {
 		let firstBounds = CGRect(x: 50, y: 100, width: 180, height: 20)

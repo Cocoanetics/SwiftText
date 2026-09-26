@@ -56,9 +56,37 @@ struct TextWhitespaceTests {
 		#expect(try await text(html) == "Hello world")
 	}
 
+	/// A whitespace-only node joins the run of whitespace next to it rather than
+	/// adding a second space to it.
+	@Test("A whitespace-only node does not double a separator", arguments: [
+		("<div><span>Hello </span>\n<span>world</span></div>", "Hello world"),
+		("<div><span>Hello </span>\n \n<span>world</span></div>", "Hello world"),
+		("<p>A<span>\n<span>\nHello\n</span>\n</span>B</p>", "A Hello B"),
+		("<p><code>a </code>\n<span>b</span></p>", "a b")
+	])
+	func whitespaceOnlyNodeJoinsTheRun(_ testCase: (html: String, expected: String)) async throws {
+		#expect(try await text(testCase.html) == testCase.expected)
+	}
+
 	@Test("A <br> is a boundary, not a separator")
 	func lineBreakIsABoundary() async throws {
 		#expect(try await text("<p>Wort A<br>\n<strong>fett</strong></p>") == "Wort A\nfett")
+	}
+
+	/// Pretty-printed markup puts a newline beside most `<br>`s. It collapses
+	/// with the line it would otherwise start or end.
+	@Test("Whitespace beside a <br> does not survive on either line", arguments: [
+		"<p>Zeile eins<br>\nZeile zwei</p>",
+		"<p>Zeile eins <br> Zeile zwei</p>",
+		"<p>Zeile eins\n<br>\nZeile zwei</p>"
+	])
+	func whitespaceBesideALineBreak(_ html: String) async throws {
+		#expect(try await text(html) == "Zeile eins\nZeile zwei")
+	}
+
+	@Test("Text after a block does not start with a space")
+	func textAfterABlock() async throws {
+		#expect(try await text("<div><p>Erster</p>\n  Danach</div>") == "Erster\n\nDanach")
 	}
 
 	@Test("A <pre> keeps its indentation, even nested in a block")

@@ -31,23 +31,62 @@ struct ListMarkerTests {
 		#expect(itemTexts(of: blocks) == ["Erster", "Zweiter"])
 	}
 
-	/// The segmenter's reported marker and the painted one need not agree, so a
-	/// marker is recognised on its own too.
+	/// An item need not report its marker. The kind of list then says which
+	/// family of marker to look for.
 	@Test("A painted marker is dropped even when none was reported", arguments: [
-		("• Punkt", "Punkt"),
-		("◦ Punkt", "Punkt"),
-		("▪ Punkt", "Punkt"),
-		("- Punkt", "Punkt"),
-		("– Punkt", "Punkt"),
-		("* Punkt", "Punkt"),
-		("1) Punkt", "Punkt"),
-		("a) Punkt", "Punkt"),
-		("B. Punkt", "Punkt"),
-		("1.2. Punkt", "Punkt"),
-		("•Punkt", "Punkt")
+		("• Punkt", DocumentBlock.List.Marker.bullet),
+		("◦ Punkt", .bullet),
+		("▪ Punkt", .bullet),
+		("- Punkt", .hyphen),
+		("– Punkt", .hyphen),
+		("* Punkt", .bullet),
+		("1) Punkt", .decimal),
+		("a) Punkt", .lowercaseLatin),
+		("B. Punkt", .uppercaseLatin),
+		("1.2. Punkt", .compositeDecimal),
+		("•Punkt", .bullet)
 	])
-	func paintedMarkerWithoutAReportedOne(_ testCase: (painted: String, expected: String)) {
-		let blocks = composeList(itemTexts: [testCase.painted], markerString: "", marker: .bullet)
+	func paintedMarkerWithoutAReportedOne(_ testCase: (painted: String, marker: DocumentBlock.List.Marker)) {
+		let blocks = composeList(itemTexts: [testCase.painted], markerString: "", marker: testCase.marker)
+		#expect(itemTexts(of: blocks) == ["Punkt"])
+	}
+
+	/// A PDF can leave the painted bullet out of its text layer, and then what
+	/// remains is content. Only a marker of the list's own kind can be one.
+	@Test("A list keeps content shaped like another kind of marker", arguments: [
+		("A. Smith", DocumentBlock.List.Marker.bullet),
+		("1. Introduction", .bullet),
+		("a) Hinweis", .hyphen),
+		("A. Smith", .lowercaseLatin),
+		("A. Smith", .decimal),
+		("2. Quartal", .uppercaseLatin)
+	])
+	func contentShapedLikeAnotherKindOfMarker(_ testCase: (text: String, marker: DocumentBlock.List.Marker)) {
+		let blocks = composeList(itemTexts: [testCase.text], markerString: "", marker: testCase.marker)
+		#expect(itemTexts(of: blocks) == [testCase.text])
+	}
+
+	/// With nothing reported about the list at all, only a bullet glyph — which
+	/// no content begins with — can be taken for a marker.
+	@Test("Without a known kind of list only a bullet glyph is a marker", arguments: [
+		("• Punkt", "Punkt"),
+		("A. Smith", "A. Smith"),
+		("1. Introduction", "1. Introduction"),
+		("- 5 Grad", "- 5 Grad")
+	])
+	func unknownListKindDropsOnlyABulletGlyph(_ testCase: (text: String, expected: String)) {
+		let blocks = composeList(itemTexts: [testCase.text], markerString: "", marker: .custom(""))
+		#expect(itemTexts(of: blocks) == [testCase.expected])
+	}
+
+	/// A hyphen doubles as a minus sign, so even a reported one is a marker only
+	/// with a space after it.
+	@Test("A reported hyphen marker needs a space after it", arguments: [
+		("- -5 Grad", "-5 Grad"),
+		("-5 Grad", "-5 Grad")
+	])
+	func reportedHyphenNeedsASpace(_ testCase: (text: String, expected: String)) {
+		let blocks = composeList(itemTexts: [testCase.text], markerString: "-", marker: .hyphen)
 		#expect(itemTexts(of: blocks) == [testCase.expected])
 	}
 
@@ -85,17 +124,41 @@ struct ListMarkerTests {
 	}
 
 	@Test("A non-breaking space separates a reported or inferred marker", arguments: [
-		("1.\u{00A0}Punkt", "1."),
-		("1.\u{00A0}Punkt", ""),
-		("a)\u{00A0}Punkt", ""),
-		("1.2.\u{00A0}Punkt", "")
+		("1.\u{00A0}Punkt", "1.", DocumentBlock.List.Marker.decimal),
+		("1.\u{00A0}Punkt", "", .decimal),
+		("a)\u{00A0}Punkt", "", .lowercaseLatin),
+		("1.2.\u{00A0}Punkt", "", .compositeDecimal)
 	])
-	func nonBreakingSpaceAfterMarker(_ testCase: (painted: String, reported: String)) {
+	func nonBreakingSpaceAfterMarker(
+		_ testCase: (painted: String, reported: String, marker: DocumentBlock.List.Marker)
+	) {
 		let blocks = composeList(
 			itemTexts: [testCase.painted],
 			markerString: testCase.reported,
-			marker: .decimal)
+			marker: testCase.marker)
 		#expect(itemTexts(of: blocks) == ["Punkt"])
+	}
+
+	/// Vision's own item content still begins with the marker it reports
+	/// separately. That marker, and nothing else, is taken off it.
+	@Test("Segmented content loses exactly the reported marker", arguments: [
+		("• Punkt eins", "• ", "Punkt eins"),
+		("• A. Smith", "•", "A. Smith"),
+		("1. Erster Schritt", "1. ", "Erster Schritt"),
+		("a) Hinweis", "a)", "Hinweis")
+	])
+	func segmentedContentLosesTheReportedMarker(_ testCase: (content: String, reported: String, expected: String)) {
+		#expect(strippingReportedMarker(testCase.content, reportedMarker: testCase.reported) == testCase.expected)
+	}
+
+	@Test("Segmented content without the reported marker is left alone", arguments: [
+		("A. Smith", "•"),
+		("1.5 Millionen", "1"),
+		("- nicht der Marker", "•"),
+		("Punkt eins", "")
+	])
+	func segmentedContentWithoutTheReportedMarker(_ testCase: (content: String, reported: String)) {
+		#expect(strippingReportedMarker(testCase.content, reportedMarker: testCase.reported) == nil)
 	}
 
 	@Test("Only the first line of a multi-line item loses a marker")

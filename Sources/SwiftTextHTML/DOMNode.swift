@@ -29,19 +29,4 @@ public extension DOMNode {
 
 	/// Nodes that are not runs of characters have no source of their own.
 	var sourceText: String { "" }
-
-	/// Whether this node begins and ends a block of text, so that whitespace
-	/// beside it separates nothing.
-	///
-	/// Wider than ``isBlockLevelElement``, which decides paragraph spacing: the
-	/// sectioning and grouping containers start no paragraph of their own, yet
-	/// they are just as much a block boundary.
-	var startsTextBlock: Bool {
-		isBlockLevelElement || [
-			"html", "body", "document", "section", "article", "main", "header",
-			"footer", "aside", "form", "fieldset", "details", "summary",
-			"dl", "dt", "dd", "li", "thead", "tbody", "tfoot", "tr", "th", "td",
-			"caption", "figcaption", "address", "hgroup", "hr", "br"
-		].contains(name)
-	}
 }

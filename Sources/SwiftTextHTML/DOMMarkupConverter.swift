@@ -112,19 +112,6 @@ struct DOMMarkupConverter {
 	private func blockChildren(of element: DOMElement) -> [BlockMarkup] {
 		var blocks: [BlockMarkup] = []
 		var inlineBuffer: [InlineMarkup] = []
-		let meaningfulIndices = element.children.indices.filter { index in
-			let child = element.children[index]
-			if let text = child as? DOMText {
-				return !text.textValue.allSatisfy(\.isWhitespace)
-			}
-			guard let childElement = child as? DOMElement else { return false }
-			if Self.skippedTags.contains(childElement.name.lowercased()) { return false }
-			return footnotes?.skip.contains(ObjectIdentifier(childElement)) != true
-		}
-		let soleInlineIndex = meaningfulIndices.count == 1
-			&& !isBlockLevel(element.children[meaningfulIndices[0]])
-			? meaningfulIndices[0]
-			: nil
 
 		func flush() {
 			let trimmed = trimInlines(inlineBuffer)
@@ -133,7 +120,7 @@ struct DOMMarkupConverter {
 			blocks.append(Paragraph(trimmed))
 		}
 
-		for (index, child) in element.children.enumerated() {
+		for child in element.children {
 			// Footnote definition containers are rendered separately (appended as
 			// `[^id]: …` blocks), so skip them in the normal block flow.
 			if let childElement = child as? DOMElement,
@@ -144,9 +131,7 @@ struct DOMMarkupConverter {
 				flush()
 				blocks.append(contentsOf: blockMarkup(from: child))
 			} else {
-				inlineBuffer.append(contentsOf: inlineMarkup(
-					from: child,
-					discardingEdgeWhitespace: index == soleInlineIndex))
+				inlineBuffer.append(contentsOf: inlineMarkup(from: child))
 			}
 		}
 		flush()
@@ -160,7 +145,9 @@ struct DOMMarkupConverter {
 
 		// Collapse single-child transparent wrapper chains (e.g. deeply nested
 		// div/span towers) iteratively to avoid pathological recursion depth.
-		let element = unwrapTransparent(original, discardingEdgeWhitespace: true)
+		// Whitespace stepped over sits at the edge of a block, where it
+		// separates nothing.
+		let element = unwrapTransparent(original).element
 		let name = element.name.lowercased()
 
 		switch name {
@@ -208,10 +195,7 @@ struct DOMMarkupConverter {
 	}
 
 	/// Converts a single DOM node into zero or more inline markups.
-	private func inlineMarkup(
-		from node: DOMNode,
-		discardingEdgeWhitespace: Bool = false
-	) -> [InlineMarkup] {
+	private func inlineMarkup(from node: DOMNode) -> [InlineMarkup] {
 		if let text = node as? DOMText {
 			let string = collapsedText(text)
 			return string.isEmpty ? [] : [Text(string)]
@@ -220,12 +204,17 @@ struct DOMMarkupConverter {
 		guard let original = node as? DOMElement else { return [] }
 		if Self.skippedTags.contains(original.name.lowercased()) { return [] }
 
-		let element = unwrapTransparent(
-			original,
-			discardingEdgeWhitespace: discardingEdgeWhitespace)
-		let name = element.name.lowercased()
+		// Whitespace at the edges of a wrapper chain can be the only thing
+		// separating its content from the text around it, so what unwrapping
+		// steps over comes back as one space on that side.
+		let unwrapped = unwrapTransparent(original)
+		let leading: [InlineMarkup] = unwrapped.leadingSpace ? [Text(" ")] : []
+		let trailing: [InlineMarkup] = unwrapped.trailingSpace ? [Text(" ")] : []
+		return leading + convertedInline(unwrapped.element) + trailing
+	}
 
-		switch name {
+	private func convertedInline(_ element: DOMElement) -> [InlineMarkup] {
+		switch element.name.lowercased() {
 		case "b", "strong":
 			return wrapInline(inlineChildren(of: element)) { Strong($0) }
 
@@ -258,7 +247,7 @@ struct DOMMarkupConverter {
 	/// leading/trailing whitespace so the markers hug the content. CommonMark
 	/// rejects `** bold **` as emphasis, so ` ` must sit outside the markers.
 	private func wrapInline(_ children: [InlineMarkup], _ make: ([InlineMarkup]) -> InlineMarkup) -> [InlineMarkup] {
-		let (leading, core, trailing) = splitOuterWhitespace(children)
+		let (leading, core, trailing) = splitOuterWhitespace(collapsingSpaces(children))
 		guard !core.isEmpty else { return leading + trailing }
 		return leading + [make(core)] + trailing
 	}
@@ -304,20 +293,25 @@ struct DOMMarkupConverter {
 			}
 		}
 
-		let content = trimInlines(inlineChildren(of: element))
+		let children = collapsingSpaces(inlineChildren(of: element))
+		let content = trimInlines(children)
+		// A space at the edge of the link text separates the link from the
+		// words around it, so it stays — outside the link — rather than going
+		// with the trim.
+		let (leading, _, trailing) = splitOuterWhitespace(children)
 
 		// Fragment links (in-page anchors, or any URL carrying a #fragment) are
 		// rendered as plain text — matches the previous renderer's behavior.
 		if href.contains("#"),
 		   let components = URLComponents(string: href),
 		   components.fragment != nil {
-			return content
+			return leading + content + trailing
 		}
 
 		guard !href.isEmpty, !content.isEmpty else {
-			return content
+			return leading + content + trailing
 		}
-		return [makeLink(destination: href, children: content)]
+		return leading + [makeLink(destination: href, children: content)] + trailing
 	}
 
 	/// `Link`'s typed initializer only accepts `RecurringInlineMarkup` children,
@@ -459,11 +453,45 @@ struct DOMMarkupConverter {
 		return leading + collapsed + trailing
 	}
 
+	/// Collapses the spaces that meet across the boundaries of inline nodes.
+	///
+	/// ``collapsedText`` collapses whitespace within one text node, but a run of
+	/// it can span several — `Hello ` then `\n` then ` world`, or the space a
+	/// wrapper kept for its edge — and a browser renders the whole run as one
+	/// space. Spaces beside a line break separate nothing and go as well.
+	private func collapsingSpaces(_ inlines: [InlineMarkup]) -> [InlineMarkup] {
+		var result: [InlineMarkup] = []
+		for inline in inlines {
+			if inline is LineBreak || inline is SoftBreak {
+				if let last = result.last as? Text {
+					let stripped = String(last.string.reversed().drop { $0 == " " }.reversed())
+					if stripped.isEmpty { result.removeLast() } else { result[result.count - 1] = Text(stripped) }
+				}
+				result.append(inline)
+				continue
+			}
+			guard let text = inline as? Text else {
+				result.append(inline)
+				continue
+			}
+			var string = text.string
+			let followsSpace = (result.last as? Text)?.string.last == " "
+				|| result.last is LineBreak || result.last is SoftBreak
+			if followsSpace {
+				string = String(string.drop { $0 == " " })
+			}
+			if !string.isEmpty {
+				result.append(string == text.string ? text : Text(string))
+			}
+		}
+		return result
+	}
+
 	/// Trims leading/trailing whitespace-only inlines (and stray breaks) from a
 	/// paragraph/heading/cell's content, and strips spaces hanging off the
 	/// boundary `Text` leaves.
 	private func trimInlines(_ inlines: [InlineMarkup]) -> [InlineMarkup] {
-		var result = inlines
+		var result = collapsingSpaces(inlines)
 
 		while let first = result.first {
 			if first is SoftBreak || first is LineBreak { result.removeFirst(); continue }
@@ -639,47 +667,95 @@ struct DOMMarkupConverter {
 	/// nested div/span/font towers from HTML email) to avoid stack-overflow-depth
 	/// recursion. Stops at the innermost wrapper whose child isn't another
 	/// transparent wrapper.
+	///
+	/// Neither the indentation of pretty-printed HTML around a wrapper's child
+	/// nor a sibling that renders nothing (an `<input>`, an empty `<span>`)
+	/// makes the wrapper branch. The whitespace can still be the only separator
+	/// between the chain's content and the text around it, so whether any was
+	/// stepped over is reported for each side, for an inline caller to keep as
+	/// a single space.
 	private func unwrapTransparent(
-		_ element: DOMElement,
-		discardingEdgeWhitespace: Bool
-	) -> DOMElement {
-		guard element.isTransparentWrapper else { return element }
+		_ element: DOMElement
+	) -> (element: DOMElement, leadingSpace: Bool, trailingSpace: Bool) {
 		var current = element
+		var leadingSpace = false
+		var trailingSpace = false
 		var steps = 0
 		while steps < 10_000,
 			  current.isTransparentWrapper,
-			  let only = soleTransparentChild(
-				of: current,
-				discardingEdgeWhitespace: discardingEdgeWhitespace) {
-			current = only
+			  let step = soleTransparentChild(of: current) {
+			current = step.child
+			leadingSpace = leadingSpace || step.leadingSpace
+			trailingSpace = trailingSpace || step.trailingSpace
 			steps += 1
 		}
-		return current
+		return (current, leadingSpace, trailingSpace)
 	}
 
-	/// The only meaningful child of a wrapper. Pretty-printed HTML commonly
-	/// puts indentation around that child; those edge-only whitespace nodes do
-	/// not make the wrapper semantically branch and must not disable iterative
-	/// unwrapping of deep email-style wrapper towers.
+	/// The one child of a wrapper that renders anything, when it is itself a
+	/// transparent wrapper, and whether whitespace lies before or after it.
 	private func soleTransparentChild(
-		of element: DOMElement,
-		discardingEdgeWhitespace: Bool
-	) -> DOMElement? {
-		let meaningful = element.children.filter { child in
-			guard let text = child as? DOMText else { return true }
-			return !text.textValue.allSatisfy(\.isWhitespace)
+		of element: DOMElement
+	) -> (child: DOMElement, leadingSpace: Bool, trailingSpace: Bool)? {
+		var sole: DOMElement?
+		var leadingSpace = false
+		var trailingSpace = false
+		for child in element.children {
+			switch rendering(of: child) {
+			case .nothing:
+				continue
+			case .space:
+				if sole == nil { leadingSpace = true } else { trailingSpace = true }
+			case .content:
+				guard sole == nil,
+				      let childElement = child as? DOMElement,
+				      childElement.isTransparentWrapper else { return nil }
+				sole = childElement
+			}
 		}
-		guard meaningful.count == 1,
-		      let child = meaningful[0] as? DOMElement,
-		      child.isTransparentWrapper else { return nil }
-		// Whitespace at a block edge is indentation. At an inline edge it can be
-		// the only separator from text outside this wrapper, so unwrapping must
-		// retain the wrapper (and therefore that whitespace) in the inline case.
-		let discardedWhitespace = meaningful.count != element.children.count
-		if discardedWhitespace && !discardingEdgeWhitespace
-			&& !isBlockLevel(element) && !isBlockLevel(child) {
-			return nil
+		guard let sole else { return nil }
+		return (sole, leadingSpace, trailingSpace)
+	}
+
+	private enum Rendering {
+		case nothing, space, content
+	}
+
+	/// Tags that produce output with no text inside them: an image, a break, a
+	/// rule, a footnote reference, a code span or block, a table, a list.
+	private static let rendersWithoutText: Set<String> = [
+		"img", "br", "hr", "a", "code", "pre",
+		"table", "thead", "tbody", "tfoot", "tr", "td", "th",
+		"ul", "ol", "li"
+	]
+
+	/// What a node contributes to the output — nothing at all, a collapsible
+	/// space, or content — judged without converting it.
+	///
+	/// Only a few nodes are inspected. A larger subtree counts as content,
+	/// which keeps the wrapper around it and so falls back to the ordinary
+	/// conversion rather than risk stepping over anything that renders.
+	private func rendering(of node: DOMNode) -> Rendering {
+		var result = Rendering.nothing
+		var pending = [node]
+		var budget = 32
+		while let current = pending.popLast() {
+			budget -= 1
+			guard budget >= 0 else { return .content }
+			if let text = current as? DOMText {
+				guard text.textValue.allSatisfy(\.isWhitespace) else { return .content }
+				if !text.textValue.isEmpty { result = .space }
+				continue
+			}
+			guard let element = current as? DOMElement else { continue }
+			let name = element.name.lowercased()
+			if Self.skippedTags.contains(name)
+				|| footnotes?.skip.contains(ObjectIdentifier(element)) == true {
+				continue
+			}
+			if Self.rendersWithoutText.contains(name) { return .content }
+			pending.append(contentsOf: element.children)
 		}
-		return child
+		return result
 	}
 }

@@ -63,16 +63,7 @@ func prettyPrintedDeepInlineWrapperChainDoesNotCrash() async throws {
 	let document = try await HTMLDocument(data: Data(html.utf8), baseURL: nil)
 	#expect(document.markdown().contains("Hello ü"))
 
-	// Swift ARC releases an ownership chain recursively. Dismantle this
-	// deliberately pathological fixture iteratively after exercising conversion
-	// so test teardown does not measure an unrelated runtime recursion limit.
-	var elements = [document.root]
-	var index = 0
-	while index < elements.count {
-		elements.append(contentsOf: elements[index].children.compactMap { $0 as? DOMElement })
-		index += 1
-	}
-	for element in elements { element.children.removeAll() }
+	dismantle(document)
 }
 
 @Test
@@ -91,6 +82,69 @@ func skippedSiblingDoesNotDefeatDeepInlineUnwrapping() async throws {
 	let document = try await HTMLDocument(data: Data(html.utf8), baseURL: nil)
 	#expect(document.markdown().contains("Hello ü"))
 
+	dismantle(document)
+}
+
+@Test
+func nonRenderingWrapperSiblingDoesNotDefeatDeepInlineUnwrapping() async throws {
+	// The sibling span renders nothing, so the tower is still the paragraph's
+	// only content and its indentation must not stop iterative unwrapping.
+	let document = try await HTMLDocument(
+		data: Data(prettyPrintedSpanTower(before: "<span><input></span>").utf8),
+		baseURL: nil)
+	#expect(document.markdown() == "Hello ü")
+	dismantle(document)
+}
+
+@Test
+func deepInlineWrapperChainKeepsItsSeparatorsFromSurroundingText() async throws {
+	// Text on both sides makes the tower's edge whitespace significant: it is
+	// the only separator. Unwrapping keeps one space for it on each side
+	// instead of falling back to recursion through every wrapper.
+	let document = try await HTMLDocument(
+		data: Data(prettyPrintedSpanTower(before: "Before", after: "After").utf8),
+		baseURL: nil)
+	#expect(document.markdown() == "Before Hello ü After")
+	dismantle(document)
+}
+
+@Test
+func nonRenderingSiblingOnEveryLevelDoesNotDefeatUnwrapping() async throws {
+	let depth = 2_000
+	var html = "<html><body><p>"
+	for _ in 0..<depth {
+		html += "\n<span><span></span><script>x()</script>"
+	}
+	html += "\nHello ü\n"
+	for _ in 0..<depth {
+		html += "</span>\n"
+	}
+	html += "</p></body></html>"
+
+	let document = try await HTMLDocument(data: Data(html.utf8), baseURL: nil)
+	#expect(document.markdown() == "Hello ü")
+	dismantle(document)
+}
+
+/// A paragraph holding a 2,000-deep tower of pretty-printed spans around
+/// `Hello ü`, with optional markup on either side of the tower.
+private func prettyPrintedSpanTower(before: String = "", after: String = "") -> String {
+	let depth = 2_000
+	var html = "<html><body><p>" + before
+	for _ in 0..<depth {
+		html += "<span>\n"
+	}
+	html += "Hello ü"
+	for _ in 0..<depth {
+		html += "\n</span>"
+	}
+	return html + after + "</p></body></html>"
+}
+
+/// Swift ARC releases an ownership chain recursively. Dismantle a deliberately
+/// pathological fixture iteratively after exercising conversion, so test
+/// teardown does not measure an unrelated runtime recursion limit.
+private func dismantle(_ document: HTMLDocument) {
 	var elements = [document.root]
 	var index = 0
 	while index < elements.count {

@@ -184,7 +184,10 @@ private func composeBlock(
 			// text, and Markdown will add one of its own.
 			var finalLines = itemMatches.isEmpty ? item.lines : makeDocumentLines(from: itemMatches)
 			if !itemMatches.isEmpty, let first = finalLines.first {
-				let stripped = strippingListMarker(first.text, reportedMarker: item.markerString)
+				let stripped = strippingListMarker(
+					first.text,
+					reportedMarker: item.markerString,
+					listMarker: list.marker)
 				if stripped != first.text {
 					let removed = String(first.text.prefix(first.text.count - stripped.count))
 					finalLines[0] = DocumentBlock.TextLine(
@@ -280,6 +283,7 @@ private func mergeParagraphBlocks(
 	guard !blocks.isEmpty else { return (blocks, metadata) }
 	var mergedBlocks: [DocumentBlock] = []
 	var mergedMetadata: [BlockMetadata] = []
+	let lineExtents = LineExtents(blocks: blocks)
 
 	for (block, meta) in zip(blocks, metadata) {
 		guard case .paragraph(let currentParagraph) = block.kind else {
@@ -298,7 +302,8 @@ private func mergeParagraphBlocks(
 			currentBounds: block.bounds,
 			currentMetadata: meta,
 			referenceSize: referenceSize,
-			typography: typography
+			typography: typography,
+			lineExtents: lineExtents
 		   ) {
 			let combinedLines = previousParagraph.lines + currentParagraph.lines
 			let combinedText = combinedLines.map(\.text).joined(separator: "\n")
@@ -417,9 +422,17 @@ private func shouldMergeParagraphs(
 	currentBounds: CGRect,
 	currentMetadata: BlockMetadata,
 	referenceSize: CGSize,
-	typography: DocumentTypography
+	typography: DocumentTypography,
+	lineExtents: LineExtents
 ) -> Bool {
-	if shouldPreventMerge(previous: previous, current: current, typography: typography) {
+	let columnTolerance = max(referenceSize.width * 0.015, 4)
+	if shouldPreventMerge(
+		previous: previous,
+		current: current,
+		typography: typography,
+		columnRight: previous.lines.last.flatMap {
+			lineExtents.rightEdge(ofTextStartingAt: $0.bounds.minX, tolerance: columnTolerance)
+		}) {
 		return false
 	}
 
@@ -447,7 +460,8 @@ private func shouldMergeParagraphs(
 private func shouldPreventMerge(
 	previous: DocumentBlock.Paragraph,
 	current: DocumentBlock.Paragraph,
-	typography: DocumentTypography
+	typography: DocumentTypography,
+	columnRight: CGFloat?
 ) -> Bool {
 	// A heading is a structural boundary, not a geometric paragraph
 	// continuation. Infer it here, before a merge can mix its runs with body
@@ -458,18 +472,63 @@ private func shouldPreventMerge(
 	let previousLevel = typography.headingLevel(for: previous)
 	let currentLevel = typography.headingLevel(for: current)
 	if previousLevel != nil || currentLevel != nil {
-		// Vision can split two lines of one all-bold body paragraph into separate
-		// semantic blocks. Each short line may look like a heading by itself, but
-		// matching body typography on both sides means geometry must still get the
-		// chance to reconstruct the paragraph.
+		// Vision can split the lines of one all-bold body paragraph into
+		// separate semantic blocks, and a short line of it looks like a heading
+		// on its own. Bold body text on both sides cannot tell the two apart;
+		// the line break between them can.
 		let continuedBoldBody = typography.isUniformBoldBodyText(previous)
 			&& typography.isUniformBoldBodyText(current)
+			&& breaksLikeAWrappedLine(from: previous, to: current, columnRight: columnRight)
 		if !continuedBoldBody { return true }
 	}
 	let candidates = [previous.text, current.text]
 	return candidates.contains { text in
 		let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
 		return isLikelyHeading(trimmed)
+	}
+}
+
+/// Whether `previous` ends where its last line ran out of room, so that
+/// `current` continues it.
+///
+/// A line breaker moves a word to the next line only when it does not fit. If
+/// the first word of `current` would have fitted at the end of `previous`'s
+/// last line, that line was ended on purpose, the way a heading ends — `Safety`
+/// above `Wear gloves.` — rather than wrapped.
+private func breaksLikeAWrappedLine(
+	from previous: DocumentBlock.Paragraph,
+	to current: DocumentBlock.Paragraph,
+	columnRight: CGFloat?
+) -> Bool {
+	guard let lastLine = previous.lines.last, let nextLine = current.lines.first else {
+		return false
+	}
+	let nextText = nextLine.text.trimmingCharacters(in: .whitespacesAndNewlines)
+	guard !nextText.isEmpty, nextLine.bounds.width > 0 else { return false }
+	let right = max(columnRight ?? 0, lastLine.bounds.maxX, nextLine.bounds.maxX)
+	// Both lines are set in the same body face, so the next line's average
+	// advance estimates what its first word, and the space before it, needs.
+	let advance = nextLine.bounds.width / CGFloat(nextText.count)
+	let firstWord = nextText.prefix { !$0.isWhitespace }
+	return lastLine.bounds.maxX + CGFloat(firstWord.count + 1) * advance > right
+}
+
+/// How far the text on a page runs, so a line that ends early can be told
+/// from a full one. Lines starting at the same left edge share a column, and
+/// the longest of them shows where that column ends.
+private struct LineExtents {
+	private let extents: [(minX: CGFloat, maxX: CGFloat)]
+
+	init(blocks: [DocumentBlock]) {
+		extents = blocks.flatMap { block -> [(minX: CGFloat, maxX: CGFloat)] in
+			guard case .paragraph(let paragraph) = block.kind else { return [] }
+			return paragraph.lines.map { (minX: $0.bounds.minX, maxX: $0.bounds.maxX) }
+		}
+	}
+
+	/// The furthest any line starting at `minX` runs, give or take `tolerance`.
+	func rightEdge(ofTextStartingAt minX: CGFloat, tolerance: CGFloat) -> CGFloat? {
+		extents.filter { abs($0.minX - minX) <= tolerance }.map(\.maxX).max()
 	}
 }
 

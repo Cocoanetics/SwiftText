@@ -50,121 +50,72 @@ public class DOMElement: DOMNode, @unchecked Sendable {
 	}
 
 	public func text() -> String {
-		if ["script", "style", "iframe", "nav", "meta", "link", "title", "select", "input", "button", "noscript", "footer"].contains(name) {
-			return ""
-		}
+		var builder = PlainTextBuilder()
+		appendText(to: &builder)
+		return builder.text
+	}
 
-		var result = ""
+	/// Writes this element's text into `builder`, which sees the characters of
+	/// every node in order and so can collapse whitespace across their
+	/// boundaries — something no node can do from its own text alone.
+	private func appendText(to builder: inout PlainTextBuilder) {
+		if ["script", "style", "iframe", "nav", "meta", "link", "title", "select", "input", "button", "noscript", "footer"].contains(name) {
+			return
+		}
 
 		switch name {
 		case "br":
-			result += "\n"
+			builder.appendLineBreak()
 
 		case "ul", "ol":
+			var result = ""
 			for child in children {
 				let childText = child.text().trimmingCharacters(in: .whitespacesAndNewlines)
 				guard !childText.isEmpty else { continue }
 				result += childText
 				result.ensureTwoTrailingNewlines()
 			}
+			builder.append(result)
 
 		case "li":
-			let content = children.map { $0.text() }.joined().trimmingCharacters(in: .whitespacesAndNewlines)
-			guard !content.isEmpty else {
-				return ""
+			var item = PlainTextBuilder()
+			for child in children {
+				Self.append(child, to: &item)
 			}
-			result += content
+			builder.append(item.text.trimmingCharacters(in: .whitespacesAndNewlines))
 
 		case "table":
-			let rows = collectTableRows()
-			for row in rows {
+			var result = ""
+			for row in collectTableRows() {
 				let rowText = row.text().trimmingCharacters(in: .whitespacesAndNewlines)
 				guard !rowText.isEmpty else { continue }
 				result += rowText + "\n"
 			}
+			builder.append(result)
 
 		case "tr":
 			let cells = children.map { $0.text().trimmingCharacters(in: .whitespacesAndNewlines) }
-			result += cells.filter { !$0.isEmpty }.joined(separator: " | ")
+			builder.append(cells.filter { !$0.isEmpty }.joined(separator: " | "))
 
 		default:
-			result += childText()
+			for child in children {
+				Self.append(child, to: &builder)
+			}
 		}
 
 		if isBlockLevelElement {
-			result.ensureTwoTrailingNewlines()
+			builder.endBlock()
 		}
-
-		return result
 	}
 
-	/// The children's text, with insignificant whitespace between them dropped.
-	///
-	/// A run of whitespace on its own means two different things depending on
-	/// what it separates. Between two inline siblings — `<a>x</a>\n<a>y</a>` — it
-	/// is the only thing keeping the words apart, so it collapses to a space and
-	/// stays. Against a block boundary, including a block element's own edges,
-	/// no text meets across it and it goes, the way a line box trims the start
-	/// and end of a block. An inline element's edges are not text boundaries:
-	/// `<span> </span>` may itself be the separator between surrounding words.
-	private func childText() -> String {
-		var result = ""
-		var previousNode: DOMNode?
-		for (index, child) in children.enumerated() {
-			var text = child.text()
-			guard child is DOMText, text.allSatisfy(\.isWhitespace) else {
-				if let previousNode,
-				   !previousNode.startsTextBlock, !child.startsTextBlock,
-				   trailingWhitespaceIsCollapsible(in: previousNode),
-				   leadingWhitespaceIsCollapsible(in: child),
-				   result.last?.isWhitespace == true,
-				   text.first?.isWhitespace == true {
-					text = String(text.drop(while: \.isWhitespace))
-				}
-				result += text
-				if !text.isEmpty { previousNode = child }
-				continue
-			}
-			let previous = children[..<index].last(where: separatesText)
-			let next = children[(index + 1)...].first(where: separatesText)
-			if startsTextBlock {
-				guard let previous, let next,
-				      !previous.startsTextBlock, !next.startsTextBlock else { continue }
-			} else if previous?.startsTextBlock == true || next?.startsTextBlock == true {
-				continue
-			}
-			result += text
-			previousNode = child
+	private static func append(_ node: DOMNode, to builder: inout PlainTextBuilder) {
+		if let element = node as? DOMElement {
+			element.appendText(to: &builder)
+		} else if let text = node as? DOMText, !text.preserveWhitespace {
+			builder.appendCollapsing(text.textValue)
+		} else {
+			builder.append(node.text())
 		}
-		return result
-	}
-
-	private func leadingWhitespaceIsCollapsible(in node: DOMNode) -> Bool {
-		if let text = node as? DOMText { return !text.preserveWhitespace }
-		guard let element = node as? DOMElement else { return false }
-		for child in element.children where !child.text().isEmpty {
-			return leadingWhitespaceIsCollapsible(in: child)
-		}
-		return false
-	}
-
-	private func trailingWhitespaceIsCollapsible(in node: DOMNode) -> Bool {
-		if let text = node as? DOMText { return !text.preserveWhitespace }
-		guard let element = node as? DOMElement else { return false }
-		for child in element.children.reversed() where !child.text().isEmpty {
-			return trailingWhitespaceIsCollapsible(in: child)
-		}
-		return false
-	}
-
-	/// Whether a run of whitespace beside this node could be separating text
-	/// from it. A whitespace-only text node cannot, and neither can a node that
-	/// contributes nothing at all — a `<script>`, or an empty `<span>`. A `<br>`
-	/// can: its text is a newline, but it is a boundary, not a separator.
-	private func separatesText(_ node: DOMNode) -> Bool {
-		let text = node.text()
-		if text.isEmpty { return false }
-		return !(node is DOMText && text.allSatisfy(\.isWhitespace))
 	}
 
 	/// Every stylesheet reference in this subtree, in document order: inline
@@ -232,5 +183,59 @@ public class DOMElement: DOMNode, @unchecked Sendable {
 			}
 		}
 		return rows
+	}
+}
+
+/// Plain text assembled node by node, collapsing whitespace the way a line box
+/// does.
+///
+/// A run of collapsible whitespace becomes one space even when it is spread
+/// over several nodes — `<span>Hello </span>\n<span>world</span>` — and none
+/// survives at the start of a line, before a line break, or at the end of a
+/// block. No single node can decide that from its own text, so the space is
+/// held back until the next character shows whether anything on the same line
+/// follows it.
+private struct PlainTextBuilder {
+	private(set) var text = ""
+	/// A collapsible space seen since the last character and not yet written.
+	private var pendingSpace = false
+
+	/// Appends characters as they are: preserved text, or text that was already
+	/// assembled on its own.
+	mutating func append(_ string: String) {
+		guard let first = string.first else { return }
+		if pendingSpace, !first.isWhitespace {
+			text += " "
+		}
+		pendingSpace = false
+		text += string
+	}
+
+	/// Appends text whose whitespace collapses. A run of it separates words only
+	/// once a word precedes it on the same line.
+	mutating func appendCollapsing(_ string: String) {
+		var remainder = Substring(string)
+		while !remainder.isEmpty {
+			let whitespace = remainder.prefix(while: \.isWhitespace)
+			if !whitespace.isEmpty {
+				if let last = text.last, !last.isWhitespace {
+					pendingSpace = true
+				}
+				remainder = remainder.dropFirst(whitespace.count)
+			}
+			let word = remainder.prefix { !$0.isWhitespace }
+			append(String(word))
+			remainder = remainder.dropFirst(word.count)
+		}
+	}
+
+	mutating func appendLineBreak() {
+		pendingSpace = false
+		text += "\n"
+	}
+
+	mutating func endBlock() {
+		pendingSpace = false
+		text.ensureTwoTrailingNewlines()
 	}
 }

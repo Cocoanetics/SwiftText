@@ -195,9 +195,17 @@ struct DocumentBlockExtractor {
 			}
 			let rect = item.content.boundingRegion.rect(in: pageSize)
 
-			let finalLines = combinedLines.isEmpty
+			var finalLines = combinedLines.isEmpty
 				? [DocumentBlock.TextLine(text: combinedText, bounds: rect)]
 				: combinedLines
+			// Vision's item content still begins with the marker it reports
+			// separately — `• Punkt eins`, marker `• ` — and Markdown writes a
+			// marker of its own. Only that reported marker goes, and only from
+			// the first line: anything else marker-shaped is the item's content.
+			if let first = finalLines.first,
+			   let stripped = strippingReportedMarker(first.text, reportedMarker: item.markerString) {
+				finalLines[0] = DocumentBlock.TextLine(text: stripped, bounds: first.bounds)
+			}
 
 			let finalText = finalLines.map(\.text).joined(separator: "\n")
 
