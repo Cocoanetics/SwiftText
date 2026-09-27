@@ -28,6 +28,19 @@ struct DOMMarkupConverter {
 	/// footnotes (in which case the converter behaves exactly as before).
 	var footnotes: DOMFootnoteIndex?
 
+	/// How many elements the conversion is currently nested inside.
+	private let nesting = NestingDepth()
+
+	/// How deeply conversion recurses before a subtree is flattened to its text.
+	///
+	/// Every element that is not stepped over as a transparent wrapper costs a
+	/// level of recursion, and markup nested a few hundred elements deep — a
+	/// tower that branches at every level, so no unwrapping applies — exhausts
+	/// the stack of the thread converting it. Past this depth the rest of a
+	/// subtree keeps its words and loses its structure, gathered without
+	/// recursion. Real documents stay far below it.
+	static let maximumNestingDepth = 100
+
 	/// Formatting options for `MarkupFormatter`. Most defaults already match the
 	/// previous renderer (`-` bullets, `*`/`**` emphasis, fenced code blocks,
 	/// ATX `#` headings); we additionally request incrementing ordered-list
@@ -142,10 +155,17 @@ struct DOMMarkupConverter {
 	private func blockMarkup(from node: DOMNode) -> [BlockMarkup] {
 		guard let original = node as? DOMElement else { return [] }
 		if Self.skippedTags.contains(original.name.lowercased()) { return [] }
+		guard nesting.enter() else {
+			let text = flattenedText(of: original).trimmingCharacters(in: .whitespaces)
+			return text.isEmpty ? [] : [Paragraph(Text(text))]
+		}
+		defer { nesting.leave() }
 
 		// Collapse single-child transparent wrapper chains (e.g. deeply nested
 		// div/span towers) iteratively to avoid pathological recursion depth.
-		let element = unwrapTransparent(original)
+		// Whitespace stepped over sits at the edge of a block, where it
+		// separates nothing.
+		let element = unwrapTransparent(original).element
 		let name = element.name.lowercased()
 
 		switch name {
@@ -201,11 +221,23 @@ struct DOMMarkupConverter {
 
 		guard let original = node as? DOMElement else { return [] }
 		if Self.skippedTags.contains(original.name.lowercased()) { return [] }
+		guard nesting.enter() else {
+			let text = flattenedText(of: original)
+			return text.isEmpty ? [] : [Text(text)]
+		}
+		defer { nesting.leave() }
 
-		let element = unwrapTransparent(original)
-		let name = element.name.lowercased()
+		// Whitespace at the edges of a wrapper chain can be the only thing
+		// separating its content from the text around it, so what unwrapping
+		// steps over comes back as one space on that side.
+		let unwrapped = unwrapTransparent(original)
+		let leading: [InlineMarkup] = unwrapped.leadingSpace ? [Text(" ")] : []
+		let trailing: [InlineMarkup] = unwrapped.trailingSpace ? [Text(" ")] : []
+		return leading + convertedInline(unwrapped.element) + trailing
+	}
 
-		switch name {
+	private func convertedInline(_ element: DOMElement) -> [InlineMarkup] {
+		switch element.name.lowercased() {
 		case "b", "strong":
 			return wrapInline(inlineChildren(of: element)) { Strong($0) }
 
@@ -238,7 +270,7 @@ struct DOMMarkupConverter {
 	/// leading/trailing whitespace so the markers hug the content. CommonMark
 	/// rejects `** bold **` as emphasis, so ` ` must sit outside the markers.
 	private func wrapInline(_ children: [InlineMarkup], _ make: ([InlineMarkup]) -> InlineMarkup) -> [InlineMarkup] {
-		let (leading, core, trailing) = splitOuterWhitespace(children)
+		let (leading, core, trailing) = splitOuterWhitespace(collapsingSpaces(children))
 		guard !core.isEmpty else { return leading + trailing }
 		return leading + [make(core)] + trailing
 	}
@@ -284,20 +316,25 @@ struct DOMMarkupConverter {
 			}
 		}
 
-		let content = trimInlines(inlineChildren(of: element))
+		let children = collapsingSpaces(inlineChildren(of: element))
+		let content = trimInlines(children)
+		// A space at the edge of the link text separates the link from the
+		// words around it, so it stays — outside the link — rather than going
+		// with the trim.
+		let (leading, _, trailing) = splitOuterWhitespace(children)
 
 		// Fragment links (in-page anchors, or any URL carrying a #fragment) are
 		// rendered as plain text — matches the previous renderer's behavior.
 		if href.contains("#"),
 		   let components = URLComponents(string: href),
 		   components.fragment != nil {
-			return content
+			return leading + content + trailing
 		}
 
 		guard !href.isEmpty, !content.isEmpty else {
-			return content
+			return leading + content + trailing
 		}
-		return [makeLink(destination: href, children: content)]
+		return leading + [makeLink(destination: href, children: content)] + trailing
 	}
 
 	/// `Link`'s typed initializer only accepts `RecurringInlineMarkup` children,
@@ -399,23 +436,55 @@ struct DOMMarkupConverter {
 	/// Used for code blocks and inline code, where collapsing must not happen.
 	private func rawText(of element: DOMElement) -> String {
 		var result = ""
-		appendRawText(of: element, into: &result)
+		var pending: [DOMNode] = [element]
+		while let node = pending.popLast() {
+			if let text = node as? DOMText {
+				result += text.textValue
+			} else if let element = node as? DOMElement {
+				if element.name.lowercased() == "br" {
+					result += "\n"
+				} else {
+					pending.append(contentsOf: element.children.reversed())
+				}
+			}
+		}
 		return result
 	}
 
-	private func appendRawText(of node: DOMNode, into result: inout String) {
-		if let text = node as? DOMText {
-			result += text.textValue
-			return
+	/// The words of a subtree nested too deeply to convert, gathered without
+	/// recursion. Block boundaries and line breaks separate words; a space at
+	/// either edge is kept, since it may separate the subtree from its
+	/// surroundings.
+	private func flattenedText(of element: DOMElement) -> String {
+		var raw = ""
+		// A nil entry marks the end of a block element.
+		var pending: [DOMNode?] = [element]
+		while let entry = pending.popLast() {
+			guard let node = entry else {
+				raw += " "
+				continue
+			}
+			if let text = node as? DOMText {
+				raw += text.textValue
+				continue
+			}
+			guard let child = node as? DOMElement else { continue }
+			let name = child.name.lowercased()
+			if Self.skippedTags.contains(name)
+				|| footnotes?.skip.contains(ObjectIdentifier(child)) == true {
+				continue
+			}
+			if name == "br" || Self.blockTags.contains(name) {
+				raw += " "
+				pending.append(nil)
+			}
+			pending.append(contentsOf: child.children.reversed())
 		}
-		guard let element = node as? DOMElement else { return }
-		if element.name.lowercased() == "br" {
-			result += "\n"
-			return
-		}
-		for child in element.children {
-			appendRawText(of: child, into: &result)
-		}
+		let words = raw.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+		guard !words.isEmpty else { return raw.isEmpty ? "" : " " }
+		let leading = raw.first?.isWhitespace == true ? " " : ""
+		let trailing = raw.last?.isWhitespace == true ? " " : ""
+		return leading + words + trailing
 	}
 
 	// MARK: - Text
@@ -439,11 +508,45 @@ struct DOMMarkupConverter {
 		return leading + collapsed + trailing
 	}
 
+	/// Collapses the spaces that meet across the boundaries of inline nodes.
+	///
+	/// ``collapsedText`` collapses whitespace within one text node, but a run of
+	/// it can span several — `Hello ` then `\n` then ` world`, or the space a
+	/// wrapper kept for its edge — and a browser renders the whole run as one
+	/// space. Spaces beside a line break separate nothing and go as well.
+	private func collapsingSpaces(_ inlines: [InlineMarkup]) -> [InlineMarkup] {
+		var result: [InlineMarkup] = []
+		for inline in inlines {
+			if inline is LineBreak || inline is SoftBreak {
+				if let last = result.last as? Text {
+					let stripped = String(last.string.reversed().drop { $0 == " " }.reversed())
+					if stripped.isEmpty { result.removeLast() } else { result[result.count - 1] = Text(stripped) }
+				}
+				result.append(inline)
+				continue
+			}
+			guard let text = inline as? Text else {
+				result.append(inline)
+				continue
+			}
+			var string = text.string
+			let followsSpace = (result.last as? Text)?.string.last == " "
+				|| result.last is LineBreak || result.last is SoftBreak
+			if followsSpace {
+				string = String(string.drop { $0 == " " })
+			}
+			if !string.isEmpty {
+				result.append(string == text.string ? text : Text(string))
+			}
+		}
+		return result
+	}
+
 	/// Trims leading/trailing whitespace-only inlines (and stray breaks) from a
 	/// paragraph/heading/cell's content, and strips spaces hanging off the
 	/// boundary `Text` leaves.
 	private func trimInlines(_ inlines: [InlineMarkup]) -> [InlineMarkup] {
-		var result = inlines
+		var result = collapsingSpaces(inlines)
 
 		while let first = result.first {
 			if first is SoftBreak || first is LineBreak { result.removeFirst(); continue }
@@ -619,18 +722,130 @@ struct DOMMarkupConverter {
 	/// nested div/span/font towers from HTML email) to avoid stack-overflow-depth
 	/// recursion. Stops at the innermost wrapper whose child isn't another
 	/// transparent wrapper.
-	private func unwrapTransparent(_ element: DOMElement) -> DOMElement {
-		guard element.isTransparentWrapper else { return element }
+	///
+	/// Neither the indentation of pretty-printed HTML around a wrapper's child
+	/// nor a sibling that renders nothing (an `<input>`, an empty `<span>`)
+	/// makes the wrapper branch. The whitespace can still be the only separator
+	/// between the chain's content and the text around it, so whether any was
+	/// stepped over is reported for each side, for an inline caller to keep as
+	/// a single space.
+	private func unwrapTransparent(
+		_ element: DOMElement
+	) -> (element: DOMElement, leadingSpace: Bool, trailingSpace: Bool) {
 		var current = element
+		var leadingSpace = false
+		var trailingSpace = false
 		var steps = 0
 		while steps < 10_000,
 			  current.isTransparentWrapper,
-			  current.children.count == 1,
-			  let only = current.children.first as? DOMElement,
-			  only.isTransparentWrapper {
-			current = only
+			  let step = soleTransparentChild(of: current) {
+			current = step.child
+			leadingSpace = leadingSpace || step.leadingSpace
+			trailingSpace = trailingSpace || step.trailingSpace
 			steps += 1
 		}
-		return current
+		return (current, leadingSpace, trailingSpace)
+	}
+
+	/// The one child of a wrapper that renders anything, when it is itself a
+	/// transparent wrapper, and whether whitespace lies before or after it.
+	private func soleTransparentChild(
+		of element: DOMElement
+	) -> (child: DOMElement, leadingSpace: Bool, trailingSpace: Bool)? {
+		var sole: DOMElement?
+		var leadingSpace = false
+		var trailingSpace = false
+		for child in element.children {
+			switch rendering(of: child) {
+			case .nothing:
+				continue
+			case .space:
+				if sole == nil { leadingSpace = true } else { trailingSpace = true }
+			case .content:
+				guard sole == nil,
+				      let childElement = child as? DOMElement,
+				      childElement.isTransparentWrapper else { return nil }
+				sole = childElement
+			}
+		}
+		guard let sole else { return nil }
+		return (sole, leadingSpace, trailingSpace)
+	}
+
+	private enum Rendering {
+		case nothing, space, content
+	}
+
+	/// Tags that produce output with no text inside them: a break, a rule, a
+	/// code block, a table, a list.
+	private static let rendersWithoutText: Set<String> = [
+		"br", "hr", "pre",
+		"table", "thead", "tbody", "tfoot", "tr", "td", "th",
+		"ul", "ol", "li"
+	]
+
+	/// What a node contributes to the output — nothing at all, a collapsible
+	/// space, or content — judged without converting it, by the same rules the
+	/// conversion applies.
+	///
+	/// Only a few nodes are inspected. A larger subtree counts as content,
+	/// which keeps the wrapper around it and so falls back to the ordinary
+	/// conversion rather than risk stepping over anything that renders.
+	private func rendering(of node: DOMNode) -> Rendering {
+		var result = Rendering.nothing
+		var pending = [node]
+		var budget = 32
+		while let current = pending.popLast() {
+			budget -= 1
+			guard budget >= 0 else { return .content }
+			if let text = current as? DOMText {
+				guard text.textValue.allSatisfy(\.isWhitespace) else { return .content }
+				if !text.textValue.isEmpty { result = .space }
+				continue
+			}
+			guard let element = current as? DOMElement else { continue }
+			let name = element.name.lowercased()
+			if Self.skippedTags.contains(name)
+				|| footnotes?.skip.contains(ObjectIdentifier(element)) == true {
+				continue
+			}
+			switch name {
+			case "a":
+				// A footnote reference renders its label and a backref nothing;
+				// any other anchor renders exactly its content.
+				let href = (element.attributes["href"] as? String) ?? ""
+				if let footnotes, let fragment = URLComponents(string: href)?.fragment {
+					if footnotes.labelForID[fragment] != nil { return .content }
+					if footnotes.refIDs.contains(fragment) { continue }
+				}
+			case "img":
+				if !imageInlines(element).isEmpty { return .content }
+				continue
+			case "code":
+				if !rawText(of: element).isEmpty { return .content }
+				continue
+			default:
+				if Self.rendersWithoutText.contains(name) { return .content }
+			}
+			pending.append(contentsOf: element.children)
+		}
+		return result
+	}
+}
+
+/// How deeply a conversion is nested, shared by its recursive calls, which
+/// are otherwise free of state.
+private final class NestingDepth {
+	private var depth = 0
+
+	/// Enters one more level, or returns false at the limit without entering.
+	func enter() -> Bool {
+		guard depth < DOMMarkupConverter.maximumNestingDepth else { return false }
+		depth += 1
+		return true
+	}
+
+	func leave() {
+		depth -= 1
 	}
 }

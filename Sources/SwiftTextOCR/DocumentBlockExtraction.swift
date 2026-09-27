@@ -181,15 +181,13 @@ struct DocumentBlockExtractor {
 			let combinedLines: [DocumentBlock.TextLine]
 
 			if paragraphs.isEmpty {
-				let cleaned = cleanListItemText(item.itemString, marker: item.markerString)
-				combinedText = cleaned
-				combinedLines = [DocumentBlock.TextLine(text: cleaned, bounds: item.content.boundingRegion.rect(in: pageSize))]
+				combinedText = item.itemString
+				combinedLines = [DocumentBlock.TextLine(text: item.itemString, bounds: item.content.boundingRegion.rect(in: pageSize))]
 			} else {
-				let joined = paragraphs.map(\.text).joined(separator: "\n")
-				combinedText = cleanListItemText(joined, marker: item.markerString)
+				combinedText = paragraphs.map(\.text).joined(separator: "\n")
 				let rawLines = paragraphs.flatMap(\.lines).map {
 					DocumentBlock.TextLine(
-						text: cleanListItemText($0.text, marker: item.markerString),
+						text: $0.text,
 						bounds: $0.bounds
 					)
 				}
@@ -197,9 +195,19 @@ struct DocumentBlockExtractor {
 			}
 			let rect = item.content.boundingRegion.rect(in: pageSize)
 
-			let finalLines = combinedLines.isEmpty
+			var finalLines = combinedLines.isEmpty
 				? [DocumentBlock.TextLine(text: combinedText, bounds: rect)]
 				: combinedLines
+			// Vision's item content still begins with the marker it reports
+			// separately — `• Punkt eins`, marker `• ` — and Markdown writes a
+			// marker of its own. Only that reported marker goes, or a bullet
+			// glyph spelled differently from it, and only from the first line:
+			// anything else marker-shaped is the item's content.
+			if let first = finalLines.first,
+			   let stripped = strippingReportedMarker(first.text, reportedMarker: item.markerString)
+			   ?? strippingBulletGlyph(first.text) {
+				finalLines[0] = DocumentBlock.TextLine(text: stripped, bounds: first.bounds)
+			}
 
 			let finalText = finalLines.map(\.text).joined(separator: "\n")
 
@@ -432,28 +440,6 @@ struct DocumentBlockExtractor {
 		let verticalGap = rhs.bounds.minY - lhs.bounds.maxY
 		let maxHeight = max(lhs.bounds.height, rhs.bounds.height)
 		return verticalGap <= max(maxHeight * 1.2, 12)
-	}
-
-	private func cleanListItemText(_ text: String, marker: String) -> String {
-		let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-		guard !trimmed.isEmpty else { return trimmed }
-
-		if !marker.isEmpty {
-			let escaped = NSRegularExpression.escapedPattern(for: marker)
-			let pattern = "^\(escaped)[.)\\s]*"
-			if let range = trimmed.range(of: pattern, options: .regularExpression) {
-				let cleaned = trimmed.replacingCharacters(in: range, with: "")
-				return cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
-			}
-		}
-
-		let pattern = #"^[0-9]+[.)\s]+"#
-		if let range = trimmed.range(of: pattern, options: .regularExpression) {
-			let cleaned = trimmed.replacingCharacters(in: range, with: "")
-			return cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
-		}
-
-		return trimmed
 	}
 
 	private func deduplicatedLines(_ lines: [DocumentBlock.TextLine]) -> [DocumentBlock.TextLine] {

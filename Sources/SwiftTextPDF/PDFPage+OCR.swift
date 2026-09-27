@@ -9,6 +9,11 @@ import Foundation
 import ImageIO
 import PDFKit
 import SwiftTextOCR
+#if canImport(AppKit)
+import AppKit
+#elseif canImport(UIKit)
+import UIKit
+#endif
 #if canImport(Vision)
 import Vision
 #endif
@@ -75,10 +80,16 @@ extension PDFPage {
 		let selectionsByLine = pageSelection.selectionsByLine()
 		guard !selectionsByLine.isEmpty else { return nil }
 
+		// The page's attributed string is indexed like `string`, so a fragment's
+		// range in one addresses the fonts in the other. That is where a text
+		// layer keeps the emphasis and heading sizes the plain string drops.
+		let attributed = attributedString
+
 		var fragments = [TextFragment]()
 
 		for lineSelection in selectionsByLine {
-			fragments.append(contentsOf: selectionFragments(from: lineSelection, pageHeight: pageHeight))
+			fragments.append(contentsOf: selectionFragments(
+				from: lineSelection, pageHeight: pageHeight, attributed: attributed))
 		}
 
 		return fragments.isEmpty ? nil : fragments.assembledLines(splitVerticalFragments: true)
@@ -125,7 +136,57 @@ extension PDFPage {
 		return try cgImage.performOCR(imageSize: pageBounds.size)
 	}
 
-	private func selectionFragments(from lineSelection: PDFSelection, pageHeight: CGFloat) -> [TextFragment] {
+	/// How a font found in a page's text layer is set.
+	///
+	/// A font's family carries what CSS splits across `font-weight` and
+	/// `font-style` — `Helvetica-Bold` is one family member, not Helvetica with
+	/// a weight — so the traits are read from the font rather than parsed out of
+	/// its name.
+	private static func textStyle(from value: Any?) -> TextStyle? {
+		#if canImport(AppKit)
+		guard let font = value as? NSFont else { return nil }
+		let traits = NSFontManager.shared.traits(of: font)
+		return TextStyle(
+			fontSize: font.pointSize,
+			isBold: traits.contains(.boldFontMask),
+			isItalic: traits.contains(.italicFontMask),
+			isMonospaced: font.isFixedPitch)
+		#elseif canImport(UIKit)
+		guard let font = value as? UIFont else { return nil }
+		let traits = font.fontDescriptor.symbolicTraits
+		return TextStyle(
+			fontSize: font.pointSize,
+			isBold: traits.contains(.traitBold),
+			isItalic: traits.contains(.traitItalic),
+			isMonospaced: traits.contains(.traitMonoSpace))
+		#else
+		return nil
+		#endif
+	}
+
+	/// The style runs covering `range` of the page's attributed string.
+	///
+	/// A font's family carries what CSS splits across `font-weight` and
+	/// `font-style`, so the traits are read through the font descriptor rather
+	/// than guessed from the PostScript name.
+	private func styleRuns(in range: NSRange, of attributed: NSAttributedString?) -> [StyleRun] {
+		guard let attributed, range.length > 0,
+		      NSMaxRange(range) <= attributed.length else { return [] }
+		let source = attributed.string as NSString
+		var runs: [StyleRun] = []
+		attributed.enumerateAttribute(.font, in: range) { value, runRange, _ in
+			runs.append(StyleRun(
+				text: source.substring(with: runRange),
+				style: Self.textStyle(from: value)))
+		}
+		return runs.coalesced()
+	}
+
+	private func selectionFragments(
+		from lineSelection: PDFSelection,
+		pageHeight: CGFloat,
+		attributed: NSAttributedString? = nil
+	) -> [TextFragment] {
 		guard let pageString = string, !pageString.isEmpty else {
 			return fragmentsFromFallbackSelection(lineSelection, pageHeight: pageHeight)
 		}
@@ -135,24 +196,6 @@ extension PDFPage {
 		guard rangeCount > 0 else {
 			return fragmentsFromFallbackSelection(lineSelection, pageHeight: pageHeight)
 		}
-
-#if DEBUG
-		if let lineText = lineSelection.string {
-			let debugTargets = ["CRV*BILLA DANKT 000344"]
-			if debugTargets.contains(where: { lineText.contains($0) }) {
-				let pageSize = bounds(for: .mediaBox).size
-				logCharacterBounds(for: lineSelection, sourceString: nsString, pageSize: pageSize)
-				print("Line selection \"\(lineText.trimmingCharacters(in: .whitespacesAndNewlines))\" uses \(rangeCount) ranges")
-				for rangeIndex in 0..<rangeCount {
-					let nsRange = lineSelection.range(at: rangeIndex, on: self)
-					let snippet = nsString.substring(with: nsRange)
-					let rect = lineSelection.bounds(for: self)
-					print("  range[\(rangeIndex)] \(nsRange) snippet: \(snippet)")
-					print("    bounds: \(rect)")
-				}
-			}
-		}
-#endif
 
 		let lineBounds = flippedRect(from: lineSelection.bounds(for: self), pageHeight: pageHeight)
 		var fragments = [TextFragment]()
@@ -164,7 +207,8 @@ extension PDFPage {
 					in: nsRange,
 					from: nsString,
 					pageHeight: pageHeight,
-					lineBounds: lineBounds
+					lineBounds: lineBounds,
+					attributed: attributed
 				)
 			)
 		}
@@ -180,7 +224,8 @@ extension PDFPage {
 		in range: NSRange,
 		from sourceString: NSString,
 		pageHeight: CGFloat,
-		lineBounds: CGRect
+		lineBounds: CGRect,
+		attributed: NSAttributedString? = nil
 	) -> [TextFragment] {
 		guard range.length > 0 else { return [] }
 
@@ -213,7 +258,14 @@ extension PDFPage {
 
 			let flipped = flippedRect(from: currentBounds, pageHeight: pageHeight)
 			let aligned = alignedRect(flipped, to: lineBounds)
-			result.append(TextFragment(bounds: aligned, string: trimmed))
+			// `trimmed` dropped whitespace from both ends of the raw text, so the
+			// runs are read from the range that is actually kept.
+			let leading = rawText.prefix { $0.isWhitespace }.utf16.count
+			let trimmedRange = NSRange(location: start + leading, length: trimmed.utf16.count)
+			result.append(TextFragment(
+				bounds: aligned,
+				string: trimmed,
+				styleRuns: styleRuns(in: trimmedRange, of: attributed)))
 			currentStart = nil
 			currentLength = 0
 			currentBounds = .null
@@ -320,27 +372,4 @@ extension PDFPage {
 			height: rect.height
 		)
 	}
-#if DEBUG
-	private func logCharacterBounds(for selection: PDFSelection, sourceString: NSString, pageSize: CGSize) {
-		guard pageSize.width > 0, pageSize.height > 0 else { return }
-		print("Character bounds for selection: \(selection.string ?? "")")
-		let rangeCount = selection.numberOfTextRanges(on: self)
-		for rangeIndex in 0..<rangeCount {
-			let nsRange = selection.range(at: rangeIndex, on: self)
-			for offset in 0..<nsRange.length {
-				let globalIndex = nsRange.location + offset
-				let character = sourceString.character(at: globalIndex)
-				let scalar = UnicodeScalar(character).map(String.init) ?? "?"
-				let rect = resolvedBoundsForCharacter(at: globalIndex)
-				let normalized = NormalizedRect(
-					minX: rect.minX / pageSize.width,
-					minY: rect.minY / pageSize.height,
-					width: rect.width / pageSize.width,
-					height: rect.height / pageSize.height
-				)
-				print("  char[\(globalIndex)] \(scalar) (\(character)) bounds: \(rect) normalized: \(normalized)")
-			}
-		}
-	}
-#endif
 }

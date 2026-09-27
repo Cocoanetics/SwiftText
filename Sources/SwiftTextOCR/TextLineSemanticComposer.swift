@@ -42,12 +42,20 @@ public enum TextLineSemanticComposer {
 		}
 
 		let remaining = lineInfos.filter { !assigned.contains($0.id) }
+		// Classify typography before attaching unmatched lines. A title is a
+		// structural boundary even when Vision did not provide heading metadata,
+		// and must not absorb (or be absorbed by) a nearby body line.
+		let typographyCandidates = blocks + remaining.map {
+			makeStandaloneParagraph(from: $0, referenceSize: semantics.referenceSize).block
+		}
+		let typography = DocumentTypography(blocks: typographyCandidates)
 		let appended = appendRemainingLines(
 			remaining,
 			to: &blocks,
 			metadata: &metadata,
 			layoutSize: layoutSize,
-			referenceSize: semantics.referenceSize
+			referenceSize: semantics.referenceSize,
+			typography: typography
 		)
 
 		let newParagraphs = appended.filter { !$0.assigned }.map {
@@ -66,7 +74,8 @@ public enum TextLineSemanticComposer {
 		let (mergedBlocks, _) = mergeParagraphBlocks(
 			splitBlocks,
 			metadata: splitMetadata,
-			referenceSize: semantics.referenceSize
+			referenceSize: semantics.referenceSize,
+			typography: DocumentTypography(blocks: splitBlocks)
 		)
 		return mergedBlocks
 	}
@@ -77,9 +86,14 @@ public enum TextLineSemanticComposer {
 private struct LineInfo {
 	let id: Int
 	let text: String
+	/// How `text` is set, empty when the source reports no style.
+	let runs: [StyleRun]
 	let normalizedBounds: NormalizedRect
 	let semanticBounds: CGRect
 	let actualBounds: CGRect
+	/// Where each fragment of the line sits: its characters in `text`, and its
+	/// bounds in the semantic coordinate space.
+	let fragments: [(characters: Range<Int>, bounds: CGRect)]
 }
 
 private struct BlockMetadata {
@@ -101,16 +115,37 @@ private func makeLineInfos(
 
 		let normalized = bounds.normalized(in: layoutSize)
 		let semanticBounds = normalized.scaled(to: referenceSize)
-		let text = line.combinedText.trimmingCharacters(in: .whitespacesAndNewlines)
+		let combined = line.combinedText
+		let text = combined.trimmingCharacters(in: .whitespacesAndNewlines)
 		guard !text.isEmpty else { continue }
+		// The runs cover the untrimmed text, so they are trimmed to match.
+		let runs = line.styleRuns.trimmedToMatch(text)
+
+		// Fragment offsets in `combinedText`, shifted past what trimming removed.
+		let leading = combined.prefix { $0.unicodeScalars.allSatisfy(CharacterSet.whitespacesAndNewlines.contains) }.count
+		var offset = -leading
+		var spans: [(characters: Range<Int>, bounds: CGRect)] = []
+		for (fragmentIndex, fragment) in fragments.enumerated() {
+			if fragmentIndex > 0 {
+				offset += TextLine.separator(between: fragments[fragmentIndex - 1], and: fragment).count
+			}
+			let length = fragment.string.count
+			let characters = max(offset, 0) ..< min(offset + length, text.count)
+			if !characters.isEmpty {
+				spans.append((characters, fragment.bounds.normalized(in: layoutSize).scaled(to: referenceSize)))
+			}
+			offset += length
+		}
 
 		results.append(
 			LineInfo(
 				id: index,
 				text: text,
+				runs: runs,
 				normalizedBounds: normalized,
 				semanticBounds: semanticBounds,
-				actualBounds: bounds
+				actualBounds: bounds,
+				fragments: spans
 			)
 		)
 	}
@@ -128,7 +163,7 @@ private func composeBlock(
 	let block: DocumentBlock
 	let metadataBounds: NormalizedRect
 	switch semanticBlock.block.kind {
-	case .paragraph:
+	case .paragraph(let semanticParagraph):
 		let matched = consumeLines(
 			in: normalizedBounds,
 			lineInfos: lineInfos,
@@ -140,7 +175,10 @@ private func composeBlock(
 
 		let finalLines = makeDocumentLines(from: matched)
 		let text = finalLines.map(\.text).joined(separator: "\n")
-		let updated = DocumentBlock.Paragraph(text: text, lines: finalLines)
+		let updated = DocumentBlock.Paragraph(
+			text: text,
+			lines: finalLines,
+			headingLevel: semanticParagraph.headingLevel)
 		let resolvedBounds = unionRect(
 			matched.map(\.semanticBounds),
 			fallback: semanticBlock.block.bounds
@@ -162,7 +200,25 @@ private func composeBlock(
 				lineInfos: lineInfos,
 				assigned: &assignedLines
 			)
-			let finalLines = itemMatches.isEmpty ? item.lines : makeDocumentLines(from: itemMatches)
+			// `item.lines` come from the segmenter with the marker already removed.
+			// Lines matched from the page may not: there the marker is painted
+			// text, and Markdown will add one of its own. The segmenter's reading
+			// shows whether one is there.
+			var finalLines = itemMatches.isEmpty ? item.lines : makeDocumentLines(from: itemMatches)
+			if !itemMatches.isEmpty, let first = finalLines.first {
+				let stripped = strippingListMarker(
+					first.text,
+					reportedMarker: item.markerString,
+					listMarker: list.marker,
+					segmentedContent: item.lines.first?.text)
+				if stripped != first.text {
+					let removed = String(first.text.prefix(first.text.count - stripped.count))
+					finalLines[0] = DocumentBlock.TextLine(
+						text: stripped,
+						bounds: first.bounds,
+						runs: first.runs.removingPrefix(removed))
+				}
+			}
 			let text = finalLines.map(\.text).joined(separator: "\n")
 			items.append(
 				DocumentBlock.List.Item(
@@ -178,27 +234,29 @@ private func composeBlock(
 		metadataBounds = normalizedBounds
 
 	case .table(let table):
+		// Every cell consumes the page lines it covers first. A page often sets
+		// a whole row as one line, which only one cell consumes but every cell
+		// of that row reads its style from.
+		let cellMatches = table.rows.enumerated().map { rowIndex, row in
+			row.enumerated().map { columnIndex, cell in
+				let normalizedCell = semanticBlock.tableRows.indices.contains(rowIndex) && semanticBlock.tableRows[rowIndex].indices.contains(columnIndex)
+					? semanticBlock.tableRows[rowIndex][columnIndex].normalizedBounds
+					: cell.bounds.normalized(in: referenceSize)
+				return consumeLines(in: normalizedCell, lineInfos: lineInfos, assigned: &assignedLines)
+			}
+		}
+		let tableLines = cellMatches.flatMap { $0.flatMap { $0 } }
 		var rows = [[DocumentBlock.Table.Cell]]()
 		for (rowIndex, row) in table.rows.enumerated() {
 			var newRow = [DocumentBlock.Table.Cell]()
 			for (columnIndex, cell) in row.enumerated() {
-				let normalizedCell = semanticBlock.tableRows.indices.contains(rowIndex) && semanticBlock.tableRows[rowIndex].indices.contains(columnIndex)
-					? semanticBlock.tableRows[rowIndex][columnIndex].normalizedBounds
-					: cell.bounds.normalized(in: referenceSize)
-				let cellMatches = consumeLines(
-					in: normalizedCell,
-					lineInfos: lineInfos,
-					assigned: &assignedLines
-				)
-				let matchedLines = makeDocumentLines(from: cellMatches)
 				var finalLines = cell.lines
-				if finalLines.isEmpty {
-					if !cell.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-						finalLines = [DocumentBlock.TextLine(text: cell.text, bounds: cell.bounds)]
-					} else {
-						finalLines = matchedLines
-					}
+				if finalLines.isEmpty, !cell.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+					finalLines = [DocumentBlock.TextLine(text: cell.text, bounds: cell.bounds)]
 				}
+				finalLines = finalLines.isEmpty
+					? makeDocumentLines(from: cellMatches[rowIndex][columnIndex])
+					: styled(finalLines, from: tableLines)
 				let text = cell.text.isEmpty ? finalLines.map(\.text).joined(separator: "\n") : cell.text
 				newRow.append(
 					DocumentBlock.Table.Cell(
@@ -244,11 +302,13 @@ private func unionNormalizedRect(_ rects: [NormalizedRect], fallback: Normalized
 private func mergeParagraphBlocks(
 	_ blocks: [DocumentBlock],
 	metadata: [BlockMetadata],
-	referenceSize: CGSize
+	referenceSize: CGSize,
+	typography: DocumentTypography
 ) -> ([DocumentBlock], [BlockMetadata]) {
 	guard !blocks.isEmpty else { return (blocks, metadata) }
 	var mergedBlocks: [DocumentBlock] = []
 	var mergedMetadata: [BlockMetadata] = []
+	let columns = TextColumns(blocks: blocks, tolerance: max(referenceSize.width * 0.015, 4))
 
 	for (block, meta) in zip(blocks, metadata) {
 		guard case .paragraph(let currentParagraph) = block.kind else {
@@ -266,12 +326,18 @@ private func mergeParagraphBlocks(
 			current: currentParagraph,
 			currentBounds: block.bounds,
 			currentMetadata: meta,
-			referenceSize: referenceSize
+			referenceSize: referenceSize,
+			typography: typography,
+			columns: columns
 		   ) {
 			let combinedLines = previousParagraph.lines + currentParagraph.lines
 			let combinedText = combinedLines.map(\.text).joined(separator: "\n")
 			let combinedBounds = mergedBlocks[lastIndex].bounds.union(block.bounds)
-			let mergedParagraph = DocumentBlock(bounds: combinedBounds, kind: .paragraph(.init(text: combinedText, lines: combinedLines)))
+			let merged = DocumentBlock.Paragraph(
+				text: combinedText,
+				lines: combinedLines,
+				headingLevel: previousParagraph.headingLevel ?? currentParagraph.headingLevel)
+			let mergedParagraph = DocumentBlock(bounds: combinedBounds, kind: .paragraph(merged))
 			mergedBlocks[lastIndex] = mergedParagraph
 
 			let newNormalized = mergedMetadata[lastIndex].normalizedBounds.union(meta.normalizedBounds)
@@ -363,8 +429,11 @@ private func splitParagraphSegment(
 		}
 		let bounds = unionRect.isNull ? referenceBounds : unionRect
 		let text = segment.map(\.text).joined(separator: "\n")
-		let paragraph = DocumentBlock.Paragraph(text: text, lines: segment)
-		let block = DocumentBlock(bounds: bounds, kind: .paragraph(paragraph))
+		let splitParagraph = DocumentBlock.Paragraph(
+			text: text,
+			lines: segment,
+			headingLevel: paragraph.headingLevel)
+		let block = DocumentBlock(bounds: bounds, kind: .paragraph(splitParagraph))
 		let normalized = bounds.normalized(in: referenceSize)
 		return (block, BlockMetadata(normalizedBounds: normalized))
 	}
@@ -377,9 +446,11 @@ private func shouldMergeParagraphs(
 	current: DocumentBlock.Paragraph,
 	currentBounds: CGRect,
 	currentMetadata: BlockMetadata,
-	referenceSize: CGSize
+	referenceSize: CGSize,
+	typography: DocumentTypography,
+	columns: TextColumns
 ) -> Bool {
-	if shouldPreventMerge(previous: previous, current: current) {
+	if shouldPreventMerge(previous: previous, current: current, typography: typography, columns: columns) {
 		return false
 	}
 
@@ -406,8 +477,16 @@ private func shouldMergeParagraphs(
 
 private func shouldPreventMerge(
 	previous: DocumentBlock.Paragraph,
-	current: DocumentBlock.Paragraph
+	current: DocumentBlock.Paragraph,
+	typography: DocumentTypography,
+	columns: TextColumns
 ) -> Bool {
+	// A heading is a structural boundary, not a geometric paragraph
+	// continuation. Infer it here, before a merge can mix its runs with body
+	// text and erase the typography that identifies it.
+	if typography.isHeadingBoundary(between: previous, and: current, columns: columns) {
+		return true
+	}
 	let candidates = [previous.text, current.text]
 	return candidates.contains { text in
 		let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -456,9 +535,47 @@ private func consumeLines(
 	}
 }
 
+/// `lines` with the style runs the page sets them in, taken from the page
+/// lines that pass through them — so a table's text counts toward the
+/// document's body size like any other text.
+///
+/// A page often sets a whole table row as one line, and the same text can
+/// stand in several of its cells, so a cell's part of such a line is found by
+/// where its fragments lie, not by what they say; what they say only has to
+/// agree. Lines stay unstyled unless every one of them is found.
+private func styled(
+	_ lines: [DocumentBlock.TextLine],
+	from pageLines: [LineInfo]
+) -> [DocumentBlock.TextLine] {
+	var result: [DocumentBlock.TextLine] = []
+	for line in lines {
+		guard let styled = pageLines.lazy.compactMap({ $0.part(within: line) }).first else { return lines }
+		result.append(styled)
+	}
+	return result
+}
+
+private extension LineInfo {
+	/// The part of this line whose fragments lie within `line`'s bounds, with
+	/// its style runs, provided it reads as `line` does.
+	func part(within line: DocumentBlock.TextLine) -> DocumentBlock.TextLine? {
+		guard !runs.isEmpty,
+		      semanticBounds.minY < line.bounds.maxY, semanticBounds.maxY > line.bounds.minY
+		else { return nil }
+		let inside = fragments.filter { $0.bounds.midX >= line.bounds.minX && $0.bounds.midX <= line.bounds.maxX }
+		guard let first = inside.first, let last = inside.last else { return nil }
+		let sliced = runs.slice(first.characters.lowerBound ..< last.characters.upperBound)
+		let partRuns = sliced.trimmedToMatch(sliced.text.trimmingCharacters(in: .whitespacesAndNewlines))
+		guard !partRuns.isEmpty,
+		      partRuns.text.split(whereSeparator: \.isWhitespace) == line.text.split(whereSeparator: \.isWhitespace)
+		else { return nil }
+		return DocumentBlock.TextLine(runs: partRuns, bounds: line.bounds)
+	}
+}
+
 private func makeDocumentLines(from infos: [LineInfo]) -> [DocumentBlock.TextLine] {
 	infos.map { info in
-		DocumentBlock.TextLine(text: info.text, bounds: info.semanticBounds)
+		DocumentBlock.TextLine(text: info.text, bounds: info.semanticBounds, runs: info.runs)
 	}
 }
 
@@ -472,7 +589,8 @@ private func appendRemainingLines(
 	to blocks: inout [DocumentBlock],
 	metadata: inout [BlockMetadata],
 	layoutSize: CGSize,
-	referenceSize: CGSize
+	referenceSize: CGSize,
+	typography: DocumentTypography
 ) -> [RemainingLine] {
 	guard !remaining.isEmpty else { return [] }
 
@@ -480,8 +598,16 @@ private func appendRemainingLines(
 
 	for index in leftovers.indices {
 		let line = leftovers[index].info
+		let lineParagraph = DocumentBlock.Paragraph(
+			text: line.text,
+			lines: [DocumentBlock.TextLine(
+				text: line.text,
+				bounds: line.semanticBounds,
+				runs: line.runs)])
+		guard typography.headingLevel(for: lineParagraph) == nil else { continue }
 		let candidates = blocks.enumerated().compactMap { idx, block -> (Int, CGRect)? in
-			guard case .paragraph = block.kind else { return nil }
+			guard case .paragraph(let paragraph) = block.kind,
+			      typography.headingLevel(for: paragraph) == nil else { return nil }
 			let normalized = metadata[idx].normalizedBounds
 			let rect = normalized.scaled(to: layoutSize)
 			guard rect.maxY <= line.actualBounds.minY + line.actualBounds.height else { return nil }
@@ -515,11 +641,18 @@ private func append(
 ) {
 	guard case .paragraph(let paragraph) = blocks[index].kind else { return }
 	var newLines = paragraph.lines
-	newLines.append(DocumentBlock.TextLine(text: line.text, bounds: line.semanticBounds))
+	newLines.append(DocumentBlock.TextLine(
+		text: line.text,
+		bounds: line.semanticBounds,
+		runs: line.runs))
 	let text = newLines.map(\.text).joined(separator: "\n")
 	let normalizedUnion = metadata[index].normalizedBounds.union(line.normalizedBounds)
 	let updatedBounds = normalizedUnion.scaled(to: referenceSize)
-	let updated = DocumentBlock(bounds: updatedBounds, kind: .paragraph(.init(text: text, lines: newLines)))
+	let updatedParagraph = DocumentBlock.Paragraph(
+		text: text,
+		lines: newLines,
+		headingLevel: paragraph.headingLevel)
+	let updated = DocumentBlock(bounds: updatedBounds, kind: .paragraph(updatedParagraph))
 	blocks[index] = updated
 	metadata[index].normalizedBounds = normalizedUnion
 }
@@ -530,7 +663,10 @@ private func makeStandaloneParagraph(
 ) -> (block: DocumentBlock, metadata: BlockMetadata) {
 	let normalized = line.normalizedBounds
 	let bounds = normalized.scaled(to: referenceSize)
-	let docLine = DocumentBlock.TextLine(text: line.text, bounds: line.semanticBounds)
+	let docLine = DocumentBlock.TextLine(
+		text: line.text,
+		bounds: line.semanticBounds,
+		runs: line.runs)
 	let paragraph = DocumentBlock.Paragraph(text: line.text, lines: [docLine])
 	let block = DocumentBlock(bounds: bounds, kind: .paragraph(paragraph))
 	let meta = BlockMetadata(normalizedBounds: normalized)

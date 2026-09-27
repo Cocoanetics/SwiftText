@@ -35,6 +35,25 @@ struct HTMLCoreElementConversionTests {
 		#expect(try await markdown("<p>This is <em>very </em>important.</p>") == "This is *very* important.")
 	}
 
+	/// A run of whitespace spread over several nodes is still one run, and
+	/// renders as one space; beside a line break it separates nothing.
+	@Test(arguments: [
+		("<div><span>Hello </span>\n<span>world</span></div>", "Hello world"),
+		("<p>Hello<span> </span><span> </span>world</p>", "Hello world"),
+		("<p>Hello <b> bold </b> world</p>", "Hello **bold** world"),
+		("<p>line one <br>\nline two</p>", "line one  \nline two")
+	])
+	func whitespaceAcrossInlineBoundariesCollapsesOnce(_ testCase: (html: String, expected: String)) async throws {
+		#expect(try await markdown(testCase.html) == testCase.expected)
+	}
+
+	/// A link's text is trimmed, but a space at its edge still separates the
+	/// link from the words around it.
+	@Test func linkEdgeWhitespaceStaysOutsideTheLink() async throws {
+		let html = "<p>Visit<a href=\"https://example.org\"> here </a>now</p>"
+		#expect(try await markdown(html) == "Visit [here](https://example.org) now")
+	}
+
 	@Test func strikethroughVariants() async throws {
 		#expect(try await markdown("<p><del>d</del> <s>s</s> <strike>k</strike></p>") == "~d~ ~s~ ~k~")
 	}

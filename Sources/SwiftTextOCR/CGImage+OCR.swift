@@ -189,9 +189,6 @@ private extension CGImage {
 		}
 
 		guard gapMidpoints.count >= requiredGaps else {
-#if DEBUG
-			print("Skipping split for \"\(fragment.string)\" — tokens \(tokens.count) gaps \(gapMidpoints.count)")
-#endif
 			return [fragment]
 		}
 
@@ -246,10 +243,6 @@ private extension CGImage {
 		if result.isEmpty {
 			return [fragment]
 		}
-
-#if DEBUG
-		print("Split OCR fragment \"\(fragment.string)\" into \(result.map(\.string))")
-#endif
 
 		return result
 	}

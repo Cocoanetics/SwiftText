@@ -183,6 +183,13 @@ public struct NormalizedDocumentBlock {
 }
 
 #if canImport(Vision)
+/// The document structure of an image as the segmenter reads it.
+///
+/// - Parameter applyPostProcessing: Whether to merge, split and deduplicate the
+///   segmenter's blocks by geometry alone. Pass `false` when the blocks will be
+///   reconciled with the page's styled text layer (``TextLineSemanticComposer``):
+///   geometry-only merging can join a heading to nearby body text before its
+///   typography is known, leaving a boundary the composer cannot recover.
 @available(iOS 26.0, tvOS 26.0, macOS 26.0, visionOS 26.0, *)
 public func documentSemantics(from cgImage: CGImage, applyPostProcessing: Bool = true) async throws -> DocumentSemantics {
 	let referenceSize = CGSize(width: CGFloat(cgImage.width), height: CGFloat(cgImage.height))
