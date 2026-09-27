@@ -48,10 +48,15 @@ func strippingListMarker(
 		.compactMap { trimmed.removingPrefix(matching: $0) }
 		.first
 
-	if let content = segmentedContent.flatMap(ContentOpening.init) {
-		if content.begins(trimmed) { return trimmed }
-		for candidate in [withoutReported, withoutFamilyMarker] {
-			if let candidate, content.begins(candidate) { return candidate }
+	if let content = segmentedContent.flatMap(SegmentedReading.init) {
+		// The line as it stands, then without each possible marker. One that
+		// reads exactly as the segmenter's content settles it; failing that —
+		// the two readers can break the line differently — one whose opening
+		// agrees with the content's.
+		let candidates = [trimmed, withoutReported, withoutFamilyMarker].compactMap { $0 }
+		if let match = candidates.first(where: content.isRead(exactlyBy:))
+			?? candidates.first(where: content.opens) {
+			return match
 		}
 	}
 	return withoutReported ?? withoutFamilyMarker ?? trimmed
@@ -151,21 +156,31 @@ func strippingBulletGlyph(_ text: String) -> String? {
 	text.trimmingCharacters(in: .whitespacesAndNewlines).removingPrefix(matching: bulletGlyphPattern)
 }
 
-/// The opening of an item's content as the segmenter read it, compared with
-/// another reading of the same line the way two readers of one page can agree:
-/// ignoring case, diacritics, compatibility forms and whitespace, over the first
-/// few characters — which are what a marker would stand in front of.
-private struct ContentOpening {
-	private let key: String
+/// An item's content as the segmenter read it, compared with another reading
+/// of the same line the way two readers of one page can agree: ignoring case,
+/// diacritics, compatibility forms and whitespace.
+private struct SegmentedReading {
+	private let content: String
 
 	init?(_ content: String) {
-		let key = String(Self.normalized(content).prefix(12))
-		guard key.count >= 3 else { return nil }
-		self.key = key
+		let normalized = Self.normalized(content)
+		guard !normalized.isEmpty else { return nil }
+		self.content = normalized
 	}
 
-	func begins(_ text: String) -> Bool {
-		Self.normalized(text).hasPrefix(key)
+	/// Whether `text` reads as exactly this content — however short, since two
+	/// whole readings of the same line either agree or do not.
+	func isRead(exactlyBy text: String) -> Bool {
+		Self.normalized(text) == content
+	}
+
+	/// Whether `text` and this content open alike, over the first few
+	/// characters of whichever is shorter — the part a marker would stand in
+	/// front of. Too few characters to compare prove nothing.
+	func opens(_ text: String) -> Bool {
+		let normalized = Self.normalized(text)
+		let length = min(normalized.count, content.count, 12)
+		return length >= 3 && normalized.prefix(length) == content.prefix(length)
 	}
 
 	private static func normalized(_ text: String) -> String {

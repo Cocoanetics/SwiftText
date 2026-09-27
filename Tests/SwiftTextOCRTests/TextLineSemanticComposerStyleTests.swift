@@ -175,6 +175,78 @@ struct TextLineSemanticComposerStyleTests {
 		#expect(!markdown.contains("# Important information"))
 	}
 
+	/// With no wrapped line to show the column's width, a heading wider than
+	/// the sentence below it proves nothing about wrapping. A capitalised next
+	/// line then reads as a new sentence, and the heading stays.
+	@Test("A bold heading wider than the bold sentence below it stays a heading")
+	func boldHeadingWiderThanTheSentenceBelow() {
+		let lines = [
+			textLine("Important", bounds: CGRect(x: 50, y: 100, width: 80, height: 20), size: 11, bold: true),
+			textLine("Be safe.", bounds: CGRect(x: 50, y: 121, width: 60, height: 20), size: 11, bold: true)
+		]
+		#expect(composedMarkdown(lines, paragraphs: [[0], [1]]).contains("# Important\n\n**Be safe.**"))
+	}
+
+	/// A full-width passage shares the left column's edge and wrapped too, but
+	/// the left column's own wrapped lines show it is narrower. A split bold
+	/// paragraph in it is rejoined, even with nothing standing beside it and a
+	/// next line that starts with a capital.
+	@Test("A column is the narrowest one holding the line, not a wider passage above it")
+	func narrowestColumnHoldsTheLine() {
+		let lines = [
+			textLine(
+				"A full-width abstract that spans both of the columns below it and",
+				bounds: CGRect(x: 50, y: 20, width: 500, height: 20), size: 11),
+			textLine("wraps onto a second line.", bounds: CGRect(x: 50, y: 41, width: 150, height: 20), size: 11),
+			textLine("Body text in the left column that", bounds: CGRect(x: 50, y: 100, width: 200, height: 20), size: 11),
+			textLine("wraps onto a second line.", bounds: CGRect(x: 50, y: 121, width: 140, height: 20), size: 11),
+			textLine("Text of the right column beside", bounds: CGRect(x: 320, y: 100, width: 200, height: 20), size: 11),
+			textLine("the left one, ending early.", bounds: CGRect(x: 320, y: 121, width: 160, height: 20), size: 11),
+			textLine(
+				"Wichtige Informationen für", bounds: CGRect(x: 50, y: 200, width: 190, height: 20), size: 11, bold: true),
+			textLine("Kunden in Deutschland.", bounds: CGRect(x: 50, y: 221, width: 170, height: 20), size: 11, bold: true)
+		]
+		let markdown = composedMarkdown(lines, paragraphs: [[0, 1], [2, 3], [4, 5], [6], [7]])
+
+		#expect(markdown.contains("**Wichtige Informationen für Kunden in Deutschland.**"))
+		#expect(!markdown.contains("# Wichtige"))
+	}
+
+	/// One page line can run across a row whose cells say the same thing in
+	/// different sizes. Each cell takes the style of the part lying within it.
+	@Test("Table cells take the style of their own part of a row line")
+	func tableCellsTakeTheirOwnPartOfARowLine() throws {
+		let left = CGRect(x: 50, y: 100, width: 20, height: 20)
+		let right = CGRect(x: 250, y: 100, width: 20, height: 20)
+		let rowLine = TextLine(fragments: [
+			TextFragment(bounds: left, string: "X", styleRuns: [StyleRun(text: "X", style: TextStyle(fontSize: 16))]),
+			TextFragment(bounds: right, string: "X", styleRuns: [StyleRun(text: "X", style: TextStyle(fontSize: 11))])
+		])
+		let cells = [(left, 0), (right, 1)].map { bounds, column in
+			DocumentBlock.Table.Cell(
+				rowRange: 0...0, columnRange: column...column, text: "X", bounds: bounds,
+				lines: [DocumentBlock.TextLine(text: "X", bounds: bounds)])
+		}
+		let tableBounds = CGRect(x: 50, y: 100, width: 220, height: 20)
+		let table = DocumentBlock(bounds: tableBounds, kind: .table(.init(rows: [cells])))
+		let semantics = DocumentSemantics(
+			referenceSize: pageSize,
+			blocks: [NormalizedDocumentBlock(
+				block: table,
+				normalizedBounds: normalized(tableBounds),
+				tableRows: [cells.map { .init(normalizedBounds: normalized($0.bounds), cell: $0) }])],
+			images: [])
+
+		let blocks = TextLineSemanticComposer.composeBlocks(
+			from: [rowLine], semantics: semantics, layoutSize: pageSize)
+		let sizes = blocks.flatMap { block -> [CGFloat?] in
+			guard case .table(let table) = block.kind else { return [] }
+			return table.rows.flatMap { $0.map { $0.lines.first?.runs.first?.style?.fontSize } }
+		}
+
+		#expect(sizes == [16, 11])
+	}
+
 	/// On a title-plus-table page the table is the running text. Its cells take
 	/// the page's own lines, and with them the size they are set at.
 	@Test("Table text counts toward the body size")

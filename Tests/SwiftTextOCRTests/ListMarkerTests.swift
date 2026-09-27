@@ -89,7 +89,9 @@ struct ListMarkerTests {
 		("1. Introduction", "1. Introduction", "1.", .decimal, "1. Introduction"),
 		("1. 1. Introduction", "1. Introduction", "1.", .decimal, "1. Introduction"),
 		("• Punkt eins", "Punkt eins", "•", .bullet, "Punkt eins"),
-		("• geprüft wird", "gepruft wird", "•", .bullet, "geprüft wird")
+		("• geprüft wird", "gepruft wird", "•", .bullet, "geprüft wird"),
+		("1 X", "1 X", "1", .decimal, "1 X"),
+		("1 1 X", "1 X", "1", .decimal, "1 X")
 	])
 	func segmentedReadingDecides(
 		_ testCase: (text: String, segmented: String, reported: String, marker: DocumentBlock.List.Marker, expected: String)

@@ -263,7 +263,8 @@ struct OCR: AsyncParsableCommand {
 
 		for pageIndex in 0..<document.pageCount {
 			guard let page = document.page(at: pageIndex) else { continue }
-			let semantics = try await page.documentSemantics(dpi: 300)
+			// The composer reconciles the blocks with the text layer itself.
+			let semantics = try await page.documentSemantics(dpi: 300, applyPostProcessing: false)
 			let layoutSize = page.bounds(for: .mediaBox).size
 			let lines = page.textLines()
 			let grouped = TextLineSemanticComposer.composeBlocks(
@@ -284,7 +285,7 @@ struct OCR: AsyncParsableCommand {
 
 	@available(iOS 26.0, tvOS 26.0, macOS 26.0, visionOS 26.0, *)
 	private func semanticMarkdownBlocks(for cgImage: CGImage, pageSize: CGSize, textLines: [TextLine]) async throws -> ([DocumentBlock], ImageLookup) {
-		let semantics = try await documentSemantics(from: cgImage)
+		let semantics = try await documentSemantics(from: cgImage, applyPostProcessing: false)
 		let grouped = TextLineSemanticComposer.composeBlocks(
 			from: textLines,
 			semantics: semantics,
@@ -551,7 +552,8 @@ struct HTML: AsyncParsableCommand {
 
 		for pageIndex in 0..<document.pageCount {
 			guard let page = document.page(at: pageIndex) else { continue }
-			let semantics = try await page.documentSemantics(dpi: 300)
+			// The composer reconciles the blocks with the text layer itself.
+			let semantics = try await page.documentSemantics(dpi: 300, applyPostProcessing: false)
 			let layoutSize = page.bounds(for: .mediaBox).size
 			let lines = page.textLines()
 			let grouped = TextLineSemanticComposer.composeBlocks(
@@ -984,7 +986,7 @@ private struct ImageLookup {
 @available(iOS 26.0, tvOS 26.0, macOS 26.0, visionOS 26.0, *)
 private extension Overlay {
 	func reconstructedBlocks(for image: CGImage, textLines: [TextLine]) async throws -> [DocumentBlock] {
-		let semantics = try await documentSemantics(from: image)
+		let semantics = try await documentSemantics(from: image, applyPostProcessing: false)
 		let layoutSize = CGSize(width: CGFloat(image.width), height: CGFloat(image.height))
 		return TextLineSemanticComposer.composeBlocks(
 			from: textLines,

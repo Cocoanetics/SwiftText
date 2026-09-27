@@ -183,8 +183,15 @@ public struct NormalizedDocumentBlock {
 }
 
 #if canImport(Vision)
+/// The document structure of an image as the segmenter reads it.
+///
+/// - Parameter applyPostProcessing: Whether to merge, split and deduplicate the
+///   segmenter's blocks by geometry alone. Pass `false` when the blocks will be
+///   reconciled with the page's styled text layer (``TextLineSemanticComposer``):
+///   geometry-only merging can join a heading to nearby body text before its
+///   typography is known, leaving a boundary the composer cannot recover.
 @available(iOS 26.0, tvOS 26.0, macOS 26.0, visionOS 26.0, *)
-public func documentSemantics(from cgImage: CGImage, applyPostProcessing: Bool = false) async throws -> DocumentSemantics {
+public func documentSemantics(from cgImage: CGImage, applyPostProcessing: Bool = true) async throws -> DocumentSemantics {
 	let referenceSize = CGSize(width: CGFloat(cgImage.width), height: CGFloat(cgImage.height))
 	let request = RecognizeDocumentsRequest()
 	let observations = try await request.perform(on: cgImage, orientation: nil)
@@ -193,10 +200,6 @@ public func documentSemantics(from cgImage: CGImage, applyPostProcessing: Bool =
 		throw DocumentScannerError.unrecognizedDocument
 	}
 
-	// Semantic blocks are reconciled with the page's styled text layer later.
-	// Geometry-only paragraph merging here can combine a heading with nearby
-	// body text before that typography is available, making the boundary
-	// impossible for the composer to recover reliably.
 	let extractor = DocumentBlockExtractor(image: cgImage, pageSize: referenceSize, allowStandaloneSupplementation: false)
 	let (blocks, images) = try extractor.extractBlocksWithImages(from: document, applyPostProcessing: applyPostProcessing)
 	let normalized = normalize(blocks: blocks, referenceSize: referenceSize)

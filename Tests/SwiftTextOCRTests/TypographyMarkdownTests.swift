@@ -219,6 +219,19 @@ struct TypographyMarkdownTests {
 		#expect(markdown.contains("# Safety\n\n**Wear gloves.**"))
 	}
 
+	@Test("The renderer keeps a bold heading wider than the sentence below it")
+	func rendererKeepsAWideBoldHeading() {
+		let heading = CGRect(x: 0, y: 100, width: 80, height: 20)
+		let sentence = CGRect(x: 0, y: 121, width: 60, height: 20)
+		let markdown = render([
+			DocumentBlock(bounds: heading, kind: .paragraph(.init(
+				text: "", lines: [.init(runs: [run("Important", size: 11, bold: true)], bounds: heading)]))),
+			DocumentBlock(bounds: sentence, kind: .paragraph(.init(
+				text: "", lines: [.init(runs: [run("Be safe.", size: 11, bold: true)], bounds: sentence)])))
+		])
+		#expect(markdown.contains("# Important\n\n**Be safe.**"))
+	}
+
 	/// On a title-plus-table page the table is the running text, so its size is
 	/// the body size and the larger title is a heading.
 	@Test("Table text counts toward the body size")

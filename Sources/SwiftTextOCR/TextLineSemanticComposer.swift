@@ -91,6 +91,9 @@ private struct LineInfo {
 	let normalizedBounds: NormalizedRect
 	let semanticBounds: CGRect
 	let actualBounds: CGRect
+	/// Where each fragment of the line sits: its characters in `text`, and its
+	/// bounds in the semantic coordinate space.
+	let fragments: [(characters: Range<Int>, bounds: CGRect)]
 }
 
 private struct BlockMetadata {
@@ -112,10 +115,27 @@ private func makeLineInfos(
 
 		let normalized = bounds.normalized(in: layoutSize)
 		let semanticBounds = normalized.scaled(to: referenceSize)
-		let text = line.combinedText.trimmingCharacters(in: .whitespacesAndNewlines)
+		let combined = line.combinedText
+		let text = combined.trimmingCharacters(in: .whitespacesAndNewlines)
 		guard !text.isEmpty else { continue }
 		// The runs cover the untrimmed text, so they are trimmed to match.
 		let runs = line.styleRuns.trimmedToMatch(text)
+
+		// Fragment offsets in `combinedText`, shifted past what trimming removed.
+		let leading = combined.prefix { $0.unicodeScalars.allSatisfy(CharacterSet.whitespacesAndNewlines.contains) }.count
+		var offset = -leading
+		var spans: [(characters: Range<Int>, bounds: CGRect)] = []
+		for (fragmentIndex, fragment) in fragments.enumerated() {
+			if fragmentIndex > 0 {
+				offset += TextLine.separator(between: fragments[fragmentIndex - 1], and: fragment).count
+			}
+			let length = fragment.string.count
+			let characters = max(offset, 0) ..< min(offset + length, text.count)
+			if !characters.isEmpty {
+				spans.append((characters, fragment.bounds.normalized(in: layoutSize).scaled(to: referenceSize)))
+			}
+			offset += length
+		}
 
 		results.append(
 			LineInfo(
@@ -124,7 +144,8 @@ private func makeLineInfos(
 				runs: runs,
 				normalizedBounds: normalized,
 				semanticBounds: semanticBounds,
-				actualBounds: bounds
+				actualBounds: bounds,
+				fragments: spans
 			)
 		)
 	}
@@ -224,7 +245,7 @@ private func composeBlock(
 				return consumeLines(in: normalizedCell, lineInfos: lineInfos, assigned: &assignedLines)
 			}
 		}
-		let tableLines = makeDocumentLines(from: cellMatches.flatMap { $0.flatMap { $0 } })
+		let tableLines = cellMatches.flatMap { $0.flatMap { $0 } }
 		var rows = [[DocumentBlock.Table.Cell]]()
 		for (rowIndex, row) in table.rows.enumerated() {
 			var newRow = [DocumentBlock.Table.Cell]()
@@ -515,25 +536,41 @@ private func consumeLines(
 }
 
 /// `lines` with the style runs the page sets them in, taken from the page
-/// lines that contain their text — so a table's text counts toward the
-/// document's body size like any other text. The page sets each line of a
-/// cell somewhere beside it, often within a line that runs across the whole
-/// row. Lines stay unstyled unless every one of them is found.
+/// lines that pass through them — so a table's text counts toward the
+/// document's body size like any other text.
+///
+/// A page often sets a whole table row as one line, and the same text can
+/// stand in several of its cells, so a cell's part of such a line is found by
+/// where its fragments lie, not by what they say; what they say only has to
+/// agree. Lines stay unstyled unless every one of them is found.
 private func styled(
 	_ lines: [DocumentBlock.TextLine],
-	from pageLines: [DocumentBlock.TextLine]
+	from pageLines: [LineInfo]
 ) -> [DocumentBlock.TextLine] {
 	var result: [DocumentBlock.TextLine] = []
 	for line in lines {
-		let text = line.text.trimmingCharacters(in: .whitespacesAndNewlines)
-		let runs = pageLines.lazy
-			.filter { $0.bounds.minY < line.bounds.maxY && $0.bounds.maxY > line.bounds.minY }
-			.compactMap { $0.runs(setting: text) }
-			.first
-		guard !text.isEmpty, let runs else { return lines }
-		result.append(DocumentBlock.TextLine(text: text, bounds: line.bounds, runs: runs))
+		guard let styled = pageLines.lazy.compactMap({ $0.part(within: line) }).first else { return lines }
+		result.append(styled)
 	}
 	return result
+}
+
+private extension LineInfo {
+	/// The part of this line whose fragments lie within `line`'s bounds, with
+	/// its style runs, provided it reads as `line` does.
+	func part(within line: DocumentBlock.TextLine) -> DocumentBlock.TextLine? {
+		guard !runs.isEmpty,
+		      semanticBounds.minY < line.bounds.maxY, semanticBounds.maxY > line.bounds.minY
+		else { return nil }
+		let inside = fragments.filter { $0.bounds.midX >= line.bounds.minX && $0.bounds.midX <= line.bounds.maxX }
+		guard let first = inside.first, let last = inside.last else { return nil }
+		let sliced = runs.slice(first.characters.lowerBound ..< last.characters.upperBound)
+		let partRuns = sliced.trimmedToMatch(sliced.text.trimmingCharacters(in: .whitespacesAndNewlines))
+		guard !partRuns.isEmpty,
+		      partRuns.text.split(whereSeparator: \.isWhitespace) == line.text.split(whereSeparator: \.isWhitespace)
+		else { return nil }
+		return DocumentBlock.TextLine(runs: partRuns, bounds: line.bounds)
+	}
 }
 
 private func makeDocumentLines(from infos: [LineInfo]) -> [DocumentBlock.TextLine] {
