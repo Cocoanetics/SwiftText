@@ -174,7 +174,7 @@ extension OpenTypeFont {
 		return OpenTypeSubset(data: Data(Self.sfnt(tables: subsetTables)), glyphMapping: mapping)
 	}
 
-	private func tableBytes(_ record: (offset: Int, length: Int)) throws -> [UInt8] {
+	func tableBytes(_ record: (offset: Int, length: Int)) throws -> [UInt8] {
 		guard record.offset >= 0, record.length >= 0,
 		      record.offset + record.length <= fonts.count else {
 			throw OpenTypeError.truncated(offset: record.offset)
@@ -182,7 +182,7 @@ extension OpenTypeFont {
 		return Array(fonts.bytes[record.offset ..< record.offset + record.length])
 	}
 
-	private static func cmap(glyphs: [Int: Unicode.Scalar], mapping: [Int: Int]) -> [UInt8] {
+	static func cmap(glyphs: [Int: Unicode.Scalar], mapping: [Int: Int]) -> [UInt8] {
 		var scalarMap: [UInt32: Int] = [:]
 		for (oldGlyph, scalar) in glyphs where oldGlyph != 0 {
 			if let newGlyph = mapping[oldGlyph] { scalarMap[scalar.value] = newGlyph }
@@ -224,7 +224,9 @@ extension OpenTypeFont {
 		return result
 	}
 
-	private static func sfnt(tables: [String: [UInt8]]) -> [UInt8] {
+	/// Serialize `tables` as a standalone sfnt. `version` is `0x00010000` for
+	/// TrueType outlines and `'OTTO'` for CFF.
+	static func sfnt(tables: [String: [UInt8]], version: Int = 0x0001_0000) -> [UInt8] {
 		let records = tables.sorted { $0.key < $1.key }
 		let tableCount = records.count
 		var power = 1
@@ -235,7 +237,7 @@ extension OpenTypeFont {
 		}
 
 		var output: [UInt8] = []
-		appendUInt32(0x0001_0000, to: &output)
+		appendUInt32(version, to: &output)
 		appendUInt16(tableCount, to: &output)
 		appendUInt16(power * 16, to: &output)
 		appendUInt16(entrySelector, to: &output)
@@ -260,7 +262,7 @@ extension OpenTypeFont {
 		return output
 	}
 
-	private static func checksum(_ bytes: [UInt8]) -> UInt32 {
+	static func checksum(_ bytes: [UInt8]) -> UInt32 {
 		var result: UInt32 = 0
 		var offset = 0
 		while offset < bytes.count {
@@ -275,25 +277,25 @@ extension OpenTypeFont {
 		return result
 	}
 
-	private static func appendUInt16(_ value: Int, to bytes: inout [UInt8]) {
+	static func appendUInt16(_ value: Int, to bytes: inout [UInt8]) {
 		bytes.append(UInt8((value >> 8) & 0xFF))
 		bytes.append(UInt8(value & 0xFF))
 	}
 
-	private static func appendUInt32(_ value: Int, to bytes: inout [UInt8]) {
+	static func appendUInt32(_ value: Int, to bytes: inout [UInt8]) {
 		bytes.append(UInt8((value >> 24) & 0xFF))
 		bytes.append(UInt8((value >> 16) & 0xFF))
 		bytes.append(UInt8((value >> 8) & 0xFF))
 		bytes.append(UInt8(value & 0xFF))
 	}
 
-	private static func replaceUInt16(_ value: Int, at offset: Int, in bytes: inout [UInt8]) {
+	static func replaceUInt16(_ value: Int, at offset: Int, in bytes: inout [UInt8]) {
 		guard offset >= 0, offset + 2 <= bytes.count else { return }
 		bytes[offset] = UInt8((value >> 8) & 0xFF)
 		bytes[offset + 1] = UInt8(value & 0xFF)
 	}
 
-	private static func replaceUInt32(_ value: Int, at offset: Int, in bytes: inout [UInt8]) {
+	static func replaceUInt32(_ value: Int, at offset: Int, in bytes: inout [UInt8]) {
 		guard offset >= 0, offset + 4 <= bytes.count else { return }
 		bytes[offset] = UInt8((value >> 24) & 0xFF)
 		bytes[offset + 1] = UInt8((value >> 16) & 0xFF)
