@@ -359,6 +359,59 @@ struct MarkdownToPagesTests {
 		#expect(orderedStyleIDs.allSatisfy { $0 == firstStyle })
 	}
 
+	@Test("Each ordered list restarts its numbering in the para-starts table (#14)")
+	func orderedListsRecordNumberingRestarts() throws {
+		let url = FileManager.default.temporaryDirectory
+			.appendingPathComponent("swifttext-list-starts-\(UUID().uuidString).pages")
+		defer { try? FileManager.default.removeItem(at: url) }
+		let markdown = """
+		Intro
+
+		1. Alpha
+		   - detail
+		2. Beta
+
+		Middle
+
+		3. Gamma
+		4. Delta
+		"""
+		try MarkdownToPages.convert(markdown, to: url)
+
+		let body = try #require(try objectStore(at: url).objects(ofType: 2001).first {
+			(ProtobufMessage($0.payload).bytes(3).map { String(decoding: $0, as: UTF8.self) } ?? "").contains("Alpha")
+		})
+		let message = ProtobufMessage(body.payload)
+		let text = String(decoding: message.bytes(3) ?? [], as: UTF8.self)
+		func offset(_ word: String) throws -> UInt64 {
+			UInt64(text[..<(try #require(text.range(of: word))).lowerBound].utf16.count)
+		}
+		let entries = (message.message(14)?.messages(1) ?? []).map { ($0.varint(1) ?? 0, $0.varint(2) ?? 0, $0.varint(3) ?? 0) }
+		// {char index, start number, 0}: a restart at each list's first item (Gamma keeps
+		// its Markdown start number), "continue" (0) from the next paragraph on — so Beta
+		// counts on past the nested bullet instead of restarting.
+		#expect(entries.map { $0.0 } == [0, try offset("Alpha"), try offset("detail"), try offset("Gamma"), try offset("Delta")])
+		#expect(entries.map { $0.1 } == [0, 1, 0, 3, 0])
+		#expect(entries.allSatisfy { $0.2 == 0 })
+	}
+
+	@Test("A heading page break is set on that heading level's paragraph style only")
+	func headingPageBreakBefore() throws {
+		let url = FileManager.default.temporaryDirectory
+			.appendingPathComponent("swifttext-page-break-\(UUID().uuidString).pages")
+		defer { try? FileManager.default.removeItem(at: url) }
+		try MarkdownToPages.convert("# One\n\nText\n\n## Sub\n\n# Two", to: url, pageBreakBeforeHeadingLevel: 1)
+
+		let store = try objectStore(at: url)
+		func pageBreakBefore(_ styleID: UInt64) throws -> UInt64? {
+			ProtobufMessage(try #require(store.object(styleID)).payload).message(12)?.varint(14)
+		}
+		#expect(try pageBreakBefore(PagesStyleID.heading1) == 1)
+		#expect(try pageBreakBefore(PagesStyleID.heading2) != 1)
+		#expect(try pageBreakBefore(PagesStyleID.body) != 1)
+		#expect(try PagesFile(url: url).markdown().contains("# Two"))
+	}
+
 	/// Loads every `Index/*.iwa` object from a written `.pages` into one store.
 	private func objectStore(at url: URL) throws -> IWAObjectStore {
 		var store = IWAObjectStore()

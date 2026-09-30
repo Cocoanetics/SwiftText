@@ -24,8 +24,8 @@ enum RenderOutputFormat: String, ExpressibleByArgument, CaseIterable {
 	case epub
 }
 
-/// Heading level before which a page break is forced (PDF/HTML print output),
-/// also reused as the EPUB chapter-split level.
+/// Heading level before which a page break is forced (PDF/HTML print output and
+/// Pages), also reused as the EPUB chapter-split level.
 enum HeadingBreakLevel: String, ExpressibleByArgument, CaseIterable {
 	case h1, h2, h3, h4, h5, h6
 
@@ -58,7 +58,7 @@ struct Render: AsyncParsableCommand {
 	@Flag(name: .long, help: "Use landscape orientation (default: portrait).")
 	var landscape: Bool = false
 
-	@Option(name: .long, help: "For PDF/HTML output, force a page break before every heading of this level (h1–h6). Use h2 to start each chapter on its own page. Omit to disable.")
+	@Option(name: .long, help: "For PDF, HTML, and Pages output, force a page break before every heading of this level (h1–h6). Use h2 to start each chapter on its own page. Omit to disable.")
 	var pageBreakBefore: HeadingBreakLevel?
 
 	@Flag(name: .long, help: "For Pages output, write a directory-package bundle instead of a single file.")
@@ -142,7 +142,8 @@ struct Render: AsyncParsableCommand {
 			                           title: resolvedTitle, authors: author)
 			print(outputURL.path)
 		case .pages:
-			try MarkdownToPages.convert(markdownText, to: outputURL, packaging: package ? .package : .singleFile, baseURL: baseURL)
+			try MarkdownToPages.convert(markdownText, to: outputURL, packaging: package ? .package : .singleFile, baseURL: baseURL,
+			                            pageBreakBeforeHeadingLevel: pageBreakBefore?.numericLevel)
 			print(outputURL.path)
 		case .epub:
 			try renderEPUB(markdownText, baseURL: baseURL, outputURL: outputURL, userCSS: userCSS, title: resolvedTitle)

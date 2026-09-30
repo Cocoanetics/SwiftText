@@ -14,6 +14,18 @@ enum PagesStyleID {
 	static let heading4: UInt64 = 1731505
 	static let caption: UInt64 = 1731517
 
+	/// Maps a Markdown heading level to a template paragraph style. The blank theme
+	/// ships Heading 1–4; deeper levels (rare) reuse Heading 4. The reader recovers the
+	/// level from each style's stable `style_identifier`, so `#`…`####` round-trip exactly.
+	static func heading(level: Int) -> UInt64 {
+		switch level {
+		case 1: return heading1
+		case 2: return heading2
+		case 3: return heading3
+		default: return heading4
+		}
+	}
+
 	/// "Caption" — another normal, referenceable style the Markdown writer doesn't
 	/// otherwise use, repurposed as the code-block ("preformatted") style: a copy of
 	/// Body in a monospace face, tight line spacing, and a light background fill. Same
@@ -80,6 +92,9 @@ struct BodyParagraph {
 	/// Logical ordered-list container identity, used to keep one Markdown list on
 	/// one Pages list instance even when nested lists interrupt its item stream.
 	var listInstance: Int?
+	/// The number an ordered list starts at (its first Markdown item's number). The
+	/// serializer records it in the para-starts table (#14) at the list's first paragraph.
+	var listStart: Int = 1
 	/// Whether the paragraph is block-quoted (rendered indented + italic).
 	var blockQuote: Bool = false
 	/// For an attachment paragraph (a single `U+FFFC`), the drawable-attachment
@@ -170,8 +185,9 @@ final class BodyObjectRegistry {
 	}
 
 	/// A fresh numbered-list style inheriting the captured template's numbered
-	/// style. Pages treats the style object identity as the list instance, so
-	/// separate Markdown lists need separate anonymous styles to restart at 1.
+	/// style, one per Markdown list, so each list stays one distinct list instance.
+	/// This alone does not restart the numbering — Pages counts on across list style
+	/// objects; the restart is recorded in the storage's para-starts table (#14).
 	func numberedListStyleInstance() -> UInt64 {
 		let id = nextID
 		nextID += 1
@@ -284,6 +300,7 @@ enum PagesBodySerializer {
 		var listStyleEntries = [(index: Int, styleID: UInt64?)]()
 		var numberedListStylesByInstance = [Int: UInt64]()
 		var activeOrderedListStyle: UInt64?
+		var listRestarts = [(paragraph: Int, number: Int)]()   // each ordered list's first paragraph
 		for (index, paragraph) in paragraphs.enumerated() {
 			let start = paragraphStarts[index]
 			let styleID = paragraph.blockQuote ? PagesStyleID.blockQuote : paragraph.paragraphStyle
@@ -292,12 +309,16 @@ enum PagesBodySerializer {
 			let listStyle = paragraph.listStyle ?? PagesStyleID.listNone
 			if listStyle == PagesStyleID.numberedList {
 				if let listInstance = paragraph.listInstance {
+					if numberedListStylesByInstance[listInstance] == nil {
+						listRestarts.append((index, paragraph.listStart))
+					}
 					let instanceStyle = numberedListStylesByInstance[listInstance] ?? registry.numberedListStyleInstance()
 					numberedListStylesByInstance[listInstance] = instanceStyle
 					listStyleEntries.append((start, instanceStyle))
 				} else {
 					if activeOrderedListStyle == nil {
 						activeOrderedListStyle = registry.numberedListStyleInstance()
+						listRestarts.append((index, paragraph.listStart))
 					}
 					listStyleEntries.append((start, activeOrderedListStyle))
 				}
@@ -401,6 +422,9 @@ enum PagesBodySerializer {
 		}
 		if !footnoteEntries.isEmpty {
 			provided[16] = runTable(footnoteEntries)
+		}
+		if !listRestarts.isEmpty {
+			provided[14] = paragraphStartsTable(listRestarts, paragraphStarts: paragraphStarts)
 		}
 
 		let template = ProtobufMessage(templatePayload)
@@ -552,6 +576,31 @@ enum PagesBodySerializer {
 		if !wrote {                                          // no para_properties yet — add one
 			var inner = ProtobufWriter()
 			appendBorder(to: &inner)
+			writer.bytesField(12, inner.bytes)
+		}
+		return writer.bytes
+	}
+
+	/// Returns a paragraph-style payload that starts each of its paragraphs on a new page:
+	/// `page_break_before` (#14) set in its para_properties (field 12). All other fields
+	/// are preserved.
+	static func settingPageBreakBefore(in stylePayload: [UInt8]) -> [UInt8] {
+		let style = ProtobufMessage(stylePayload)
+		var writer = ProtobufWriter()
+		var wrote = false
+		for field in style.fields {
+			guard field.number == 12, case .lengthDelimited(let paraProperties) = field.value else { writer.append(field); continue }
+			var inner = ProtobufWriter()
+			for property in ProtobufMessage(paraProperties).fields where property.number != 14 {
+				inner.append(property)
+			}
+			inner.varintField(14, 1)
+			writer.bytesField(12, inner.bytes)
+			wrote = true
+		}
+		if !wrote {                                          // no para_properties yet — add one
+			var inner = ProtobufWriter()
+			inner.varintField(14, 1)
 			writer.bytesField(12, inner.bytes)
 		}
 		return writer.bytes
@@ -802,6 +851,35 @@ enum PagesBodySerializer {
 				reference.varintField(1, styleID)
 				entryWriter.messageField(2, reference.bytes)
 			}
+			table.messageField(1, entryWriter.bytes)
+		}
+		return table.bytes
+	}
+
+	/// The para-starts table (#14): where list numbering restarts. Pages numbers all the
+	/// list paragraphs of a storage as one running sequence — a second list after
+	/// `1. Alpha` / `2. Beta` continues at 3, whatever list style object it uses — unless
+	/// this table restarts it: `{ #1: charIndex, #2: start number, #3: 0 }` at the list's
+	/// first paragraph, then `#2: 0` ("continue") from the next paragraph on. Confirmed by
+	/// exporting through Pages; `#3` must stay 0 (Pages adds `#3` × 65536 to the number).
+	private static func paragraphStartsTable(_ restarts: [(paragraph: Int, number: Int)], paragraphStarts: [Int]) -> [UInt8] {
+		let restartParagraphs = Set(restarts.map(\.paragraph))
+		var entries = [(index: Int, number: Int)]()
+		if restarts.first?.paragraph != 0 { entries.append((0, 0)) }
+		for restart in restarts {
+			// 0 means "continue", so a list can't restart at 0: a `0.` list starts at 1.
+			entries.append((paragraphStarts[restart.paragraph], max(restart.number, 1)))
+			let next = restart.paragraph + 1
+			if next < paragraphStarts.count, !restartParagraphs.contains(next) {
+				entries.append((paragraphStarts[next], 0))
+			}
+		}
+		var table = ProtobufWriter()
+		for entry in entries {
+			var entryWriter = ProtobufWriter()
+			entryWriter.varintField(1, UInt64(entry.index))
+			entryWriter.varintField(2, UInt64(entry.number))
+			entryWriter.varintField(3, 0)
 			table.messageField(1, entryWriter.bytes)
 		}
 		return table.bytes
