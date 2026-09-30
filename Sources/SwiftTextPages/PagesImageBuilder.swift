@@ -46,6 +46,12 @@ enum PagesImageBuilder {
     static let dataBase: UInt64 = 1000
     /// The default body text-column width (points) — pasted images are scaled to fit it.
     static let columnWidth: Float = 481.89
+    /// The tallest an inline image is shown (points), so it fits one page. The body area
+    /// is 728.5pt high (A4 less 2cm margins), but the image's line also carries the
+    /// paragraph's spacing and the text descent: in Pages a 690pt image still fits a
+    /// page, a 705pt one spills its line onto the next — a page that a page break
+    /// after the image then leaves blank.
+    static let maxDisplayHeight: Float = 680
 
     static func build(_ inputs: [Input], bodyStorageID: UInt64) -> Artifacts {
         var objects = [IWAObject]()
@@ -62,9 +68,13 @@ enum PagesImageBuilder {
 
             let (pw, ph) = ImageDimensions.dimensions(of: input.bytes) ?? (Int(columnWidth), Int(columnWidth))
             let natW = Float(pw), natH = Float(ph)
-            // Scale to the column width if wider, preserving aspect ratio.
-            let dispW = min(natW, columnWidth)
-            let dispH = natW > 0 ? dispW * (natH / natW) : natH
+            // Scale to the column width if wider, then to one page if taller, preserving aspect ratio.
+            var dispW = min(natW, columnWidth)
+            var dispH = natW > 0 ? dispW * (natH / natW) : natH
+            if dispH > maxDisplayHeight {
+                dispW *= maxDisplayHeight / dispH
+                dispH = maxDisplayHeight
+            }
 
             // Media file + its registry entry.
             let onDisk = "\(input.baseName)-\(dataID).\(input.pathExtension)"

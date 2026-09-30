@@ -156,6 +156,28 @@ struct PagesImageTests {
 		#expect(try Data(contentsOf: try #require(extracted.first)) == PagesImageTests.onePixelPNG)
 	}
 
+	@Test("Inline images are scaled to the column width, then to one page's height")
+	func imageDisplaySizeFitsThePage() throws {
+		/// The header of a PNG of the given size (all `ImageDimensions` reads).
+		func pngHeader(width: UInt32, height: UInt32) -> [UInt8] {
+			[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52]
+				+ withUnsafeBytes(of: width.bigEndian, Array.init) + withUnsafeBytes(of: height.bigEndian, Array.init)
+		}
+		func displaySize(width: UInt32, height: UInt32) throws -> (Float, Float) {
+			let input = PagesImageBuilder.Input(bytes: pngHeader(width: width, height: height), baseName: "img", pathExtension: "png")
+			let image = try #require(PagesImageBuilder.build([input], bodyStorageID: 1).objects.first { $0.type == 3005 })
+			let size = try #require(ProtobufMessage(image.payload).message(4))
+			return (try #require(size.float(1)), try #require(size.float(2)))
+		}
+		let small = try displaySize(width: 300, height: 200)          // natural size
+		#expect(small.0 == 300 && small.1 == 200)
+		let wide = try displaySize(width: 2000, height: 1000)         // column width
+		#expect(abs(wide.0 - PagesImageBuilder.columnWidth) < 0.01 && abs(wide.1 - PagesImageBuilder.columnWidth / 2) < 0.01)
+		let tall = try displaySize(width: 1600, height: 2400)         // a full-page cover: one page high
+		#expect(tall.1 == PagesImageBuilder.maxDisplayHeight)
+		#expect(abs(tall.0 - PagesImageBuilder.maxDisplayHeight * 2 / 3) < 0.01)
+	}
+
 	@Test("A missing image falls back to alt text (no Data file, still opens)")
 	func missingImageFallsBack() throws {
 		let dir = FileManager.default.temporaryDirectory.appendingPathComponent("img-\(UUID().uuidString)")
