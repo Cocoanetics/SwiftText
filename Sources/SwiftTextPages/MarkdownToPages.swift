@@ -25,15 +25,21 @@ public enum MarkdownToPages {
 	/// - Parameter baseURL: the directory Markdown image paths are resolved against
 	///   (typically the source `.md` file's folder). When `nil`, images fall back to
 	///   alt-text placeholders.
-	public static func convert(_ markdown: String, to url: URL, packaging: Packaging = .singleFile, baseURL: URL? = nil) throws {
+	/// - Parameter pageBreakBeforeHeadingLevel: when set (1–6), every heading of that
+	///   level starts a new page (set on the heading's paragraph style, so it stays
+	///   editable in Pages; levels 4–6 share the Heading 4 style).
+	public static func convert(_ markdown: String, to url: URL, packaging: Packaging = .singleFile, baseURL: URL? = nil,
+	                           pageBreakBeforeHeadingLevel: Int? = nil) throws {
 		let paragraphs = MarkdownPagesBuilder.paragraphs(from: markdown)
 		switch packaging {
 		case .singleFile:
-			try PagesWriter().write(paragraphs: paragraphs, baseURL: baseURL, to: url)
+			try PagesWriter().write(paragraphs: paragraphs, baseURL: baseURL,
+			                        pageBreakBeforeHeadingLevel: pageBreakBeforeHeadingLevel, to: url)
 		case .package:
 			let temp = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("\(UUID().uuidString).pages")
 			defer { try? FileManager.default.removeItem(at: temp) }
-			try PagesWriter().write(paragraphs: paragraphs, baseURL: baseURL, to: temp)
+			try PagesWriter().write(paragraphs: paragraphs, baseURL: baseURL,
+			                        pageBreakBeforeHeadingLevel: pageBreakBeforeHeadingLevel, to: temp)
 			guard let pkg = IWAPackage.read(zip: [UInt8](try Data(contentsOf: temp))) else {
 				throw PagesWriteError.malformedTemplate("flat package")
 			}
@@ -262,7 +268,7 @@ private struct BlockVisitor: MarkupVisitor {
 		collector.collect(from: heading)
 		var bodyParagraph = BodyParagraph(
 			text: collector.text,
-			paragraphStyle: Self.headingStyle(level: heading.level),
+			paragraphStyle: PagesStyleID.heading(level: heading.level),
 			runs: collector.runs,
 			links: collector.links
 		)
@@ -299,18 +305,18 @@ private struct BlockVisitor: MarkupVisitor {
 	mutating func visitOrderedList(_ orderedList: OrderedList) {
 		let listInstance = nextListInstance
 		nextListInstance += 1
-		emitListItems(in: orderedList, ordered: true, listInstance: listInstance)
+		emitListItems(in: orderedList, ordered: true, listInstance: listInstance, start: Int(orderedList.startIndex))
 	}
 
-	private mutating func emitListItems(in list: ListItemContainer, ordered: Bool, listInstance: Int?) {
+	private mutating func emitListItems(in list: ListItemContainer, ordered: Bool, listInstance: Int?, start: Int = 1) {
 		let level = listDepth
 		for child in list.children {
 			guard let item = child as? ListItem else { continue }
-			emit(listItem: item, ordered: ordered, level: level, listInstance: listInstance)
+			emit(listItem: item, ordered: ordered, level: level, listInstance: listInstance, start: start)
 		}
 	}
 
-	private mutating func emit(listItem: ListItem, ordered: Bool, level: Int, listInstance: Int?) {
+	private mutating func emit(listItem: ListItem, ordered: Bool, level: Int, listInstance: Int?, start: Int) {
 		var inlineParagraphs: [Paragraph] = []
 		var nestedLists: [Markup] = []
 		for child in listItem.children {
@@ -332,6 +338,7 @@ private struct BlockVisitor: MarkupVisitor {
 			listStyle: ordered ? PagesStyleID.numberedList : PagesStyleID.bulletList,
 			listLevel: level,
 			listInstance: ordered ? listInstance : nil,
+			listStart: start,
 			runs: collector.runs,
 			links: collector.links
 		))
@@ -401,17 +408,5 @@ private struct BlockVisitor: MarkupVisitor {
 
 	mutating func visitHTMLBlock(_ htmlBlock: HTMLBlock) {
 		// Not representable; the DOCX writer drops these too.
-	}
-
-	/// Maps a Markdown heading level to a template paragraph style. The blank theme
-	/// ships Heading 1–4; deeper levels (rare) reuse Heading 4. The reader recovers the
-	/// level from each style's stable `style_identifier`, so `#`…`####` round-trip exactly.
-	private static func headingStyle(level: Int) -> UInt64 {
-		switch level {
-		case 1: return PagesStyleID.heading1
-		case 2: return PagesStyleID.heading2
-		case 3: return PagesStyleID.heading3
-		default: return PagesStyleID.heading4
-		}
 	}
 }

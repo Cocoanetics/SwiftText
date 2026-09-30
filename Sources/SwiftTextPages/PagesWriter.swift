@@ -33,8 +33,10 @@ public final class PagesWriter {
 	// MARK: Structured body
 
 	/// Writes a document whose body is the given paragraphs (each carrying its
-	/// paragraph style, list membership, and inline style runs).
-	func write(paragraphs inputParagraphs: [BodyParagraph], baseURL: URL? = nil, to url: URL) throws {
+	/// paragraph style, list membership, and inline style runs). With
+	/// `pageBreakBeforeHeadingLevel`, headings of that level each start a new page.
+	func write(paragraphs inputParagraphs: [BodyParagraph], baseURL: URL? = nil,
+	           pageBreakBeforeHeadingLevel: Int? = nil, to url: URL) throws {
 		let identity = DocumentIdentity.fresh()
 		let registry = BodyObjectRegistry()
 
@@ -105,7 +107,7 @@ public final class PagesWriter {
 				                         footnoteMarkIDs: footnoteArtifacts?.bodyMarkIDs ?? [],
 				                         footnoteCharStyleID: footnoteArtifacts?.charStyleID)
 			case "Index/DocumentStylesheet.iwa":
-				data = try applyingStylesheet(to: data)
+				data = try applyingStylesheet(to: data, pageBreakBeforeHeadingLevel: pageBreakBeforeHeadingLevel)
 			case "Index/Metadata.iwa" where registry.didSynthesize || tableArtifacts != nil || imageArtifacts != nil || footnoteArtifacts != nil:
 				// Document.iwa is processed earlier in this loop, so `registry` already
 				// reflects any synthesized objects by the time Metadata is written.
@@ -251,7 +253,8 @@ public final class PagesWriter {
 	/// Edits `DocumentStylesheet.iwa` to install the default stylesheet: each style
 	/// object is rewritten in place (size/spacing/line-spacing/color), the block-quote
 	/// style is built, and link text is colored. All other styles are preserved.
-	private func applyingStylesheet(to stylesheetIWA: [UInt8]) throws -> [UInt8] {
+	/// `pageBreakBeforeHeadingLevel` adds a page break before that heading style.
+	private func applyingStylesheet(to stylesheetIWA: [UInt8], pageBreakBeforeHeadingLevel: Int? = nil) throws -> [UInt8] {
 		var data = Data(stylesheetIWA)
 		for spec in Self.stylesheet {
 			data = try IWAArchive.replacingPayload(in: data, objectID: spec.id) { payload in
@@ -303,6 +306,12 @@ public final class PagesWriter {
 			codeBlock = PagesBodySerializer.settingTextColor(in: codeBlock, red: code.r, green: code.g, blue: code.b)
 			codeBlock = PagesBodySerializer.settingBoxFrame(in: codeBlock, fill: (0.572, 0.572, 0.572, 0.121), stroke: (0, 0, 0), strokeWidth: 0.25)
 			data = try IWAArchive.replacingPayload(in: data, objectID: PagesStyleID.codeBlock) { _ in codeBlock }
+		}
+		// After the Heading 4 rebuild above, so a level-4 break isn't overwritten.
+		if let level = pageBreakBeforeHeadingLevel, (1...6).contains(level) {
+			data = try IWAArchive.replacingPayload(in: data, objectID: PagesStyleID.heading(level: level)) { payload in
+				PagesBodySerializer.settingPageBreakBefore(in: payload)
+			}
 		}
 		return [UInt8](data)
 	}

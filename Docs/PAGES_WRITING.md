@@ -44,7 +44,8 @@ Status as built (all validated opening + rendering in Pages 14.5; 214 tests gree
 | **Bold** / *italic* / ***both*** | built-in Emphasis/Italic char styles; synthesized bold+italic | ✅ |
 | `inline code` / code blocks | synthesized monospace (Menlo) char style | ✅ |
 | ~~strikethrough~~ | built-in Strikethrough char style | ✅ (DOCX drops it) |
-| Lists (bullet/numbered, nested) | Bullet/Numbered list styles; nesting **level** encoded | ✅ functional (visual indent of nested levels is a list-style refinement) |
+| Lists (bullet/numbered, nested) | Bullet/Numbered list styles; nesting **level** encoded; every numbered list restarts at its Markdown start number (storage para-starts table `#14`: `{index, start, 0}`, then `0` = continue — without it Pages numbers all lists of a document as one sequence) | ✅ functional (visual indent of nested levels is a list-style refinement) |
+| Page breaks (`--page-break-before hN`) | `page_break_before` (para_properties `#14`) on that heading level's paragraph style; a heading at the top of the document adds no blank page | ◐ Pages/PDF/HTML (DOCX ignores the option) |
 | Block quotes | indented + italic (a real style overwritten with a Body copy + indent) | ✅ |
 | Horizontal rule | full-width box-drawing line | ◐ visual, not a native rule object |
 | Images | italic placeholder text (alt or `[image]`) | ✅ (matches DOCX exactly) |
