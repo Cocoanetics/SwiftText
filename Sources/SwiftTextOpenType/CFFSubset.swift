@@ -137,7 +137,7 @@ private struct CFFFont {
 		let reader = CFFReader(bytes: bytes)
 		guard try reader.u8(0) == 1 else { throw OpenTypeError.notSFNT(tag: "CFF ") }
 		let headerSize = try reader.u8(2)
-		header = bytes[0 ..< headerSize]
+		header = try reader.slice(0, headerSize)
 
 		let names = try reader.index(at: headerSize)
 		nameIndex = bytes[headerSize ..< names.end]
@@ -164,7 +164,7 @@ private struct CFFFont {
 
 		isCIDKeyed = topDict.contains { $0.op == CFFOperator.ros }
 		if !isCIDKeyed, let charsetOffset = operand(CFFOperator.charset), charsetOffset > 2 {
-			customCharset = bytes[charsetOffset ..< (try reader.charsetEnd(at: charsetOffset, glyphCount: glyphCount))]
+			customCharset = try reader.slice(charsetOffset, reader.charsetEnd(at: charsetOffset, glyphCount: glyphCount))
 		} else {
 			customCharset = nil
 		}
@@ -174,7 +174,7 @@ private struct CFFFont {
 			      let fdSelectOffset = operand(CFFOperator.fdSelect) else {
 				throw OpenTypeError.missingTable("CFF FDArray")
 			}
-			fdSelect = bytes[fdSelectOffset ..< (try reader.fdSelectEnd(at: fdSelectOffset, glyphCount: glyphCount))]
+			fdSelect = try reader.slice(fdSelectOffset, reader.fdSelectEnd(at: fdSelectOffset, glyphCount: glyphCount))
 			let fdArray = try reader.index(at: fdArrayOffset)
 			fontDicts = try fdArray.items.map { try reader.dict($0) }
 			privates = try fontDicts.map { try reader.privateDict(for: $0) }
@@ -321,6 +321,15 @@ private struct CFFReader {
 		try u8(offset) << 8 | u8(offset + 1)
 	}
 
+	/// `bytes[lower ..< upper]`, throwing instead of trapping when a font's
+	/// offsets or sizes point outside the table.
+	func slice(_ lower: Int, _ upper: Int) throws -> ArraySlice<UInt8> {
+		guard lower >= 0, upper >= lower, upper <= bytes.count else {
+			throw OpenTypeError.truncated(offset: max(lower, upper))
+		}
+		return bytes[lower ..< upper]
+	}
+
 	func offset(_ position: Int, size: Int) throws -> Int {
 		var value = 0
 		for index in 0 ..< size { value = value << 8 | (try u8(position + index)) }
@@ -407,7 +416,7 @@ private struct CFFReader {
 		      let size = entry.operands[0], let offset = entry.operands[1] else {
 			return CFFPrivate(entries: [], subrs: [])
 		}
-		let entries = try self.dict(offset ..< offset + size)
+		let entries = try self.dict(slice(offset, offset + size).indices)
 		var subrs: [ArraySlice<UInt8>] = []
 		if let subrsEntry = entries.first(where: { $0.op == CFFOperator.subrs }),
 		   let relative = subrsEntry.operands.first ?? nil {

@@ -82,6 +82,27 @@ struct CFFSubsetTests {
 		#expect(try OpenTypeFont(data: data).numGlyphs == font.numGlyphs)
 	}
 
+	/// Offsets and sizes come from the font; ones pointing outside the table
+	/// must throw rather than trap, since `FontResourceBuilder` uses `try?`.
+	@Test("A truncated CFF table throws instead of trapping", .enabled(if: hiraginoAvailable))
+	func truncatedCFFThrows() throws {
+		let font = try loadHiragino()
+		let used = glyphs("日本", in: font)
+		var bytes = try [UInt8](#require(try font.subsetCFF(glyphs: used)).data)
+
+		// Shrink the `CFF ` record to 4 bytes and claim a 200-byte header.
+		let tableCount = Int(bytes[4]) << 8 | Int(bytes[5])
+		let record = try #require((0 ..< tableCount).map { 12 + $0 * 16 }.first {
+			bytes[$0 ..< $0 + 4].elementsEqual("CFF ".utf8)
+		})
+		let tableOffset = bytes[record + 8 ..< record + 12].reduce(0) { $0 << 8 | Int($1) }
+		bytes.replaceSubrange(record + 12 ..< record + 16, with: [0, 0, 0, 4])
+		bytes[tableOffset + 2] = 200
+
+		let truncated = try OpenTypeFont(data: Data(bytes))
+		#expect(throws: OpenTypeError.self) { try truncated.subsetCFF(glyphs: used) }
+	}
+
 	@Test("TrueType fonts are not CFF-subset")
 	func trueTypeIsNotCFF() throws {
 		let paths = ["/System/Library/Fonts/Supplemental/Arial Unicode.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"]
