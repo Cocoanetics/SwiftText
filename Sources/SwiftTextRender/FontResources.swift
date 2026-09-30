@@ -88,9 +88,12 @@ public final class FontResourceBuilder {
 		// TrueType (`glyf`) outlines embed as FontFile2 + CIDFontType2; CFF
 		// (PostScript) outlines as FontFile3 (Subtype OpenType) + CIDFontType0.
 		// Encoding a FontFile2 stream that is actually CFF produces invalid text.
+		// A CFF subset keeps glyph identifiers; a TrueType subset renumbers them.
+		// Either falls back to the whole face — never the whole `.ttc` collection
+		// `font.data` may hold, which is not a font program.
 		let cff = font.hasCFFOutlines
-		let subset = cff ? nil : try? font.otf.subsetTrueType(glyphs: glyphs)
-		let fontData = subset?.data ?? font.data
+		let subset = cff ? try? font.otf.subsetCFF(glyphs: glyphs) : try? font.otf.subsetTrueType(glyphs: glyphs)
+		let fontData = subset?.data ?? (try? font.otf.standaloneFont()) ?? font.data
 		let name = subset == nil ? font.postScriptName : subsetName(for: font.postScriptName, glyphs: glyphs.keys)
 		let fontFile = PDFStream(stream: [fontData])
 		// Deflate the embedded font program. `/Length1` stays the *decoded* size,
