@@ -114,6 +114,10 @@ public enum ZipContainerWriter {
 			defer { archive_entry_free(header) }
 			archive_entry_set_pathname(header, entry.path)
 			archive_entry_set_filetype(header, Self.regularFile)
+			// rw-r--r--: without it the mode is 0, and `unzip` extracts files no one can
+			// read. Permissions go into the central directory's external attributes, not
+			// an extra field, so the bare `mimetype` header is unaffected.
+			archive_entry_set_perm(header, 0o644)
 			archive_entry_set_size(header, Int64(entry.data.count))
 			// uid/gid/mtime are deliberately never set — see the file comment.
 			try check(archive_write_header(archive, header), archive)

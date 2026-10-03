@@ -46,6 +46,25 @@ struct EpubTests {
 		#expect(payload == "application/epub+zip")
 	}
 
+	@Test("every entry is a regular file anyone can read (rw-r--r--), so unzip extracts readable files")
+	func entryPermissions() throws {
+		let data = try MarkdownToEpub.makeData("# Chapter\n\nBody.", metadata: fixedMetadata(), options: EpubOptions())
+		let bytes = [UInt8](data)
+		func u16(_ at: Int) -> Int { Int(bytes[at]) | Int(bytes[at + 1]) << 8 }
+		func u32(_ at: Int) -> Int { u16(at) | u16(at + 2) << 16 }
+		// The end-of-central-directory record ("PK\x05\x06") gives the directory's size.
+		let end = try #require((0 ... bytes.count - 22).reversed().first { u32($0) == 0x0605_4B50 })
+		var offset = u32(end + 16)
+		var modes = [Int]()
+		for _ in 0 ..< u16(end + 10) {
+			try #require(u32(offset) == 0x0201_4B50)                      // central directory header
+			modes.append(u32(offset + 38) >> 16)                          // external attributes: st_mode
+			offset += 46 + u16(offset + 28) + u16(offset + 30) + u16(offset + 32)
+		}
+		#expect(!modes.isEmpty)
+		#expect(modes.allSatisfy { $0 == 0o100644 })
+	}
+
 	@Test("container.xml points at the package document")
 	func containerXML() {
 		let files = MarkdownToEpub.makeFiles("# A\n\nx", metadata: fixedMetadata(), options: EpubOptions())
