@@ -70,7 +70,6 @@ enum MarkdownPagesBuilder {
 		return visitor.paragraphs
 	}
 
-
 	/// Pulls `[^id]: text` definition blocks out of the Markdown source (with 4-space- or
 	/// tab-indented continuation lines), returning the cleaned source and `id → text`.
 	static func extractFootnoteDefinitions(_ markdown: String) -> (cleaned: String, definitions: [String: String]) {

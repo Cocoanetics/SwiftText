@@ -51,7 +51,7 @@ public struct MarkdownAlertBlock {
 	/// The five GitHub kinds plus DocC's `Experiment`, with their default titles.
 	public static let knownKinds: [String: String] = [
 		"note": "Note", "tip": "Tip", "important": "Important",
-		"warning": "Warning", "caution": "Caution", "experiment": "Experiment",
+		"warning": "Warning", "caution": "Caution", "experiment": "Experiment"
 	]
 
 	/// The default title for a kind: its known title, else the kind capitalized
