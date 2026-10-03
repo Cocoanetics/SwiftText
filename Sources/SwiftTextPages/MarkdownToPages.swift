@@ -299,6 +299,20 @@ private struct BlockVisitor: MarkupVisitor {
 		// lines tight while the style's space-before/after becomes a margin around the
 		// block (not a gap between every line). Monospace + code color live in the style.
 		let lines = code.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+		if calloutKind != nil {
+			// Inside an alert the code block's own frame would break the box apart: its
+			// lines stay in the box as one monospace paragraph (as in the DOCX writer).
+			var collector = InlineCollector(base: InlineStyle(code: true))
+			collector.appendLiteral(lines.joined(separator: "\u{2028}"))
+			paragraphs.append(BodyParagraph(
+				text: collector.text,
+				paragraphStyle: PagesStyleID.body,
+				callout: calloutBodyRole,
+				runs: collector.runs,
+				links: collector.links
+			))
+			return
+		}
 		paragraphs.append(BodyParagraph(text: lines.joined(separator: "\u{2028}"), paragraphStyle: PagesStyleID.codeBlock))
 	}
 

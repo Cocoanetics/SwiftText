@@ -131,17 +131,22 @@ struct PagesCalloutTests {
 		#expect(!boxDrawing)
 	}
 
-	@Test("Inside a box, quotes become italic lines and headings bold lines, keeping one frame")
+	@Test("Inside a box, quotes become italic lines, headings bold lines and code monospace ones, keeping one frame")
 	func nestedBlocksStayInTheBox() throws {
-		let paragraphs = MarkdownToPages.paragraphs("> [!NOTE]\n> ## Heading\n>\n> > “Example.”\n")
-		#expect(paragraphs.count == 3)
+		let paragraphs = MarkdownToPages.paragraphs("> [!NOTE]\n> ## Heading\n>\n> > “Example.”\n>\n> ```\n> a\n>   b\n> ```\n")
+		try #require(paragraphs.count == 4)
 		let allNote = paragraphs.allSatisfy { $0.callout?.kind == "note" }
-		let headingBold = paragraphs.count == 3 && paragraphs[1].runs.allSatisfy { $0.style.bold }
-		let quoteItalic = paragraphs.count == 3 && paragraphs[2].runs.allSatisfy { $0.style.italic }
+		let headingBold = paragraphs[1].runs.allSatisfy { $0.style.bold }
+		let quoteItalic = paragraphs[2].runs.allSatisfy { $0.style.italic }
+		let codeMonospace = paragraphs[3].runs.count == 1 && paragraphs[3].runs.allSatisfy { $0.style.code }
 		let anyQuoteStyle = paragraphs.contains { $0.blockQuote }
+		let anyCodeStyle = paragraphs.contains { $0.paragraphStyle == PagesStyleID.codeBlock }
 		#expect(allNote)
 		#expect(headingBold)
 		#expect(quoteItalic)
+		#expect(codeMonospace)
+		#expect(paragraphs[3].text == "a\u{2028}  b")
 		#expect(!anyQuoteStyle)
+		#expect(!anyCodeStyle)
 	}
 }

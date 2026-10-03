@@ -1,4 +1,5 @@
 import Foundation
+import SwiftTextMarkdown
 
 /// Represents a parsed DOCX document and its paragraph content.
 public struct DocxDocument {
@@ -27,12 +28,54 @@ public struct DocxDocument {
 		renderedParagraphs(style: .markdown)
 	}
 
-	/// Returns rendered paragraphs using the requested style.
+	/// Returns rendered paragraphs using the requested style. In Markdown, the
+	/// paragraphs of an alert box (SwiftText's "Callout" styles) render together as one
+	/// `> [!KIND]` block, and a rule paragraph as `---`.
 	public func renderedParagraphs(style: RenderStyle = .markdown) -> [RenderedParagraph] {
 		var numberingState = NumberingState(numbering: numbering)
-		return paragraphs.compactMap { paragraph in
-			paragraph.rendered(using: self, numberingState: &numberingState, style: style)
+		var rendered = [RenderedParagraph]()
+		var index = 0
+		while index < paragraphs.count {
+			let paragraph = paragraphs[index]
+			let paragraphStyle = styles.style(for: paragraph.styleIdentifier)
+			if style == .markdown, let callout = paragraphStyle?.callout {
+				let alert = markdownAlert(from: index, kind: callout.kind, numberingState: &numberingState)
+				rendered.append(RenderedParagraph(text: alert.block, isListItem: false))
+				index = alert.end
+				continue
+			}
+			index += 1
+			if paragraphStyle?.isRule == true, paragraph.plainText().isEmpty {
+				if style == .markdown { rendered.append(RenderedParagraph(text: "---", isListItem: false)) }
+				continue
+			}
+			if let result = paragraph.rendered(using: self, numberingState: &numberingState, style: style) {
+				rendered.append(result)
+			}
 		}
+		return rendered
+	}
+
+	/// Renders the alert box starting at `start` — its title paragraph, if any, and the
+	/// body paragraphs of the same kind — as a `> [!KIND]` block, and returns it with the
+	/// index after the box. The title is written only when it isn't the kind's default.
+	private func markdownAlert(from start: Int, kind: String, numberingState: inout NumberingState) -> (block: String, end: Int) {
+		var index = start
+		var title: String?
+		if styles.style(for: paragraphs[index].styleIdentifier)?.callout?.isTitle == true {
+			title = paragraphs[index].plainText()
+			index += 1
+		}
+		var body = [MarkdownAlertBlock.RecoveredBlock]()
+		while index < paragraphs.count,
+			  let callout = styles.style(for: paragraphs[index].styleIdentifier)?.callout,
+			  !callout.isTitle, callout.kind == kind {
+			let paragraph = paragraphs[index]
+			index += 1
+			guard let rendered = paragraph.rendered(using: self, numberingState: &numberingState, style: .markdown) else { continue }
+			body.append(rendered.isListItem ? .listItem(rendered.text) : .paragraph(rendered.text))
+		}
+		return (MarkdownAlertBlock.markdown(kind: kind, title: title, body: body), index)
 	}
 
 	/// Returns the detected heading level for a paragraph style identifier.
@@ -219,7 +262,19 @@ public struct DocxDocument {
 		var name: String?
 		var outlineLevel: Int?
 
+		/// The alert kind, and whether this is the title style, for SwiftText's callout styles.
+		var callout: (kind: String, isTitle: Bool)? {
+			DocxStyleID.callout(styleId: styleId, name: name)
+		}
+
+		/// Whether this is SwiftText's "Horizontal Rule" style.
+		var isRule: Bool {
+			DocxStyleID.isRule(styleId: styleId, name: name)
+		}
+
 		func headingLevel() -> Int? {
+			// "Callout Note Title" is a box's title, not a heading.
+			guard callout == nil, !isRule else { return nil }
 			let identifier = (name ?? styleId).lowercased()
 			if identifier.contains("subtitle") {
 				return 2

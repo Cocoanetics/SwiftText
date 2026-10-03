@@ -47,7 +47,7 @@ Status as built (all validated opening + rendering in Pages 14.5; 214 tests gree
 | Lists (bullet/numbered, nested) | Bullet/Numbered list styles; nesting **level** encoded; every numbered list restarts at its Markdown start number (storage para-starts table `#14`: `{index, start, 0}`, then `0` = continue — without it Pages numbers all lists of a document as one sequence) | ✅ functional (visual indent of nested levels is a list-style refinement) |
 | Page breaks (`--page-break-before hN`) | `page_break_before` (para_properties `#14`) on that heading level's paragraph style; a heading at the top of the document adds no blank page | ◐ Pages/PDF/HTML (DOCX ignores the option) |
 | Block quotes | indented + italic with a left bar (a real style overwritten with a Body copy); reads back as `>` (style identifier `swifttext-block-quote`) | ✅ |
-| Alerts (`> [!NOTE]`, `> [!WARNING] Title`, any `[!KIND]`) | a native Borders & Rules box: tinted fill + coloured left border, one box over all its paragraphs, spaced in `em` like the CSS (see "Alert boxes" below); reads back as `> [!KIND] Title` | ✅ (DOCX: see the DOCX writer) |
+| Alerts (`> [!NOTE]`, `> [!WARNING] Title`, any `[!KIND]`) | a native Borders & Rules box: tinted fill + coloured left border, one box over all its paragraphs, spaced in `em` like the CSS (see "Alert boxes" below); reads back as `> [!KIND] Title` | ✅ (DOCX: paragraph borders + shading, [DOCX_WRITING.md](DOCX_WRITING.md)) |
 | Horizontal rule | an empty "Rule" paragraph whose bottom border spans the column (like CSS `hr`); reads back as `---` | ✅ |
 | Images | italic placeholder text (alt or `[image]`) | ✅ (matches DOCX exactly) |
 | Links | **clickable** hyperlink (TSWP type 2032 object + `#11` smart-field run table) + underline | ✅ |
@@ -191,8 +191,10 @@ margin 0.8em (raising the space after of the paragraph above, collapsing like CS
 0.75em (title's space before; end paragraph), 0.6em between paragraphs (0.2em between list
 items), keep-with-next through the box (`break-inside: avoid`), rules with `hr`'s 1.2em.
 
-Inside a box, a nested quote becomes italic text and a heading a bold line in the box's style
-(a second frame or indent would split the box); they read back as emphasis.
+Inside a box, a nested quote becomes italic text, a heading a bold line and a code block one
+monospace paragraph in the box's style (a second frame or indent would split the box); they read
+back as emphasis. Tables, images and rules split the box (it continues after them, untitled). The
+DOCX writer does the same ([DOCX_WRITING.md](DOCX_WRITING.md)).
 
 ---
 

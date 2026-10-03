@@ -59,7 +59,7 @@ final class DocxParser {
 			footnotesByID = [:]
 		}
 
-		let extractor = DocumentExtractor(footnotesByID: footnotesByID)
+		let extractor = DocumentExtractor(footnotesByID: footnotesByID, styles: styleCatalog)
 		let parser = XMLParser(data: data)
 		parser.delegate = extractor
 		guard parser.parse() else {
@@ -110,6 +110,8 @@ private final class DocumentExtractor: NSObject, XMLParserDelegate {
 
 	private(set) var document = DocxDocument()
 	private let footnotesByID: [String: String]
+	/// The paragraph styles, to keep rule paragraphs, which are empty but mean `---`.
+	private let styles: DocxDocument.StyleCatalog
 	private var footnoteNumberByID: [String: Int] = [:]
 	private var footnoteCounter = 0
 	private var currentParagraph: DocxDocument.Paragraph?
@@ -124,8 +126,9 @@ private final class DocumentExtractor: NSObject, XMLParserDelegate {
 	private var pendingNumberingLevel: Int?
 	private var pendingNumberingId: Int?
 
-	init(footnotesByID: [String: String]) {
+	init(footnotesByID: [String: String], styles: DocxDocument.StyleCatalog) {
 		self.footnotesByID = footnotesByID
+		self.styles = styles
 	}
 
 	private var currentState: DocxDocument.FormatState {
@@ -289,7 +292,7 @@ private final class DocumentExtractor: NSObject, XMLParserDelegate {
 		guard let paragraph = currentParagraph else {
 			return
 		}
-		if !paragraph.isEmpty {
+		if !paragraph.isEmpty || styles.style(for: paragraph.styleIdentifier)?.isRule == true {
 			document.paragraphs.append(paragraph)
 		}
 		currentParagraph = nil

@@ -111,9 +111,41 @@ public struct MarkdownAlertBlock {
 	}
 
 	/// A kind is a single word: letters, digits, `-` or `_`, starting with a letter.
-	static func isValidKind(_ token: String) -> Bool {
+	public static func isValidKind(_ token: String) -> Bool {
 		guard let first = token.first, first.isLetter else { return false }
 		return token.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }
+	}
+
+	/// One body block of an alert that a reader recovered from another format.
+	public enum RecoveredBlock: Sendable, Equatable {
+		/// A paragraph's Markdown; it may span several lines.
+		case paragraph(String)
+		/// A list item's Markdown with its indentation and marker (`- text`, `  1. text`).
+		case listItem(String)
+	}
+
+	/// Writes an alert recovered from another format (Pages, DOCX) as a `> [!KIND]`
+	/// block, so every reader writes the same Markdown: the marker line (with `title`
+	/// when it isn't the kind's default), then the body, with a `>` line between
+	/// paragraphs and none between consecutive list items.
+	public static func markdown(kind: String, title: String?, body: [RecoveredBlock]) -> String {
+		var lines = ["> " + markerLine(kind: kind, title: title)]
+		var previousWasItem = false
+		for block in body {
+			switch block {
+			case .listItem(let text):
+				if !previousWasItem, lines.count > 1 { lines.append(">") }
+				lines.append("> " + text)
+				previousWasItem = true
+			case .paragraph(let text):
+				if lines.count > 1 { lines.append(">") }
+				for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
+					lines.append(line.isEmpty ? ">" : "> " + line)
+				}
+				previousWasItem = false
+			}
+		}
+		return lines.joined(separator: "\n")
 	}
 
 	private static func bracketed(kind: String, firstLineRest: String, in quote: BlockQuote) -> MarkdownAlertBlock {

@@ -203,6 +203,8 @@ private struct BlockVisitor: MarkupVisitor {
 
 	var blocks: [DocxWriter.Block] = []
 	private var listLevel: Int = 0
+	/// Whether these blocks are an alert's body.
+	private var insideAlert = false
 	/// Shared across the whole document so footnote numbers stay in source order.
 	let resolver: MarkdownFootnoteResolver?
 
@@ -250,6 +252,15 @@ private struct BlockVisitor: MarkupVisitor {
 	mutating func visitBlockQuote(_ blockQuote: BlockQuote) {
 		var inner = BlockVisitor(resolver: resolver)
 		inner.listLevel = listLevel
+		// An alert (`> [!NOTE]`, `> [!WARNING] Watch out`, …) becomes a callout box. One
+		// nested inside another stays a quote, as in the Pages writer.
+		if !insideAlert, let alert = MarkdownAlertBlock.detect(in: blockQuote) {
+			inner.insideAlert = true
+			for child in alert.body { inner.visit(child) }
+			blocks.append(.alert(kind: alert.kind, title: alert.title, blocks: inner.blocks))
+			return
+		}
+		inner.insideAlert = insideAlert
 		for child in blockQuote.children { inner.visit(child) }
 		blocks.append(.blockquote(blocks: inner.blocks))
 	}

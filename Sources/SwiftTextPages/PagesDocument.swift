@@ -577,9 +577,7 @@ public struct PagesDocument {
 			title = paragraphs[index].normalizedText()
 			index += 1
 		}
-		let marker = MarkdownAlertBlock.markerLine(kind: kind, title: title)
-		var lines = ["> " + marker]
-		var previousWasItem = false
+		var body = [MarkdownAlertBlock.RecoveredBlock]()
 		var counters = [Int: Int]()
 		while index < paragraphs.count, let callout = paragraphs[index].callout, callout.role != .title, callout.kind == kind {
 			let paragraph = paragraphs[index]
@@ -595,17 +593,13 @@ public struct PagesDocument {
 				} else {
 					marker = "- "
 				}
-				if !previousWasItem, lines.count > 1 { lines.append(">") }
-				lines.append("> " + String(repeating: "  ", count: max(level, 0)) + marker + text)
-				previousWasItem = true
+				body.append(.listItem(String(repeating: "  ", count: max(level, 0)) + marker + text))
 			} else {
 				counters.removeAll()
-				if lines.count > 1 { lines.append(">") }
-				lines.append(contentsOf: text.split(separator: "\n", omittingEmptySubsequences: false).map { "> " + $0 })
-				previousWasItem = false
+				body.append(.paragraph(text))
 			}
 		}
-		return (lines.joined(separator: "\n"), index)
+		return (MarkdownAlertBlock.markdown(kind: kind, title: title, body: body), index)
 	}
 
 	/// Renders a table (row 0 = header) as a GitHub-flavored Markdown table, with the

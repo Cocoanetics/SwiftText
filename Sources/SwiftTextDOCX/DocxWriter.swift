@@ -1,5 +1,6 @@
 import Foundation
 import SwiftTextCore
+import SwiftTextMarkdown
 import SwiftTextZip
 
 /// Page configuration for DOCX output.
@@ -62,6 +63,10 @@ public final class DocxWriter {
 		case listItem(ordered: Bool, level: Int, runs: [Run])
 		case codeBlock(language: String?, text: String)
 		case blockquote(blocks: [Block])
+		/// An alert box (`> [!NOTE]`, `> [!WARNING] Watch out`): `title` is the custom
+		/// title, or the kind's default ("Note"), and `blocks` is the body. Written as a
+		/// tinted, bordered box of paragraphs in the kind's "Callout" styles.
+		case alert(kind: String, title: String, blocks: [Block])
 		case horizontalRule
 		case table(headers: [[Run]], rows: [[[Run]]], alignments: [ColumnAlignment])
 		/// A standalone image: `source` is resolved against ``DocxWriter/baseURL`` and
@@ -155,6 +160,27 @@ public final class DocxWriter {
 		case unordered
 	}
 
+	/// The alert kinds used, in order of first use: each gets a pair of callout styles.
+	private var calloutKinds: [String] = []
+	/// Whether a horizontal rule was written (it needs the rule style).
+	private var usesRuleStyle = false
+
+	// MARK: - Style Metrics
+
+	/// The body font size in points (Normal and the document defaults): 1em for the
+	/// CSS-like spacing of alert boxes and rules.
+	static let bodyFontSize: Double = 11
+	private static var bodyFontHalfPoints: Int { Int((bodyFontSize * 2).rounded()) }
+	/// Normal's space after, in twips.
+	static let paragraphSpaceAfter = 120
+	static func headingSpaceBefore(level: Int) -> Int { level <= 2 ? 240 : 200 }
+	static let headingSpaceAfter = 80
+	/// The indent of one block-quote level, and the hanging indent of list bullets.
+	static let quoteIndent = 360
+	static let listHangingIndent = 360
+
+	private var boxLayout: DocxBoxLayout { DocxBoxLayout(fontSize: Self.bodyFontSize) }
+
 	// MARK: - Initialization
 
 	public init() {}
@@ -174,6 +200,8 @@ public final class DocxWriter {
 		imageRels = []
 		imageContentDefaults = [:]
 		imageCounter = 0
+		calloutKinds = []
+		usesRuleStyle = false
 
 		// Build document body XML. This populates `hyperlinks` and the image media
 		// state as a side effect, so it must run before the rels / content-types parts.
@@ -230,10 +258,7 @@ public final class DocxWriter {
 	// MARK: - Body Generation
 
 	private func generateBodyXML() -> String {
-		var xml = ""
-		for block in blocks {
-			xml += renderBlock(block, quoteDepth: 0)
-		}
+		var xml = renderBlocks(blocks, quoteDepth: 0, above: nil, below: nil)
 		let orient = pageSetup.landscape ? "landscape" : "portrait"
 		let m = pageSetup.margin
 		xml += """
@@ -245,7 +270,47 @@ public final class DocxWriter {
 		return xml
 	}
 
-	private func renderBlock(_ block: Block, quoteDepth: Int) -> String {
+	/// Renders a run of blocks, telling each one what is above and below it (alert boxes
+	/// and rules space themselves against their neighbours, like CSS margins). `above`
+	/// and `below` are the neighbours of the whole run.
+	private func renderBlocks(_ blocks: [Block], quoteDepth: Int, above: DocxEdge?, below: DocxEdge?) -> String {
+		var xml = ""
+		for (index, block) in blocks.enumerated() {
+			let previous = index > 0 ? bottomEdge(of: blocks[index - 1]) : above
+			let next = index + 1 < blocks.count ? topEdge(of: blocks[index + 1]) : below
+			xml += renderBlock(block, quoteDepth: quoteDepth, above: previous, below: next)
+		}
+		return xml
+	}
+
+	/// What a block shows the block above it: its first paragraph's space before, or
+	/// that it is a box or rule.
+	private func topEdge(of block: Block) -> DocxEdge {
+		switch block {
+		case .alert: return .box
+		case .horizontalRule: return .rule
+		case .heading(let level, _): return .spacing(Self.headingSpaceBefore(level: max(1, min(level, 6))))
+		case .blockquote(let inner): return inner.first.map(topEdge(of:)) ?? .spacing(0)
+		case .paragraph, .listItem, .codeBlock, .table, .image: return .spacing(0)
+		}
+	}
+
+	/// What a block shows the block below it: its last paragraph's space after, or that
+	/// it is a box or rule.
+	private func bottomEdge(of block: Block) -> DocxEdge {
+		switch block {
+		case .alert(_, let title, let inner):
+			if case .block(let last)? = calloutPieces(title: title, blocks: inner).last { return bottomEdge(of: last) }
+			return .box
+		case .horizontalRule: return .rule
+		case .heading: return .spacing(Self.headingSpaceAfter)
+		case .blockquote(let inner): return inner.last.map(bottomEdge(of:)) ?? .spacing(0)
+		case .paragraph, .listItem, .image: return .spacing(Self.paragraphSpaceAfter)
+		case .codeBlock, .table: return .spacing(0)
+		}
+	}
+
+	private func renderBlock(_ block: Block, quoteDepth: Int, above: DocxEdge?, below: DocxEdge?) -> String {
 		switch block {
 		case .heading(let level, let runs):
 			lastListType = nil
@@ -257,14 +322,7 @@ public final class DocxWriter {
 			return paragraph(style: nil, runs: runs, quoteDepth: quoteDepth)
 
 		case .listItem(let ordered, let level, let runs):
-			let listType: ListType = ordered ? .ordered : .unordered
-			if lastListType != listType {
-				nextNumId += 1
-				let abstractNumId = ordered ? 1 : 0
-				numInstances.append((numId: nextNumId, abstractNumId: abstractNumId))
-				lastListType = listType
-			}
-			return listParagraph(runs: runs, numId: nextNumId, ilvl: level, quoteDepth: quoteDepth)
+			return listParagraph(runs: runs, numId: listNumId(ordered: ordered), ilvl: level, quoteDepth: quoteDepth)
 
 		case .codeBlock(_, let text):
 			lastListType = nil
@@ -272,15 +330,14 @@ public final class DocxWriter {
 
 		case .blockquote(let innerBlocks):
 			lastListType = nil
-			var xml = ""
-			for inner in innerBlocks {
-				xml += renderBlock(inner, quoteDepth: quoteDepth + 1)
-			}
-			return xml
+			return renderBlocks(innerBlocks, quoteDepth: quoteDepth + 1, above: above, below: below)
+
+		case .alert(let kind, let title, let innerBlocks):
+			return renderAlert(kind: kind, title: title, blocks: innerBlocks, quoteDepth: quoteDepth, above: above, below: below)
 
 		case .horizontalRule:
 			lastListType = nil
-			return horizontalRuleParagraph(quoteDepth: quoteDepth)
+			return horizontalRuleParagraph(quoteDepth: quoteDepth, above: above, below: below)
 
 		case .table(let headers, let rows, let alignments):
 			lastListType = nil
@@ -292,6 +349,19 @@ public final class DocxWriter {
 		}
 	}
 
+	/// The numbering instance for a list item: consecutive items of one list type share
+	/// one, so their numbers run on.
+	private func listNumId(ordered: Bool) -> Int {
+		let listType: ListType = ordered ? .ordered : .unordered
+		if lastListType != listType {
+			nextNumId += 1
+			let abstractNumId = ordered ? 1 : 0
+			numInstances.append((numId: nextNumId, abstractNumId: abstractNumId))
+			lastListType = listType
+		}
+		return nextNumId
+	}
+
 	// MARK: - Paragraph Builders
 
 	private func paragraph(style: String?, runs: [Run], quoteDepth: Int) -> String {
@@ -300,11 +370,11 @@ public final class DocxWriter {
 			pPr += "<w:pStyle w:val=\"\(xmlEscape(style))\"/>"
 		}
 		if quoteDepth > 0 {
-			let indent = quoteDepth * 360 // 0.25 inch per level
-			pPr += "<w:ind w:left=\"\(indent)\"/>"
+			// Schema order: the border comes before the indent.
 			if style == nil {
 				pPr += "<w:pBdr><w:left w:val=\"single\" w:sz=\"12\" w:space=\"4\" w:color=\"CCCCCC\"/></w:pBdr>"
 			}
+			pPr += "<w:ind w:left=\"\(quoteDepth * Self.quoteIndent)\"/>"
 		}
 		let pPrXML = pPr.isEmpty ? "" : "<w:pPr>\(pPr)</w:pPr>"
 		return "<w:p>\(pPrXML)\(renderRuns(runs))</w:p>\n"
@@ -388,18 +458,186 @@ public final class DocxWriter {
 		"""
 	}
 
-	private func horizontalRuleParagraph(quoteDepth: Int) -> String {
-		var indentXML = ""
+	/// A rule: an empty paragraph in the "Horizontal Rule" style (a bottom border under
+	/// a 1pt line), spaced by the CSS `hr` margins against its neighbours.
+	private func horizontalRuleParagraph(quoteDepth: Int, above: DocxEdge?, below: DocxEdge?) -> String {
+		usesRuleStyle = true
+		let layout = boxLayout
+		var pPr = "<w:pStyle w:val=\"\(DocxStyleID.rule)\"/>"
+		pPr += "<w:spacing w:before=\"\(layout.ruleSpaceBefore(above: above))\" w:after=\"\(layout.ruleSpaceAfter(below: below))\"/>"
 		if quoteDepth > 0 {
-			indentXML = "<w:ind w:left=\"\(quoteDepth * 360)\"/>"
+			pPr += "<w:ind w:left=\"\(quoteDepth * Self.quoteIndent)\"/>"
 		}
-		return """
-		<w:p><w:pPr>\
-		<w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="DDDDDD"/></w:pBdr>\
-		\(indentXML)\
-		</w:pPr></w:p>
+		return "<w:p><w:pPr>\(pPr)</w:pPr></w:p>\n"
+	}
 
-		"""
+	// MARK: - Alert Boxes
+
+	/// A paragraph of an alert box.
+	private struct CalloutParagraph {
+		enum Role {
+			case title
+			case body
+			case listItem(ordered: Bool, level: Int)
+		}
+		var role: Role
+		var runs: [Run]
+
+		var isListItem: Bool {
+			if case .listItem = role { return true }
+			return false
+		}
+	}
+
+	/// An alert's content, as Word can draw it: runs of paragraphs that form one box, and
+	/// the tables, images and rules that can't sit inside a paragraph box and split it.
+	private enum CalloutPiece {
+		case box([CalloutParagraph])
+		case block(Block)
+	}
+
+	/// Flattens an alert into box paragraphs: headings become bold lines, quotes italic
+	/// ones and code blocks monospace ones, since a second frame or indent would break
+	/// the box apart (as in the Pages writer). Nested list levels keep their numbering
+	/// level but share the box's indent.
+	private func calloutPieces(title: String, blocks: [Block]) -> [CalloutPiece] {
+		var pieces = [CalloutPiece]()
+		var current = [CalloutParagraph(role: .title, runs: [Run(text: title)])]
+		func styled(_ runs: [Run], bold: Bool = false, italic: Bool) -> [Run] {
+			runs.map { run in
+				var run = run
+				run.bold = run.bold || bold
+				run.italic = run.italic || italic
+				return run
+			}
+		}
+		func flatten(_ blocks: [Block], italic: Bool) {
+			for block in blocks {
+				switch block {
+				case .paragraph(let runs):
+					current.append(CalloutParagraph(role: .body, runs: styled(runs, italic: italic)))
+				case .heading(_, let runs):
+					current.append(CalloutParagraph(role: .body, runs: styled(runs, bold: true, italic: italic)))
+				case .listItem(let ordered, let level, let runs):
+					current.append(CalloutParagraph(role: .listItem(ordered: ordered, level: level), runs: styled(runs, italic: italic)))
+				case .codeBlock(_, let text):
+					current.append(CalloutParagraph(role: .body, runs: [Run(text: text, italic: italic, code: true)]))
+				case .blockquote(let inner):
+					flatten(inner, italic: true)
+				case .alert(_, let innerTitle, let inner):
+					current.append(CalloutParagraph(role: .body, runs: [Run(text: innerTitle, bold: true, italic: true)]))
+					flatten(inner, italic: true)
+				case .horizontalRule, .table, .image:
+					if !current.isEmpty { pieces.append(.box(current)) }
+					current = []
+					pieces.append(.block(block))
+				}
+			}
+		}
+		flatten(blocks, italic: false)
+		if !current.isEmpty { pieces.append(.box(current)) }
+		return pieces
+	}
+
+	private func renderAlert(kind: String, title: String, blocks: [Block], quoteDepth: Int, above: DocxEdge?, below: DocxEdge?) -> String {
+		if !calloutKinds.contains(kind) { calloutKinds.append(kind) }
+		lastListType = nil
+		let pieces = calloutPieces(title: title, blocks: blocks)
+		var xml = ""
+		for (index, piece) in pieces.enumerated() {
+			let previous: DocxEdge?
+			if index == 0 {
+				previous = above
+			} else if case .block(let block) = pieces[index - 1] {
+				previous = bottomEdge(of: block)
+			} else {
+				previous = .box
+			}
+			let next: DocxEdge?
+			if index + 1 == pieces.count {
+				next = below
+			} else if case .block(let block) = pieces[index + 1] {
+				next = topEdge(of: block)
+			} else {
+				next = .box
+			}
+			switch piece {
+			case .box(let paragraphs):
+				xml += calloutBoxXML(paragraphs, kind: kind, quoteDepth: quoteDepth, above: previous, below: next)
+			case .block(let block):
+				xml += renderBlock(block, quoteDepth: quoteDepth, above: previous, below: next)
+			}
+		}
+		lastListType = nil
+		return xml
+	}
+
+	/// One box: its paragraphs share the kind's borders, shading and indents, so Word
+	/// draws them as one frame, and are spaced like the CSS box, in `em` of the body font.
+	private func calloutBoxXML(_ paragraphs: [CalloutParagraph], kind: String, quoteDepth: Int, above: DocxEdge?, below: DocxEdge?) -> String {
+		let layout = boxLayout
+		// Word splits a box wherever borders or indents differ, so every paragraph gets
+		// the same ones: the style's, unless a quote's indent or list bullets (which hang
+		// in a wider left padding) move the text.
+		let listHang = paragraphs.contains(where: \.isListItem) ? Self.listHangingIndent : 0
+		let offset = quoteDepth * Self.quoteIndent
+		let directBorders = listHang > 0 ? calloutBordersXML(kind: kind, listHang: listHang) : ""
+		let directIndent = listHang > 0 || offset > 0
+		var xml = ""
+		for (index, paragraph) in paragraphs.enumerated() {
+			let isLast = index + 1 == paragraphs.count
+			let before = index == 0 ? layout.boxSpaceBefore(above: above) : 0
+			let after: Int
+			if isLast {
+				after = layout.boxSpaceAfter(below: below)
+			} else if case .title = paragraph.role {
+				after = layout.paragraphGap
+			} else if paragraph.isListItem, paragraphs[index + 1].isListItem {
+				after = layout.itemGap
+			} else {
+				after = layout.bodyGap
+			}
+
+			var styleID = DocxStyleID.callout(kind: kind)
+			if case .title = paragraph.role { styleID = DocxStyleID.calloutTitle(kind: kind) }
+			var pPr = "<w:pStyle w:val=\"\(styleID)\"/>"
+			if !isLast { pPr += "<w:keepNext/>" }                  // CSS break-inside: avoid
+			var hanging = ""
+			if case .listItem(let ordered, let level) = paragraph.role {
+				pPr += "<w:numPr><w:ilvl w:val=\"\(level)\"/><w:numId w:val=\"\(listNumId(ordered: ordered))\"/></w:numPr>"
+				hanging = " w:hanging=\"\(listHang)\""
+			} else {
+				lastListType = nil
+			}
+			pPr += directBorders
+			pPr += "<w:spacing w:before=\"\(before)\" w:after=\"\(after)\"/>"
+			if directIndent {
+				pPr += "<w:ind w:left=\"\(layout.leftIndent(listHang: listHang, offset: offset))\" w:right=\"\(layout.rightIndent)\"\(hanging)/>"
+			}
+			xml += "<w:p><w:pPr>\(pPr)</w:pPr>\(renderRuns(paragraph.runs))</w:p>\n"
+		}
+		if below == .box {
+			// Two boxes in a row would join into one: an unbordered 1pt paragraph parts them.
+			let hairline = DocxBoxLayout.hairlineTwips
+			let size = DocxBoxLayout.hairlineHalfPoints
+			xml += "<w:p><w:pPr><w:spacing w:before=\"0\" w:after=\"0\" w:line=\"\(hairline)\" w:lineRule=\"exact\"/><w:rPr><w:sz w:val=\"\(size)\"/><w:szCs w:val=\"\(size)\"/></w:rPr></w:pPr></w:p>\n"
+		}
+		return xml
+	}
+
+	/// The box frame: the kind's 3pt accent border on the left, and borders in the fill
+	/// colour on the other sides, which only exist to pad the text (Word pads a side
+	/// only when it has a border). The shading fills the padding.
+	private func calloutBordersXML(kind: String, listHang: Int) -> String {
+		let palette = MarkdownAlertPalette.palette(forKind: kind)
+		let layout = boxLayout
+		let hairline = DocxBoxLayout.hairlineBorderEighths
+		return "<w:pBdr>"
+			+ "<w:top w:val=\"single\" w:sz=\"\(hairline)\" w:space=\"\(layout.paddingBlock)\" w:color=\"\(palette.background)\"/>"
+			+ "<w:left w:val=\"single\" w:sz=\"\(layout.accentBorderEighths)\" w:space=\"\(layout.paddingLeft(listHang: listHang))\" w:color=\"\(palette.border)\"/>"
+			+ "<w:bottom w:val=\"single\" w:sz=\"\(hairline)\" w:space=\"\(layout.paddingBlock)\" w:color=\"\(palette.background)\"/>"
+			+ "<w:right w:val=\"single\" w:sz=\"\(hairline)\" w:space=\"\(layout.paddingRight)\" w:color=\"\(palette.background)\"/>"
+			+ "</w:pBdr>"
 	}
 
 	// MARK: - Image Rendering
@@ -621,7 +859,7 @@ public final class DocxWriter {
 				if run.bold || forceBold { rPr += "<w:b/><w:bCs/>" }
 				if run.italic { rPr += "<w:i/><w:iCs/>" }
 				if run.strike { rPr += "<w:strike/>" }
-				xml += "<w:hyperlink r:id=\"\(rId)\"><w:r><w:rPr>\(rPr)</w:rPr><w:t xml:space=\"preserve\">\(xmlEscape(run.text))</w:t></w:r></w:hyperlink>"
+				xml += "<w:hyperlink r:id=\"\(rId)\"><w:r><w:rPr>\(rPr)</w:rPr>\(textElements(run.text))</w:r></w:hyperlink>"
 			} else {
 				var rPr = ""
 				if run.bold || forceBold { rPr += "<w:b/><w:bCs/>" }
@@ -632,10 +870,19 @@ public final class DocxWriter {
 					rPr += "<w:sz w:val=\"21\"/><w:szCs w:val=\"21\"/>"
 				}
 				let rPrXML = rPr.isEmpty ? "" : "<w:rPr>\(rPr)</w:rPr>"
-				xml += "<w:r>\(rPrXML)<w:t xml:space=\"preserve\">\(xmlEscape(run.text))</w:t></w:r>"
+				xml += "<w:r>\(rPrXML)\(textElements(run.text))</w:r>"
 			}
 		}
 		return xml
+	}
+
+	/// A run's text: hard line breaks (and the lines of a code block) become `w:br`,
+	/// since Word shows a newline inside `w:t` as a space.
+	private func textElements(_ text: String) -> String {
+		guard text.contains("\n") else { return "<w:t xml:space=\"preserve\">\(xmlEscape(text))</w:t>" }
+		return text.split(separator: "\n", omittingEmptySubsequences: false).enumerated().map { index, line in
+			(index > 0 ? "<w:br/>" : "") + (line.isEmpty ? "" : "<w:t xml:space=\"preserve\">\(xmlEscape(String(line)))</w:t>")
+		}.joined()
 	}
 
 	private func nextHyperlinkId(url: String) -> String {
@@ -747,7 +994,7 @@ public final class DocxWriter {
 		<w:docDefaults>
 		<w:rPrDefault><w:rPr>
 		<w:rFonts w:ascii="Helvetica Neue" w:hAnsi="Helvetica Neue" w:cs="Arial"/>
-		<w:sz w:val="22"/><w:szCs w:val="22"/>
+		<w:sz w:val="\(Self.bodyFontHalfPoints)"/><w:szCs w:val="\(Self.bodyFontHalfPoints)"/>
 		<w:color w:val="222222"/>
 		<w:u w:val="none" w:color="auto"/>
 		<w:bdr w:val="nil"/>
@@ -773,10 +1020,10 @@ public final class DocxWriter {
 		<w:style w:type="paragraph" w:default="1" w:styleId="Normal">
 		<w:name w:val="Normal"/>
 		<w:pPr>
-		<w:spacing w:after="120" w:line="276" w:lineRule="auto"/>
+		<w:spacing w:after="\(Self.paragraphSpaceAfter)" w:line="276" w:lineRule="auto"/>
 		</w:pPr>
 		<w:rPr>
-		<w:sz w:val="22"/><w:szCs w:val="22"/>
+		<w:sz w:val="\(Self.bodyFontHalfPoints)"/><w:szCs w:val="\(Self.bodyFontHalfPoints)"/>
 		</w:rPr>
 		</w:style>
 
@@ -839,29 +1086,89 @@ public final class DocxWriter {
 		<w:vertAlign w:val="superscript"/>
 		</w:rPr>
 		</w:style>
-
+		\(ruleStyle())\(calloutStyles())
 		</w:styles>
 		"""
 	}
 
 	private func headingStyle(level: Int, size: Int, borderBottom: Bool, borderSize: Int = 0) -> String {
-		let spaceBefore = level <= 2 ? "240" : "200"
-		let spaceAfter = "80"
-		var pPr = "<w:spacing w:before=\"\(spaceBefore)\" w:after=\"\(spaceAfter)\"/>"
-		pPr += "<w:keepNext/><w:keepLines/>"
+		let spaceBefore = Self.headingSpaceBefore(level: level)
+		let spaceAfter = Self.headingSpaceAfter
+		// In schema order: keeps, border, spacing, outline level.
+		var pPr = "<w:keepNext/><w:keepLines/>"
 		if borderBottom {
 			let color = level == 1 ? "DDDDDD" : "EEEEEE"
 			pPr += "<w:pBdr><w:bottom w:val=\"single\" w:sz=\"\(borderSize)\" w:space=\"4\" w:color=\"\(color)\"/></w:pBdr>"
 		}
+		pPr += "<w:spacing w:before=\"\(spaceBefore)\" w:after=\"\(spaceAfter)\"/>"
+		pPr += "<w:outlineLvl w:val=\"\(level - 1)\"/>"
 		return """
 		<w:style w:type="paragraph" w:styleId="Heading\(level)">
 		<w:name w:val="heading \(level)"/>
 		<w:basedOn w:val="Normal"/>
 		<w:next w:val="Normal"/>
-		<w:pPr><w:outlineLvl w:val="\(level - 1)"/>\(pPr)</w:pPr>
+		<w:pPr>\(pPr)</w:pPr>
 		<w:rPr><w:b/><w:bCs/><w:sz w:val="\(size)"/><w:szCs w:val="\(size)"/></w:rPr>
 		</w:style>
 		"""
+	}
+
+	/// "Horizontal Rule": an empty 1pt line with a bottom border; each rule paragraph
+	/// sets its own CSS-like spacing.
+	private func ruleStyle() -> String {
+		guard usesRuleStyle else { return "" }
+		let hairline = DocxBoxLayout.hairlineTwips
+		let size = DocxBoxLayout.hairlineHalfPoints
+		return """
+
+		<w:style w:type="paragraph" w:customStyle="1" w:styleId="\(DocxStyleID.rule)">
+		<w:name w:val="\(DocxStyleID.ruleName)"/>
+		<w:basedOn w:val="Normal"/>
+		<w:next w:val="Normal"/>
+		<w:pPr>
+		<w:pBdr><w:bottom w:val="single" w:sz="\(DocxBoxLayout.ruleBorderEighths)" w:space="0" w:color="DDDDDD"/></w:pBdr>
+		<w:spacing w:before="0" w:after="0" w:line="\(hairline)" w:lineRule="exact"/>
+		</w:pPr>
+		<w:rPr><w:sz w:val="\(size)"/><w:szCs w:val="\(size)"/></w:rPr>
+		</w:style>
+
+		"""
+	}
+
+	/// "Callout Note" and "Callout Note Title" (and so on for each kind used): the box's
+	/// frame, tint, indents and text colour live in the body style, which the title style
+	/// inherits, so both draw as one box. The colours are the CSS ones.
+	private func calloutStyles() -> String {
+		let layout = boxLayout
+		return calloutKinds.map { kind in
+			let palette = MarkdownAlertPalette.palette(forKind: kind)
+			let body = DocxStyleID.callout(kind: kind)
+			return """
+
+			<w:style w:type="paragraph" w:customStyle="1" w:styleId="\(body)">
+			<w:name w:val="\(xmlEscape(DocxStyleID.calloutName(kind: kind, title: false)))"/>
+			<w:basedOn w:val="Normal"/>
+			<w:next w:val="\(body)"/>
+			<w:qFormat/>
+			<w:pPr>
+			<w:keepLines/>
+			\(calloutBordersXML(kind: kind, listHang: 0))
+			<w:shd w:val="clear" w:color="auto" w:fill="\(palette.background)"/>
+			<w:spacing w:before="0" w:after="\(layout.bodyGap)"/>
+			<w:ind w:left="\(layout.leftIndent(listHang: 0, offset: 0))" w:right="\(layout.rightIndent)"/>
+			</w:pPr>
+			<w:rPr><w:color w:val="\(palette.text)"/></w:rPr>
+			</w:style>
+			<w:style w:type="paragraph" w:customStyle="1" w:styleId="\(DocxStyleID.calloutTitle(kind: kind))">
+			<w:name w:val="\(xmlEscape(DocxStyleID.calloutName(kind: kind, title: true)))"/>
+			<w:basedOn w:val="\(body)"/>
+			<w:next w:val="\(body)"/>
+			<w:qFormat/>
+			<w:pPr><w:keepNext/><w:spacing w:before="\(layout.margin)" w:after="\(layout.paragraphGap)"/></w:pPr>
+			<w:rPr><w:b/><w:bCs/></w:rPr>
+			</w:style>
+			"""
+		}.joined()
 	}
 
 	// MARK: - Numbering
@@ -1028,6 +1335,9 @@ public final class DocxWriter {
 			case .listItem(_, _, let runs):
 				paragraphs.append(runs)
 			case .blockquote(let inner):
+				paragraphs.append(contentsOf: footnoteRunParagraphs(from: inner))
+			case .alert(_, let title, let inner):
+				paragraphs.append([Run(text: title, bold: true)])
 				paragraphs.append(contentsOf: footnoteRunParagraphs(from: inner))
 			case .codeBlock(_, let text):
 				for line in text.components(separatedBy: "\n") {
