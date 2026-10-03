@@ -110,7 +110,8 @@ private final class DocumentExtractor: NSObject, XMLParserDelegate {
 
 	private(set) var document = DocxDocument()
 	private let footnotesByID: [String: String]
-	/// The paragraph styles, to keep rule paragraphs, which are empty but mean `---`.
+	/// The paragraph styles, to keep the empty paragraphs that mean something: rules
+	/// (`---`) and blank lines of code blocks.
 	private let styles: DocxDocument.StyleCatalog
 	private var footnoteNumberByID: [String: Int] = [:]
 	private var footnoteCounter = 0
@@ -125,6 +126,11 @@ private final class DocumentExtractor: NSObject, XMLParserDelegate {
 	private var formatTargetStack = [FormatTarget]()
 	private var pendingNumberingLevel: Int?
 	private var pendingNumberingId: Int?
+	/// Set at a table cell's start, so its first paragraph is marked as starting one.
+	private var cellStartPending = false
+	/// Set when an empty paragraph outside a quote was skipped, so the next paragraph is
+	/// marked as following a break (the spacer between two quotes).
+	private var breakPending = false
 
 	init(footnotesByID: [String: String], styles: DocxDocument.StyleCatalog) {
 		self.footnotesByID = footnotesByID
@@ -139,6 +145,8 @@ private final class DocumentExtractor: NSObject, XMLParserDelegate {
 		switch elementName {
 		case "w:p", "p", "wp:p":
 			beginParagraph()
+		case "w:tc", "tc":
+			cellStartPending = true
 		case "w:pPr", "pPr":
 			insideParagraphProperties = true
 			formatTargetStack.append(.paragraph)
@@ -147,6 +155,8 @@ private final class DocumentExtractor: NSObject, XMLParserDelegate {
 			formatStack.append(currentState)
 		case "w:pStyle", "pStyle":
 			applyParagraphStyle(attributes: attributeDict)
+		case "w:ind", "ind":
+			applyIndent(attributes: attributeDict)
 		case "w:t", "t":
 			insideTextTag = true
 			currentRunText = ""
@@ -183,6 +193,8 @@ private final class DocumentExtractor: NSObject, XMLParserDelegate {
 		default:
 			if elementName.hasSuffix(":p") {
 				beginParagraph()
+			} else if elementName.hasSuffix(":tc") {
+				cellStartPending = true
 			} else if elementName.hasSuffix(":pPr") {
 				insideParagraphProperties = true
 				formatTargetStack.append(.paragraph)
@@ -191,6 +203,8 @@ private final class DocumentExtractor: NSObject, XMLParserDelegate {
 				formatStack.append(currentState)
 			} else if elementName.hasSuffix(":pStyle") {
 				applyParagraphStyle(attributes: attributeDict)
+			} else if elementName.hasSuffix(":ind") {
+				applyIndent(attributes: attributeDict)
 			} else if elementName.hasSuffix(":t") {
 				insideTextTag = true
 				currentRunText = ""
@@ -283,6 +297,8 @@ private final class DocumentExtractor: NSObject, XMLParserDelegate {
 		paragraphFormat = DocxDocument.FormatState()
 		formatStack.removeAll(keepingCapacity: true)
 		currentParagraph = DocxDocument.Paragraph()
+		currentParagraph?.startsTableCell = cellStartPending
+		cellStartPending = false
 		pendingNumberingId = nil
 		pendingNumberingLevel = nil
 	}
@@ -292,8 +308,14 @@ private final class DocumentExtractor: NSObject, XMLParserDelegate {
 		guard let paragraph = currentParagraph else {
 			return
 		}
-		if !paragraph.isEmpty || styles.style(for: paragraph.styleIdentifier)?.isRule == true {
+		let style = styles.style(for: paragraph.styleIdentifier)
+		if !paragraph.isEmpty || style?.isRule == true || style?.isCodeBlock == true {
+			var paragraph = paragraph
+			paragraph.followsBreak = breakPending
+			breakPending = false
 			document.paragraphs.append(paragraph)
+		} else if style?.isBlockQuote != true {
+			breakPending = true
 		}
 		currentParagraph = nil
 		formatStack.removeAll(keepingCapacity: true)
@@ -415,6 +437,14 @@ private final class DocumentExtractor: NSObject, XMLParserDelegate {
 		updateCurrentParagraph { paragraph in
 			paragraph.styleIdentifier = styleIdentifier
 		}
+	}
+
+	/// A paragraph's direct left indent (twips): a quote's nesting depth.
+	private func applyIndent(attributes: [String: String]) {
+		guard insideParagraphProperties,
+			  let value = attributeValue(from: attributes, for: ["w:left", "left", "w:start", "start"]),
+			  let indent = Int(value) else { return }
+		updateCurrentParagraph { $0.leftIndent = indent }
 	}
 
 	private func assignNumberingLevel(from attributes: [String: String]) {

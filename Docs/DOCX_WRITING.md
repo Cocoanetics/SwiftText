@@ -1,4 +1,4 @@
-# DOCX writing: alert boxes and rules
+# DOCX writing: alert boxes, rules, quotes and code blocks
 
 `MarkdownToDocx` writes GitHub/Obsidian/DocC alerts (`> [!NOTE]`, `> [!WARNING] Watch out`,
 any `[!KIND]`, `> Note:`) as **boxes of ordinary paragraphs**: a tinted fill with the kind's
@@ -75,6 +75,18 @@ An unbordered 1pt **spacer paragraph** therefore parts them; the reader skips it
   emphasis and plain lines. The Pages writer does the same.
 - **Tables, images and rules** can't sit inside a paragraph box. They split it: the box
   closes before them and continues after them, without a title.
+
+## Block quotes and code blocks
+
+Quoted paragraphs use the **Block Quote** style (`SwiftTextBlockQuote`: a grey left bar at
+one level's indent). Deeper levels add 360 twips of direct indent each, and the reader turns
+the indent back into `> > `. It also takes Word's own **Quote** and **Intense Quote** styles
+as quotes. Two quotes in a row would join under one bar, so the same unstyled spacer that
+parts two boxes parts them, and the reader takes it as the boundary.
+
+Code blocks stay single-cell tables of **Code Block** paragraphs. The reader turns each cell
+back into one fenced block. It keeps the empty paragraphs (blank lines) and the
+indentation, and uses a longer fence when the code holds backticks.
 
 ## Not verified in Word
 

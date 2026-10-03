@@ -5,6 +5,10 @@ import SwiftTextMarkdown
 enum DocxStyleID {
 	static let rule = "SwiftTextRule"
 	static let ruleName = "Horizontal Rule"
+	static let blockQuote = "SwiftTextBlockQuote"
+	static let blockQuoteName = "Block Quote"
+	static let codeBlock = "CodeBlock"
+	static let codeBlockName = "Code Block"
 	private static let calloutPrefix = "SwiftTextCallout-"
 	private static let calloutTitlePrefix = "SwiftTextCalloutTitle-"
 
@@ -35,6 +39,15 @@ enum DocxStyleID {
 
 	static func isRule(styleId: String, name: String?) -> Bool {
 		styleId == rule || name == ruleName
+	}
+
+	/// SwiftText's "Block Quote", or Word's built-in "Quote" and "Intense Quote".
+	static func isBlockQuote(styleId: String, name: String?) -> Bool {
+		styleId == blockQuote || [blockQuoteName, "Quote", "Intense Quote"].contains(name)
+	}
+
+	static func isCodeBlock(styleId: String, name: String?) -> Bool {
+		styleId == codeBlock || name == codeBlockName
 	}
 }
 

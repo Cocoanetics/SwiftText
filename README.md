@@ -92,8 +92,8 @@ Features:
   footnotes
 - Markdown → DOCX writes alerts (`> [!NOTE]`, `> [!WARNING] Watch out`, any
   `[!KIND]`) as tinted, bordered paragraph boxes spaced like the HTML/PDF CSS, and
-  rules as native rules; both read back as `> [!KIND]` and `---`
-  (see [Docs/DOCX_WRITING.md](Docs/DOCX_WRITING.md))
+  rules as native rules; these, block quotes and code blocks read back as
+  Markdown (see [Docs/DOCX_WRITING.md](Docs/DOCX_WRITING.md))
 
 ### SwiftTextEPUB
 
@@ -397,7 +397,7 @@ On Linux/Windows the CLI needs libxml2 for the HTML/render paths (Linux:
 Options:
 - **ocr** *(macOS only)* `--markdown`/`-m` (Vision segmentation), `--save-images <dir>`, `--output-path <file>`/`-o`
 - **html** `--markdown`/`-m`, `--main-content`, `--save-images <dir>`, `--output-path <file>`/`-o`, `--webkit` *(macOS)*, `--via-pdf` *(macOS)*
-- **docx** `--markdown`/`-m` (headings, lists, alert boxes, rules), `--output-path <file>`/`-o`, `--save-images`
+- **docx** `--markdown`/`-m` (headings, lists, quotes, code blocks, alert boxes, rules), `--output-path <file>`/`-o`, `--save-images`
 - **pages** `--markdown`/`-m` (inferred headings), `--output-path <file>`/`-o`, `--save-images`
 - **numbers** `--markdown`/`-m`, `--html`, `--json`, `--output-path <file>`/`-o`
 - **keynote** `--markdown`/`-m`, `--json`, `--output-path <file>`/`-o`

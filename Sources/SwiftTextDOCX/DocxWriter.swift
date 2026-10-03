@@ -164,6 +164,8 @@ public final class DocxWriter {
 	private var calloutKinds: [String] = []
 	/// Whether a horizontal rule was written (it needs the rule style).
 	private var usesRuleStyle = false
+	/// Whether a quoted paragraph was written (it needs the block-quote style).
+	private var usesQuoteStyle = false
 
 	// MARK: - Style Metrics
 
@@ -202,6 +204,7 @@ public final class DocxWriter {
 		imageCounter = 0
 		calloutKinds = []
 		usesRuleStyle = false
+		usesQuoteStyle = false
 
 		// Build document body XML. This populates `hyperlinks` and the image media
 		// state as a side effect, so it must run before the rels / content-types parts.
@@ -279,6 +282,10 @@ public final class DocxWriter {
 			let previous = index > 0 ? bottomEdge(of: blocks[index - 1]) : above
 			let next = index + 1 < blocks.count ? topEdge(of: blocks[index + 1]) : below
 			xml += renderBlock(block, quoteDepth: quoteDepth, above: previous, below: next)
+			if case .blockquote = block, index + 1 < blocks.count, case .blockquote = blocks[index + 1] {
+				// Two quotes in a row would draw (and read back) as one.
+				xml += spacerParagraph()
+			}
 		}
 		return xml
 	}
@@ -368,13 +375,13 @@ public final class DocxWriter {
 		var pPr = ""
 		if let style {
 			pPr += "<w:pStyle w:val=\"\(xmlEscape(style))\"/>"
-		}
-		if quoteDepth > 0 {
-			// Schema order: the border comes before the indent.
-			if style == nil {
-				pPr += "<w:pBdr><w:left w:val=\"single\" w:sz=\"12\" w:space=\"4\" w:color=\"CCCCCC\"/></w:pBdr>"
-			}
-			pPr += "<w:ind w:left=\"\(quoteDepth * Self.quoteIndent)\"/>"
+			if quoteDepth > 0 { pPr += "<w:ind w:left=\"\(quoteDepth * Self.quoteIndent)\"/>" }
+		} else if quoteDepth > 0 {
+			// A quoted paragraph: the "Block Quote" style (a grey bar at one level's
+			// indent), which the reader turns back into `>`; deeper levels indent further.
+			usesQuoteStyle = true
+			pPr += "<w:pStyle w:val=\"\(DocxStyleID.blockQuote)\"/>"
+			if quoteDepth > 1 { pPr += "<w:ind w:left=\"\(quoteDepth * Self.quoteIndent)\"/>" }
 		}
 		let pPrXML = pPr.isEmpty ? "" : "<w:pPr>\(pPr)</w:pPr>"
 		return "<w:p>\(pPrXML)\(renderRuns(runs))</w:p>\n"
@@ -618,11 +625,17 @@ public final class DocxWriter {
 		}
 		if below == .box {
 			// Two boxes in a row would join into one: an unbordered 1pt paragraph parts them.
-			let hairline = DocxBoxLayout.hairlineTwips
-			let size = DocxBoxLayout.hairlineHalfPoints
-			xml += "<w:p><w:pPr><w:spacing w:before=\"0\" w:after=\"0\" w:line=\"\(hairline)\" w:lineRule=\"exact\"/><w:rPr><w:sz w:val=\"\(size)\"/><w:szCs w:val=\"\(size)\"/></w:rPr></w:pPr></w:p>\n"
+			xml += spacerParagraph()
 		}
 		return xml
+	}
+
+	/// An empty, unstyled 1pt paragraph that keeps two framed groups (boxes, quotes)
+	/// from joining; the reader takes it as the boundary between them.
+	private func spacerParagraph() -> String {
+		let hairline = DocxBoxLayout.hairlineTwips
+		let size = DocxBoxLayout.hairlineHalfPoints
+		return "<w:p><w:pPr><w:spacing w:before=\"0\" w:after=\"0\" w:line=\"\(hairline)\" w:lineRule=\"exact\"/><w:rPr><w:sz w:val=\"\(size)\"/><w:szCs w:val=\"\(size)\"/></w:rPr></w:pPr></w:p>\n"
 	}
 
 	/// The box frame: the kind's 3pt accent border on the left, and borders in the fill
@@ -1086,7 +1099,7 @@ public final class DocxWriter {
 		<w:vertAlign w:val="superscript"/>
 		</w:rPr>
 		</w:style>
-		\(ruleStyle())\(calloutStyles())
+		\(quoteStyle())\(ruleStyle())\(calloutStyles())
 		</w:styles>
 		"""
 	}
@@ -1110,6 +1123,25 @@ public final class DocxWriter {
 		<w:pPr>\(pPr)</w:pPr>
 		<w:rPr><w:b/><w:bCs/><w:sz w:val="\(size)"/><w:szCs w:val="\(size)"/></w:rPr>
 		</w:style>
+		"""
+	}
+
+	/// "Block Quote": the grey left bar and one level's indent of a quoted paragraph.
+	private func quoteStyle() -> String {
+		guard usesQuoteStyle else { return "" }
+		return """
+
+		<w:style w:type="paragraph" w:customStyle="1" w:styleId="\(DocxStyleID.blockQuote)">
+		<w:name w:val="\(DocxStyleID.blockQuoteName)"/>
+		<w:basedOn w:val="Normal"/>
+		<w:next w:val="\(DocxStyleID.blockQuote)"/>
+		<w:qFormat/>
+		<w:pPr>
+		<w:pBdr><w:left w:val="single" w:sz="12" w:space="4" w:color="CCCCCC"/></w:pBdr>
+		<w:ind w:left="\(Self.quoteIndent)"/>
+		</w:pPr>
+		</w:style>
+
 		"""
 	}
 
