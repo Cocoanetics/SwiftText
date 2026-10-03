@@ -82,15 +82,18 @@ enum PagesStyleIdentifier {
 	static let calloutTitle = "swifttext-callout-title"
 	static let rule = "swifttext-rule"
 
+	static let calloutStart = "swifttext-callout-start"
 	static let calloutEnd = "swifttext-callout-end"
 
 	/// The identifier of an alert kind's style variation (`swifttext-callout:warning`,
-	/// `swifttext-callout-title:warning`, `swifttext-callout-end:warning`), so the reader
-	/// recovers the kind and the paragraph's role exactly.
+	/// `swifttext-callout-title:warning`, `swifttext-callout-start:warning`,
+	/// `swifttext-callout-end:warning`), so the reader recovers the kind and the
+	/// paragraph's role exactly.
 	static func callout(kind: String, role: BodyParagraph.CalloutRole.Role) -> String {
 		switch role {
 		case .title: return calloutTitle + ":" + kind
 		case .body: return callout + ":" + kind
+		case .start: return calloutStart + ":" + kind
 		case .end: return calloutEnd + ":" + kind
 		}
 	}
@@ -143,7 +146,7 @@ struct BodyParagraph {
 	/// An alert paragraph: its kind (`"note"`, `"warning"`, …), its role in the box and
 	/// the spacing the box layout gave it. Each distinct role is one style variation.
 	struct CalloutRole: Hashable {
-		enum Role: Hashable { case title, body, end }
+		enum Role: Hashable { case start, title, body, end }
 		var kind: String
 		var role: Role
 		var spaceBefore: Float = 0
@@ -725,8 +728,8 @@ enum PagesBodySerializer {
 		payload = settingTextColor(in: payload, red: text.r, green: text.g, blue: text.b)
 		payload = settingSpacing(in: payload, spaceBefore: role.spaceBefore, spaceAfter: role.spaceAfter)
 		payload = settingKeep(in: payload, withNext: role.keepWithNext, linesTogether: true)
-		if role.role == .end {
-			// The end paragraph only carries the bottom padding: a hairline of type.
+		if role.role == .start || role.role == .end {
+			// The start and end paragraphs only carry the padding: a hairline of type.
 			payload = settingFontSize(in: payload, points: PagesBoxLayout.hairlineFontSize)
 		}
 		return payload

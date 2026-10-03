@@ -182,6 +182,10 @@ box's spacing, with an identifier naming the kind and role (`swifttext-callout:w
   (so a title's space before is top padding), but **not** the last paragraph's space after.
   Bottom padding therefore needs an empty **end paragraph** inside the box (hairline type),
   whose space before is the padding and space after the box's bottom margin.
+- At the **top of a page**, Pages drops a paragraph's space before. Top padding taken from
+  the title's space before vanished whenever a box opened a page, so a box also starts with
+  an empty **start paragraph**: its space before is the box's top margin (which may well
+  vanish at a page top) and its space after the padding, which stays.
 - `historicalRuleOffset` (#17, a `TSP.Point`) moves a left/right border horizontally
   (Pages writes (−5, −5) for a boxed paragraph); its y has no effect on a left-only border.
 - `roundedCorners` (#46) rounds only full-box frames, not a left border — the one visible
@@ -189,7 +193,7 @@ box's spacing, with an identifier naming the kind and role (`swifttext-callout:w
 
 `PagesBoxLayout` turns the CSS into these settings in `em` of the template's Body font size:
 margin 0.8em (raising the space after of the paragraph above, collapsing like CSS), padding
-0.75em (title's space before; end paragraph), 0.6em between paragraphs (0.2em between list
+0.75em (start and end paragraphs), 0.6em between paragraphs (0.2em between list
 items), keep-with-next through the box (`break-inside: avoid`), rules with `hr`'s 1.2em.
 
 Inside a box, a nested quote becomes italic text, a heading a bold line and a code block one

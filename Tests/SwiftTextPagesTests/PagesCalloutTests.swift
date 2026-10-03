@@ -69,10 +69,10 @@ struct PagesCalloutTests {
 		let markdown = "> [!WARNING] First\n> One.\n\n> [!WARNING] Second\n> Two."
 		#expect(try roundTrip(markdown) == markdown)
 		let laidOut = PagesBoxLayout.apply(to: MarkdownToPages.paragraphs(markdown), fontSize: 11, baseSpacing: PagesWriter.baseSpacing(of:))
-		// title, body, end | separator | title, body, end
-		#expect(laidOut.count == 7)
-		#expect(laidOut[3].isSeparator)
-		#expect(laidOut[3].callout == nil)
+		// start, title, body, end | separator | start, title, body, end
+		#expect(laidOut.count == 9)
+		#expect(laidOut[4].isSeparator)
+		#expect(laidOut[4].callout == nil)
 	}
 
 	@Test("Each kind gets a style variation named for it, in its palette")
@@ -110,11 +110,29 @@ struct PagesCalloutTests {
 		// The end paragraph carries the bottom padding and the bottom margin.
 		#expect(abs((end.spaceBefore ?? 0) - (Float(MarkdownAlertLayout.paddingBlockEm) * em - PagesBoxLayout.hairlineLineHeight)) < 0.01)
 		#expect(abs((end.spaceAfter ?? 0) - Float(MarkdownAlertLayout.marginEm + MarkdownAlertLayout.halfLeadingEm) * em) < 0.01)
-		// The title's space before: the margin above (collapsing with Body's 8pt
-		// space after) plus the top padding, drawn inside the fill.
-		let title = try #require(styles["swifttext-callout-title:tip"]?.paraProperties)
+		// The start paragraph carries the top: the margin above (collapsing with Body's
+		// 8pt space after) as its space before, the top padding as its space after.
+		let start = try #require(styles["swifttext-callout-start:tip"]?.paraProperties)
 		let margin = max(8, Float(MarkdownAlertLayout.marginEm) * em)
-		#expect(abs((title.spaceBefore ?? 0) - (margin + Float(MarkdownAlertLayout.paddingBlockEm) * em)) < 0.01)
+		#expect(abs((start.spaceBefore ?? 0) - margin) < 0.01)
+		#expect(abs((start.spaceAfter ?? 0) - (Float(MarkdownAlertLayout.paddingBlockEm) * em - PagesBoxLayout.hairlineLineHeight)) < 0.01)
+		let title = try #require(styles["swifttext-callout-title:tip"]?.paraProperties)
+		#expect((title.spaceBefore ?? 0) == 0)
+	}
+
+	@Test("The top padding is a start paragraph's space after, which Pages keeps at the top of a page")
+	func topPaddingSurvivesAPageTop() {
+		// Pages drops a paragraph's space before at the top of a page. Were the padding the
+		// title's space before, a box opening a page would lose it.
+		let laidOut = PagesBoxLayout.apply(to: MarkdownToPages.paragraphs("> [!WARNING] Watch out\n> Careful.\n"),
+		                                   fontSize: 11, baseSpacing: PagesWriter.baseSpacing(of:))
+		let roles = laidOut.compactMap { $0.callout?.role }
+		#expect(roles == [.start, .title, .body, .end])
+		let start = laidOut[0].callout
+		#expect(start?.spaceBefore == 0)                       // nothing above at the document start
+		#expect(abs((start?.spaceAfter ?? 0) - (Float(MarkdownAlertLayout.paddingBlockEm) * 11 - PagesBoxLayout.hairlineLineHeight)) < 0.01)
+		#expect(start?.keepWithNext == true)
+		#expect(laidOut[1].callout?.spaceBefore == 0)
 	}
 
 	@Test("Block quotes read back as quotes, not italic paragraphs (#109)")
