@@ -70,6 +70,7 @@ enum MarkdownPagesBuilder {
 		return visitor.paragraphs
 	}
 
+
 	/// Pulls `[^id]: text` definition blocks out of the Markdown source (with 4-space- or
 	/// tab-indented continuation lines), returning the cleaned source and `id → text`.
 	static func extractFootnoteDefinitions(_ markdown: String) -> (cleaned: String, definitions: [String: String]) {
@@ -227,6 +228,17 @@ private struct BlockVisitor: MarkupVisitor {
 	private var listDepth = 0
 	private var nextListInstance = 1
 	private var blockQuoteDepth = 0
+	/// The kind of the alert whose body is being visited (`> [!NOTE]` …), if any: its
+	/// paragraphs take the kind's callout style instead of the block-quote style.
+	private var calloutKind: String?
+	/// Block quotes nested inside an alert: italic text in the alert's style, since a
+	/// second frame or indent would break the box apart.
+	private var calloutQuoteDepth = 0
+
+	/// The callout role for a body paragraph emitted now (nil outside alerts).
+	private var calloutBodyRole: BodyParagraph.CalloutRole? {
+		calloutKind.map { BodyParagraph.CalloutRole(kind: $0, role: .body) }
+	}
 
 	mutating func defaultVisit(_ markup: Markup) {
 		for child in markup.children { visit(child) }
@@ -250,12 +262,13 @@ private struct BlockVisitor: MarkupVisitor {
 			))
 			return
 		}
-		var collector = InlineCollector(footnoteDefinitions: footnoteDefinitions)
+		var collector = InlineCollector(base: InlineStyle(italic: calloutQuoteDepth > 0), footnoteDefinitions: footnoteDefinitions)
 		collector.collect(from: paragraph)
 		var bodyParagraph = BodyParagraph(
 			text: collector.text,
 			paragraphStyle: PagesStyleID.body,
 			blockQuote: blockQuoteDepth > 0,
+			callout: calloutBodyRole,
 			runs: collector.runs,
 			links: collector.links
 		)
@@ -264,11 +277,13 @@ private struct BlockVisitor: MarkupVisitor {
 	}
 
 	mutating func visitHeading(_ heading: Heading) {
-		var collector = InlineCollector(footnoteDefinitions: footnoteDefinitions)
+		// Inside an alert a heading would break the box: it becomes a bold body line.
+		var collector = InlineCollector(base: InlineStyle(bold: calloutKind != nil), footnoteDefinitions: footnoteDefinitions)
 		collector.collect(from: heading)
 		var bodyParagraph = BodyParagraph(
 			text: collector.text,
-			paragraphStyle: PagesStyleID.heading(level: heading.level),
+			paragraphStyle: calloutKind == nil ? PagesStyleID.heading(level: heading.level) : PagesStyleID.body,
+			callout: calloutBodyRole,
 			runs: collector.runs,
 			links: collector.links
 		)
@@ -288,14 +303,35 @@ private struct BlockVisitor: MarkupVisitor {
 	}
 
 	mutating func visitBlockQuote(_ blockQuote: BlockQuote) {
+		// An alert (`> [!NOTE]`, `> [!WARNING] Watch out`, …) becomes a callout box: a
+		// title paragraph and its body paragraphs in the kind's callout styles, which
+		// Pages draws as one framed, tinted box (see PagesWriter's "Callout" styles).
+		if calloutKind == nil, let alert = MarkdownAlertBlock.detect(in: blockQuote) {
+			paragraphs.append(BodyParagraph(
+				text: alert.title,
+				paragraphStyle: PagesStyleID.body,
+				callout: BodyParagraph.CalloutRole(kind: alert.kind, role: .title)
+			))
+			calloutKind = alert.kind
+			defer { calloutKind = nil }
+			for child in alert.body { visit(child) }
+			return
+		}
+		if calloutKind != nil {
+			calloutQuoteDepth += 1
+			defer { calloutQuoteDepth -= 1 }
+			for child in blockQuote.children { visit(child) }
+			return
+		}
 		blockQuoteDepth += 1
 		defer { blockQuoteDepth -= 1 }
 		for child in blockQuote.children { visit(child) }
 	}
 
 	mutating func visitThematicBreak(_ thematicBreak: ThematicBreak) {
-		// A horizontal rule rendered as a full-width line of box-drawing characters.
-		paragraphs.append(BodyParagraph(text: String(repeating: "\u{2500}", count: 40), paragraphStyle: PagesStyleID.body))
+		// A native rule: an empty paragraph in the "Rule" style, whose bottom border
+		// spans the text column (Pages' Borders & Rules), like HTML's <hr>.
+		paragraphs.append(BodyParagraph(text: "", paragraphStyle: PagesStyleID.rule, isRule: true))
 	}
 
 	mutating func visitUnorderedList(_ unorderedList: UnorderedList) {
@@ -339,6 +375,7 @@ private struct BlockVisitor: MarkupVisitor {
 			listLevel: level,
 			listInstance: ordered ? listInstance : nil,
 			listStart: start,
+			callout: calloutBodyRole,
 			runs: collector.runs,
 			links: collector.links
 		))

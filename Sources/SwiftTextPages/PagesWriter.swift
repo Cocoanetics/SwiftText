@@ -1,5 +1,6 @@
 import SwiftTextIWA
 import Foundation
+import SwiftTextMarkdown
 
 /// Writes a `.pages` document from scratch.
 ///
@@ -39,6 +40,12 @@ public final class PagesWriter {
 	           pageBreakBeforeHeadingLevel: Int? = nil, to url: URL) throws {
 		let identity = DocumentIdentity.fresh()
 		let registry = BodyObjectRegistry()
+
+		// Alert boxes and rules get their CSS spacing (in em of the body font size),
+		// which also adds each box's end paragraph — so this runs before anything that
+		// indexes paragraphs (tables, images).
+		let fontSize = try bodyFontSize()
+		let inputParagraphs = PagesBoxLayout.apply(to: inputParagraphs, fontSize: fontSize, baseSpacing: Self.baseSpacing(of:))
 
 		// Native tables: build the object set for every table paragraph and inject it
 		// into the captured components (the grid lives in `Index/Tables/*`, the model
@@ -107,7 +114,7 @@ public final class PagesWriter {
 				                         footnoteMarkIDs: footnoteArtifacts?.bodyMarkIDs ?? [],
 				                         footnoteCharStyleID: footnoteArtifacts?.charStyleID)
 			case "Index/DocumentStylesheet.iwa":
-				data = try applyingStylesheet(to: data, pageBreakBeforeHeadingLevel: pageBreakBeforeHeadingLevel)
+				data = try applyingStylesheet(to: data, pageBreakBeforeHeadingLevel: pageBreakBeforeHeadingLevel, bodyFontSize: fontSize)
 			case "Index/Metadata.iwa" where registry.didSynthesize || tableArtifacts != nil || imageArtifacts != nil || footnoteArtifacts != nil:
 				// Document.iwa is processed earlier in this loop, so `registry` already
 				// reflects any synthesized objects by the time Metadata is written.
@@ -254,7 +261,9 @@ public final class PagesWriter {
 	/// object is rewritten in place (size/spacing/line-spacing/color), the block-quote
 	/// style is built, and link text is colored. All other styles are preserved.
 	/// `pageBreakBeforeHeadingLevel` adds a page break before that heading style.
-	private func applyingStylesheet(to stylesheetIWA: [UInt8], pageBreakBeforeHeadingLevel: Int? = nil) throws -> [UInt8] {
+	private func applyingStylesheet(to stylesheetIWA: [UInt8], pageBreakBeforeHeadingLevel: Int? = nil, bodyFontSize: Float = 11) throws -> [UInt8] {
+		let em = bodyFontSize
+		func ems(_ value: Double) -> Float { Float(value) * em }
 		var data = Data(stylesheetIWA)
 		for spec in Self.stylesheet {
 			data = try IWAArchive.replacingPayload(in: data, objectID: spec.id) { payload in
@@ -306,6 +315,44 @@ public final class PagesWriter {
 			codeBlock = PagesBodySerializer.settingTextColor(in: codeBlock, red: code.r, green: code.g, blue: code.b)
 			codeBlock = PagesBodySerializer.settingBoxFrame(in: codeBlock, fill: (0.572, 0.572, 0.572, 0.121), stroke: (0, 0, 0), strokeWidth: 0.25)
 			data = try IWAArchive.replacingPayload(in: data, objectID: PagesStyleID.codeBlock) { _ in codeBlock }
+
+			// Alerts ("callouts", `> [!NOTE]`): two base styles that mirror the HTML/PDF
+			// `.markdown-alert` box — a left border on a tinted background, 0.4cm inner
+			// padding, coloured text — in the neutral palette. Each kind in the document
+			// uses a synthesized variation of them in its own colours (the registry).
+			// Repurposes the unused "Label" / "Label Dark" styles (same reason as above).
+			let neutral = MarkdownAlertPalette.neutral
+			let neutralText = MarkdownAlertPalette.components(neutral.text)
+			// Horizontal padding: CSS `padding: … 1em` inside the 4px (3pt) left border.
+			let inlinePadding = ems(MarkdownAlertLayout.paddingInlineEm) + Float(MarkdownAlertLayout.borderWidthPoints)
+			var callout = PagesBodySerializer.settingStyleIdentity(in: body, name: "Callout", identifier: PagesStyleIdentifier.callout)
+			callout = PagesBodySerializer.settingIndents(in: callout, left: inlinePadding, firstLine: inlinePadding, right: ems(MarkdownAlertLayout.paddingInlineEm))
+			callout = PagesBodySerializer.settingSpacing(in: callout, spaceBefore: 0, spaceAfter: ems(MarkdownAlertLayout.paragraphMarginEm))
+			callout = PagesBodySerializer.settingCalloutFrame(in: callout, palette: neutral)
+			callout = PagesBodySerializer.settingTextColor(in: callout, red: neutralText.r, green: neutralText.g, blue: neutralText.b)
+			callout = PagesBodySerializer.settingKeep(in: callout, withNext: false, linesTogether: true)
+			data = try IWAArchive.replacingPayload(in: data, objectID: PagesStyleID.calloutBody) { _ in callout }
+
+			var calloutTitle = PagesBodySerializer.settingStyleIdentity(in: body, name: "Callout Title", identifier: PagesStyleIdentifier.calloutTitle)
+			calloutTitle = PagesBodySerializer.settingBold(in: calloutTitle)
+			calloutTitle = PagesBodySerializer.settingIndents(in: calloutTitle, left: inlinePadding, firstLine: inlinePadding, right: ems(MarkdownAlertLayout.paddingInlineEm))
+			calloutTitle = PagesBodySerializer.settingSpacing(in: calloutTitle, spaceBefore: ems(MarkdownAlertLayout.paddingBlockEm),
+			                                                  spaceAfter: ems(MarkdownAlertLayout.collapsedGap(MarkdownAlertLayout.titleMarginBottomEm, MarkdownAlertLayout.paragraphMarginEm)))
+			calloutTitle = PagesBodySerializer.settingCalloutFrame(in: calloutTitle, palette: neutral)
+			calloutTitle = PagesBodySerializer.settingTextColor(in: calloutTitle, red: neutralText.r, green: neutralText.g, blue: neutralText.b)
+			calloutTitle = PagesBodySerializer.settingKeep(in: calloutTitle, withNext: true, linesTogether: true)
+			data = try IWAArchive.replacingPayload(in: data, objectID: PagesStyleID.calloutTitle) { _ in calloutTitle }
+
+			// Horizontal rule (`---`): an empty paragraph whose bottom border is the rule —
+			// a native Borders & Rules line that spans the column, like CSS `hr`
+			// (`border-top: 1px solid #ddd; margin: 1.2em 0`). Hairline type keeps the
+			// empty line out of the way; PagesBoxLayout sets the margins per rule.
+			var rule = PagesBodySerializer.settingStyleIdentity(in: body, name: "Rule", identifier: PagesStyleIdentifier.rule)
+			rule = PagesBodySerializer.settingFontSize(in: rule, points: PagesBoxLayout.hairlineFontSize)
+			rule = PagesBodySerializer.settingSpacing(in: rule, spaceBefore: max(0, ems(MarkdownAlertLayout.ruleMarginEm) - PagesBoxLayout.hairlineLineHeight),
+			                                         spaceAfter: ems(MarkdownAlertLayout.ruleMarginEm))
+			rule = PagesBodySerializer.settingBottomRule(in: rule, gray: Float(0xDD) / 255, width: 0.75)
+			data = try IWAArchive.replacingPayload(in: data, objectID: PagesStyleID.rule) { _ in rule }
 		}
 		// After the Heading 4 rebuild above, so a level-4 break isn't overwritten.
 		if let level = pageBreakBeforeHeadingLevel, (1...6).contains(level) {
@@ -314,6 +361,31 @@ public final class PagesWriter {
 			}
 		}
 		return [UInt8](data)
+	}
+
+	/// The template's Body font size (char_properties #3 of the Body style): the `em`
+	/// that alert boxes and rules are spaced in.
+	func bodyFontSize() throws -> Float {
+		guard let stylesheet = template.data(for: "Index/DocumentStylesheet.iwa"),
+			  let body = try IWAArchive.objects(from: Data(stylesheet)).first(where: { $0.identifier == PagesStyleID.body }),
+			  let charProperties = ProtobufMessage(body.payload).message(11),
+			  let size = charProperties.float(3), size > 0 else { return 11 }
+		return size
+	}
+
+	/// A paragraph's spacing in its own style, as this writer configures the styles —
+	/// what the box layout collapses its margins against.
+	static func baseSpacing(of paragraph: BodyParagraph) -> (before: Float, after: Float) {
+		if paragraph.blockQuote { return (8, 8) }
+		switch paragraph.paragraphStyle {
+		case PagesStyleID.codeBlock: return (12, 12)
+		case PagesStyleID.heading4: return (12, 4)
+		default:
+			if let spec = stylesheet.first(where: { $0.id == paragraph.paragraphStyle }) {
+				return (spec.spaceBefore, spec.spaceAfter)
+			}
+			return (0, 0)
+		}
 	}
 
 	/// The identifier of the document body's text storage: the root

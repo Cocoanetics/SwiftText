@@ -46,8 +46,9 @@ Status as built (all validated opening + rendering in Pages 14.5; 214 tests gree
 | ~~strikethrough~~ | built-in Strikethrough char style | ✅ (DOCX drops it) |
 | Lists (bullet/numbered, nested) | Bullet/Numbered list styles; nesting **level** encoded; every numbered list restarts at its Markdown start number (storage para-starts table `#14`: `{index, start, 0}`, then `0` = continue — without it Pages numbers all lists of a document as one sequence) | ✅ functional (visual indent of nested levels is a list-style refinement) |
 | Page breaks (`--page-break-before hN`) | `page_break_before` (para_properties `#14`) on that heading level's paragraph style; a heading at the top of the document adds no blank page | ◐ Pages/PDF/HTML (DOCX ignores the option) |
-| Block quotes | indented + italic (a real style overwritten with a Body copy + indent) | ✅ |
-| Horizontal rule | full-width box-drawing line | ◐ visual, not a native rule object |
+| Block quotes | indented + italic with a left bar (a real style overwritten with a Body copy); reads back as `>` (style identifier `swifttext-block-quote`) | ✅ |
+| Alerts (`> [!NOTE]`, `> [!WARNING] Title`, any `[!KIND]`) | a native Borders & Rules box: tinted fill + coloured left border, one box over all its paragraphs, spaced in `em` like the CSS (see "Alert boxes" below); reads back as `> [!KIND] Title` | ✅ (DOCX: see the DOCX writer) |
+| Horizontal rule | an empty "Rule" paragraph whose bottom border spans the column (like CSS `hr`); reads back as `---` | ✅ |
 | Images | italic placeholder text (alt or `[image]`) | ✅ (matches DOCX exactly) |
 | Links | **clickable** hyperlink (TSWP type 2032 object + `#11` smart-field run table) + underline | ✅ |
 | Tables | **native iWork (`TST`) grid** (header row styled, **per-column alignment** from `:--`/`:-:`/`--:`, **in-cell `**bold**`/`*italic*`/`~~strike~~`** that composes with alignment), any number per document; reads back as a Markdown table | ✅ |
@@ -153,6 +154,45 @@ matches after injection) or add a `ComponentInfo` per new `Tables/` file + bump 
   alone did nothing), with italic char_properties. Indented + italic, opens cleanly.
 - **Nested-list visual indent** — list levels are encoded and round-trip correctly,
   but nested items don't visually indent yet (list-style per-level indent).
+
+---
+
+## Alert boxes (callouts) and rules
+
+**Detection** is shared by every writer: `MarkdownAlertBlock` (SwiftTextMarkdown) — GitHub
+`[!KIND]`, Obsidian custom titles (`[!WARNING] Watch out`) and kinds (`[!EXAMPLE]`), DocC
+`Kind:` asides. **Colours** (`MarkdownAlertPalette`) and **geometry** (`MarkdownAlertLayout`,
+in CSS `em`) are shared too; the HTML/PDF stylesheets are generated from them, so all outputs
+agree.
+
+**Styles.** Two repurposed template styles are the named bases — "Label" → **Callout**
+(`swifttext-callout`) and "Label Dark" → **Callout Title** (`swifttext-callout-title`) — and
+"Table Title 1" → **Rule** (`swifttext-rule`). Each alert kind uses synthesized *variations*
+(`is_variation` = 1, parent = the base; a free-standing synthesized style's para_properties do
+not apply, a variation's do) carrying the kind's fill, left-border stroke, text colour and the
+box's spacing, with an identifier naming the kind and role (`swifttext-callout:warning`,
+`swifttext-callout-title:warning`, `swifttext-callout-end:warning`), which the reader uses.
+
+**How Pages draws framed paragraphs** (measured on Pages' PDF export, 300 dpi):
+- Consecutive paragraphs with the same frame join into **one box**, across the gaps between
+  them and across different styles (title + body), including list items.
+- Paragraph spacing **collapses** like CSS margins: the gap is max(space after, next space before).
+- The fill covers the part of that gap that exceeds the *previous* paragraph's space after
+  (so a title's space before is top padding), but **not** the last paragraph's space after.
+  Bottom padding therefore needs an empty **end paragraph** inside the box (hairline type),
+  whose space before is the padding and space after the box's bottom margin.
+- `historicalRuleOffset` (#17, a `TSP.Point`) moves a left/right border horizontally
+  (Pages writes (−5, −5) for a boxed paragraph); its y has no effect on a left-only border.
+- `roundedCorners` (#46) rounds only full-box frames, not a left border — the one visible
+  difference from the CSS (`border-radius: 6px`).
+
+`PagesBoxLayout` turns the CSS into these settings in `em` of the template's Body font size:
+margin 0.8em (raising the space after of the paragraph above, collapsing like CSS), padding
+0.75em (title's space before; end paragraph), 0.6em between paragraphs (0.2em between list
+items), keep-with-next through the box (`break-inside: avoid`), rules with `hr`'s 1.2em.
+
+Inside a box, a nested quote becomes italic text and a heading a bold line in the box's style
+(a second frame or indent would split the box); they read back as emphasis.
 
 ---
 

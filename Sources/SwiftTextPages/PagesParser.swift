@@ -163,7 +163,16 @@ final class PagesParser {
 	/// Per-document caches for style resolution — the same handful of styles is
 	/// referenced by every run entry, so resolve each chain once.
 	private var charFlagsCache = [UInt64: CharStyleFlags]()
-	private var identifierTraitsCache = [UInt64: (headingLevel: Int?, isCodeBlock: Bool)]()
+	private var identifierTraitsCache = [UInt64: StyleTraits]()
+
+	/// What a paragraph style's stable `style_identifier` says about its paragraphs.
+	struct StyleTraits {
+		var headingLevel: Int?
+		var isCodeBlock = false
+		var isBlockQuote = false
+		var callout: PagesDocument.Paragraph.Callout?
+		var isRule = false
+	}
 
 	/// Resolves the character properties a style defines, following its parent
 	/// chain (`super.parent`) so an anonymous style derived from a named one
@@ -194,19 +203,19 @@ final class PagesParser {
 	/// overrides Pages writes) defers to its parent chain; a style that carries an
 	/// identifier is authoritative, so a named style merely *derived* from a
 	/// heading doesn't become one.
-	private func identifierTraits(forStyle styleID: UInt64, store: IWAObjectStore) -> (headingLevel: Int?, isCodeBlock: Bool) {
+	private func identifierTraits(forStyle styleID: UInt64, store: IWAObjectStore) -> StyleTraits {
 		if let cached = identifierTraitsCache[styleID] { return cached }
-		var traits: (headingLevel: Int?, isCodeBlock: Bool) = (nil, false)
+		var traits = StyleTraits()
 		var currentID: UInt64? = styleID
 		var depth = 0
 		var visited = Set<UInt64>()
 		while let id = currentID, depth < 8, visited.insert(id).inserted, let object = store.object(id) {
 			let superStyle = ProtobufMessage(object.payload).message(IWork.styleSuperField)
 			if let identifier = superStyle?.bytes(IWork.styleIdentifierField).map({ String(decoding: $0, as: UTF8.self) }) {
-				if identifier == PagesStyleIdentifier.codeBlock {
-					traits = (nil, true)
+				if let known = Self.traits(forStyleIdentifier: identifier) {
+					traits = known
 				} else if let level = Self.headingLevel(forStyleIdentifier: identifier) {
-					traits = (level, false)
+					traits.headingLevel = level
 				}
 				break
 			}
@@ -375,7 +384,7 @@ final class PagesParser {
 				text: paragraphText,
 				fontSize: style.fontSize,
 				bold: style.bold,
-				headingLevel: style.headingLevel,
+				headingLevel: style.traits.headingLevel,
 				attachmentReferences: currentAttachments,
 				emphasis: currentEmphasis,
 				links: paragraphLinks,
@@ -383,7 +392,10 @@ final class PagesParser {
 				listOrdered: listOrdered,
 				footnoteMarkers: currentFootnotes,
 				tables: currentTables,
-				isCodeBlock: style.isCodeBlock
+				isCodeBlock: style.traits.isCodeBlock,
+				isBlockQuote: style.traits.isBlockQuote,
+				callout: style.traits.callout,
+				isRule: style.traits.isRule
 			))
 			current = String.UnicodeScalarView()
 			currentAttachments = []
@@ -635,10 +647,32 @@ final class PagesParser {
 	/// chain), plus — for a faithful Markdown round-trip — an explicit heading
 	/// level or code-block marker read from a stable `style_identifier` anywhere
 	/// in the chain.
-	private func paragraphStyleInfo(_ styleID: UInt64?, base: CharStyleFlags, store: IWAObjectStore) -> (fontSize: Double?, bold: Bool, headingLevel: Int?, isCodeBlock: Bool) {
-		guard let styleID else { return (nil, false, nil, false) }
+	private func paragraphStyleInfo(_ styleID: UInt64?, base: CharStyleFlags, store: IWAObjectStore) -> (fontSize: Double?, bold: Bool, traits: StyleTraits) {
+		guard let styleID else { return (nil, false, StyleTraits()) }
 		let traits = identifierTraits(forStyle: styleID, store: store)
-		return (base.fontSize, base.bold ?? false, traits.headingLevel, traits.isCodeBlock)
+		return (base.fontSize, base.bold ?? false, traits)
+	}
+
+	/// The writer's own block styles, recognized by identifier: code blocks, block
+	/// quotes, rules and alert boxes (`swifttext-callout:KIND`, `…-title:KIND`,
+	/// `…-end:KIND`; the bare base styles default to a note).
+	static func traits(forStyleIdentifier identifier: String) -> StyleTraits? {
+		var traits = StyleTraits()
+		switch identifier {
+		case PagesStyleIdentifier.codeBlock: traits.isCodeBlock = true; return traits
+		case PagesStyleIdentifier.blockQuote: traits.isBlockQuote = true; return traits
+		case PagesStyleIdentifier.rule: traits.isRule = true; return traits
+		default: break
+		}
+		for (prefix, role) in [(PagesStyleIdentifier.calloutTitle, PagesDocument.Paragraph.Callout.Role.title),
+		                       (PagesStyleIdentifier.calloutEnd, .end),
+		                       (PagesStyleIdentifier.callout, .body)] {
+			guard identifier == prefix || identifier.hasPrefix(prefix + ":") else { continue }
+			let kind = identifier == prefix ? "note" : String(identifier.dropFirst(prefix.count + 1))
+			traits.callout = PagesDocument.Paragraph.Callout(kind: kind, role: role)
+			return traits
+		}
+		return nil
 	}
 
 	/// Maps a paragraph style's `style_identifier` to a Markdown heading level so

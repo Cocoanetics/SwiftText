@@ -1,4 +1,5 @@
 import SwiftTextIWA
+import SwiftTextMarkdown
 import Foundation
 
 /// Object identifiers of the built-in styles in the bundled blank template
@@ -46,6 +47,18 @@ enum PagesStyleID {
 	/// special "Default" style, which crashes Pages).
 	static let blockQuote: UInt64 = 1731497
 
+	/// "Label" — repurposed (same rationale as ``blockQuote``) as the base style of an
+	/// alert's body paragraphs ("Callout"): a Body copy framed by a left border on a
+	/// tinted background. Each alert kind uses a synthesized *variation* of it carrying
+	/// that kind's colours (``BodyObjectRegistry/calloutStyle(_:)``).
+	static let calloutBody: UInt64 = 1731523
+	/// "Label Dark" — repurposed as the base style of an alert's title paragraph
+	/// ("Callout Title"): the body frame plus bold, kept with the next paragraph.
+	static let calloutTitle: UInt64 = 1731524
+	/// "Table Title 1" — repurposed as the horizontal-rule style ("Rule"): an empty
+	/// paragraph whose bottom border is the rule, as Pages' Borders & Rules draws it.
+	static let rule: UInt64 = 1731525
+
 	// List styles (TSWP.ListStyleArchive, type 2023)
 	static let listNone: UInt64 = 1731481
 	static let bulletList: UInt64 = 1731482
@@ -65,6 +78,22 @@ enum PagesStyleID {
 enum PagesStyleIdentifier {
 	static let blockQuote = "swifttext-block-quote"
 	static let codeBlock = "swifttext-code-block"
+	static let callout = "swifttext-callout"
+	static let calloutTitle = "swifttext-callout-title"
+	static let rule = "swifttext-rule"
+
+	static let calloutEnd = "swifttext-callout-end"
+
+	/// The identifier of an alert kind's style variation (`swifttext-callout:warning`,
+	/// `swifttext-callout-title:warning`, `swifttext-callout-end:warning`), so the reader
+	/// recovers the kind and the paragraph's role exactly.
+	static func callout(kind: String, role: BodyParagraph.CalloutRole.Role) -> String {
+		switch role {
+		case .title: return calloutTitle + ":" + kind
+		case .body: return callout + ":" + kind
+		case .end: return calloutEnd + ":" + kind
+		}
+	}
 }
 
 /// An inline character styling combination.
@@ -97,6 +126,31 @@ struct BodyParagraph {
 	var listStart: Int = 1
 	/// Whether the paragraph is block-quoted (rendered indented + italic).
 	var blockQuote: Bool = false
+	/// When set, the paragraph belongs to an alert box: its title line, a body
+	/// paragraph or the empty end paragraph, in the kind's style variation. Takes
+	/// precedence over `blockQuote`. ``PagesBoxLayout`` sets its spacing.
+	var callout: CalloutRole?
+	/// Whether the paragraph is a horizontal rule: empty, in the "Rule" style.
+	var isRule: Bool = false
+	/// Whether the paragraph is the empty, unframed hairline between two adjacent alert
+	/// boxes, which would otherwise join into one.
+	var isSeparator: Bool = false
+	/// Spacing overrides in points (from ``PagesBoxLayout``): the paragraph then uses a
+	/// variation of its style that changes only these. `nil` keeps the style's own.
+	var spaceBefore: Float?
+	var spaceAfter: Float?
+
+	/// An alert paragraph: its kind (`"note"`, `"warning"`, …), its role in the box and
+	/// the spacing the box layout gave it. Each distinct role is one style variation.
+	struct CalloutRole: Hashable {
+		enum Role: Hashable { case title, body, end }
+		var kind: String
+		var role: Role
+		var spaceBefore: Float = 0
+		var spaceAfter: Float = 0
+		var keepWithNext = false
+		var isTitle: Bool { role == .title }
+	}
 	/// For an attachment paragraph (a single `U+FFFC`), the drawable-attachment
 	/// object id (type 2003) the `#9` run table maps that character to — e.g. a
 	/// native table. `nil` for ordinary text paragraphs.
@@ -146,6 +200,7 @@ struct BodyParagraph {
 final class BodyObjectRegistry {
 	private var nextID = PagesStyleID.synthesizedBase
 	private var cache: [InlineStyle: UInt64] = [:]
+	private var calloutCache: [BodyParagraph.CalloutRole: UInt64] = [:]
 	private(set) var synthesizedObjects: [IWAObject] = []
 
 	/// The character-style id for a styling combination (the "None" style for plain).
@@ -220,6 +275,49 @@ final class BodyObjectRegistry {
 		archive.messageField(1, styleSuper.bytes)             // TSWP.ListStyleArchive.super
 		return archive.bytes
 	}
+
+	/// The paragraph style for an alert paragraph: a variation of the "Callout" (or
+	/// "Callout Title") base style in the kind's colours, synthesized once per kind and
+	/// role. Variations are what Pages writes for "Body + changes" — they apply their
+	/// para_properties, unlike a free-standing synthesized style (see ``PagesStyleID``).
+	func calloutStyle(_ role: BodyParagraph.CalloutRole) -> UInt64 {
+		if let cached = calloutCache[role] { return cached }
+		let id = nextID
+		nextID += 1
+		synthesizedObjects.append(IWAObject(identifier: id, type: 2022, payload: PagesBodySerializer.calloutVariationPayload(role)))
+		calloutCache[role] = id
+		return id
+	}
+
+	/// A variation of `parent` that only changes its spacing (inheriting everything
+	/// else, including the parent's identifier for the reader).
+	func spacedStyle(_ parent: UInt64, spaceBefore: Float?, spaceAfter: Float?) -> UInt64 {
+		let key = SpacedKey(parent: parent, spaceBefore: spaceBefore, spaceAfter: spaceAfter)
+		if let cached = spacedCache[key] { return cached }
+		let id = nextID
+		nextID += 1
+		synthesizedObjects.append(IWAObject(identifier: id, type: 2022, payload: PagesBodySerializer.spacedVariationPayload(parent: parent, spaceBefore: spaceBefore, spaceAfter: spaceAfter)))
+		spacedCache[key] = id
+		return id
+	}
+
+	private struct SpacedKey: Hashable { var parent: UInt64; var spaceBefore: Float?; var spaceAfter: Float? }
+
+	/// The style of the hairline paragraph between two adjacent alert boxes: Body in
+	/// hairline type with no spacing (a variation, so it inherits Body's identity).
+	func separatorStyle() -> UInt64 {
+		if let separatorID { return separatorID }
+		let id = nextID
+		nextID += 1
+		var payload = PagesBodySerializer.spacedVariationPayload(parent: PagesStyleID.body, spaceBefore: 0, spaceAfter: 0)
+		payload = PagesBodySerializer.settingFontSize(in: payload, points: PagesBoxLayout.hairlineFontSize)
+		synthesizedObjects.append(IWAObject(identifier: id, type: 2022, payload: payload))
+		separatorID = id
+		return id
+	}
+
+	private var separatorID: UInt64?
+	private var spacedCache: [SpacedKey: UInt64] = [:]
 
 	/// The highest synthesized identifier (for bumping the package's id high-water mark).
 	var maxIdentifier: UInt64 { nextID - 1 }
@@ -303,7 +401,19 @@ enum PagesBodySerializer {
 		var listRestarts = [(paragraph: Int, number: Int)]()   // each ordered list's first paragraph
 		for (index, paragraph) in paragraphs.enumerated() {
 			let start = paragraphStarts[index]
-			let styleID = paragraph.blockQuote ? PagesStyleID.blockQuote : paragraph.paragraphStyle
+			let styleID: UInt64
+			if let role = paragraph.callout {
+				styleID = registry.calloutStyle(role)
+			} else {
+				let base = paragraph.isRule ? PagesStyleID.rule : (paragraph.blockQuote ? PagesStyleID.blockQuote : paragraph.paragraphStyle)
+				if paragraph.isSeparator {
+					styleID = registry.separatorStyle()
+				} else if paragraph.spaceBefore != nil || paragraph.spaceAfter != nil {
+					styleID = registry.spacedStyle(base, spaceBefore: paragraph.spaceBefore, spaceAfter: paragraph.spaceAfter)
+				} else {
+					styleID = base
+				}
+			}
 			paragraphStyleEntries.append((start, styleID))
 			paragraphDataEntries.append((start, paragraph.listLevel))
 			let listStyle = paragraph.listStyle ?? PagesStyleID.listNone
@@ -525,6 +635,119 @@ enum PagesBodySerializer {
 		)
 	}
 
+	/// Returns a paragraph-style payload framed like an HTML alert (`.markdown-alert`):
+	/// a tinted background `fill` and a left border in the kind's accent colour. Pages
+	/// draws consecutive paragraphs with the same frame as one box — across the gaps
+	/// between them and across different styles — so a title and its body paragraphs
+	/// read as a single callout, and the box can break across pages like the HTML one.
+	static func settingCalloutFrame(in stylePayload: [UInt8], palette: MarkdownAlertPalette) -> [UInt8] {
+		let fill = MarkdownAlertPalette.components(palette.background)
+		let border = MarkdownAlertPalette.components(palette.border)
+		return settingParagraphBorder(
+			in: stylePayload,
+			fill: colorBytes(red: fill.r, green: fill.g, blue: fill.b, alpha: 1),
+			stroke: solidStroke(color: colorBytes(red: border.r, green: border.g, blue: border.b), width: 3),
+			borderPositions: 4,            // left edge, like the CSS border-left
+			borders: 8,                    // legacy left bit
+			rounded: false                 // Pages rounds only full-box frames, not a left border
+		)
+	}
+
+	/// Returns a paragraph-style payload with a bottom rule (`borderPositions` 2): an
+	/// empty paragraph in this style is the document's horizontal rule.
+	static func settingBottomRule(in stylePayload: [UInt8], gray: Float, width: Float) -> [UInt8] {
+		settingParagraphBorder(
+			in: stylePayload,
+			fill: nil,
+			stroke: solidStroke(color: colorBytes(red: gray, green: gray, blue: gray), width: width),
+			borderPositions: 2,            // bottom edge
+			borders: 2,                    // legacy bottom
+			rounded: false
+		)
+	}
+
+	/// Returns a style payload with "keep with next" (#10) and/or "keep lines together"
+	/// (#9) set in its para_properties — how an alert avoids breaking right after its
+	/// title or in the middle of a paragraph (the CSS `break-inside: avoid`).
+	static func settingKeep(in stylePayload: [UInt8], withNext: Bool, linesTogether: Bool) -> [UInt8] {
+		let style = ProtobufMessage(stylePayload)
+		var writer = ProtobufWriter()
+		var wrote = false
+		func append(to inner: inout ProtobufWriter) {
+			if linesTogether { inner.varintField(9, 1) }
+			if withNext { inner.varintField(10, 1) }
+		}
+		for field in style.fields {
+			guard field.number == 12, case .lengthDelimited(let paraProperties) = field.value else { writer.append(field); continue }
+			var inner = ProtobufWriter()
+			for property in ProtobufMessage(paraProperties).fields where property.number != 9 && property.number != 10 {
+				inner.append(property)
+			}
+			append(to: &inner)
+			writer.bytesField(12, inner.bytes)
+			wrote = true
+		}
+		if !wrote {
+			var inner = ProtobufWriter()
+			append(to: &inner)
+			writer.bytesField(12, inner.bytes)
+		}
+		return writer.bytes
+	}
+
+	/// The payload of an alert kind's style variation: `is_variation` of the "Callout"
+	/// (or "Callout Title") base, with the kind's frame and text colour, and a stable
+	/// identifier naming the kind for the reader.
+	static func calloutVariationPayload(_ role: BodyParagraph.CalloutRole) -> [UInt8] {
+		let palette = MarkdownAlertPalette.palette(forKind: role.kind)
+		var parentReference = ProtobufWriter()
+		parentReference.varintField(1, role.isTitle ? PagesStyleID.calloutTitle : PagesStyleID.calloutBody)
+		var stylesheetReference = ProtobufWriter()
+		stylesheetReference.varintField(1, PagesStyleID.stylesheet)
+		var styleSuper = ProtobufWriter()
+		styleSuper.stringField(2, PagesStyleIdentifier.callout(kind: role.kind, role: role.role))
+		styleSuper.messageField(3, parentReference.bytes)        // TSS.StyleArchive.parent
+		styleSuper.varintField(4, 1)                             // is_variation
+		styleSuper.messageField(5, stylesheetReference.bytes)    // stylesheet
+		var archive = ProtobufWriter()
+		archive.messageField(1, styleSuper.bytes)
+		archive.varintField(10, 1)                               // present on built-in styles
+		archive.bytesField(11, [])                               // char_properties
+		archive.bytesField(12, [])                               // para_properties
+		var payload = settingCalloutFrame(in: archive.bytes, palette: palette)
+		let text = MarkdownAlertPalette.components(palette.text)
+		payload = settingTextColor(in: payload, red: text.r, green: text.g, blue: text.b)
+		payload = settingSpacing(in: payload, spaceBefore: role.spaceBefore, spaceAfter: role.spaceAfter)
+		payload = settingKeep(in: payload, withNext: role.keepWithNext, linesTogether: true)
+		if role.role == .end {
+			// The end paragraph only carries the bottom padding: a hairline of type.
+			payload = settingFontSize(in: payload, points: PagesBoxLayout.hairlineFontSize)
+		}
+		return payload
+	}
+
+	/// A paragraph-style variation of `parent` whose only changes are `space_before`
+	/// (#21) and/or `space_after` (#20).
+	static func spacedVariationPayload(parent: UInt64, spaceBefore: Float?, spaceAfter: Float?) -> [UInt8] {
+		var parentReference = ProtobufWriter()
+		parentReference.varintField(1, parent)
+		var stylesheetReference = ProtobufWriter()
+		stylesheetReference.varintField(1, PagesStyleID.stylesheet)
+		var styleSuper = ProtobufWriter()
+		styleSuper.messageField(3, parentReference.bytes)
+		styleSuper.varintField(4, 1)                             // is_variation
+		styleSuper.messageField(5, stylesheetReference.bytes)
+		var paraProperties = ProtobufWriter()
+		if let spaceAfter { paraProperties.fixed32Field(20, spaceAfter.bitPattern) }    // space_after
+		if let spaceBefore { paraProperties.fixed32Field(21, spaceBefore.bitPattern) }  // space_before
+		var archive = ProtobufWriter()
+		archive.messageField(1, styleSuper.bytes)
+		archive.varintField(10, 1)
+		archive.bytesField(11, [])
+		archive.bytesField(12, paraProperties.bytes)
+		return archive.bytes
+	}
+
 	/// A solid `TSD.StrokeArchive` (`color` + `width`) with the all-zero dash `pattern`
 	/// (type 1 = solid) Pages emits. Shared by the block-quote bar and the box frame.
 	private static func solidStroke(color: [UInt8], width: Float) -> [UInt8] {
@@ -548,13 +771,24 @@ enum PagesBodySerializer {
 	/// background `fill` (#6, clearing `fill_null` #5), a `stroke` (#32), the edge bitmask
 	/// `borderPositions` (#45) + legacy `borders` (#15), and optional `roundedCorners` (#46).
 	/// `stroke_null` (#31) is dropped so the stroke renders. All other properties preserved.
-	private static func settingParagraphBorder(in stylePayload: [UInt8], fill: [UInt8]?, stroke: [UInt8], borderPositions: UInt64, borders: UInt64, rounded: Bool) -> [UInt8] {
+	private static func settingParagraphBorder(in stylePayload: [UInt8], fill: [UInt8]?, stroke: [UInt8], borderPositions: UInt64, borders: UInt64, rounded: Bool,
+	                                           offset: (x: Float, y: Float)? = nil) -> [UInt8] {
 		var drop: Set<Int> = [15, 31, 32, 45, 46]
 		if fill != nil { drop.insert(5); drop.insert(6) }    // replace fill + clear fill_null
+		if offset != nil { drop.insert(17) }
 
 		func appendBorder(to inner: inout ProtobufWriter) {
 			if let fill { inner.bytesField(6, fill) }
 			inner.varintField(15, borders)
+			if let offset {
+				// The border's distance from the text (Borders & Rules "Offset"), a TSP.Point:
+				// negative values move the frame — and its fill — outward. Pages writes
+				// (-5, -5) for a boxed paragraph; here it is the box's inner padding.
+				var point = ProtobufWriter()
+				point.fixed32Field(1, offset.x.bitPattern)
+				point.fixed32Field(2, offset.y.bitPattern)
+				inner.bytesField(17, point.bytes)
+			}
 			inner.bytesField(32, stroke)
 			inner.varintField(45, borderPositions)
 			if rounded { inner.varintField(46, 1) }
