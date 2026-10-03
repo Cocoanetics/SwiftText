@@ -255,9 +255,6 @@ public enum MarkdownAlertLayout {
 	/// The alert rules of the default HTML/PDF stylesheets: geometry from the
 	/// constants above, one colour rule per kind from ``MarkdownAlertPalette``.
 	public static var css: String {
-		func fmt(_ value: Double) -> String {
-			value == value.rounded() ? String(Int(value)) : String(value)
-		}
 		var rules = """
 		.markdown-alert {
 		    border-left-width: 4px;
@@ -283,5 +280,24 @@ public enum MarkdownAlertLayout {
 			rules += ".markdown-alert-\(kind) { background: #\(palette.background.lowercased()); border-left-color: #\(palette.border.lowercased()); color: #\(palette.text.lowercased()); }\n"
 		}
 		return rules
+	}
+
+	/// Rules for the blocks inside a box, for stylesheets whose own paragraph and list
+	/// rules differ from the HTML default's. EPUB's book stylesheet, for one, indents
+	/// paragraphs and leaves no gap between them; inside a box they are spaced as in
+	/// every other output.
+	public static var contentCSS: String {
+		"""
+		.markdown-alert p { margin: \(fmt(paragraphMarginEm))em 0; text-indent: 0; text-align: left; }
+		.markdown-alert p.markdown-alert-title { margin: 0 0 \(fmt(titleMarginBottomEm))em; }
+		.markdown-alert ul, .markdown-alert ol { margin-top: \(fmt(paragraphMarginEm))em; margin-bottom: \(fmt(paragraphMarginEm))em; }
+		.markdown-alert li { margin: \(fmt(listItemMarginEm))em 0; }
+		.markdown-alert > :last-child { margin-bottom: 0; }
+
+		"""
+	}
+
+	private static func fmt(_ value: Double) -> String {
+		value == value.rounded() ? String(Int(value)) : String(value)
 	}
 }

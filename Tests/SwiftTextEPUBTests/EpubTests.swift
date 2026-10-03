@@ -4,6 +4,7 @@
 import Foundation
 import Testing
 @testable import SwiftTextEPUB
+import SwiftTextMarkdown
 
 @Suite("Markdown → EPUB")
 struct EpubTests {
@@ -188,6 +189,17 @@ struct EpubTests {
 	}
 
 	// MARK: - Stylesheet
+
+	@Test("alert boxes get the shared box rules, and their paragraphs aren't indented like book text")
+	func alertStyles() {
+		let files = MarkdownToEpub.makeFiles("# One\n\n> [!WARNING] Watch out\n> Careful.\n", metadata: fixedMetadata(), options: EpubOptions())
+		let stylesheet = string(file(files, "OEBPS/styles/stylesheet.css"))
+		#expect(stylesheet.contains(MarkdownAlertLayout.css))
+		#expect(stylesheet.contains(".markdown-alert p { margin: 0.6em 0; text-indent: 0; text-align: left; }"))
+		let chapter = string(file(files, "OEBPS/text/ch001.xhtml"))
+		#expect(chapter.contains("markdown-alert markdown-alert-warning"))
+		#expect(chapter.contains(">Watch out</p>"))
+	}
 
 	@Test("user CSS is appended after the default stylesheet")
 	func userCSSAppended() {

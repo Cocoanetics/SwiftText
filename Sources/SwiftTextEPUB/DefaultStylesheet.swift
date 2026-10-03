@@ -7,8 +7,15 @@
 //  each chapter starting on a new page, and a centered title page. User CSS
 //  passed to the converter is appended after this so author rules win.
 
+import SwiftTextMarkdown
+
 enum DefaultStylesheet {
-	static let css = """
+	/// The book rules, then the alert boxes (`> [!NOTE]`) with the geometry and colours
+	/// every SwiftText writer shares.
+	static let css = bookCSS + "\n/* Alert boxes */\n" + MarkdownAlertLayout.css + MarkdownAlertLayout.contentCSS
+		+ "/* Like after a scene break, the paragraph after a box starts flush. */\n.markdown-alert + p { text-indent: 0; }\n"
+
+	private static let bookCSS = """
 	/* SwiftText EPUB base stylesheet */
 	html {
 	  font-family: Georgia, "Times New Roman", serif;
