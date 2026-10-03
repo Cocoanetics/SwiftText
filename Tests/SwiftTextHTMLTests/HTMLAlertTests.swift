@@ -8,7 +8,7 @@ struct HTMLAlertTests {
 	@Test("A custom title and a custom kind render as an aside with that title")
 	func customTitleAndKind() {
 		let html = SwiftMarkdownHTMLRenderer.convert("> [!WARNING] Watch out\n> Careful.\n\n> [!EXAMPLE]\n> A letter.")
-		#expect(html.contains(#"<aside class="markdown-alert markdown-alert-warning" data-alert="warning" role="alert">"#))
+		#expect(html.contains(#"<aside class="markdown-alert markdown-alert-warning" data-alert="warning" role="note">"#))
 		#expect(html.contains(#"<p class="markdown-alert-title">Watch out</p>"#))
 		#expect(html.contains("<p>Careful.</p>"))
 		#expect(html.contains(#"<aside class="markdown-alert markdown-alert-example" data-alert="example" role="note">"#))

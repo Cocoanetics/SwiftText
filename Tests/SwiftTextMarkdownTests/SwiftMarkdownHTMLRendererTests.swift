@@ -57,7 +57,7 @@ struct SwiftMarkdownHTMLRendererTests {
 		let markdown = "> [!WARNING] Proceed carefully"
 		let html = SwiftMarkdownHTMLRenderer.convert(markdown)
 		#expect(html.contains(#"markdown-alert-warning"#))
-		#expect(html.contains(#"role="alert""#))
+		#expect(html.contains(#"role="note""#))                // `alert` is invalid on aside
 		#expect(html.contains("Proceed carefully"))
 	}
 

@@ -314,9 +314,11 @@ private struct HTMLRenderer: MarkupVisitor {
 	/// An alert as `<aside class="markdown-alert markdown-alert-KIND">` with a title
 	/// paragraph, the shape GitHub emits (as a `div`), styled by `.markdown-alert-*` CSS.
 	/// Detection and titles come from ``MarkdownAlertBlock``, shared by every writer.
+	/// Every kind is `role="note"`: ARIA's `alert` is a live region for time-sensitive
+	/// messages, and it isn't allowed on `aside` at all (epubcheck rejects it). The
+	/// title says what kind of note it is.
 	private mutating func emitAlert(_ alert: MarkdownAlertBlock) {
-		let role = alert.isWarning ? "alert" : "note"
-		output += "<aside class=\"markdown-alert markdown-alert-\(alert.kind)\" data-alert=\"\(alert.kind)\" role=\"\(role)\">"
+		output += "<aside class=\"markdown-alert markdown-alert-\(alert.kind)\" data-alert=\"\(alert.kind)\" role=\"note\">"
 		output += "<p class=\"markdown-alert-title\">\(escapeHTMLNotQuote(alert.title))</p>"
 		for child in alert.body { visit(child) }
 		output += "</aside>"

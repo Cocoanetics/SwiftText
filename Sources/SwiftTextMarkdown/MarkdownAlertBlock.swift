@@ -48,9 +48,6 @@ public struct MarkdownAlertBlock {
 	/// The colours shared by all writers (HTML/CSS, DOCX, Pages).
 	public var palette: MarkdownAlertPalette { MarkdownAlertPalette.palette(forKind: kind) }
 
-	/// Whether the kind denotes a warning rather than information (ARIA `role="alert"`).
-	public var isWarning: Bool { kind == "warning" || kind == "caution" }
-
 	/// The five GitHub kinds plus DocC's `Experiment`, with their default titles.
 	public static let knownKinds: [String: String] = [
 		"note": "Note", "tip": "Tip", "important": "Important",
