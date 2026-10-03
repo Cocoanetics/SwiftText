@@ -666,6 +666,7 @@ final class PagesParser {
 		}
 		for (prefix, role) in [(PagesStyleIdentifier.calloutTitle, PagesDocument.Paragraph.Callout.Role.title),
 		                       (PagesStyleIdentifier.calloutEnd, .end),
+		                       (PagesStyleIdentifier.calloutStart, .start),
 		                       (PagesStyleIdentifier.callout, .body)] {
 			guard identifier == prefix || identifier.hasPrefix(prefix + ":") else { continue }
 			let kind = identifier == prefix ? "note" : String(identifier.dropFirst(prefix.count + 1))

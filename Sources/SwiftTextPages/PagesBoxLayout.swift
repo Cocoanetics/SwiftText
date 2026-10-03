@@ -14,6 +14,9 @@ import SwiftTextMarkdown
 ///   outside (white). Bottom padding therefore needs one more, empty paragraph inside the
 ///   box (the "end" paragraph, in tiny type), whose space before is the padding and
 ///   whose space after is the box's bottom margin.
+/// - At the top of a page Pages drops a paragraph's space before. A box therefore opens
+///   with an empty "start" paragraph too: its space before is the box's top margin (which
+///   may well vanish at a page top) and its space after the top padding, which stays.
 enum PagesBoxLayout {
 	/// Type size of the empty paragraphs that only carry spacing (box ends, rules), and
 	/// the height of their line (Body's 1.2 line spacing).
@@ -38,7 +41,7 @@ enum PagesBoxLayout {
 		// gets CSS's half-leading back as extra margin below a box or rule.
 		let halfLeading = ems(MarkdownAlertLayout.halfLeadingEm)
 
-		// 1. Give each box an end paragraph and space its paragraphs.
+		// 1. Give each box a start and an end paragraph and space its paragraphs.
 		var output = [BodyParagraph]()
 		var index = 0
 		while index < input.count {
@@ -58,7 +61,8 @@ enum PagesBoxLayout {
 			var box = Array(input[index..<end])
 
 			// Margin above (collapsing with the paragraph above): raise that paragraph's
-			// space after to the box margin; the title's extra space before is the padding.
+			// space after to the box margin; the start paragraph repeats it as its space
+			// before, so none of the margin is filled.
 			var aboveAfter: Float = 0
 			if var above = output.popLast() {
 				if above.callout?.role == .end {
@@ -80,7 +84,7 @@ enum PagesBoxLayout {
 			for k in box.indices {
 				var role = box[k].callout!
 				let next = k + 1 < box.count ? box[k + 1] : nil
-				role.spaceBefore = k == 0 ? aboveAfter + padding : 0
+				role.spaceBefore = 0                                   // the start paragraph pads
 				if next == nil {
 					role.spaceAfter = 0                                    // the end paragraph follows
 				} else if role.role == .title {
@@ -93,6 +97,11 @@ enum PagesBoxLayout {
 				role.keepWithNext = true                                   // CSS break-inside: avoid
 				box[k].callout = role
 			}
+			var startRole = BodyParagraph.CalloutRole(kind: first.kind, role: .start)
+			startRole.spaceBefore = aboveAfter
+			startRole.spaceAfter = max(0, padding - hairlineLineHeight)
+			startRole.keepWithNext = true
+			box.insert(BodyParagraph(text: "", paragraphStyle: PagesStyleID.body, callout: startRole), at: 0)
 			var endRole = BodyParagraph.CalloutRole(kind: first.kind, role: .end)
 			endRole.spaceBefore = max(0, padding - hairlineLineHeight)
 			endRole.spaceAfter = margin + halfLeading

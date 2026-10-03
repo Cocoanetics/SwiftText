@@ -111,6 +111,8 @@ public struct PagesDocument {
 				case body
 				/// The empty paragraph that carries the box's bottom padding.
 				case end
+				/// The empty paragraph that carries the box's top padding.
+				case start
 			}
 			/// The alert kind, lowercased (`"note"`, `"warning"`, `"example"`, …).
 			public var kind: String
@@ -573,13 +575,15 @@ public struct PagesDocument {
 	static func markdownAlert(_ paragraphs: [Paragraph], from start: Int, kind: String) -> (block: String, end: Int) {
 		var index = start
 		var title = ""
-		if paragraphs[index].callout?.role == .title {
+		if paragraphs[index].callout?.role == .start { index += 1 }
+		if index < paragraphs.count, paragraphs[index].callout?.role == .title {
 			title = paragraphs[index].normalizedText()
 			index += 1
 		}
 		var body = [MarkdownAlertBlock.RecoveredBlock]()
 		var counters = [Int: Int]()
-		while index < paragraphs.count, let callout = paragraphs[index].callout, callout.role != .title, callout.kind == kind {
+		while index < paragraphs.count, let callout = paragraphs[index].callout,
+			  callout.role != .title, callout.role != .start, callout.kind == kind {
 			let paragraph = paragraphs[index]
 			index += 1
 			if callout.role == .end { break }

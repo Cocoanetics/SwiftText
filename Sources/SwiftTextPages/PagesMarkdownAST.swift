@@ -54,12 +54,14 @@ extension PagesDocument {
 			if let callout = paragraph.callout {
 				var end = index
 				var title = ""
-				if paragraphs[end].callout?.role == .title {
+				if paragraphs[end].callout?.role == .start { end += 1 }
+				if end < paragraphs.count, paragraphs[end].callout?.role == .title {
 					title = paragraphs[end].normalizedText()
 					end += 1
 				}
 				var body = [Paragraph]()
-				while end < paragraphs.count, let role = paragraphs[end].callout, role.role != .title, role.kind == callout.kind {
+				while end < paragraphs.count, let role = paragraphs[end].callout,
+					  role.role != .title, role.role != .start, role.kind == callout.kind {
 					end += 1
 					if role.role == .end { break }
 					body.append(paragraphs[end - 1])
