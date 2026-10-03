@@ -1,5 +1,6 @@
 import Foundation
 import Markdown
+import SwiftTextMarkdown
 
 /// Converts the libxml2-backed DOM tree into a swift-markdown `Document`, which
 /// is then rendered to Markdown text by swift-markdown's `MarkupFormatter`.
@@ -118,6 +119,39 @@ struct DOMMarkupConverter {
 		return Self.blockTags.contains(element.name.lowercased())
 	}
 
+	// MARK: - Alerts
+
+	/// An alert box — SwiftText's `<aside class="markdown-alert markdown-alert-KIND">`
+	/// or GitHub's `<div class="markdown-alert …">`, each with a
+	/// `markdown-alert-title` child — back as the `> [!KIND] Title` block quote every
+	/// SwiftText writer recognizes. The title is kept only when it isn't the default.
+	private func alertMarkup(from element: DOMElement) -> BlockMarkup? {
+		let name = element.name.lowercased()
+		guard name == "aside" || name == "div",
+			  let classes = (element.attributes["class"] as? String)?.split(separator: " ").map(String.init),
+			  classes.contains("markdown-alert") else { return nil }
+		let kind = (element.attributes["data-alert"] as? String)
+			?? classes.first(where: { $0.hasPrefix("markdown-alert-") && $0 != "markdown-alert-title" })
+				.map { String($0.dropFirst("markdown-alert-".count)) }
+			?? "note"
+		var title: String?
+		var bodyChildren = [DOMNode]()
+		for child in element.children {
+			if let childElement = child as? DOMElement,
+			   ((childElement.attributes["class"] as? String) ?? "").split(separator: " ").contains("markdown-alert-title") {
+				title = flattenedText(of: childElement).trimmingCharacters(in: .whitespacesAndNewlines)
+			} else {
+				bodyChildren.append(child)
+			}
+		}
+		let marker = MarkdownAlertBlock.markerLine(kind: kind.lowercased(), title: title)
+		var blocks: [BlockMarkup] = [Paragraph(Text(marker))]
+		let body = DOMElement(name: "div", attributes: [:])
+		body.children = bodyChildren
+		blocks.append(contentsOf: blockChildren(of: body))
+		return BlockQuote(blocks)
+	}
+
 	// MARK: - Block context
 
 	/// Converts the children of a block container into a list of blocks,
@@ -167,6 +201,8 @@ struct DOMMarkupConverter {
 		// separates nothing.
 		let element = unwrapTransparent(original).element
 		let name = element.name.lowercased()
+
+		if let alert = alertMarkup(from: element) { return [alert] }
 
 		switch name {
 		case "h1", "h2", "h3", "h4", "h5", "h6":

@@ -7,6 +7,7 @@
 
 import ArgumentParser
 import Foundation
+import SwiftTextMarkdown
 import SwiftTextHTML
 import SwiftTextDOCX
 import SwiftTextRender
@@ -442,25 +443,8 @@ func markdownToHTML(
 	    margin: 0.6em 0;
 	    color: #555;
 	}
-	.markdown-alert {
-	    border-left-width: 4px;
-	    border-left-style: solid;
-	    border-radius: 6px;
-	    margin: 0.8em 0;
-	    padding: 0.75em 1em;
-	    page-break-inside: avoid;
-	    break-inside: avoid;
-	}
-	.markdown-alert-title {
-	    font-weight: 600;
-	    margin: 0 0 0.35em;
-	}
-	.markdown-alert > :last-child { margin-bottom: 0; }
-	.markdown-alert-note { background: #ddf4ff; border-left-color: #0969da; color: #0a3069; }
-	.markdown-alert-tip { background: #dafbe1; border-left-color: #1a7f37; color: #116329; }
-	.markdown-alert-important { background: #fbefff; border-left-color: #8250df; color: #5521b5; }
-	.markdown-alert-warning { background: #fff8c5; border-left-color: #9a6700; color: #7d4e00; }
-	.markdown-alert-caution { background: #ffebe9; border-left-color: #cf222e; color: #a40e26; }
+	\(MarkdownAlertLayout.css)
+	.markdown-alert { page-break-inside: avoid; break-inside: avoid; }
 	code {
 	    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
 	    font-size: 0.88em;
