@@ -9,9 +9,13 @@ import Foundation
 /// `border-left-color`, `border-left`, `border-color` or `border`, and the text from
 /// `color`. Colours can be `#rgb`, `#rrggbb`, `#rrggbbaa`, `rgb()` or `rgba()`. A
 /// translucent colour is mixed with white, the page, because Pages and Word fill boxes
-/// with opaque colours. A rule wins by specificity, then by its order in the stylesheet,
-/// as in CSS. Rules in `@media` and other at-rules are ignored, and so are selectors
-/// with combinators or pseudo-classes.
+/// with opaque colours. A declaration wins as in CSS: `!important` first, then
+/// specificity, then order in the stylesheet. Only selectors that match the box the HTML
+/// writer generates count: `<aside class="markdown-alert markdown-alert-KIND">`, so
+/// `.markdown-alert`, `.markdown-alert-note`, `aside.markdown-alert.markdown-alert-note`,
+/// but not `section.markdown-alert-note` or `.special.markdown-alert-note`. Rules in
+/// `@media` and other at-rules are ignored, and so are selectors with combinators,
+/// attributes or pseudo-classes.
 public struct MarkdownAlertColors: Sendable, Equatable {
 	/// The built-in colours: the same as the default stylesheets.
 	public static let builtIn = MarkdownAlertColors()
@@ -22,12 +26,13 @@ public struct MarkdownAlertColors: Sendable, Equatable {
 
 	/// A declared colour and what decides between competing declarations.
 	private struct Declaration: Equatable, Sendable {
+		var important: Bool
 		var specificity: Int
 		var order: Int
 		var hex: String
 
 		func wins(over other: Declaration) -> Bool {
-			(specificity, order) > (other.specificity, other.order)
+			(important ? 1 : 0, specificity, order) > (other.important ? 1 : 0, other.specificity, other.order)
 		}
 	}
 
@@ -44,9 +49,9 @@ public struct MarkdownAlertColors: Sendable, Equatable {
 		for rule in Self.styleRules(in: css) {
 			for selector in rule.selectors {
 				guard let target = Self.alertTarget(of: selector) else { continue }
-				for (property, hex) in Self.colors(in: rule.declarations) {
+				for (property, hex, important) in Self.colors(in: rule.declarations) {
 					order += 1
-					let declaration = Declaration(specificity: target.specificity, order: order, hex: hex)
+					let declaration = Declaration(important: important, specificity: target.specificity, order: order, hex: hex)
 					if let kind = target.kind {
 						if let current = kinds[kind]?[property], !declaration.wins(over: current) { continue }
 						kinds[kind, default: [:]][property] = declaration
@@ -123,31 +128,34 @@ public struct MarkdownAlertColors: Sendable, Equatable {
 	}
 
 	/// The alert kind a simple selector (`.markdown-alert-note`, `aside.markdown-alert`)
-	/// targets — `nil` for the base rule — and its specificity, or `nil` for any other
-	/// selector, including the title's.
+	/// targets — `nil` for the base rule — and its specificity, or `nil` when the selector
+	/// can't match the generated `<aside class="markdown-alert markdown-alert-KIND">`: another
+	/// tag, a class the box lacks (the title's included), or two kinds.
 	private static func alertTarget(of selector: String) -> (kind: String?, specificity: Int)? {
 		let selector = selector.trimmingCharacters(in: .whitespacesAndNewlines)
 		guard selector.range(of: #"^[A-Za-z][A-Za-z0-9-]*?(\.[A-Za-z0-9_-]+)+$|^(\.[A-Za-z0-9_-]+)+$"#, options: .regularExpression) != nil
 		else { return nil }
 		let parts = selector.split(separator: ".", omittingEmptySubsequences: false)
-		let hasTag = !(parts.first ?? "").isEmpty
-		let classes = parts.dropFirst().map { $0.lowercased() }
-		guard classes.contains(where: { $0 == "markdown-alert" || $0.hasPrefix("markdown-alert-") }),
+		let tag = String(parts.first ?? "")
+		guard tag.isEmpty || tag.lowercased() == "aside" else { return nil }      // tag names ignore case
+		let classes = parts.dropFirst().map(String.init)                          // class names don't
+		guard classes.allSatisfy({ $0 == "markdown-alert" || $0.hasPrefix("markdown-alert-") }),
 			  !classes.contains("markdown-alert-title") else { return nil }
-		let kinds = classes.filter { $0.hasPrefix("markdown-alert-") }.map { String($0.dropFirst("markdown-alert-".count)) }
+		let kinds = Set(classes.filter { $0.hasPrefix("markdown-alert-") }.map { String($0.dropFirst("markdown-alert-".count)) })
 		guard kinds.count <= 1 else { return nil }
-		return (kinds.first, classes.count * 10 + (hasTag ? 1 : 0))
+		return (kinds.first, classes.count * 10 + (tag.isEmpty ? 0 : 1))
 	}
 
-	/// The alert colours declared in a rule's block, in order.
-	private static func colors(in declarations: String) -> [(Property, String)] {
-		var result = [(Property, String)]()
+	/// The alert colours declared in a rule's block, in order, with whether each is `!important`.
+	private static func colors(in declarations: String) -> [(Property, String, Bool)] {
+		var result = [(Property, String, Bool)]()
 		for declaration in declarations.split(separator: ";") {
 			guard let colon = declaration.firstIndex(of: ":") else { continue }
 			let name = declaration[..<colon].trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-			let value = declaration[declaration.index(after: colon)...]
-				.replacingOccurrences(of: "!important", with: "")
-				.trimmingCharacters(in: .whitespacesAndNewlines)
+			var value = String(declaration[declaration.index(after: colon)...])
+			let importance = value.range(of: #"!\s*important\s*$"#, options: [.regularExpression, .caseInsensitive])
+			if let importance { value.removeSubrange(importance) }
+			value = value.trimmingCharacters(in: .whitespacesAndNewlines)
 			let property: Property
 			switch name {
 			case "background", "background-color": property = .background
@@ -155,7 +163,7 @@ public struct MarkdownAlertColors: Sendable, Equatable {
 			case "color": property = .text
 			default: continue
 			}
-			if let hex = hexColor(in: value) { result.append((property, hex)) }
+			if let hex = hexColor(in: value) { result.append((property, hex, importance != nil)) }
 		}
 		return result
 	}

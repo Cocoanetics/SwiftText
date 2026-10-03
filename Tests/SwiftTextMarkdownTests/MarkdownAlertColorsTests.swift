@@ -38,6 +38,33 @@ struct MarkdownAlertColorsTests {
 		#expect(colors.palette(forKind: "caution").text == "666666")
 	}
 
+	@Test("!important wins over specificity and order, as in CSS")
+	func important() {
+		let colors = MarkdownAlertColors(css: """
+		.markdown-alert-note { background: #f00 !important; }
+		aside.markdown-alert-note { background: #00f; }
+		.markdown-alert { color: #111111 ! IMPORTANT; }
+		.markdown-alert-tip { color: #222222; }
+		""")
+		#expect(colors.palette(forKind: "note").background == "FF0000")
+		#expect(colors.palette(forKind: "tip").text == "111111")
+	}
+
+	@Test("Only selectors the generated <aside> can match: no other tag, no other class")
+	func selectorsMustMatchTheBox() {
+		let colors = MarkdownAlertColors(css: """
+		.markdown-alert { background: #ffffff; }
+		section.markdown-alert-note { background: #ff0000; }
+		.special.markdown-alert-note { background: #00ff00; }
+		.markdown-alert-NOTE { background: #0000ff; }
+		.markdown-alert-note.markdown-alert-tip { background: #123456; }
+		ASIDE.markdown-alert.markdown-alert-warning { background: #abcdef; }
+		""")
+		#expect(colors.palette(forKind: "note").background == "FFFFFF")
+		#expect(colors.palette(forKind: "tip").background == "FFFFFF")
+		#expect(colors.palette(forKind: "warning").background == "ABCDEF")
+	}
+
 	@Test("Hex, rgb() and rgba() colours; translucent ones are mixed with white")
 	func colorFormats() {
 		#expect(MarkdownAlertColors.hexColor(in: "#abc") == "AABBCC")
