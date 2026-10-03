@@ -28,18 +28,20 @@ public enum MarkdownToPages {
 	/// - Parameter pageBreakBeforeHeadingLevel: when set (1–6), every heading of that
 	///   level starts a new page (set on the heading's paragraph style, so it stays
 	///   editable in Pages; levels 4–6 share the Heading 4 style).
+	/// - Parameter alertColors: the colours of alert boxes, e.g. read from the stylesheet
+	///   the HTML and EPUB outputs use (``MarkdownAlertColors/init(css:)``).
 	public static func convert(_ markdown: String, to url: URL, packaging: Packaging = .singleFile, baseURL: URL? = nil,
-	                           pageBreakBeforeHeadingLevel: Int? = nil) throws {
+	                           pageBreakBeforeHeadingLevel: Int? = nil, alertColors: MarkdownAlertColors = .builtIn) throws {
 		let paragraphs = MarkdownPagesBuilder.paragraphs(from: markdown)
 		switch packaging {
 		case .singleFile:
 			try PagesWriter().write(paragraphs: paragraphs, baseURL: baseURL,
-			                        pageBreakBeforeHeadingLevel: pageBreakBeforeHeadingLevel, to: url)
+			                        pageBreakBeforeHeadingLevel: pageBreakBeforeHeadingLevel, alertColors: alertColors, to: url)
 		case .package:
 			let temp = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("\(UUID().uuidString).pages")
 			defer { try? FileManager.default.removeItem(at: temp) }
 			try PagesWriter().write(paragraphs: paragraphs, baseURL: baseURL,
-			                        pageBreakBeforeHeadingLevel: pageBreakBeforeHeadingLevel, to: temp)
+			                        pageBreakBeforeHeadingLevel: pageBreakBeforeHeadingLevel, alertColors: alertColors, to: temp)
 			guard let pkg = IWAPackage.read(zip: [UInt8](try Data(contentsOf: temp))) else {
 				throw PagesWriteError.malformedTemplate("flat package")
 			}

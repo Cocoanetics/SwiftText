@@ -130,6 +130,10 @@ public final class DocxWriter {
 	/// images render as their alt-text placeholder instead of being embedded.
 	public var baseURL: URL?
 
+	/// The colours of alert boxes: the built-in palettes, or a stylesheet's
+	/// (``MarkdownAlertColors/init(css:)``).
+	public var alertColors: MarkdownAlertColors = .builtIn
+
 	/// Document title and authors emitted in `docProps/core.xml`.
 	public var title: String?
 	public var authors: [String] = []

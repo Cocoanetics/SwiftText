@@ -10,6 +10,7 @@ import Foundation
 import SwiftTextDOCX
 import SwiftTextEPUB
 import SwiftTextHTML
+import SwiftTextMarkdown
 import SwiftTextPages
 import SwiftTextRender
 #if os(macOS)
@@ -69,7 +70,7 @@ struct Render: AsyncParsableCommand {
 
 	// MARK: EPUB / shared options
 
-	@Option(name: .long, help: "Custom CSS file, applied to HTML, PDF, and EPUB output (appended after the built-in styles so its rules win).")
+	@Option(name: .long, help: "Custom CSS file for HTML, PDF, and EPUB (appended after the built-in styles, so its rules win). DOCX and Pages take its alert-box colours.")
 	var css: String?
 
 	@Option(name: .long, help: "For EPUB output, a cover image file (JPEG/PNG). Apple Books wants at least 1400px wide.")
@@ -139,11 +140,11 @@ struct Render: AsyncParsableCommand {
 			print(outputURL.path)
 		case .docx:
 			try MarkdownToDocx.convert(markdownText, to: outputURL, pageSetup: docxPageSetup(), baseURL: baseURL,
-			                           title: resolvedTitle, authors: author)
+			                           title: resolvedTitle, authors: author, alertColors: alertColors(from: userCSS))
 			print(outputURL.path)
 		case .pages:
 			try MarkdownToPages.convert(markdownText, to: outputURL, packaging: package ? .package : .singleFile, baseURL: baseURL,
-			                            pageBreakBeforeHeadingLevel: pageBreakBefore?.numericLevel)
+			                            pageBreakBeforeHeadingLevel: pageBreakBefore?.numericLevel, alertColors: alertColors(from: userCSS))
 			print(outputURL.path)
 		case .epub:
 			try renderEPUB(markdownText, baseURL: baseURL, outputURL: outputURL, userCSS: userCSS, title: resolvedTitle)
@@ -178,6 +179,11 @@ struct Render: AsyncParsableCommand {
 	/// The first top-level heading's plain text, used as the default document title.
 	private func inferTitle(from markdown: String) -> String? {
 		MarkdownToHTML.firstHeadingPlainText(markdown)
+	}
+
+	/// The alert colours of the `--css` file, for the writers that don't read CSS.
+	private func alertColors(from css: String?) -> MarkdownAlertColors {
+		css.map(MarkdownAlertColors.init(css:)) ?? .builtIn
 	}
 
 	/// Loads the `--css` file if given.

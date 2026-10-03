@@ -228,7 +228,7 @@ extension DocxWriter {
 	/// colour on the other sides, which only exist to pad the text (Word pads a side
 	/// only when it has a border). The shading fills the padding.
 	func calloutBordersXML(kind: String, listHang: Int) -> String {
-		let palette = MarkdownAlertPalette.palette(forKind: kind)
+		let palette = alertColors.palette(forKind: kind)
 		let layout = boxLayout
 		let hairline = DocxBoxLayout.hairlineBorderEighths
 		return "<w:pBdr>"
@@ -288,7 +288,7 @@ extension DocxWriter {
 	func calloutStyles() -> String {
 		let layout = boxLayout
 		return calloutKinds.map { kind in
-			let palette = MarkdownAlertPalette.palette(forKind: kind)
+			let palette = alertColors.palette(forKind: kind)
 			let body = DocxStyleID.callout(kind: kind)
 			return """
 

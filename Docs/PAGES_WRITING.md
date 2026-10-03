@@ -163,7 +163,8 @@ matches after injection) or add a `ComponentInfo` per new `Tables/` file + bump 
 `[!KIND]`, Obsidian custom titles (`[!WARNING] Watch out`) and kinds (`[!EXAMPLE]`), DocC
 `Kind:` asides. **Colours** (`MarkdownAlertPalette`) and **geometry** (`MarkdownAlertLayout`,
 in CSS `em`) are shared too; the HTML/PDF stylesheets are generated from them, so all outputs
-agree.
+agree. A stylesheet's `.markdown-alert` and `.markdown-alert-KIND` colours (`MarkdownAlertColors`,
+`swifttext render --css`) recolour the Pages boxes as they do the HTML ones.
 
 **Styles.** Two repurposed template styles are the named bases — "Label" → **Callout**
 (`swifttext-callout`) and "Label Dark" → **Callout Title** (`swifttext-callout-title`) — and
