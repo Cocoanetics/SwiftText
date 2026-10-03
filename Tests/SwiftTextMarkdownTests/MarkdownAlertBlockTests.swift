@@ -69,6 +69,24 @@ struct MarkdownAlertBlockTests {
 		#expect(alert("> Remember: this is an ordinary quote.") == nil)
 	}
 
+	@Test("A DocC marker alone on its line: the body starts on the next line, without the break")
+	func doccMarkerOnItsOwnLine() throws {
+		let detected = try #require(alert("> Note:\n> Mind the gap."))
+		#expect(detected.kind == "note")
+		#expect(bodyText(detected) == "Mind the gap.")
+		let paragraph = try #require(detected.body.first as? Paragraph)
+		#expect(paragraph.child(at: 0) is Text)
+	}
+
+	@Test("A formatted custom title is the text, not the Markdown; literal * and _ stay")
+	func formattedTitleIsPlainText() throws {
+		let linked = try #require(alert("> [!NOTE] [Docs](https://example.com) and *more* `code`\n> Body."))
+		#expect(linked.title == "Docs and more code")
+		#expect(bodyText(linked) == "Body.")
+		let literal = try #require(alert("> [!TIP] snake_case and 2 * 3"))
+		#expect(literal.title == "snake_case and 2 * 3")
+	}
+
 	@Test("Ordinary quotes and invalid markers are not alerts")
 	func notAlerts() {
 		#expect(alert("> Just a quote.") == nil)

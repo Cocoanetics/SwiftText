@@ -98,6 +98,10 @@ public struct MarkdownAlertBlock {
 			var rest = String(raw[raw.index(after: colon)...])
 			if rest.hasPrefix(" ") { rest.removeFirst() }
 			var inlines = Array(first.inlineChildren.dropFirst())
+			// `> Note:` alone on its line: the body starts after the line break.
+			if rest.isEmpty, let lead = inlines.first, lead is SoftBreak || lead is LineBreak {
+				inlines.removeFirst()
+			}
 			if !rest.isEmpty { inlines.insert(Text(rest), at: 0) }
 			var body = [BlockMarkup]()
 			if !inlines.isEmpty { body.append(Paragraph(inlines)) }
@@ -150,11 +154,12 @@ public struct MarkdownAlertBlock {
 			return MarkdownAlertBlock(kind: kind, title: defaultTitle(forKind: kind), hasCustomTitle: false, syntax: .bracketed, body: [])
 		}
 		// The title is the rest of the marker's line: the remaining text of the first
-		// inline node, plus any further inlines up to the first line break.
+		// inline node, plus the text of any further inlines up to the first line break
+		// (a link's text, not its Markdown).
 		var titleParts = [firstLineRest]
 		var remaining = Array(first.inlineChildren.dropFirst())
 		while let next = remaining.first, !(next is SoftBreak), !(next is LineBreak) {
-			titleParts.append(next.format().trimmingCharacters(in: .newlines))
+			titleParts.append(swiftMarkdownPlainText(of: next))
 			remaining.removeFirst()
 		}
 		if let next = remaining.first, next is SoftBreak || next is LineBreak { remaining.removeFirst() }
@@ -171,10 +176,10 @@ public struct MarkdownAlertBlock {
 		)
 	}
 
-	/// A title as plain text: Markdown emphasis markers removed, whitespace collapsed.
-	private static func plainTitle(_ markdown: String) -> String {
-		let stripped = markdown.filter { $0 != "*" && $0 != "_" && $0 != "`" }
-		return stripped.split(whereSeparator: { $0 == " " || $0 == "\t" }).joined(separator: " ")
+	/// A title's text with its whitespace collapsed. The parts are already plain text, so
+	/// literal `*` and `_` (as in `snake_case`) stay.
+	private static func plainTitle(_ text: String) -> String {
+		text.split(whereSeparator: { $0 == " " || $0 == "\t" }).joined(separator: " ")
 	}
 }
 
