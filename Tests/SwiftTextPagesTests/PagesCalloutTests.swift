@@ -20,11 +20,11 @@ struct PagesCalloutTests {
 
 	/// The paragraph-style objects the writer synthesized (in `Document.iwa`), keyed by
 	/// their style identifier.
-	private func synthesizedStyles(_ markdown: String) throws -> [String: TSWP_ParagraphStyleArchive] {
+	private func synthesizedStyles(_ markdown: String, alertColors: MarkdownAlertColors = .builtIn) throws -> [String: TSWP_ParagraphStyleArchive] {
 		let url = FileManager.default.temporaryDirectory
 			.appendingPathComponent("swifttext-callout-\(UUID().uuidString).pages")
 		defer { try? FileManager.default.removeItem(at: url) }
-		try MarkdownToPages.convert(markdown, to: url)
+		try MarkdownToPages.convert(markdown, to: url, alertColors: alertColors)
 		let document = try IWAContainer.entries(at: url, prefix: "Index/").first { $0.path.hasSuffix("Document.iwa") }
 		var styles = [String: TSWP_ParagraphStyleArchive]()
 		for object in try IWAArchive.objects(from: #require(document).data) where object.type == 2022 {
@@ -89,6 +89,17 @@ struct PagesCalloutTests {
 		#expect(abs((fill.r ?? 0) - Float(0xFF) / 255) < 0.01)
 		#expect(abs((fill.g ?? 0) - Float(0xEB) / 255) < 0.01)
 		#expect(body.paraProperties?.borderPositions == 4)          // the left edge
+	}
+
+	@Test("A stylesheet's alert colours replace the built-in palette")
+	func colorsFromCSS() throws {
+		let colors = MarkdownAlertColors(css: ".markdown-alert-careful { background: #f6f1ea; border-left-color: #b8975a; color: #3b3222; }")
+		let styles = try synthesizedStyles("> [!CAREFUL] Watch out\n> Body.\n", alertColors: colors)
+		let body = try #require(styles["swifttext-callout:careful"]?.paraProperties)
+		let fill = try #require(body.fill)
+		#expect(abs((fill.r ?? 0) - Float(0xF6) / 255) < 0.01)
+		#expect(abs((fill.g ?? 0) - Float(0xF1) / 255) < 0.01)
+		#expect(abs((fill.b ?? 0) - Float(0xEA) / 255) < 0.01)
 	}
 
 	@Test("Box spacing is the CSS em values times the body font size")

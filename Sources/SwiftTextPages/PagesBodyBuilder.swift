@@ -198,10 +198,16 @@ struct BodyParagraph {
 /// Allocates body-scoped objects referenced from run tables: synthesized
 /// character styles, hyperlink smart fields, and anonymous list styles.
 final class BodyObjectRegistry {
+	/// The alert boxes' colours: the built-in palettes or a stylesheet's.
+	let alertColors: MarkdownAlertColors
 	private var nextID = PagesStyleID.synthesizedBase
 	private var cache: [InlineStyle: UInt64] = [:]
 	private var calloutCache: [BodyParagraph.CalloutRole: UInt64] = [:]
 	private(set) var synthesizedObjects: [IWAObject] = []
+
+	init(alertColors: MarkdownAlertColors = .builtIn) {
+		self.alertColors = alertColors
+	}
 
 	/// The character-style id for a styling combination (the "None" style for plain).
 	func identifier(for style: InlineStyle) -> UInt64 {
@@ -284,7 +290,8 @@ final class BodyObjectRegistry {
 		if let cached = calloutCache[role] { return cached }
 		let id = nextID
 		nextID += 1
-		synthesizedObjects.append(IWAObject(identifier: id, type: 2022, payload: PagesBodySerializer.calloutVariationPayload(role)))
+		let palette = alertColors.palette(forKind: role.kind)
+		synthesizedObjects.append(IWAObject(identifier: id, type: 2022, payload: PagesBodySerializer.calloutVariationPayload(role, palette: palette)))
 		calloutCache[role] = id
 		return id
 	}
@@ -696,10 +703,9 @@ enum PagesBodySerializer {
 	}
 
 	/// The payload of an alert kind's style variation: `is_variation` of the "Callout"
-	/// (or "Callout Title") base, with the kind's frame and text colour, and a stable
-	/// identifier naming the kind for the reader.
-	static func calloutVariationPayload(_ role: BodyParagraph.CalloutRole) -> [UInt8] {
-		let palette = MarkdownAlertPalette.palette(forKind: role.kind)
+	/// (or "Callout Title") base, with the kind's frame and text colour (`palette`), and
+	/// a stable identifier naming the kind for the reader.
+	static func calloutVariationPayload(_ role: BodyParagraph.CalloutRole, palette: MarkdownAlertPalette) -> [UInt8] {
 		var parentReference = ProtobufWriter()
 		parentReference.varintField(1, role.isTitle ? PagesStyleID.calloutTitle : PagesStyleID.calloutBody)
 		var stylesheetReference = ProtobufWriter()

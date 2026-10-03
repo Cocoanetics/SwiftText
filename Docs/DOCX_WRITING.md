@@ -5,6 +5,9 @@ any `[!KIND]`, `> Note:`) as **boxes of ordinary paragraphs**: a tinted fill wit
 coloured left border, laid out like the CSS box of the HTML/PDF output. Detection
 (`MarkdownAlertBlock`), colours (`MarkdownAlertPalette`) and geometry (`MarkdownAlertLayout`,
 in CSS `em`) are shared with every other writer, so the boxes look alike in all formats.
+A stylesheet can recolour them: `MarkdownAlertColors(css:)` reads its `.markdown-alert` and
+`.markdown-alert-KIND` rules (fill, left border, text colour), and `swifttext render --css` applies
+them to DOCX and Pages as it does to HTML, PDF and EPUB.
 `DocxFile.markdown()` (and `swifttext docx --markdown`) reads them back as `> [!KIND] Title`.
 
 ## Why paragraph borders, not text boxes or tables

@@ -1,4 +1,5 @@
 import Foundation
+import SwiftTextMarkdown
 
 /// Converts Markdown text to a DOCX file, backed by swift-markdown's parser.
 ///
@@ -18,7 +19,10 @@ public enum MarkdownToDocx {
 	///     alt-text placeholders.
 	///   - title: Optional document title for the package's core properties.
 	///   - authors: Document authors for the package's core properties.
-	public static func convert(_ markdown: String, to url: URL, pageSetup: DocxPageSetup = .a4, baseURL: URL? = nil, title: String? = nil, authors: [String] = []) throws {
+	///   - alertColors: The colours of alert boxes, e.g. read from the stylesheet the HTML
+	///     and EPUB outputs use (``MarkdownAlertColors/init(css:)``).
+	public static func convert(_ markdown: String, to url: URL, pageSetup: DocxPageSetup = .a4, baseURL: URL? = nil, title: String? = nil,
+	                           authors: [String] = [], alertColors: MarkdownAlertColors = .builtIn) throws {
 		let build = MarkdownDocxBuilder.build(from: markdown)
 		let writer = DocxWriter()
 		writer.blocks = build.blocks
@@ -27,6 +31,7 @@ public enum MarkdownToDocx {
 		writer.baseURL = baseURL
 		writer.title = title
 		writer.authors = authors
+		writer.alertColors = alertColors
 		try writer.write(to: url)
 	}
 

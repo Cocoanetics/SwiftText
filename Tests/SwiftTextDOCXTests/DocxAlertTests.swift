@@ -124,6 +124,18 @@ struct DocxAlertTests {
 		#expect(value("w:right", of: "w:ind", in: body) == layout.rightIndent)
 	}
 
+	@Test("A stylesheet's alert colours replace the built-in palette")
+	func colorsFromCSS() throws {
+		let url = FileManager.default.temporaryDirectory.appendingPathComponent("swifttext-alert-\(UUID().uuidString).docx")
+		defer { try? FileManager.default.removeItem(at: url) }
+		let colors = MarkdownAlertColors(css: ".markdown-alert-careful { background: rgba(184, 151, 90, 0.13); border-left: 3pt solid #b8975a; color: #3b3222; }")
+		try MarkdownToDocx.convert("> [!CAREFUL] Watch out\n> Body.\n", to: url, alertColors: colors)
+		let styles = try DocxArchive(contentsOf: url).text("word/styles.xml")
+		#expect(styles.contains("<w:shd w:val=\"clear\" w:color=\"auto\" w:fill=\"F6F1EA\"/>"))
+		#expect(styles.contains("w:color=\"B8975A\"/>"))
+		#expect(styles.contains("<w:color w:val=\"3B3222\"/>"))
+	}
+
 	@Test("Box spacing is the CSS em values times the body font size, net of the neighbours' own")
 	func spacingFollowsTheFontSize() throws {
 		let box = try write("Before.\n\n> [!TIP]\n> Body.\n\n## After\n\nText.\n").callout("tip")

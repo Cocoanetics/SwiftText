@@ -107,6 +107,7 @@ let cliTargets: [Target] = [
 			"SwiftTextHTML",
 			"SwiftTextDOCX",
 			"SwiftTextEPUB",
+			"SwiftTextMarkdown",
 			"SwiftTextPages",
 			"SwiftTextNumbers",
 			"SwiftTextKeynote",

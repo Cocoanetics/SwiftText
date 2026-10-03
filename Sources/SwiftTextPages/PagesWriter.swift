@@ -35,11 +35,12 @@ public final class PagesWriter {
 
 	/// Writes a document whose body is the given paragraphs (each carrying its
 	/// paragraph style, list membership, and inline style runs). With
-	/// `pageBreakBeforeHeadingLevel`, headings of that level each start a new page.
+	/// `pageBreakBeforeHeadingLevel`, headings of that level each start a new page;
+	/// `alertColors` colours the alert boxes.
 	func write(paragraphs inputParagraphs: [BodyParagraph], baseURL: URL? = nil,
-	           pageBreakBeforeHeadingLevel: Int? = nil, to url: URL) throws {
+	           pageBreakBeforeHeadingLevel: Int? = nil, alertColors: MarkdownAlertColors = .builtIn, to url: URL) throws {
 		let identity = DocumentIdentity.fresh()
-		let registry = BodyObjectRegistry()
+		let registry = BodyObjectRegistry(alertColors: alertColors)
 
 		// Alert boxes and rules get their CSS spacing (in em of the body font size),
 		// which also adds each box's end paragraph — so this runs before anything that
