@@ -239,8 +239,8 @@ private struct HTMLRenderer: MarkupVisitor {
 	}
 
 	mutating func visitBlockQuote(_ blockQuote: BlockQuote) {
-		if let alert = githubAlert(in: blockQuote) {
-			emitGitHubAlert(alert)
+		if let alert = MarkdownAlertBlock.detect(in: blockQuote) {
+			emitAlert(alert)
 			return
 		}
 		output += "<blockquote>"
@@ -309,109 +309,18 @@ private struct HTMLRenderer: MarkupVisitor {
 		}
 	}
 
-	// MARK: - GitHub alerts
+	// MARK: - Alerts (GitHub / Obsidian / DocC)
 
-	private struct GitHubAlert {
-		var kind: String
-		var title: String
-		var role: String
-		var markerTerminator: Character  // `]` for `[!NOTE]`, `:` for DocC `Note:`
-		var body: BlockQuote
-	}
-
-	private func githubAlert(in quote: BlockQuote) -> GitHubAlert? {
-		// GitHub's `[!NOTE]` syntax — bracket-bang on its own line.
-		if let bracketed = bracketedAlertToken(in: quote) {
-			return alert(forToken: bracketed, terminator: "]", in: quote)
-		}
-		// DocC-style `Note:` / `Tip:` plain-text tag. swift-markdown's `Aside`
-		// node would resolve this for us, but we want to emit it through the
-		// same `<aside class="markdown-alert-...">` shape as GitHub alerts so
-		// styling stays consistent.
-		if let docc = doccAsideToken(in: quote) {
-			return alert(forToken: docc, terminator: ":", in: quote)
-		}
-		return nil
-	}
-
-	private func bracketedAlertToken(in quote: BlockQuote) -> String? {
-		guard let firstParagraph = quote.child(at: 0) as? Paragraph else { return nil }
-		guard let firstText = firstParagraph.child(at: 0) as? Text else { return nil }
-		let raw = firstText.string
-		guard raw.hasPrefix("[!") else { return nil }
-		guard let closing = raw.firstIndex(of: "]") else { return nil }
-		return String(raw[raw.index(raw.startIndex, offsetBy: 2)..<closing])
-	}
-
-	private func doccAsideToken(in quote: BlockQuote) -> String? {
-		guard let firstParagraph = quote.child(at: 0) as? Paragraph else { return nil }
-		guard let firstText = firstParagraph.child(at: 0) as? Text else { return nil }
-		guard let colon = firstText.string.firstIndex(of: ":") else { return nil }
-		let token = String(firstText.string[..<colon])
-		// DocC tags are single-word identifiers without whitespace.
-		guard !token.isEmpty, !token.contains(where: { $0.isWhitespace }) else { return nil }
-		return token
-	}
-
-	private func alert(forToken token: String, terminator: Character, in quote: BlockQuote) -> GitHubAlert? {
-		let role: String
-		let title: String
-		switch token.uppercased() {
-		case "NOTE": (title, role) = ("Note", "note")
-		case "TIP": (title, role) = ("Tip", "note")
-		case "IMPORTANT": (title, role) = ("Important", "note")
-		case "WARNING": (title, role) = ("Warning", "alert")
-		case "CAUTION": (title, role) = ("Caution", "alert")
-		case "EXPERIMENT": (title, role) = ("Experiment", "note")
-		default: return nil
-		}
-		return GitHubAlert(kind: token.lowercased(), title: title, role: role, markerTerminator: terminator, body: quote)
-	}
-
-	private mutating func emitGitHubAlert(_ alert: GitHubAlert) {
-		output += "<aside class=\"markdown-alert markdown-alert-\(alert.kind)\" data-alert=\"\(alert.kind)\" role=\"\(alert.role)\">"
-		output += "<p class=\"markdown-alert-title\">\(alert.title)</p>"
-
-		// Render the blockquote children, but skip the [!TYPE] marker that lives at
-		// the start of the first paragraph. If the marker line stands alone (e.g.
-		// "> [!NOTE]\n> body"), drop the trailing soft-break that would otherwise
-		// inject a leading newline into the body paragraph.
-		let children = Array(alert.body.children)
-		for (index, child) in children.enumerated() {
-			if index == 0, let paragraph = child as? Paragraph {
-				var inlineChildren = Array(paragraph.children)
-				guard !inlineChildren.isEmpty else { continue }
-				if let firstText = inlineChildren.first as? Text {
-					var stripped = firstText.string
-					if let closing = stripped.firstIndex(of: alert.markerTerminator) {
-						stripped.removeSubrange(stripped.startIndex...closing)
-						if stripped.hasPrefix(" ") { stripped.removeFirst() }
-					}
-					if stripped.isEmpty {
-						inlineChildren.removeFirst()
-						// Marker had its own line — eat the soft-break that followed.
-						if let next = inlineChildren.first, next is SoftBreak {
-							inlineChildren.removeFirst()
-						}
-						if inlineChildren.isEmpty { continue }
-						output += "<p>"
-						for tail in inlineChildren { visit(tail) }
-						output += "</p>"
-					} else {
-						output += "<p>"
-						output += escapeHTMLNotQuote(stripped)
-						for tail in inlineChildren.dropFirst() { visit(tail) }
-						output += "</p>"
-					}
-				} else {
-					output += "<p>"
-					for inline in inlineChildren { visit(inline) }
-					output += "</p>"
-				}
-			} else {
-				visit(child)
-			}
-		}
+	/// An alert as `<aside class="markdown-alert markdown-alert-KIND">` with a title
+	/// paragraph, the shape GitHub emits (as a `div`), styled by `.markdown-alert-*` CSS.
+	/// Detection and titles come from ``MarkdownAlertBlock``, shared by every writer.
+	/// Every kind is `role="note"`: ARIA's `alert` is a live region for time-sensitive
+	/// messages, and it isn't allowed on `aside` at all (epubcheck rejects it). The
+	/// title says what kind of note it is.
+	private mutating func emitAlert(_ alert: MarkdownAlertBlock) {
+		output += "<aside class=\"markdown-alert markdown-alert-\(alert.kind)\" data-alert=\"\(alert.kind)\" role=\"note\">"
+		output += "<p class=\"markdown-alert-title\">\(escapeHTMLNotQuote(alert.title))</p>"
+		for child in alert.body { visit(child) }
 		output += "</aside>"
 	}
 

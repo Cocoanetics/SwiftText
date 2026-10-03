@@ -173,6 +173,20 @@ public enum SwiftTextMarkdownAttributes {
 		public static let name = "SwiftText.alert"
 	}
 
+	/// The raw kind of an alert (`"note"`, `"example"`, …): also set for kinds that
+	/// ``MarkdownAlert`` has no case for, which carry no ``Alert`` value.
+	public enum AlertKind: AttributedStringKey {
+		public typealias Value = String
+		public static let name = "SwiftText.alertKind"
+	}
+
+	/// The title of an alert: its custom title (`> [!WARNING] Watch out`) or the
+	/// kind's default ("Warning").
+	public enum AlertTitle: AttributedStringKey {
+		public typealias Value = String
+		public static let name = "SwiftText.alertTitle"
+	}
+
 	/// The checkbox state of a GFM task-list item.
 	public enum Checkbox: AttributedStringKey {
 		public typealias Value = MarkdownCheckbox
@@ -198,6 +212,8 @@ extension AttributeScopes {
 		public let footnoteReference: SwiftTextMarkdownAttributes.FootnoteReference
 		public let footnoteDefinition: SwiftTextMarkdownAttributes.FootnoteDefinition
 		public let alert: SwiftTextMarkdownAttributes.Alert
+		public let alertKind: SwiftTextMarkdownAttributes.AlertKind
+		public let alertTitle: SwiftTextMarkdownAttributes.AlertTitle
 		public let checkbox: SwiftTextMarkdownAttributes.Checkbox
 		public let imageSource: SwiftTextMarkdownAttributes.ImageSource
 		public let foundation: FoundationAttributes

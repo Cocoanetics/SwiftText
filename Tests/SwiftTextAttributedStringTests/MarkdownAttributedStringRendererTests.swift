@@ -288,6 +288,20 @@ struct MarkdownAttributedStringRendererTests {
 		#expect(kinds(body) == [.paragraph, .blockQuote])
 	}
 
+	@Test func customTitleAndKindAreCarried() {
+		let warning = render("> [!WARNING] Watch out\n> Be careful.")
+		let body = firstRun(warning) { $0.contains("Be careful.") }
+		#expect(body?[SwiftTextMarkdownAttributes.Alert.self] == .warning)
+		#expect(body?[SwiftTextMarkdownAttributes.AlertTitle.self] == "Watch out")
+		#expect(!wholeString(warning).contains("Watch out"))     // the title is an attribute, not body text
+
+		let example = render("> [!EXAMPLE]\n> A letter.")
+		let run = firstRun(example) { $0.contains("A letter.") }
+		#expect(run?[SwiftTextMarkdownAttributes.Alert.self] == nil)  // no MarkdownAlert case for it
+		#expect(run?[SwiftTextMarkdownAttributes.AlertKind.self] == "example")
+		#expect(run?[SwiftTextMarkdownAttributes.AlertTitle.self] == "Example")
+	}
+
 	@Test func doccAsideTagged() {
 		let attributed = render("> Tip: handy")
 		#expect(firstRun(attributed) { $0.contains("handy") }?[SwiftTextMarkdownAttributes.Alert.self] == .tip)

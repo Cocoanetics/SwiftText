@@ -94,6 +94,8 @@ extension AttributedString {
 private struct EmitContext {
 	var ancestors: [MarkdownBlock.Component] = []
 	var alert: MarkdownAlert?
+	var alertKind: String?
+	var alertTitle: String?
 	var footnoteDefinition: Int?
 	var checkbox: MarkdownCheckbox?
 
@@ -181,19 +183,12 @@ private final class Builder {
 		let quoteComponent = component(.blockQuote)
 		let quoteContext = context.nested(quoteComponent)
 
-		if let detected = detectAlert(in: blockQuote) {
+		if let detected = MarkdownAlertBlock.detect(in: blockQuote) {
 			var alertContext = quoteContext
-			alertContext.alert = detected.kind
-			let children = Array(blockQuote.children)
-			for (index, child) in children.enumerated() {
-				if index == 0, let paragraph = child as? Paragraph {
-					let inlines = strippedAlertMarker(in: paragraph, terminator: detected.terminator)
-					guard !inlines.isEmpty else { continue }
-					emitInlines(inlines, block: [component(.paragraph)] + alertContext.ancestors, alertContext)
-				} else {
-					emitBlock(child, alertContext)
-				}
-			}
+			alertContext.alert = MarkdownAlert(token: detected.kind)
+			alertContext.alertKind = detected.kind
+			alertContext.alertTitle = detected.title
+			emitBlocks(detected.body.map { $0 as Markup }, alertContext)
 			return
 		}
 
@@ -412,6 +407,8 @@ private final class Builder {
 		if !style.isEmpty { container[SwiftTextMarkdownAttributes.InlineStyle.self] = style }
 		if let link { container.link = link }
 		if let alert = context.alert { container[SwiftTextMarkdownAttributes.Alert.self] = alert }
+		if let kind = context.alertKind { container[SwiftTextMarkdownAttributes.AlertKind.self] = kind }
+		if let title = context.alertTitle { container[SwiftTextMarkdownAttributes.AlertTitle.self] = title }
 		if let definition = context.footnoteDefinition {
 			container[SwiftTextMarkdownAttributes.FootnoteDefinition.self] = definition
 		}
@@ -431,53 +428,7 @@ private final class Builder {
 	/// Foundation uses U+2E3B (THREE-EM DASH) as a thematic-break placeholder.
 	private var thematicBreakText: String { "\u{2E3B}" }
 
-	// MARK: Alert detection (ports SwiftMarkdownHTMLRenderer's logic)
-
-	private func detectAlert(in quote: BlockQuote) -> (kind: MarkdownAlert, terminator: Character)? {
-		if let token = bracketedAlertToken(in: quote), let kind = MarkdownAlert(token: token) {
-			return (kind, "]")
-		}
-		if let token = doccAsideToken(in: quote), let kind = MarkdownAlert(token: token) {
-			return (kind, ":")
-		}
-		return nil
-	}
-
-	private func bracketedAlertToken(in quote: BlockQuote) -> String? {
-		guard let paragraph = quote.child(at: 0) as? Paragraph,
-		      let text = paragraph.child(at: 0) as? Text else { return nil }
-		let raw = text.string
-		guard raw.hasPrefix("[!"), let closing = raw.firstIndex(of: "]") else { return nil }
-		return String(raw[raw.index(raw.startIndex, offsetBy: 2)..<closing])
-	}
-
-	private func doccAsideToken(in quote: BlockQuote) -> String? {
-		guard let paragraph = quote.child(at: 0) as? Paragraph,
-		      let text = paragraph.child(at: 0) as? Text,
-		      let colon = text.string.firstIndex(of: ":") else { return nil }
-		let token = String(text.string[..<colon])
-		guard !token.isEmpty, !token.contains(where: { $0.isWhitespace }) else { return nil }
-		return token
-	}
-
-	private func strippedAlertMarker(in paragraph: Paragraph, terminator: Character) -> [Markup] {
-		var inlines = Array(paragraph.children)
-		guard let firstText = inlines.first as? Text else { return inlines }
-
-		var stripped = firstText.string
-		if let closing = stripped.firstIndex(of: terminator) {
-			stripped.removeSubrange(stripped.startIndex...closing)
-			if stripped.hasPrefix(" ") { stripped.removeFirst() }
-		}
-
-		if stripped.isEmpty {
-			inlines.removeFirst()
-			if let next = inlines.first, next is SoftBreak { inlines.removeFirst() }
-		} else {
-			inlines[0] = Text(stripped)
-		}
-		return inlines
-	}
+	// Alert detection is shared with every other writer: see `MarkdownAlertBlock`.
 }
 
 // MARK: - Native intent bridging (Apple platforms only)

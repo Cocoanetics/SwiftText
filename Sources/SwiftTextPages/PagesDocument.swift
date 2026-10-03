@@ -1,4 +1,5 @@
 import Foundation
+import SwiftTextMarkdown
 import Markdown
 
 /// A parsed Pages document reduced to its ordered body paragraphs.
@@ -92,6 +93,33 @@ public struct PagesDocument {
 		/// Whether this paragraph belongs to a preformatted code block (the "Code
 		/// Block" style). Consecutive code-block paragraphs render as one fenced block.
 		public var isCodeBlock: Bool
+		/// Whether the paragraph is block-quoted (the writer's "Block Quote" style).
+		/// Consecutive quote paragraphs render as one `>` quote.
+		public var isBlockQuote: Bool
+		/// The alert box (`> [!KIND]`) this paragraph belongs to, if any — read from
+		/// the writer's "Callout" style variations, which name the kind.
+		public var callout: Callout?
+		/// Whether the paragraph is a horizontal rule (the writer's "Rule" style).
+		public var isRule: Bool
+
+		/// A paragraph's place in an alert box.
+		public struct Callout: Sendable, Equatable {
+			public enum Role: Sendable, Equatable {
+				/// The title line ("Note", or a custom title).
+				case title
+				/// A paragraph of the box's content.
+				case body
+				/// The empty paragraph that carries the box's bottom padding.
+				case end
+			}
+			/// The alert kind, lowercased (`"note"`, `"warning"`, `"example"`, …).
+			public var kind: String
+			public var role: Role
+			public init(kind: String, role: Role) {
+				self.kind = kind
+				self.role = role
+			}
+		}
 
 		/// A native table reconstructed from the iWork grid: cell strings (row 0 =
 		/// header) plus per-column horizontal alignment.
@@ -117,7 +145,10 @@ public struct PagesDocument {
 			listOrdered: Bool = false,
 			footnoteMarkers: [FootnoteMarker] = [],
 			tables: [Table] = [],
-			isCodeBlock: Bool = false
+			isCodeBlock: Bool = false,
+			isBlockQuote: Bool = false,
+			callout: Callout? = nil,
+			isRule: Bool = false
 		) {
 			self.text = text
 			self.fontSize = fontSize
@@ -131,6 +162,9 @@ public struct PagesDocument {
 			self.footnoteMarkers = footnoteMarkers
 			self.tables = tables
 			self.isCodeBlock = isCodeBlock
+			self.isBlockQuote = isBlockQuote
+			self.callout = callout
+			self.isRule = isRule
 		}
 
 		/// A footnote reference at a paragraph-relative UTF-16 offset.
@@ -439,6 +473,48 @@ public struct PagesDocument {
 				continue
 			}
 
+			// A rule paragraph (empty, in the "Rule" style) is `---`.
+			if paragraph.isRule {
+				counters.removeAll()
+				lines.append("---")
+				isListItem.append(false)
+				index += 1
+				continue
+			}
+
+			// An alert box: its title line becomes the `> [!KIND] Title` marker, its body
+			// paragraphs the quoted lines, its empty end paragraph nothing.
+			if let callout = paragraph.callout {
+				let (block, end) = Self.markdownAlert(paragraphs, from: index, kind: callout.kind)
+				counters.removeAll()
+				if !block.isEmpty {
+					lines.append(block)
+					isListItem.append(false)
+				}
+				index = end
+				continue
+			}
+
+			// Consecutive block-quote paragraphs are one `>` quote (the style's italic is
+			// the quote's look, not emphasis).
+			if paragraph.isBlockQuote {
+				var quoted = [String]()
+				while index < paragraphs.count, paragraphs[index].isBlockQuote {
+					let text = paragraphs[index].renderedText(inliningImages: true, applyingEmphasis: true, suppressingUniformEmphasis: true)
+					if !text.isEmpty {
+						if !quoted.isEmpty { quoted.append(">") }
+						quoted.append(contentsOf: text.split(separator: "\n", omittingEmptySubsequences: false).map { "> " + $0 })
+					}
+					index += 1
+				}
+				counters.removeAll()
+				if !quoted.isEmpty {
+					lines.append(quoted.joined(separator: "\n"))
+					isListItem.append(false)
+				}
+				continue
+			}
+
 			let rendered = paragraph.renderedText(inliningImages: true, applyingEmphasis: true)
 			guard !rendered.isEmpty else { index += 1; continue }
 
@@ -488,6 +564,42 @@ public struct PagesDocument {
 			output += (output.isEmpty ? "" : "\n\n") + definitions
 		}
 		return output
+	}
+
+	/// Renders the alert box starting at `start` — its title paragraph (if any), the body
+	/// paragraphs of the same kind and the end paragraph — as a `> [!KIND]` block, and
+	/// returns it with the index after the box. The title is written only when it differs
+	/// from the kind's default title.
+	static func markdownAlert(_ paragraphs: [Paragraph], from start: Int, kind: String) -> (block: String, end: Int) {
+		var index = start
+		var title = ""
+		if paragraphs[index].callout?.role == .title {
+			title = paragraphs[index].normalizedText()
+			index += 1
+		}
+		var body = [MarkdownAlertBlock.RecoveredBlock]()
+		var counters = [Int: Int]()
+		while index < paragraphs.count, let callout = paragraphs[index].callout, callout.role != .title, callout.kind == kind {
+			let paragraph = paragraphs[index]
+			index += 1
+			if callout.role == .end { break }
+			let text = paragraph.renderedText(inliningImages: true, applyingEmphasis: true)
+			guard !text.isEmpty else { continue }
+			if let level = paragraph.listLevel {
+				let marker: String
+				if paragraph.listOrdered {
+					counters[level, default: 0] += 1
+					marker = "\(counters[level]!). "
+				} else {
+					marker = "- "
+				}
+				body.append(.listItem(String(repeating: "  ", count: max(level, 0)) + marker + text))
+			} else {
+				counters.removeAll()
+				body.append(.paragraph(text))
+			}
+		}
+		return (MarkdownAlertBlock.markdown(kind: kind, title: title, body: body), index)
 	}
 
 	/// Renders a table (row 0 = header) as a GitHub-flavored Markdown table, with the

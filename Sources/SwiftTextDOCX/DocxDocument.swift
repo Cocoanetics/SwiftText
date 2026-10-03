@@ -1,4 +1,5 @@
 import Foundation
+import SwiftTextMarkdown
 
 /// Represents a parsed DOCX document and its paragraph content.
 public struct DocxDocument {
@@ -27,12 +28,111 @@ public struct DocxDocument {
 		renderedParagraphs(style: .markdown)
 	}
 
-	/// Returns rendered paragraphs using the requested style.
+	/// Returns rendered paragraphs using the requested style. In Markdown, the
+	/// paragraphs of an alert box (SwiftText's "Callout" styles) render together as one
+	/// `> [!KIND]` block, consecutive quoted paragraphs as one `>` block, "Code Block"
+	/// paragraphs as one fenced block, and a rule paragraph as `---`.
 	public func renderedParagraphs(style: RenderStyle = .markdown) -> [RenderedParagraph] {
 		var numberingState = NumberingState(numbering: numbering)
-		return paragraphs.compactMap { paragraph in
-			paragraph.rendered(using: self, numberingState: &numberingState, style: style)
+		var rendered = [RenderedParagraph]()
+		var index = 0
+		while index < paragraphs.count {
+			let paragraph = paragraphs[index]
+			let paragraphStyle = styles.style(for: paragraph.styleIdentifier)
+			if style == .markdown, let callout = paragraphStyle?.callout {
+				let alert = markdownAlert(from: index, kind: callout.kind, numberingState: &numberingState)
+				rendered.append(RenderedParagraph(text: alert.block, isListItem: false))
+				index = alert.end
+				continue
+			}
+			if style == .markdown, paragraphStyle?.isCodeBlock == true {
+				let code = markdownCodeBlock(from: index)
+				rendered.append(RenderedParagraph(text: code.block, isListItem: false))
+				index = code.end
+				continue
+			}
+			if style == .markdown, paragraphStyle?.isBlockQuote == true {
+				let quote = markdownQuote(from: index, numberingState: &numberingState)
+				if !quote.block.isEmpty { rendered.append(RenderedParagraph(text: quote.block, isListItem: false)) }
+				index = quote.end
+				continue
+			}
+			index += 1
+			if paragraphStyle?.isRule == true, paragraph.plainText().isEmpty {
+				if style == .markdown { rendered.append(RenderedParagraph(text: "---", isListItem: false)) }
+				continue
+			}
+			if let result = paragraph.rendered(using: self, numberingState: &numberingState, style: style) {
+				rendered.append(result)
+			}
 		}
+		return rendered
+	}
+
+	/// Renders the run of "Code Block" paragraphs starting at `start` as a fenced block:
+	/// their raw text, one line each, indentation and blank lines kept.
+	private func markdownCodeBlock(from start: Int) -> (block: String, end: Int) {
+		var index = start
+		var lines = [String]()
+		while index < paragraphs.count, styles.style(for: paragraphs[index].styleIdentifier)?.isCodeBlock == true,
+			  index == start || !paragraphs[index].startsTableCell {
+			lines.append(paragraphs[index].text)
+			index += 1
+		}
+		// A fence longer than any run of backticks in the code.
+		let longestRun = lines.map { line in
+			line.split(omittingEmptySubsequences: true) { $0 != "`" }.map(\.count).max() ?? 0
+		}.max() ?? 0
+		let fence = String(repeating: "`", count: max(3, longestRun + 1))
+		return ([fence, lines.joined(separator: "\n"), fence].joined(separator: "\n"), index)
+	}
+
+	/// Renders the run of quoted paragraphs starting at `start` as one `>` block. A
+	/// paragraph's depth is its direct indent in quote levels (the writer indents
+	/// deeper levels by 360 twips each); the line between two paragraphs carries the
+	/// shallower depth.
+	private func markdownQuote(from start: Int, numberingState: inout NumberingState) -> (block: String, end: Int) {
+		var index = start
+		var lines = [String]()
+		var previousDepth: Int?
+		while index < paragraphs.count, styles.style(for: paragraphs[index].styleIdentifier)?.isBlockQuote == true,
+			  index == start || !paragraphs[index].followsBreak {
+			let paragraph = paragraphs[index]
+			index += 1
+			guard let rendered = paragraph.rendered(using: self, numberingState: &numberingState, style: .markdown) else { continue }
+			let depth = max(1, (paragraph.leftIndent ?? 0) / DocxWriter.quoteIndent)
+			if let previousDepth {
+				lines.append(String(repeating: ">", count: min(previousDepth, depth)))
+			}
+			let prefix = String(repeating: "> ", count: depth)
+			for line in rendered.text.split(separator: "\n", omittingEmptySubsequences: false) {
+				lines.append(line.isEmpty ? String(prefix.dropLast()) : prefix + line)
+			}
+			previousDepth = depth
+		}
+		return (lines.joined(separator: "\n"), index)
+	}
+
+	/// Renders the alert box starting at `start` — its title paragraph, if any, and the
+	/// body paragraphs of the same kind — as a `> [!KIND]` block, and returns it with the
+	/// index after the box. The title is written only when it isn't the kind's default.
+	private func markdownAlert(from start: Int, kind: String, numberingState: inout NumberingState) -> (block: String, end: Int) {
+		var index = start
+		var title: String?
+		if styles.style(for: paragraphs[index].styleIdentifier)?.callout?.isTitle == true {
+			title = paragraphs[index].plainText()
+			index += 1
+		}
+		var body = [MarkdownAlertBlock.RecoveredBlock]()
+		while index < paragraphs.count,
+			  let callout = styles.style(for: paragraphs[index].styleIdentifier)?.callout,
+			  !callout.isTitle, callout.kind == kind {
+			let paragraph = paragraphs[index]
+			index += 1
+			guard let rendered = paragraph.rendered(using: self, numberingState: &numberingState, style: .markdown) else { continue }
+			body.append(rendered.isListItem ? .listItem(rendered.text) : .paragraph(rendered.text))
+		}
+		return (MarkdownAlertBlock.markdown(kind: kind, title: title, body: body), index)
 	}
 
 	/// Returns the detected heading level for a paragraph style identifier.
@@ -59,6 +159,13 @@ public struct DocxDocument {
 		public private(set) var runs: [Run] = []
 		public internal(set) var styleIdentifier: String?
 		public internal(set) var numbering: NumberingReference?
+		/// Whether this is the first paragraph of a table cell (one code block per cell).
+		internal var startsTableCell = false
+		/// The direct left indent in twips, if the paragraph sets one.
+		internal var leftIndent: Int?
+		/// Whether an empty, unstyled paragraph preceded this one: a boundary between
+		/// two quotes.
+		internal var followsBreak = false
 
 		/// Returns the raw text for the paragraph without any formatting.
 		public var text: String {
@@ -219,7 +326,29 @@ public struct DocxDocument {
 		var name: String?
 		var outlineLevel: Int?
 
+		/// The alert kind, and whether this is the title style, for SwiftText's callout styles.
+		var callout: (kind: String, isTitle: Bool)? {
+			DocxStyleID.callout(styleId: styleId, name: name)
+		}
+
+		/// Whether this is SwiftText's "Horizontal Rule" style.
+		var isRule: Bool {
+			DocxStyleID.isRule(styleId: styleId, name: name)
+		}
+
+		/// Whether this is a block-quote style (SwiftText's, or Word's "Quote").
+		var isBlockQuote: Bool {
+			DocxStyleID.isBlockQuote(styleId: styleId, name: name)
+		}
+
+		/// Whether this is the "Code Block" style.
+		var isCodeBlock: Bool {
+			DocxStyleID.isCodeBlock(styleId: styleId, name: name)
+		}
+
 		func headingLevel() -> Int? {
+			// "Callout Note Title" is a box's title, not a heading.
+			guard callout == nil, !isRule else { return nil }
 			let identifier = (name ?? styleId).lowercased()
 			if identifier.contains("subtitle") {
 				return 2

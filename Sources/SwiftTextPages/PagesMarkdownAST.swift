@@ -1,5 +1,6 @@
 import Foundation
 import Markdown
+import SwiftTextMarkdown
 
 /// Builds a swift-markdown `Document` (the Markdown AST) from the structure a
 /// `.pages` file decoded into `PagesDocument`. This is the exact inverse of
@@ -37,6 +38,62 @@ extension PagesDocument {
 					end += 1
 				}
 				blocks.append(CodeBlock(language: nil, codeLines.joined(separator: "\n") + "\n"))
+				index = end
+				continue
+			}
+
+			// A rule paragraph is a thematic break (`---`).
+			if paragraph.isRule {
+				blocks.append(ThematicBreak())
+				index += 1
+				continue
+			}
+
+			// An alert box becomes a block quote opening with its `[!KIND] Title` marker,
+			// the form every SwiftText writer recognizes (MarkdownAlertBlock).
+			if let callout = paragraph.callout {
+				var end = index
+				var title = ""
+				if paragraphs[end].callout?.role == .title {
+					title = paragraphs[end].normalizedText()
+					end += 1
+				}
+				var body = [Paragraph]()
+				while end < paragraphs.count, let role = paragraphs[end].callout, role.role != .title, role.kind == callout.kind {
+					end += 1
+					if role.role == .end { break }
+					body.append(paragraphs[end - 1])
+				}
+				var children: [BlockMarkup] = [Markdown.Paragraph(Text(MarkdownAlertBlock.markerLine(kind: callout.kind, title: title)))]
+				var bodyIndex = 0
+				while bodyIndex < body.count {
+					if body[bodyIndex].listLevel != nil {
+						var listEnd = bodyIndex
+						while listEnd < body.count, body[listEnd].listLevel != nil { listEnd += 1 }
+						children.append(contentsOf: Self.listMarkup(Array(body[bodyIndex..<listEnd])))
+						bodyIndex = listEnd
+						continue
+					}
+					let inlines = Self.inlineMarkup(of: body[bodyIndex])
+					if !inlines.isEmpty { children.append(Markdown.Paragraph(inlines)) }
+					bodyIndex += 1
+				}
+				blocks.append(BlockQuote(children))
+				index = end
+				continue
+			}
+
+			// Consecutive block-quote paragraphs are one block quote; the style's italic
+			// is the quote's look, not emphasis.
+			if paragraph.isBlockQuote {
+				var end = index
+				var children = [BlockMarkup]()
+				while end < paragraphs.count, paragraphs[end].isBlockQuote {
+					let inlines = Self.inlineMarkup(of: paragraphs[end], suppressingUniformEmphasis: true)
+					if !inlines.isEmpty { children.append(Markdown.Paragraph(inlines)) }
+					end += 1
+				}
+				if !children.isEmpty { blocks.append(BlockQuote(children)) }
 				index = end
 				continue
 			}

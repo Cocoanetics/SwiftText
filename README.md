@@ -90,6 +90,10 @@ Features:
 - Plain text paragraph extraction
 - Markdown output with headings, emphasis (bold/italic/strikethrough), lists, and
   footnotes
+- Markdown → DOCX writes alerts (`> [!NOTE]`, `> [!WARNING] Watch out`, any
+  `[!KIND]`) as tinted, bordered paragraph boxes spaced like the HTML/PDF CSS, and
+  rules as native rules; these, block quotes and code blocks read back as
+  Markdown (see [Docs/DOCX_WRITING.md](Docs/DOCX_WRITING.md))
 
 ### SwiftTextEPUB
 
@@ -119,6 +123,8 @@ Features:
 - Inline **bold**/*italic*/~~strikethrough~~ emphasis and bullet/numbered lists
   (with nesting)
 - Footnotes as `[^N]` references with definitions collected at the end
+- Alert boxes, block quotes and rules written by SwiftText read back as
+  `> [!KIND]`, `>` and `---` (see [Docs/PAGES_WRITING.md](Docs/PAGES_WRITING.md))
 - Reads modern `.iwa` documents in all three on-disk layouts: a flat Zip, a
   package directory with a loose `Index/`, and a package directory with a nested
   `Index.zip`
@@ -391,7 +397,7 @@ On Linux/Windows the CLI needs libxml2 for the HTML/render paths (Linux:
 Options:
 - **ocr** *(macOS only)* `--markdown`/`-m` (Vision segmentation), `--save-images <dir>`, `--output-path <file>`/`-o`
 - **html** `--markdown`/`-m`, `--main-content`, `--save-images <dir>`, `--output-path <file>`/`-o`, `--webkit` *(macOS)*, `--via-pdf` *(macOS)*
-- **docx** `--markdown`/`-m` (headings and lists), `--output-path <file>`/`-o`, `--save-images`
+- **docx** `--markdown`/`-m` (headings, lists, quotes, code blocks, alert boxes, rules), `--output-path <file>`/`-o`, `--save-images`
 - **pages** `--markdown`/`-m` (inferred headings), `--output-path <file>`/`-o`, `--save-images`
 - **numbers** `--markdown`/`-m`, `--html`, `--json`, `--output-path <file>`/`-o`
 - **keynote** `--markdown`/`-m`, `--json`, `--output-path <file>`/`-o`
