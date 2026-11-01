@@ -156,7 +156,9 @@ jobs:
   # can build the test bundle and actually run it under the emulator — proving
   # the Markdown/AttributedString/CSS/OpenType/PDF-writer core works on bionic.
   test-android-portable:
-    runs-on: ubuntu-latest
+    # Pinned: the action downloads a host toolchain for the runner's Ubuntu release,
+    # and swift.org publishes none for ubuntu-latest's 26.04 (404 for 6.3.1).
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
       SWIFTTEXT_PORTABLE_ONLY: "1"
