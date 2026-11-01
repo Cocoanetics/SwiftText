@@ -144,7 +144,8 @@ struct Render: AsyncParsableCommand {
 			print(outputURL.path)
 		case .pages:
 			try MarkdownToPages.convert(markdownText, to: outputURL, packaging: package ? .package : .singleFile, baseURL: baseURL,
-			                            pageBreakBeforeHeadingLevel: pageBreakBefore?.numericLevel, alertColors: alertColors(from: userCSS))
+			                            pageBreakBeforeHeadingLevel: pageBreakBefore?.numericLevel, alertColors: alertColors(from: userCSS),
+			                            textAlignment: userCSS.map(MarkdownTextAlignment.init(css:)) ?? .none)
 			print(outputURL.path)
 		case .epub:
 			try renderEPUB(markdownText, baseURL: baseURL, outputURL: outputURL, userCSS: userCSS, title: resolvedTitle)

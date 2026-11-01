@@ -203,13 +203,20 @@ struct BodyParagraph {
 final class BodyObjectRegistry {
 	/// The alert boxes' colours: the built-in palettes or a stylesheet's.
 	let alertColors: MarkdownAlertColors
+	/// The alignment (`ParagraphStylePropertiesArchive.alignment`) list items take over
+	/// their style's, when a stylesheet aligns them unlike body paragraphs.
+	let listItemAlignment: UInt64?
 	private var nextID = PagesStyleID.synthesizedBase
 	private var cache: [InlineStyle: UInt64] = [:]
 	private var calloutCache: [BodyParagraph.CalloutRole: UInt64] = [:]
 	private(set) var synthesizedObjects: [IWAObject] = []
 
-	init(alertColors: MarkdownAlertColors = .builtIn) {
+	init(alertColors: MarkdownAlertColors = .builtIn, textAlignment: MarkdownTextAlignment = .none) {
 		self.alertColors = alertColors
+		// An `li` takes nothing from a `p` rule: with only paragraphs aligned, list items
+		// stay left-aligned rather than inherit the Body style's alignment.
+		let listItem = textAlignment.paragraph == nil ? textAlignment.listItem : textAlignment.listItem ?? .left
+		self.listItemAlignment = listItem == textAlignment.paragraph ? nil : listItem?.pagesValue
 	}
 
 	/// The character-style id for a styling combination (the "None" style for plain).
@@ -299,19 +306,20 @@ final class BodyObjectRegistry {
 		return id
 	}
 
-	/// A variation of `parent` that only changes its spacing (inheriting everything
-	/// else, including the parent's identifier for the reader).
-	func spacedStyle(_ parent: UInt64, spaceBefore: Float?, spaceAfter: Float?) -> UInt64 {
-		let key = SpacedKey(parent: parent, spaceBefore: spaceBefore, spaceAfter: spaceAfter)
+	/// A variation of `parent` that only changes its spacing and/or alignment (inheriting
+	/// everything else, including the parent's identifier for the reader).
+	func spacedStyle(_ parent: UInt64, spaceBefore: Float?, spaceAfter: Float?, alignment: UInt64? = nil) -> UInt64 {
+		let key = SpacedKey(parent: parent, spaceBefore: spaceBefore, spaceAfter: spaceAfter, alignment: alignment)
 		if let cached = spacedCache[key] { return cached }
 		let id = nextID
 		nextID += 1
-		synthesizedObjects.append(IWAObject(identifier: id, type: 2022, payload: PagesBodySerializer.spacedVariationPayload(parent: parent, spaceBefore: spaceBefore, spaceAfter: spaceAfter)))
+		synthesizedObjects.append(IWAObject(identifier: id, type: 2022, payload: PagesBodySerializer.spacedVariationPayload(
+			parent: parent, spaceBefore: spaceBefore, spaceAfter: spaceAfter, alignment: alignment)))
 		spacedCache[key] = id
 		return id
 	}
 
-	private struct SpacedKey: Hashable { var parent: UInt64; var spaceBefore: Float?; var spaceAfter: Float? }
+	private struct SpacedKey: Hashable { var parent: UInt64; var spaceBefore: Float?; var spaceAfter: Float?; var alignment: UInt64? }
 
 	/// The style of the hairline paragraph between two adjacent alert boxes: Body in
 	/// hairline type with no spacing (a variation, so it inherits Body's identity).
@@ -416,10 +424,12 @@ enum PagesBodySerializer {
 				styleID = registry.calloutStyle(role)
 			} else {
 				let base = paragraph.isRule ? PagesStyleID.rule : (paragraph.blockQuote ? PagesStyleID.blockQuote : paragraph.paragraphStyle)
+				// A list item aligned unlike body paragraphs (CSS `li` vs `p`).
+				let alignment = paragraph.listStyle == nil || paragraph.isRule ? nil : registry.listItemAlignment
 				if paragraph.isSeparator {
 					styleID = registry.separatorStyle()
-				} else if paragraph.spaceBefore != nil || paragraph.spaceAfter != nil {
-					styleID = registry.spacedStyle(base, spaceBefore: paragraph.spaceBefore, spaceAfter: paragraph.spaceAfter)
+				} else if paragraph.spaceBefore != nil || paragraph.spaceAfter != nil || alignment != nil {
+					styleID = registry.spacedStyle(base, spaceBefore: paragraph.spaceBefore, spaceAfter: paragraph.spaceAfter, alignment: alignment)
 				} else {
 					styleID = base
 				}
@@ -736,8 +746,8 @@ enum PagesBodySerializer {
 	}
 
 	/// A paragraph-style variation of `parent` whose only changes are `space_before`
-	/// (#21) and/or `space_after` (#20).
-	static func spacedVariationPayload(parent: UInt64, spaceBefore: Float?, spaceAfter: Float?) -> [UInt8] {
+	/// (#21), `space_after` (#20) and/or `alignment` (#1).
+	static func spacedVariationPayload(parent: UInt64, spaceBefore: Float?, spaceAfter: Float?, alignment: UInt64? = nil) -> [UInt8] {
 		var parentReference = ProtobufWriter()
 		parentReference.varintField(1, parent)
 		var stylesheetReference = ProtobufWriter()
@@ -747,6 +757,7 @@ enum PagesBodySerializer {
 		styleSuper.varintField(4, 1)                             // is_variation
 		styleSuper.messageField(5, stylesheetReference.bytes)
 		var paraProperties = ProtobufWriter()
+		if let alignment { paraProperties.varintField(1, alignment) }                    // alignment
 		if let spaceAfter { paraProperties.fixed32Field(20, spaceAfter.bitPattern) }    // space_after
 		if let spaceBefore { paraProperties.fixed32Field(21, spaceBefore.bitPattern) }  // space_before
 		var archive = ProtobufWriter()
