@@ -36,7 +36,7 @@ jobs:
         with:
           xcode-version: "27.1"
       - name: Verify Swift version
-        run: swift --version | tee /dev/stderr | grep -q "Swift version 6\.4"
+        run: v="$(swift --version 2>&1)"; echo "$v"; echo "$v" | grep -q "Swift version 6\.4"
       - name: Build (macOS)
         run: swift build --build-tests -v
       - name: Test (macOS)
@@ -64,7 +64,7 @@ jobs:
       - name: Install libxml2 + zlib dev
         run: apt-get update && apt-get install -y libxml2-dev zlib1g-dev libssl-dev pkg-config
       - name: Verify Swift version
-        run: swift --version | tee /dev/stderr | grep -q "Swift version 6\.4"
+        run: v="$(swift --version 2>&1)"; echo "$v"; echo "$v" | grep -q "Swift version 6\.4"
       - name: Build (Linux)
         run: swift build --build-tests -v
       - name: Test (Linux)
@@ -96,7 +96,7 @@ jobs:
         with:
           xcode-version: "27.1"
       - name: Verify Swift version
-        run: swift --version | tee /dev/stderr | grep -q "Swift version 6\.4"
+        run: v="$(swift --version 2>&1)"; echo "$v"; echo "$v" | grep -q "Swift version 6\.4"
       # This Xcode image ships without the iOS SDK preinstalled; fetch it. The
       # download intermittently flakes on the hosted runner, so retry before failing.
       - name: Install the iOS platform
@@ -148,7 +148,7 @@ jobs:
           swift-version: "6.4.2"
       - name: Verify Swift version
         shell: bash
-        run: swift --version 2>&1 | tee /dev/stderr | grep -q "Swift version 6\.4"
+        run: v="$(swift --version 2>&1)"; echo "$v"; echo "$v" | grep -q "Swift version 6\.4"
       - name: Build & Test (portable targets)
         run: swift test -v
 
@@ -214,7 +214,7 @@ jobs:
           "$root\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
       - name: Verify Swift version
         shell: bash
-        run: swift --version 2>&1 | tee /dev/stderr | grep -q "Swift version 6\.4"
+        run: v="$(swift --version 2>&1)"; echo "$v"; echo "$v" | grep -q "Swift version 6\.4"
       - name: Build & smoke-test the CLI (Windows, swift engine)
         shell: pwsh
         run: |
