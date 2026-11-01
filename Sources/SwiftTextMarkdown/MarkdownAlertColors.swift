@@ -87,14 +87,14 @@ public struct MarkdownAlertColors: Sendable, Equatable {
 
 	// MARK: - Reading the stylesheet
 
-	private struct StyleRule {
+	struct StyleRule {
 		var selectors: [String]
 		var declarations: String
 	}
 
 	/// The top-level style rules, in order; comments and at-rules (with their blocks)
-	/// are skipped.
-	private static func styleRules(in css: String) -> [StyleRule] {
+	/// are skipped. Shared with ``MarkdownTextAlignment``.
+	static func styleRules(in css: String) -> [StyleRule] {
 		let text = css.replacingOccurrences(of: #"/\*[\s\S]*?\*/"#, with: " ", options: .regularExpression)
 		var rules = [StyleRule]()
 		var prelude = ""

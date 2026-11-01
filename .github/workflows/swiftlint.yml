@@ -24,10 +24,15 @@ jobs:
     # macOS + Homebrew SwiftLint keeps CI aligned with the local pre-commit
     # hook (Scripts/hooks/pre-commit) — same binary, same rule set, no version
     # drift between dev and CI.
-    runs-on: macos-latest
+    runs-on: xcode-27
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
+      # SwiftLint reads the selected Xcode's Swift: 6.4, like the build lanes.
+      - name: Select Xcode 27.1
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "27.1"
       - name: Install SwiftLint
         run: brew install swiftlint
       - name: SwiftLint version
