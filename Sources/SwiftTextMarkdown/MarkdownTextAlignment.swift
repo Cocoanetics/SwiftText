@@ -22,15 +22,23 @@ public struct MarkdownTextAlignment: Sendable, Equatable {
 
 	/// The alignment of body paragraphs, or `nil` to keep the writer's default.
 	public var paragraph: Alignment?
-	/// The alignment of list items, or `nil` to keep the writer's default.
-	public var listItem: Alignment?
+	/// The alignment of unordered (`ul`) list items, or `nil` to keep the writer's default.
+	public var unorderedListItem: Alignment?
+	/// The alignment of ordered (`ol`) list items, or `nil` to keep the writer's default.
+	public var orderedListItem: Alignment?
 
 	/// No alignment from a stylesheet: every writer keeps its default.
 	public static let none = MarkdownTextAlignment()
 
-	public init(paragraph: Alignment? = nil, listItem: Alignment? = nil) {
+	public init(paragraph: Alignment? = nil, unorderedListItem: Alignment? = nil, orderedListItem: Alignment? = nil) {
 		self.paragraph = paragraph
-		self.listItem = listItem
+		self.unorderedListItem = unorderedListItem
+		self.orderedListItem = orderedListItem
+	}
+
+	/// Aligns paragraphs and both kinds of list item.
+	public init(paragraph: Alignment? = nil, listItem: Alignment?) {
+		self.init(paragraph: paragraph, unorderedListItem: listItem, orderedListItem: listItem)
 	}
 
 	/// The alignment a stylesheet sets for body paragraphs and list items.
@@ -51,12 +59,12 @@ public struct MarkdownTextAlignment: Sendable, Equatable {
 			chain.lazy.compactMap { winners[$0]?.alignment }.first
 		}
 		paragraph = nearest(["p", "body", "html"])
-		let list = winners["ul"]?.alignment ?? winners["ol"]?.alignment
-		listItem = winners["li"]?.alignment ?? list ?? nearest(["body", "html"])
+		unorderedListItem = nearest(["li", "ul", "body", "html"])
+		orderedListItem = nearest(["li", "ol", "body", "html"])
 	}
 
 	/// Whether the stylesheet set no alignment.
-	public var isEmpty: Bool { paragraph == nil && listItem == nil }
+	public var isEmpty: Bool { paragraph == nil && unorderedListItem == nil && orderedListItem == nil }
 
 	/// The elements whose `text-align` reaches a paragraph or a list item.
 	private static let elements: Set<String> = ["p", "li", "ul", "ol", "body", "html"]

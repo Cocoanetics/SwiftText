@@ -205,7 +205,8 @@ final class BodyObjectRegistry {
 	let alertColors: MarkdownAlertColors
 	/// The alignment (`ParagraphStylePropertiesArchive.alignment`) list items take over
 	/// their style's, when a stylesheet aligns them unlike body paragraphs.
-	let listItemAlignment: UInt64?
+	private let unorderedListItemAlignment: UInt64?
+	private let orderedListItemAlignment: UInt64?
 	private var nextID = PagesStyleID.synthesizedBase
 	private var cache: [InlineStyle: UInt64] = [:]
 	private var calloutCache: [BodyParagraph.CalloutRole: UInt64] = [:]
@@ -215,8 +216,17 @@ final class BodyObjectRegistry {
 		self.alertColors = alertColors
 		// An `li` takes nothing from a `p` rule: with only paragraphs aligned, list items
 		// stay left-aligned rather than inherit the Body style's alignment.
-		let listItem = textAlignment.paragraph == nil ? textAlignment.listItem : textAlignment.listItem ?? .left
-		self.listItemAlignment = listItem == textAlignment.paragraph ? nil : listItem?.pagesValue
+		func listItem(_ alignment: MarkdownTextAlignment.Alignment?) -> UInt64? {
+			let resolved = textAlignment.paragraph == nil ? alignment : alignment ?? .left
+			return resolved == textAlignment.paragraph ? nil : resolved?.pagesValue
+		}
+		self.unorderedListItemAlignment = listItem(textAlignment.unorderedListItem)
+		self.orderedListItemAlignment = listItem(textAlignment.orderedListItem)
+	}
+
+	/// The alignment a list item takes over its style's, if any.
+	func listItemAlignment(ordered: Bool) -> UInt64? {
+		ordered ? orderedListItemAlignment : unorderedListItemAlignment
 	}
 
 	/// The character-style id for a styling combination (the "None" style for plain).
@@ -425,7 +435,8 @@ enum PagesBodySerializer {
 			} else {
 				let base = paragraph.isRule ? PagesStyleID.rule : (paragraph.blockQuote ? PagesStyleID.blockQuote : paragraph.paragraphStyle)
 				// A list item aligned unlike body paragraphs (CSS `li` vs `p`).
-				let alignment = paragraph.listStyle == nil || paragraph.isRule ? nil : registry.listItemAlignment
+				let alignment = paragraph.listStyle == nil || paragraph.isRule
+					? nil : registry.listItemAlignment(ordered: paragraph.listStyle == PagesStyleID.numberedList)
 				if paragraph.isSeparator {
 					styleID = registry.separatorStyle()
 				} else if paragraph.spaceBefore != nil || paragraph.spaceAfter != nil || alignment != nil {

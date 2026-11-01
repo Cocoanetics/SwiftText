@@ -8,15 +8,26 @@ struct MarkdownTextAlignmentTests {
 	func justifiesBoth() {
 		let alignment = MarkdownTextAlignment(css: "p, li { text-align: justify; }")
 		#expect(alignment.paragraph == .justify)
-		#expect(alignment.listItem == .justify)
+		#expect(alignment.unorderedListItem == .justify)
+		#expect(alignment.orderedListItem == .justify)
 	}
 
 	@Test("Paragraphs and list items inherit from body; their own rules win")
 	func inheritance() {
 		let alignment = MarkdownTextAlignment(css: "body { text-align: center } li { text-align: right }")
 		#expect(alignment.paragraph == .center)
-		#expect(alignment.listItem == .right)
-		#expect(MarkdownTextAlignment(css: "ul { text-align: justify } body { text-align: left }").listItem == .justify)
+		#expect(alignment.unorderedListItem == .right)
+		#expect(MarkdownTextAlignment(css: "ul { text-align: justify } body { text-align: left }").unorderedListItem == .justify)
+	}
+
+	@Test("`ul` and `ol` rules reach only their own list items")
+	func listTypes() {
+		let ordered = MarkdownTextAlignment(css: "ol { text-align: right }")
+		#expect(ordered.orderedListItem == .right)
+		#expect(ordered.unorderedListItem == nil)
+		let both = MarkdownTextAlignment(css: "ul { text-align: center } ol { text-align: right }")
+		#expect(both.unorderedListItem == .center)
+		#expect(both.orderedListItem == .right)
 	}
 
 	@Test("Later declarations win unless an earlier one is !important; start/end map to left/right")

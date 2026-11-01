@@ -49,6 +49,15 @@ struct PagesTextAlignmentTests {
 		#expect(styles.values.contains { $0.super?.isVariation == true && $0.paraProperties?.alignment == 0 })
 	}
 
+	@Test("An `ol` rule aligns ordered items only")
+	func orderedOnly() throws {
+		let alignment = MarkdownTextAlignment(unorderedListItem: nil, orderedListItem: .right)
+		let unordered = try styles("Text.\n\n- Item\n", alignment: alignment)
+		#expect(!unordered.values.contains { $0.super?.isVariation == true && $0.paraProperties?.alignment == 1 })
+		let ordered = try styles("Text.\n\n1. Item\n", alignment: alignment)
+		#expect(ordered.values.contains { $0.super?.isVariation == true && $0.paraProperties?.alignment == 1 })
+	}
+
 	@Test("Without a stylesheet alignment nothing changes")
 	func untouchedByDefault() throws {
 		let styles = try styles("Text.\n\n- Item\n", alignment: .none)
