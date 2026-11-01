@@ -40,6 +40,7 @@ Status as built (all validated opening + rendering in Pages 14.5; 214 tests gree
 | Markdown feature | Pages rendering | Parity vs DOCX writer |
 |---|---|---|
 | Paragraphs | Body style, `space_after` 8pt | ✅ |
+| Paragraph alignment (`--css` `p, li { text-align: … }`) | `alignment` (para_properties `#1`) on the **Body style**: left 0, right 1, center 2, justify 3 (`start`/`end` read as left/right); `body`/`html` count as a fallback for `p`. List items follow Body unless an `li` rule differs (then a Body variation); a table's anchor paragraph is pinned left under a centred/right Body. Headings, quotes, code, alert boxes and table cells keep their own. Not read back | ◐ Pages only (DOCX ignores it) |
 | Headings 1–6 | template Heading 1/2/3 styles (+ spacing) | ✅ |
 | **Bold** / *italic* / ***both*** | built-in Emphasis/Italic char styles; synthesized bold+italic | ✅ |
 | `inline code` / code blocks | synthesized monospace (Menlo) char style | ✅ |

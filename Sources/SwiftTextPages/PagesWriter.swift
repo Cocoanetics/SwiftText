@@ -36,11 +36,13 @@ public final class PagesWriter {
 	/// Writes a document whose body is the given paragraphs (each carrying its
 	/// paragraph style, list membership, and inline style runs). With
 	/// `pageBreakBeforeHeadingLevel`, headings of that level each start a new page;
-	/// `alertColors` colours the alert boxes.
+	/// `alertColors` colours the alert boxes; `textAlignment` aligns body paragraphs and
+	/// list items.
 	func write(paragraphs inputParagraphs: [BodyParagraph], baseURL: URL? = nil,
-	           pageBreakBeforeHeadingLevel: Int? = nil, alertColors: MarkdownAlertColors = .builtIn, to url: URL) throws {
+	           pageBreakBeforeHeadingLevel: Int? = nil, alertColors: MarkdownAlertColors = .builtIn,
+	           textAlignment: MarkdownTextAlignment = .unspecified, to url: URL) throws {
 		let identity = DocumentIdentity.fresh()
-		let registry = BodyObjectRegistry(alertColors: alertColors)
+		let registry = BodyObjectRegistry(alertColors: alertColors, textAlignment: textAlignment)
 
 		// Alert boxes and rules get their CSS spacing (in em of the body font size),
 		// which also adds each box's end paragraph — so this runs before anything that
@@ -115,7 +117,8 @@ public final class PagesWriter {
 				                         footnoteMarkIDs: footnoteArtifacts?.bodyMarkIDs ?? [],
 				                         footnoteCharStyleID: footnoteArtifacts?.charStyleID)
 			case "Index/DocumentStylesheet.iwa":
-				data = try applyingStylesheet(to: data, pageBreakBeforeHeadingLevel: pageBreakBeforeHeadingLevel, bodyFontSize: fontSize)
+				data = try applyingStylesheet(to: data, pageBreakBeforeHeadingLevel: pageBreakBeforeHeadingLevel, bodyFontSize: fontSize,
+				                              bodyAlignment: textAlignment.paragraph)
 			case "Index/Metadata.iwa" where registry.didSynthesize || tableArtifacts != nil || imageArtifacts != nil || footnoteArtifacts != nil:
 				// Document.iwa is processed earlier in this loop, so `registry` already
 				// reflects any synthesized objects by the time Metadata is written.
@@ -261,8 +264,10 @@ public final class PagesWriter {
 	/// Edits `DocumentStylesheet.iwa` to install the default stylesheet: each style
 	/// object is rewritten in place (size/spacing/line-spacing/color), the block-quote
 	/// style is built, and link text is colored. All other styles are preserved.
-	/// `pageBreakBeforeHeadingLevel` adds a page break before that heading style.
-	private func applyingStylesheet(to stylesheetIWA: [UInt8], pageBreakBeforeHeadingLevel: Int? = nil, bodyFontSize: Float = 11) throws -> [UInt8] {
+	/// `pageBreakBeforeHeadingLevel` adds a page break before that heading style;
+	/// `bodyAlignment` aligns the Body style (body paragraphs, list items, images).
+	private func applyingStylesheet(to stylesheetIWA: [UInt8], pageBreakBeforeHeadingLevel: Int? = nil, bodyFontSize: Float = 11,
+	                                bodyAlignment: MarkdownTextAlignment.Alignment? = nil) throws -> [UInt8] {
 		let em = bodyFontSize
 		func ems(_ value: Double) -> Float { Float(value) * em }
 		var data = Data(stylesheetIWA)
@@ -359,6 +364,14 @@ public final class PagesWriter {
 		if let level = pageBreakBeforeHeadingLevel, (1...6).contains(level) {
 			data = try IWAArchive.replacingPayload(in: data, objectID: PagesStyleID.heading(level: level)) { payload in
 				PagesBodySerializer.settingPageBreakBefore(in: payload)
+			}
+		}
+		// Last, after every copy of Body above: Block Quote, Heading 4, Code Block, the
+		// callouts and Rule are siblings of Body, not children, so they keep the template's
+		// alignment — only Body and its variations (spacing, list items) take this one.
+		if let bodyAlignment {
+			data = try IWAArchive.replacingPayload(in: data, objectID: PagesStyleID.body) { payload in
+				PagesBodySerializer.settingAlignment(in: payload, value: bodyAlignment.paragraphValue)
 			}
 		}
 		return [UInt8](data)

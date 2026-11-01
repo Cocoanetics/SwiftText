@@ -30,18 +30,25 @@ public enum MarkdownToPages {
 	///   editable in Pages; levels 4–6 share the Heading 4 style).
 	/// - Parameter alertColors: the colours of alert boxes, e.g. read from the stylesheet
 	///   the HTML and EPUB outputs use (``MarkdownAlertColors/init(css:)``).
+	/// - Parameter textAlignment: the alignment of body paragraphs and list items, e.g.
+	///   `p, li { text-align: justify }` from that stylesheet (``MarkdownTextAlignment/init(css:)``).
+	///   It is set on the Body style, so headings, quotes, code, alert boxes and table
+	///   cells keep their own.
 	public static func convert(_ markdown: String, to url: URL, packaging: Packaging = .singleFile, baseURL: URL? = nil,
-	                           pageBreakBeforeHeadingLevel: Int? = nil, alertColors: MarkdownAlertColors = .builtIn) throws {
+	                           pageBreakBeforeHeadingLevel: Int? = nil, alertColors: MarkdownAlertColors = .builtIn,
+	                           textAlignment: MarkdownTextAlignment = .unspecified) throws {
 		let paragraphs = MarkdownPagesBuilder.paragraphs(from: markdown)
 		switch packaging {
 		case .singleFile:
 			try PagesWriter().write(paragraphs: paragraphs, baseURL: baseURL,
-			                        pageBreakBeforeHeadingLevel: pageBreakBeforeHeadingLevel, alertColors: alertColors, to: url)
+			                        pageBreakBeforeHeadingLevel: pageBreakBeforeHeadingLevel, alertColors: alertColors,
+			                        textAlignment: textAlignment, to: url)
 		case .package:
 			let temp = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("\(UUID().uuidString).pages")
 			defer { try? FileManager.default.removeItem(at: temp) }
 			try PagesWriter().write(paragraphs: paragraphs, baseURL: baseURL,
-			                        pageBreakBeforeHeadingLevel: pageBreakBeforeHeadingLevel, alertColors: alertColors, to: temp)
+			                        pageBreakBeforeHeadingLevel: pageBreakBeforeHeadingLevel, alertColors: alertColors,
+			                        textAlignment: textAlignment, to: temp)
 			guard let pkg = IWAPackage.read(zip: [UInt8](try Data(contentsOf: temp))) else {
 				throw PagesWriteError.malformedTemplate("flat package")
 			}

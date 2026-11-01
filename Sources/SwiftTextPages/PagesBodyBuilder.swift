@@ -203,13 +203,34 @@ struct BodyParagraph {
 final class BodyObjectRegistry {
 	/// The alert boxes' colours: the built-in palettes or a stylesheet's.
 	let alertColors: MarkdownAlertColors
+	/// The alignment of body paragraphs and list items: Body carries the paragraphs'
+	/// (``PagesWriter``), list items and table anchors that differ get a variation.
+	let textAlignment: MarkdownTextAlignment
 	private var nextID = PagesStyleID.synthesizedBase
 	private var cache: [InlineStyle: UInt64] = [:]
 	private var calloutCache: [BodyParagraph.CalloutRole: UInt64] = [:]
 	private(set) var synthesizedObjects: [IWAObject] = []
 
-	init(alertColors: MarkdownAlertColors = .builtIn) {
+	init(alertColors: MarkdownAlertColors = .builtIn, textAlignment: MarkdownTextAlignment = .unspecified) {
 		self.alertColors = alertColors
+		self.textAlignment = textAlignment
+	}
+
+	/// The alignment a Body paragraph needs over the Body style's, or `nil` when it
+	/// follows Body: a list item whose `li` alignment differs from the paragraphs', and a
+	/// table's anchor paragraph, pinned left so a centred or right-aligned Body doesn't
+	/// move the table.
+	func alignmentOverride(for paragraph: BodyParagraph) -> UInt64? {
+		if paragraph.table != nil {
+			switch textAlignment.paragraph {
+			case .center?, .right?: return MarkdownTextAlignment.Alignment.left.paragraphValue
+			default: return nil
+			}
+		}
+		if paragraph.listStyle != nil, let listItem = textAlignment.listItem, listItem != textAlignment.paragraph {
+			return listItem.paragraphValue
+		}
+		return nil
 	}
 
 	/// The character-style id for a styling combination (the "None" style for plain).
@@ -299,19 +320,20 @@ final class BodyObjectRegistry {
 		return id
 	}
 
-	/// A variation of `parent` that only changes its spacing (inheriting everything
-	/// else, including the parent's identifier for the reader).
-	func spacedStyle(_ parent: UInt64, spaceBefore: Float?, spaceAfter: Float?) -> UInt64 {
-		let key = SpacedKey(parent: parent, spaceBefore: spaceBefore, spaceAfter: spaceAfter)
+	/// A variation of `parent` that only changes its spacing and/or alignment (inheriting
+	/// everything else, including the parent's identifier for the reader).
+	func spacedStyle(_ parent: UInt64, spaceBefore: Float?, spaceAfter: Float?, alignment: UInt64? = nil) -> UInt64 {
+		let key = SpacedKey(parent: parent, spaceBefore: spaceBefore, spaceAfter: spaceAfter, alignment: alignment)
 		if let cached = spacedCache[key] { return cached }
 		let id = nextID
 		nextID += 1
-		synthesizedObjects.append(IWAObject(identifier: id, type: 2022, payload: PagesBodySerializer.spacedVariationPayload(parent: parent, spaceBefore: spaceBefore, spaceAfter: spaceAfter)))
+		synthesizedObjects.append(IWAObject(identifier: id, type: 2022, payload: PagesBodySerializer.spacedVariationPayload(
+			parent: parent, spaceBefore: spaceBefore, spaceAfter: spaceAfter, alignment: alignment)))
 		spacedCache[key] = id
 		return id
 	}
 
-	private struct SpacedKey: Hashable { var parent: UInt64; var spaceBefore: Float?; var spaceAfter: Float? }
+	private struct SpacedKey: Hashable { var parent: UInt64; var spaceBefore: Float?; var spaceAfter: Float?; var alignment: UInt64? }
 
 	/// The style of the hairline paragraph between two adjacent alert boxes: Body in
 	/// hairline type with no spacing (a variation, so it inherits Body's identity).
@@ -416,10 +438,11 @@ enum PagesBodySerializer {
 				styleID = registry.calloutStyle(role)
 			} else {
 				let base = paragraph.isRule ? PagesStyleID.rule : (paragraph.blockQuote ? PagesStyleID.blockQuote : paragraph.paragraphStyle)
+				let alignment = base == PagesStyleID.body ? registry.alignmentOverride(for: paragraph) : nil
 				if paragraph.isSeparator {
 					styleID = registry.separatorStyle()
-				} else if paragraph.spaceBefore != nil || paragraph.spaceAfter != nil {
-					styleID = registry.spacedStyle(base, spaceBefore: paragraph.spaceBefore, spaceAfter: paragraph.spaceAfter)
+				} else if paragraph.spaceBefore != nil || paragraph.spaceAfter != nil || alignment != nil {
+					styleID = registry.spacedStyle(base, spaceBefore: paragraph.spaceBefore, spaceAfter: paragraph.spaceAfter, alignment: alignment)
 				} else {
 					styleID = base
 				}
@@ -736,8 +759,8 @@ enum PagesBodySerializer {
 	}
 
 	/// A paragraph-style variation of `parent` whose only changes are `space_before`
-	/// (#21) and/or `space_after` (#20).
-	static func spacedVariationPayload(parent: UInt64, spaceBefore: Float?, spaceAfter: Float?) -> [UInt8] {
+	/// (#21) and/or `space_after` (#20), and its `alignment` (#1) when given.
+	static func spacedVariationPayload(parent: UInt64, spaceBefore: Float?, spaceAfter: Float?, alignment: UInt64? = nil) -> [UInt8] {
 		var parentReference = ProtobufWriter()
 		parentReference.varintField(1, parent)
 		var stylesheetReference = ProtobufWriter()
@@ -747,6 +770,7 @@ enum PagesBodySerializer {
 		styleSuper.varintField(4, 1)                             // is_variation
 		styleSuper.messageField(5, stylesheetReference.bytes)
 		var paraProperties = ProtobufWriter()
+		if let alignment { paraProperties.varintField(1, alignment) }                   // alignment
 		if let spaceAfter { paraProperties.fixed32Field(20, spaceAfter.bitPattern) }    // space_after
 		if let spaceBefore { paraProperties.fixed32Field(21, spaceBefore.bitPattern) }  // space_before
 		var archive = ProtobufWriter()
@@ -844,6 +868,31 @@ enum PagesBodySerializer {
 		if !wrote {                                          // no para_properties yet — add one
 			var inner = ProtobufWriter()
 			inner.varintField(14, 1)
+			writer.bytesField(12, inner.bytes)
+		}
+		return writer.bytes
+	}
+
+	/// Returns a paragraph-style payload with its text `alignment` (#1, a varint: see
+	/// ``MarkdownTextAlignment/Alignment/paragraphValue``) set in its para_properties
+	/// (field 12), replacing the one it has. All other fields are preserved.
+	static func settingAlignment(in stylePayload: [UInt8], value: UInt64) -> [UInt8] {
+		let style = ProtobufMessage(stylePayload)
+		var writer = ProtobufWriter()
+		var wrote = false
+		for field in style.fields {
+			guard field.number == 12, case .lengthDelimited(let paraProperties) = field.value else { writer.append(field); continue }
+			var inner = ProtobufWriter()
+			inner.varintField(1, value)
+			for property in ProtobufMessage(paraProperties).fields where property.number != 1 {
+				inner.append(property)
+			}
+			writer.bytesField(12, inner.bytes)
+			wrote = true
+		}
+		if !wrote {                                          // no para_properties yet — add one
+			var inner = ProtobufWriter()
+			inner.varintField(1, value)
 			writer.bytesField(12, inner.bytes)
 		}
 		return writer.bytes

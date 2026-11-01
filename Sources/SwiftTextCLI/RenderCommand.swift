@@ -70,7 +70,7 @@ struct Render: AsyncParsableCommand {
 
 	// MARK: EPUB / shared options
 
-	@Option(name: .long, help: "Custom CSS file for HTML, PDF, and EPUB (appended after the built-in styles, so its rules win). DOCX and Pages take its alert-box colours.")
+	@Option(name: .long, help: "Custom CSS file for HTML, PDF, and EPUB (appended after the built-in styles, so its rules win). DOCX and Pages take its alert-box colours; Pages also its `text-align` on p and li.")
 	var css: String?
 
 	@Option(name: .long, help: "For EPUB output, a cover image file (JPEG/PNG). Apple Books wants at least 1400px wide.")
@@ -144,7 +144,8 @@ struct Render: AsyncParsableCommand {
 			print(outputURL.path)
 		case .pages:
 			try MarkdownToPages.convert(markdownText, to: outputURL, packaging: package ? .package : .singleFile, baseURL: baseURL,
-			                            pageBreakBeforeHeadingLevel: pageBreakBefore?.numericLevel, alertColors: alertColors(from: userCSS))
+			                            pageBreakBeforeHeadingLevel: pageBreakBefore?.numericLevel, alertColors: alertColors(from: userCSS),
+			                            textAlignment: userCSS.map(MarkdownTextAlignment.init(css:)) ?? .unspecified)
 			print(outputURL.path)
 		case .epub:
 			try renderEPUB(markdownText, baseURL: baseURL, outputURL: outputURL, userCSS: userCSS, title: resolvedTitle)

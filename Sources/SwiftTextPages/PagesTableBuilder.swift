@@ -1,4 +1,5 @@
 import SwiftTextIWA
+import SwiftTextMarkdown
 import Foundation
 
 /// Horizontal text alignment of a table column (from the Markdown delimiter row).
@@ -7,6 +8,20 @@ enum PagesColumnAlignment: Equatable {
 	/// The `TSWP.ParagraphStylePropertiesArchive.alignment` (#1) value Pages uses for
 	/// an explicit override (empirically: right = 1, center = 2; left needs no style).
 	var paragraphValue: UInt64 { self == .right ? 1 : 2 }
+}
+
+extension MarkdownTextAlignment.Alignment {
+	/// The `TSWP.ParagraphStylePropertiesArchive.alignment` (#1) value: left = 0, right = 1,
+	/// center = 2, justified = 3 (natural = 4, the template's Body). Justified is confirmed
+	/// against Pages-authored documents whose justified body text carries 3.
+	var paragraphValue: UInt64 {
+		switch self {
+		case .left: return 0
+		case .right: return 1
+		case .center: return 2
+		case .justify: return 3
+		}
+	}
 }
 
 /// A table destined for native iWork (`TST`) rendering: a rectangular grid of
