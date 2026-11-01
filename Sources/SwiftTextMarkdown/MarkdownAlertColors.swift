@@ -46,7 +46,7 @@ public struct MarkdownAlertColors: Sendable, Equatable {
 	/// The colours a stylesheet sets for alert boxes, over the built-in ones.
 	public init(css: String) {
 		var order = 0
-		for rule in Self.styleRules(in: css) {
+		for rule in MarkdownCSSRules.styleRules(in: css) {
 			for selector in rule.selectors {
 				guard let target = Self.alertTarget(of: selector) else { continue }
 				for (property, hex, important) in Self.colors(in: rule.declarations) {
@@ -87,46 +87,6 @@ public struct MarkdownAlertColors: Sendable, Equatable {
 
 	// MARK: - Reading the stylesheet
 
-	private struct StyleRule {
-		var selectors: [String]
-		var declarations: String
-	}
-
-	/// The top-level style rules, in order; comments and at-rules (with their blocks)
-	/// are skipped.
-	private static func styleRules(in css: String) -> [StyleRule] {
-		let text = css.replacingOccurrences(of: #"/\*[\s\S]*?\*/"#, with: " ", options: .regularExpression)
-		var rules = [StyleRule]()
-		var prelude = ""
-		var block = ""
-		var depth = 0
-		for character in text {
-			switch character {
-			case "{":
-				if depth > 0 { block.append(character) }
-				depth += 1
-			case "}":
-				depth -= 1
-				if depth > 0 {
-					block.append(character)
-				} else {
-					depth = 0
-					let selectors = prelude.trimmingCharacters(in: .whitespacesAndNewlines)
-					if !selectors.hasPrefix("@") {
-						rules.append(StyleRule(selectors: selectors.split(separator: ",").map(String.init), declarations: block))
-					}
-					prelude = ""
-					block = ""
-				}
-			case ";" where depth == 0:
-				prelude = ""                                  // e.g. `@import …;`
-			default:
-				if depth == 0 { prelude.append(character) } else { block.append(character) }
-			}
-		}
-		return rules
-	}
-
 	/// The alert kind a simple selector (`.markdown-alert-note`, `aside.markdown-alert`)
 	/// targets — `nil` for the base rule — and its specificity, or `nil` when the selector
 	/// can't match the generated `<aside class="markdown-alert markdown-alert-KIND">`: another
@@ -149,21 +109,15 @@ public struct MarkdownAlertColors: Sendable, Equatable {
 	/// The alert colours declared in a rule's block, in order, with whether each is `!important`.
 	private static func colors(in declarations: String) -> [(Property, String, Bool)] {
 		var result = [(Property, String, Bool)]()
-		for declaration in declarations.split(separator: ";") {
-			guard let colon = declaration.firstIndex(of: ":") else { continue }
-			let name = declaration[..<colon].trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-			var value = String(declaration[declaration.index(after: colon)...])
-			let importance = value.range(of: #"!\s*important\s*$"#, options: [.regularExpression, .caseInsensitive])
-			if let importance { value.removeSubrange(importance) }
-			value = value.trimmingCharacters(in: .whitespacesAndNewlines)
+		for declaration in MarkdownCSSRules.declarations(in: declarations) {
 			let property: Property
-			switch name {
+			switch declaration.name {
 			case "background", "background-color": property = .background
 			case "border-left-color", "border-left", "border-color", "border": property = .border
 			case "color": property = .text
 			default: continue
 			}
-			if let hex = hexColor(in: value) { result.append((property, hex, importance != nil)) }
+			if let hex = hexColor(in: declaration.value) { result.append((property, hex, declaration.important)) }
 		}
 		return result
 	}
