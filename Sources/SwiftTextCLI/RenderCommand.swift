@@ -70,7 +70,7 @@ struct Render: AsyncParsableCommand {
 
 	// MARK: EPUB / shared options
 
-	@Option(name: .long, help: "Custom CSS file for HTML, PDF, and EPUB (appended after the built-in styles, so its rules win). DOCX and Pages take its alert-box colours; Pages also its `text-align` on p and li.")
+	@Option(name: .long, help: "Custom CSS file for HTML, PDF, and EPUB (appended after the built-in styles, so its rules win). DOCX and Pages take its alert colours, Pages its p/li text-align.")
 	var css: String?
 
 	@Option(name: .long, help: "For EPUB output, a cover image file (JPEG/PNG). Apple Books wants at least 1400px wide.")
