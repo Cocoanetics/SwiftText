@@ -53,6 +53,9 @@ public func stringEncoding(for rawCharset: String) -> String.Encoding? {
 
 	let additional: [String: String.Encoding] = [
 		"utf-8": .utf8,
+		"utf-16": .utf16,
+		"utf-16le": .utf16LittleEndian,
+		"utf-16be": .utf16BigEndian,
 		"us-ascii": .ascii,
 		"iso-8859-1": .isoLatin1,
 		"iso-8859-2": .isoLatin2,
