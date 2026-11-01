@@ -102,4 +102,19 @@ struct EMLHTMLExtractorTests {
 		let data = eml("Content-Type: multipart/mixed; boundary=outer", body)
 		#expect(try #require(extractHTMLFromEML(data)).contains("Größe"))
 	}
+
+	@Test func whitespaceAroundCharsetSeparator() throws {
+		var data = Data("Content-Type: text/html; charset = windows-1252\nContent-Transfer-Encoding: 8bit\n\n<html>".utf8)
+		data.append(0x80)
+		data.append(contentsOf: Array("</html>".utf8))
+		#expect(try #require(extractHTMLFromEML(data)).contains("€"))
+	}
+
+	@Test func utf16Charset() throws {
+		let utf16 = Data("<html>Größe €</html>".data(using: .utf16LittleEndian)!).base64EncodedString()
+		let data = multipart(
+			partHeaders: "Content-Type: text/html; charset=UTF-16LE\nContent-Transfer-Encoding: base64",
+			body: utf16)
+		#expect(try #require(extractHTMLFromEML(data)).contains("Größe €"))
+	}
 }

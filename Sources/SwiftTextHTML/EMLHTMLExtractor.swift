@@ -95,14 +95,13 @@ private func mimeHeadersAndBody(_ text: String) -> ([String: String], String) {
 /// Extracts a parameter value (e.g. `boundary`, `charset`) from a Content-Type
 /// header. Parameter names are case-insensitive; values may be quoted.
 private func mimeParameter(_ name: String, from contentType: String) -> String? {
-	let prefix = name.lowercased() + "="
 	for part in contentType.components(separatedBy: ";") {
-		let t = part.trimmingCharacters(in: .whitespaces)
-		if t.lowercased().hasPrefix(prefix) {
-			var v = String(t.dropFirst(prefix.count))
-			if v.count >= 2, v.hasPrefix("\""), v.hasSuffix("\"") { v = String(v.dropFirst().dropLast()) }
-			return v
-		}
+		guard let eq = part.firstIndex(of: "=") else { continue }
+		let key = part[..<eq].trimmingCharacters(in: .whitespaces)
+		guard key.caseInsensitiveCompare(name) == .orderedSame else { continue }
+		var v = part[part.index(after: eq)...].trimmingCharacters(in: .whitespaces)
+		if v.count >= 2, v.hasPrefix("\""), v.hasSuffix("\"") { v = String(v.dropFirst().dropLast()) }
+		return v
 	}
 	return nil
 }
