@@ -230,9 +230,9 @@ struct RenderPDFTests {
 		#expect(image?.height == 1)
 	}
 
-	@Test("An <img> becomes a replaced box sized by CSS")
+	@Test("A block-level <img> becomes a replaced box sized by CSS")
 	func imageBoxSizing() async throws {
-		let root = try await layoutTree("<img src=\"\(onePixelPNG)\" style=\"width:50px;height:30px\">", contentWidth: 400)
+		let root = try await layoutTree("<img src=\"\(onePixelPNG)\" style=\"display:block;width:50px;height:30px\">", contentWidth: 400)
 		let img = try #require(firstBlock(in: root) { $0.element?.localName == "img" })
 		#expect(img.image != nil)
 		#expect(img.width == 50)

@@ -26,6 +26,12 @@ struct PreservedWhitespaceTests {
 		#expect(lines == ["f() {", "    return 1", "}"])
 	}
 
+	@Test("CR LF line ends break preserved lines like LF", arguments: ["pre", "pre-wrap", "pre-line"])
+	func carriageReturnLineFeedBreaksPreservedLines(_ mode: String) async throws {
+		let lines = try await lineTexts("<p style=\"white-space: \(mode)\">A\r\nB\rC</p>")
+		#expect(lines == ["A", "B", "C"])
+	}
+
 	/// A collapsed separator is a gap the line builder opens between fragments,
 	/// not a space any fragment carries, so it shows here as `·`.
 	@Test("A collapsing white-space mode collapses runs of spaces", arguments: [

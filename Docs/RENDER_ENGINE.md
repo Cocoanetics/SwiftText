@@ -110,10 +110,43 @@ metrics — no embedding needed.
   `counter(pages)` (optionally styled, e.g. `counter(page, upper-roman)`), and
   the `:first`/`:left`/`:right` page selectors (e.g. to suppress a header on
   the title page via `@page :first { @top-center { content: normal } }`).
+- Images: JPEG, and PNG in every colour type — palette, alpha and interlaced
+  images are unpacked into colour plus a soft mask. An `<img>` sits in the line
+  like a glyph (with `vertical-align`) unless it is styled block-level, and
+  `max-width` scales it with its height.
+- Tables with automatic layout: shrink-to-fit without a width, spare width
+  shared among columns that set none, cell widths honoured, colspan/rowspan,
+  separated and collapsed borders, repeated headers across pages.
+- `margin: auto` centring, and HTML's legacy alignment (`<center>`,
+  `align="center"`), which centres a nested table without centring its text.
+
+## HTML email
+
+Email HTML lays itself out with nested tables, attributes rather than CSS
+(Outlook ignores much of CSS) and remote images. The engine renders it the way a
+browser does:
+
+- **Presentational attributes** become CSS as the HTML standard maps them:
+  `width`/`height`, `bgcolor`, `align`/`valign`, `cellpadding`/`cellspacing`, a
+  table's `border`, `hspace`/`vspace` and `<font>`. Any CSS rule for the same
+  property wins over them.
+- **Remote images** (`http`/`https`) are fetched before layout, at most six at
+  a time, through `RenderOptions.imageLoader` — URLSession by default, which
+  gives up after 15 seconds of silence or 30 in all, and stops a body the moment
+  it passes 20 MB. Images inside `display: none` are skipped.
+  Set it to `nil` to render without touching the network (a remote image then
+  draws as a placeholder, and the warning handler says why), or supply your own
+  loader to resolve other schemes, such as an email's `cid:` parts. Loading an
+  email's images tells its sender it was opened, as any mail client does.
+- **CR LF line ends**, which every mail body has, read as single newlines.
+- The **Euro sign** is drawn from an embedded, metric-compatible face (Arial,
+  Times New Roman, or Liberation) when one is installed: viewers disagree on the
+  base-14 Euro, and macOS's draws it into the digit that follows.
 
 ## Not yet (roadmap)
 
-Images (`<img>`), tables, fl/grid, floats, positioned boxes, parent/child margin
-collapsing, transforms, gradients, SVG, bidi/complex-script shaping, hyphenation,
-bookmarks/outline. See the layout source for the simplifications called out in
-comments.
+Flex/grid, floats (an `align="left"` image or table stays in the flow),
+positioned boxes, inline-block boxes (laid out as inline), parent/child margin
+collapsing, transforms, gradients, background images, GIF/WebP/SVG images,
+OpenType shaping beyond Arabic presentation forms (GSUB/GPOS), hyphenation. See
+the layout source for the simplifications called out in comments.

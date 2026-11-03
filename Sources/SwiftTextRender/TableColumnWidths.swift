@@ -25,6 +25,23 @@ enum TableColumnWidths {
 		return preferred.indices.map { minimum[$0] + flexibility[$0] * scale }
 	}
 
+	/// Widens columns to fill a table that is wider than they would like, the way
+	/// browsers do: the spare width goes to the `growable` columns in proportion
+	/// to their preferred widths (equally when those are all zero), and to every
+	/// column when none is growable.
+	static func expand(_ preferred: [Double], growable: [Bool], to availableWidth: Double) -> [Double] {
+		let spare = availableWidth - preferred.reduce(0, +)
+		guard spare > 0, !preferred.isEmpty else { return preferred }
+		var targets = preferred.indices.filter { growable[$0] }
+		if targets.isEmpty { targets = Array(preferred.indices) }
+		let weight = targets.reduce(0.0) { $0 + preferred[$1] }
+		var result = preferred
+		for column in targets {
+			result[column] += weight > 0 ? spare * preferred[column] / weight : spare / Double(targets.count)
+		}
+		return result
+	}
+
 	/// Keeps narrower columns at min-content and shares unavoidable overflow only
 	/// among the widest columns, progressively capping them to the same width.
 	private static func capWidest(_ minimum: [Double], to availableWidth: Double) -> [Double] {

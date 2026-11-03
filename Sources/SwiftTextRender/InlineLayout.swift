@@ -18,6 +18,8 @@ extension LayoutEngine {
 	enum InlineToken {
 		case word(String, ComputedStyle, href: String?, decorations: TextDecorationRuns)
 		case checkbox(isChecked: Bool, style: ComputedStyle)
+		/// A replaced image, placed as one unbreakable box.
+		case image(DecodedImage, ComputedStyle, href: String?)
 		case space(ComputedStyle)
 		case forcedBreak(ComputedStyle)
 	}
@@ -41,7 +43,7 @@ extension LayoutEngine {
 			tokenScalarStart.append(bidiScalars.count)
 			switch token {
 			case .word(let word, _, _, _): bidiScalars.append(contentsOf: word.unicodeScalars)
-			case .checkbox: bidiScalars.append("\u{FFFC}")
+			case .checkbox, .image: bidiScalars.append("\u{FFFC}")
 			case .space: bidiScalars.append(" ")
 			case .forcedBreak: bidiScalars.append("\n")
 			}
@@ -100,9 +102,9 @@ extension LayoutEngine {
 			let indent = isFirstLine ? box.style.textIndent : 0
 			var x: Double
 			switch box.style.textAlign {
-			case .center: x = extra / 2
-			case .left: x = indent
-			case .right: x = extra - indent
+			case .center, .webkitCenter: x = extra / 2
+			case .left, .webkitLeft: x = indent
+			case .right, .webkitRight: x = extra - indent
 			case .start: x = rtl ? extra - indent : indent
 			case .end: x = rtl ? indent : extra - indent
 			case .justify: x = rtl ? extra - indent : indent // RTL justify → start for now
@@ -122,11 +124,7 @@ extension LayoutEngine {
 
 		func finishLine(isLast: Bool) {
 			guard !fragments.isEmpty else { pendingSpace = nil; return }
-			let lineHeight = fragments.map { $0.style.resolvedLineHeight() }.max() ?? 0
-			let ascent = fragments.map { fonts.font(for: $0.style).ascent(size: $0.style.fontSize) }.max() ?? 0
-			let descent = fragments.map { fonts.font(for: $0.style).descent(size: $0.style.fontSize) }.max() ?? 0
-			// Center the text box within the line height (half-leading).
-			let baselineFromTop = ascent + (lineHeight - ascent - descent) / 2
+			let (lineHeight, baselineFromTop) = lineMetrics(&fragments, strut: box.style)
 
 			let line = LineBox()
 			line.x = contentX
@@ -143,8 +141,8 @@ extension LayoutEngine {
 				var offset = 0.0
 				var perGap = 0.0
 				switch box.style.textAlign {
-				case .center: offset = extra / 2
-				case .right, .end: offset = extra
+				case .center, .webkitCenter: offset = extra / 2
+				case .right, .end, .webkitRight: offset = extra
 				case .justify: if !isLast, gaps > 0 { perGap = extra / Double(gaps) }
 				default: break // start / left
 				}
@@ -163,6 +161,23 @@ extension LayoutEngine {
 			fragments = []
 			penX = 0
 			pendingSpace = nil
+		}
+
+		/// Place an unbreakable inline box — a checkbox or an image — moving to a
+		/// new line first if it does not fit after the pending space.
+		func placeAtomic(_ control: TextFragment.InlineControl, width: Double, style: ComputedStyle, href: String?, tokenIndex: Int) {
+			let precedingSpaceWidth = pendingSpace.map(spaceWidth) ?? 0
+			if style.whiteSpace.wraps, penX + precedingSpaceWidth + width > contentWidth, !fragments.isEmpty {
+				finishLine(isLast: false)
+			} else {
+				penX += precedingSpaceWidth
+				pendingSpace = nil
+			}
+			var fragment = TextFragment(text: "", style: style, x: penX, y: 0, width: width, baseline: 0, href: href,
+			                            bidiLevel: wordLevel(tokenIndex), font: fonts.font(for: style))
+			fragment.inlineControl = control
+			fragments.append(fragment)
+			penX += width
 		}
 
 		for (tokenIndex, token) in tokens.enumerated() {
@@ -187,23 +202,12 @@ extension LayoutEngine {
 			case .checkbox(let isChecked, let style):
 				let leadingMargin = style.margin.left.resolved(percentageBasis: contentWidth) ?? 0
 				let trailingMargin = style.margin.right.resolved(percentageBasis: contentWidth) ?? 0
-				let size = style.fontSize
-				let width = leadingMargin + size + trailingMargin
-				let precedingSpaceWidth = pendingSpace.map(spaceWidth) ?? 0
-				if style.whiteSpace.wraps, penX + precedingSpaceWidth + width > contentWidth, !fragments.isEmpty {
-					finishLine(isLast: false)
-				} else {
-					penX += precedingSpaceWidth
-					pendingSpace = nil
-				}
-
-				var fragment = TextFragment(
-					text: "", style: style, x: penX, y: 0, width: width, baseline: 0,
-					bidiLevel: wordLevel(tokenIndex), font: fonts.font(for: style))
-				fragment.inlineControl = .checkbox(
-					isChecked: isChecked, size: size, leadingMargin: leadingMargin)
-				fragments.append(fragment)
-				penX += width
+				placeAtomic(.checkbox(isChecked: isChecked, size: style.fontSize, leadingMargin: leadingMargin),
+				            width: leadingMargin + style.fontSize + trailingMargin, style: style, href: nil, tokenIndex: tokenIndex)
+			case .image(let image, let style, let href):
+				let metrics = replacedBoxMetrics(of: image, style: style, containingWidth: contentWidth)
+				// `finishLine` decides the vertical position.
+				placeAtomic(.image(image, metrics, top: 0), width: metrics.width, style: style, href: href, tokenIndex: tokenIndex)
 			case .word(let rawWord, let style, let href, let decorations):
 				// Split the word into runs that share one font (font fallback), then
 				// shape each Arabic run into presentation forms. Shaping stays in
@@ -228,6 +232,7 @@ extension LayoutEngine {
 				func append(_ pieces: [Piece]) {
 					for piece in pieces {
 						if let last = fragments.indices.last,
+						   fragments[last].inlineControl == nil,
 						   !fragments[last].carriesPreservedWhitespace,
 						   !piece.text.allSatisfy({ $0 == " " || $0 == "\t" }),
 						   fragments[last].font?.key == piece.font.key,
@@ -412,6 +417,10 @@ extension LayoutEngine {
 			}
 			flushWord()
 		} else if let inline = box as? InlineBox {
+			if let image = inline.image {
+				tokens.append(.image(image, inline.style, href: href))
+				return
+			}
 			// A <br> forces a line break.
 			if inline.element?.localName == "br" {
 				tokens.append(.forcedBreak(inline.style))
@@ -444,6 +453,79 @@ extension LayoutEngine {
 			for child in inline.children {
 				collectInline(child, into: &tokens, href: childHref, decorations: childDecorations)
 			}
+		}
+	}
+
+	/// A finished line's height and the distance from its top to the baseline.
+	/// Text sets them: the tallest line-height, with the text box centred in it
+	/// (half-leading). A line of nothing but images still has the block's own
+	/// text metrics — its `strut` — as browsers give it, and the images then
+	/// stretch it to fit.
+	private func lineMetrics(_ fragments: inout [TextFragment], strut: ComputedStyle) -> (height: Double, baselineFromTop: Double) {
+		let textStyles = fragments.filter { !$0.isReplaced }.map(\.style)
+		let metricStyles = textStyles.isEmpty ? [strut] : textStyles
+		var lineHeight = metricStyles.map { $0.resolvedLineHeight() }.max() ?? 0
+		let ascent = metricStyles.map { fonts.font(for: $0).ascent(size: $0.fontSize) }.max() ?? 0
+		let descent = metricStyles.map { fonts.font(for: $0).descent(size: $0.fontSize) }.max() ?? 0
+		var baselineFromTop = ascent + (lineHeight - ascent - descent) / 2
+		if fragments.contains(where: \.isReplaced) {
+			placeReplacedFragments(&fragments, lineHeight: &lineHeight, baselineFromTop: &baselineFromTop,
+			                       textAscent: ascent, textDescent: descent)
+		}
+		return (lineHeight, baselineFromTop)
+	}
+
+	/// Fit a line's images into it: grow the line until every image's margin
+	/// box fits where its `vertical-align` puts it, then record how far below
+	/// the line's top each one starts.
+	private func placeReplacedFragments(_ fragments: inout [TextFragment], lineHeight: inout Double,
+	                                    baselineFromTop: inout Double, textAscent: Double, textDescent: Double) {
+		// `middle` centres an image on the baseline raised by half an x-height,
+		// taken as the usual half an em.
+		func middleLift(_ style: ComputedStyle) -> Double { style.fontSize * 0.25 }
+
+		var above = baselineFromTop
+		var below = lineHeight - baselineFromTop
+		for fragment in fragments {
+			guard case .image(_, let metrics, _) = fragment.inlineControl else { continue }
+			switch fragment.style.verticalAlign {
+			case .middle:
+				above = max(above, metrics.height / 2 + middleLift(fragment.style))
+				below = max(below, metrics.height / 2 - middleLift(fragment.style))
+			case .textTop:
+				below = max(below, metrics.height - textAscent)
+			case .textBottom:
+				above = max(above, metrics.height - textDescent)
+			case .top, .bottom:
+				break // aligned to the line's edges, once those are known
+			case .baseline, .sub:
+				above = max(above, metrics.height)
+			}
+		}
+		for fragment in fragments {
+			guard case .image(_, let metrics, _) = fragment.inlineControl else { continue }
+			switch fragment.style.verticalAlign {
+			case .top: below = max(below, metrics.height - above)
+			case .bottom: above = max(above, metrics.height - below)
+			default: break
+			}
+		}
+		lineHeight = above + below
+		baselineFromTop = above
+
+		for index in fragments.indices {
+			guard case .image(let image, let metrics, _) = fragments[index].inlineControl else { continue }
+			let style = fragments[index].style
+			let top: Double
+			switch style.verticalAlign {
+			case .middle: top = above - metrics.height / 2 - middleLift(style)
+			case .textTop: top = above - textAscent
+			case .textBottom: top = above + textDescent - metrics.height
+			case .top: top = 0
+			case .bottom: top = lineHeight - metrics.height
+			case .baseline, .sub: top = above - metrics.height
+			}
+			fragments[index].inlineControl = .image(image, metrics, top: top)
 		}
 	}
 
