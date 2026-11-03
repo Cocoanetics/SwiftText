@@ -167,7 +167,12 @@ public final class Painter {
 			stream.popState()
 		case .image(let image, let metrics, let top):
 			let marginTop = fragment.y + top
-			paintInlineImageDecorations(fragment: fragment, metrics: metrics, top: marginTop)
+			let borderX = fragment.x + metrics.borderX
+			let borderTop = marginTop + metrics.borderY
+			paintBackground(fragment.style.backgroundColor, x: borderX, top: borderTop,
+			                width: metrics.borderWidth, height: metrics.borderHeight)
+			paintBorders(metrics.border, colors: fragment.style.borderColor, x: borderX, top: borderTop,
+			             width: metrics.borderWidth, height: metrics.borderHeight)
 			drawImage(image, x: fragment.x + metrics.contentX, top: marginTop + metrics.contentY,
 			          width: metrics.contentWidth, height: metrics.contentHeight)
 			if let href = fragment.href {
@@ -175,24 +180,6 @@ public final class Painter {
 				                  bottom: marginTop + metrics.height, anchor: fragment.baseline, href: href)
 			}
 		}
-	}
-
-	/// The background and borders of an inline image, which layout reserved
-	/// room for around its content box.
-	private func paintInlineImageDecorations(fragment: TextFragment, metrics: ReplacedBoxMetrics, top: Double) {
-		let style = fragment.style
-		let marginLeft = style.margin.left.resolved(percentageBasis: 0) ?? 0
-		let marginRight = style.margin.right.resolved(percentageBasis: 0) ?? 0
-		let marginTop = style.margin.top.resolved(percentageBasis: 0) ?? 0
-		let marginBottom = style.margin.bottom.resolved(percentageBasis: 0) ?? 0
-		let box = Box(style: style)
-		box.x = fragment.x + marginLeft
-		box.y = top + marginTop
-		box.width = metrics.width - marginLeft - marginRight
-		box.height = metrics.height - marginTop - marginBottom
-		guard box.width > 0, box.height > 0 else { return }
-		paintBackground(box)
-		paintBorders(box)
 	}
 
 	/// Paint a table header group at the top of a continuation page. Its original
@@ -209,17 +196,20 @@ public final class Painter {
 	// MARK: - Backgrounds and borders
 
 	private func paintBackground(_ box: Box) {
-		guard let color = box.style.backgroundColor, color.alpha > 0 else { return }
+		paintBackground(box.style.backgroundColor, x: box.x, top: box.y, width: box.width, height: box.height)
+	}
+
+	/// Fill a border box, given in column coordinates, with its background.
+	private func paintBackground(_ color: RGBA?, x: Double, top: Double, width: Double, height: Double) {
+		guard let color, color.alpha > 0 else { return }
 		stream.pushState()
 		stream.setColorRGB(color.red, color.green, color.blue)
-		stream.rectangle(box.x, yUp(columnTop: box.y, height: box.height), box.width, box.height)
+		stream.rectangle(x, yUp(columnTop: top, height: height), width, height)
 		stream.fill()
 		stream.popState()
 	}
 
 	private func paintBorders(_ box: Box) {
-		let border = box.usedBorder
-		guard border.top > 0 || border.right > 0 || border.bottom > 0 || border.left > 0 else { return }
 		let style = box.style
 		let colors = box.resolvedCollapsedBorders.map {
 			Edges(
@@ -228,7 +218,14 @@ public final class Painter {
 				bottom: $0.bottom?.color ?? style.borderColor.bottom,
 				left: $0.left?.color ?? style.borderColor.left)
 		} ?? style.borderColor
-		let bottomY = yUp(columnTop: box.y, height: box.height)
+		paintBorders(box.usedBorder, colors: colors, x: box.x, top: box.y, width: box.width, height: box.height)
+	}
+
+	/// Draw the edges of a border box given in column coordinates.
+	private func paintBorders(_ border: Edges<Double>, colors: Edges<RGBA>,
+	                          x: Double, top: Double, width: Double, height: Double) {
+		guard border.top > 0 || border.right > 0 || border.bottom > 0 || border.left > 0 else { return }
+		let bottomY = yUp(columnTop: top, height: height)
 
 		func fillEdge(_ x: Double, _ y: Double, _ w: Double, _ h: Double, _ color: RGBA) {
 			guard w > 0, h > 0 else { return }
@@ -239,16 +236,16 @@ public final class Painter {
 
 		stream.pushState()
 		if border.top > 0 {
-			fillEdge(box.x, bottomY + box.height - border.top, box.width, border.top, colors.top)
+			fillEdge(x, bottomY + height - border.top, width, border.top, colors.top)
 		}
 		if border.bottom > 0 {
-			fillEdge(box.x, bottomY, box.width, border.bottom, colors.bottom)
+			fillEdge(x, bottomY, width, border.bottom, colors.bottom)
 		}
 		if border.left > 0 {
-			fillEdge(box.x, bottomY, border.left, box.height, colors.left)
+			fillEdge(x, bottomY, border.left, height, colors.left)
 		}
 		if border.right > 0 {
-			fillEdge(box.x + box.width - border.right, bottomY, border.right, box.height, colors.right)
+			fillEdge(x + width - border.right, bottomY, border.right, height, colors.right)
 		}
 		stream.popState()
 	}

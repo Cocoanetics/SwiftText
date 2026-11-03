@@ -220,21 +220,28 @@ public final class LayoutEngine {
 	/// box sits inside that.
 	func replacedBoxMetrics(of image: DecodedImage, style: ComputedStyle, containingWidth: Double?) -> ReplacedBoxMetrics {
 		let basis = containingWidth ?? 0
-		func edge(_ margin: Length, _ padding: Length, _ border: Double) -> Double {
-			(margin.resolved(percentageBasis: basis) ?? 0) + (padding.resolved(percentageBasis: basis) ?? 0) + border
+		func edges(_ lengths: Edges<Length>) -> Edges<Double> {
+			Edges(top: lengths.top.resolved(percentageBasis: basis) ?? 0,
+			      right: lengths.right.resolved(percentageBasis: basis) ?? 0,
+			      bottom: lengths.bottom.resolved(percentageBasis: basis) ?? 0,
+			      left: lengths.left.resolved(percentageBasis: basis) ?? 0)
 		}
+		let margin = edges(style.margin)
+		let padding = edges(style.padding)
 		let border = Edges(
 			top: style.borderStyle.top.isVisible ? style.borderWidth.top : 0,
 			right: style.borderStyle.right.isVisible ? style.borderWidth.right : 0,
 			bottom: style.borderStyle.bottom.isVisible ? style.borderWidth.bottom : 0,
 			left: style.borderStyle.left.isVisible ? style.borderWidth.left : 0)
-		let left = edge(style.margin.left, style.padding.left, border.left)
-		let right = edge(style.margin.right, style.padding.right, border.right)
-		let top = edge(style.margin.top, style.padding.top, border.top)
-		let bottom = edge(style.margin.bottom, style.padding.bottom, border.bottom)
 		let size = replacedSize(of: image, style: style, containingWidth: containingWidth)
-		return ReplacedBoxMetrics(width: left + size.width + right, height: top + size.height + bottom,
-		                          contentX: left, contentY: top, contentWidth: size.width, contentHeight: size.height)
+		let borderWidth = border.left + padding.left + size.width + padding.right + border.right
+		let borderHeight = border.top + padding.top + size.height + padding.bottom + border.bottom
+		return ReplacedBoxMetrics(
+			width: margin.left + borderWidth + margin.right, height: margin.top + borderHeight + margin.bottom,
+			contentX: margin.left + border.left + padding.left, contentY: margin.top + border.top + padding.top,
+			contentWidth: size.width, contentHeight: size.height,
+			borderX: margin.left, borderY: margin.top, borderWidth: borderWidth, borderHeight: borderHeight,
+			border: border)
 	}
 
 	/// Whether a replaced image gives up its width when its container is

@@ -144,6 +144,25 @@ struct PNGImageTests {
 		#expect(image.width == 48 && image.height == 32)
 	}
 
+	@Test("Dimensions whose product overflows give a placeholder, not a crash")
+	func overflowingDimensionsArePlaceholders() throws {
+		var png = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+		func chunk(_ type: String, _ payload: [UInt8]) {
+			let length = UInt32(payload.count)
+			png.append(contentsOf: [UInt8(length >> 24), UInt8(length >> 16 & 0xFF), UInt8(length >> 8 & 0xFF), UInt8(length & 0xFF)])
+			png.append(contentsOf: Array(type.utf8))
+			png.append(contentsOf: payload)
+			png.append(contentsOf: [0, 0, 0, 0]) // the CRC is not checked
+		}
+		// 4294967295 × 4294967295 RGBA: the pixel count overflows Int.
+		chunk("IHDR", [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 8, 6, 0, 0, 0])
+		chunk("IDAT", [0x78, 0x9C, 0x03, 0x00, 0x00, 0x00, 0x00, 0x01])
+		chunk("IEND", [])
+		let image = try #require(ImageDecoder.decode(png))
+		#expect(image.pdfStream == nil)
+		#expect(image.width == 0xFFFF_FFFF)
+	}
+
 	@Test("A transparent PNG renders as an image XObject drawn through its soft mask")
 	func softMaskIsWrittenToThePDF() async throws {
 		let uri = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFUlEQVR42mP4z8DwHwhB4H/DfyAAAD1XCHkixQx7AAAAAElFTkSuQmCC"

@@ -128,6 +128,13 @@ struct ReplacedBoxMetrics {
 	let contentY: Double
 	let contentWidth: Double
 	let contentHeight: Double
+	/// The border box, relative to the margin box's top-left corner — where
+	/// the background and border are painted — and its border widths.
+	let borderX: Double
+	let borderY: Double
+	let borderWidth: Double
+	let borderHeight: Double
+	let border: Edges<Double>
 }
 
 /// The element that established a propagated text decoration and the style

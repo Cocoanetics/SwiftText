@@ -131,8 +131,9 @@ browser does:
   table's `border`, `hspace`/`vspace` and `<font>`. Any CSS rule for the same
   property wins over them.
 - **Remote images** (`http`/`https`) are fetched before layout, at most six at
-  a time, through `RenderOptions.imageLoader` — URLSession by default, with a
-  15-second timeout and a 20 MB limit. Images inside `display: none` are skipped.
+  a time, through `RenderOptions.imageLoader` — URLSession by default, which
+  gives up after 15 seconds of silence or 30 in all, and stops a body the moment
+  it passes 20 MB. Images inside `display: none` are skipped.
   Set it to `nil` to render without touching the network (a remote image then
   draws as a placeholder, and the warning handler says why), or supply your own
   loader to resolve other schemes, such as an email's `cid:` parts. Loading an

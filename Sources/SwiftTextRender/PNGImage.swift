@@ -104,6 +104,8 @@ struct PNGImage {
 				break
 			}
 		}
+		// The header's dimensions are untrusted 32-bit values: their product can
+		// overflow, and the decoder's own size arithmetic must never see one.
 		let pixels = width.multipliedReportingOverflow(by: height)
 		guard !pixels.overflow, pixels.partialValue <= Self.maximumDecodedPixels,
 		      let image = try? unpackedImage() else { return placeholder }

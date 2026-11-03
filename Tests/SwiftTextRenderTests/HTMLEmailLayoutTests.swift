@@ -52,6 +52,17 @@ struct HTMLEmailLayoutTests {
 		#expect(!pdf.contains("0.9 0.9 0.9 rg"))
 	}
 
+	@Test("An inline image paints its background and border")
+	func inlineImageDecorations() async throws {
+		let html = "<p>x <img src=\"\(Self.icon)\" width=\"10\" height=\"10\" border=\"2\" "
+			+ "style=\"background-color: #ff0000; border-color: #00ff00; padding: 3px\"></p>"
+		let pdf = try await render(html)
+		#expect(pdf.contains("1 0 0 rg")) // the background
+		#expect(pdf.contains("0 1 0 rg")) // the border
+		// Background and border cover the border box: 2 + 3 + 10 + 3 + 2 = 20.
+		#expect(pdf.contains(" 20 20 re"))
+	}
+
 	@Test("max-width: 100% scales an image down, height and all")
 	func maxWidthScalesImage() async throws {
 		let html = "<div style=\"width: 100px\"><img src=\"\(Self.logo)\" style=\"width: 400px; max-width: 100%\"></div>"
@@ -122,6 +133,25 @@ struct HTMLEmailLayoutTests {
 		#expect(warnings.count == 1)
 		#expect(warnings.first?.contains("is not a local file") == true)
 	}
+
+	#if canImport(Darwin)
+	/// The limit holds while the body arrives: an oversized response is cut off,
+	/// never buffered whole.
+	@Test("The default loader stops a download that outgrows its limit", arguments: ["streamed", "declared"])
+	func oversizedDownloadStops(_ kind: String) async throws {
+		let configuration = URLSessionConfiguration.ephemeral
+		configuration.protocolClasses = [OversizedImageProtocol.self]
+		let url = try #require(URL(string: "https://example.com/huge.png?\(kind)"))
+		let error = await #expect(throws: ImageLoadingError.self) {
+			_ = try await HTMLRenderer.downloadImage(from: url, limit: 100_000, configuration: configuration)
+		}
+		guard case .tooLarge(_, let limit)? = error else {
+			Issue.record("expected the download to be stopped, got \(String(describing: error))")
+			return
+		}
+		#expect(limit == 100_000)
+	}
+	#endif
 
 	@Test("Image sources resolve to the URL a browser would fetch")
 	func remoteImageURLs() throws {
@@ -306,6 +336,30 @@ struct HTMLEmailLayoutTests {
 			+ box.children.compactMap { $0 as? BlockBox }.flatMap(replacedFragments)
 	}
 }
+
+#if canImport(Darwin)
+/// Serves an image far larger than any limit: streamed in chunks, or announced
+/// up front by its Content-Length (`?declared`).
+private final class OversizedImageProtocol: URLProtocol, @unchecked Sendable {
+	override static func canInit(with request: URLRequest) -> Bool { true }
+	override static func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+	override func startLoading() {
+		let declared = request.url?.query == "declared"
+		guard let url = request.url,
+		      let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1",
+		                                     headerFields: declared ? ["Content-Length": "100000000"] : [:]) else { return }
+		client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+		let chunk = Data(repeating: 0x89, count: 64 * 1024)
+		for _ in 0 ..< (declared ? 1 : 32) {
+			client?.urlProtocol(self, didLoad: chunk)
+		}
+		client?.urlProtocolDidFinishLoading(self)
+	}
+
+	override func stopLoading() {}
+}
+#endif
 
 /// The URLs an image loader was asked for, in order.
 private actor RequestLog {

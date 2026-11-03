@@ -23,15 +23,14 @@ public typealias LoadedImages = [String: Result<Data, any Error>]
 public enum ImageLoadingError: Error, CustomStringConvertible {
 	case unsupportedScheme(String)
 	case httpStatus(Int)
-	case tooLarge(Int)
-	case noData
+	/// The body reached at least `bytes`, past `limit`, when the transfer was stopped.
+	case tooLarge(bytes: Int, limit: Int)
 
 	public var description: String {
 		switch self {
 		case .unsupportedScheme(let scheme): return "the URL scheme '\(scheme)' is not supported"
 		case .httpStatus(let status): return "the server answered HTTP \(status)"
-		case .tooLarge(let bytes): return "the image is \(bytes) bytes, more than the \(HTMLRenderer.maximumRemoteImageBytes)-byte limit"
-		case .noData: return "the server sent no data"
+		case .tooLarge(let bytes, let limit): return "the image is at least \(bytes) bytes, more than the \(limit)-byte limit"
 		}
 	}
 }
@@ -44,35 +43,30 @@ extension HTMLRenderer {
 	static let maximumConcurrentImageLoads = 6
 
 	/// The default `RenderOptions.imageLoader`: fetches `http` and `https` URLs
-	/// with URLSession, giving up on a server that stays silent for 15 seconds
-	/// or an image larger than `maximumRemoteImageBytes`. Other schemes throw.
+	/// with URLSession, giving up on a server that stays silent for 15 seconds,
+	/// a transfer that takes more than 30, or an image larger than
+	/// `maximumRemoteImageBytes`. Other schemes throw.
 	public static let urlSessionImageLoader: ImageLoader = { url in
+		try await downloadImage(from: url)
+	}
+
+	/// Download an image, stopping the transfer as soon as its declared or
+	/// received size passes `limit` — a hostile server cannot make the renderer
+	/// buffer an endless body.
+	static func downloadImage(from url: URL, limit: Int = maximumRemoteImageBytes,
+	                          configuration: URLSessionConfiguration = .ephemeral) async throws -> Data {
 		let scheme = url.scheme?.lowercased() ?? ""
 		guard scheme == "http" || scheme == "https" else { throw ImageLoadingError.unsupportedScheme(scheme) }
 		var request = URLRequest(url: url, cachePolicy: .useProtocolCachePolicy, timeoutInterval: 15)
 		// Only the formats the image decoder embeds. Content-negotiating CDNs
 		// otherwise answer with WebP or AVIF.
 		request.setValue("image/png,image/jpeg;q=0.9,*/*;q=0.5", forHTTPHeaderField: "Accept")
-		let (data, status) = try await fetch(request)
+		configuration.timeoutIntervalForResource = 30
+		let (data, status) = try await LimitedDownload(limit: limit).run(request, configuration: configuration)
 		if let status, !(200 ... 299).contains(status) {
 			throw ImageLoadingError.httpStatus(status)
 		}
 		return data
-	}
-
-	/// The body and HTTP status of a request. The body is cut off, and the
-	/// request cancelled, as soon as it exceeds `maximumRemoteImageBytes`, so a
-	/// server cannot make the renderer buffer more than that. Uses URLSession's
-	/// delegate API, which every platform's Foundation has.
-	private static func fetch(_ request: URLRequest) async throws -> (Data, Int?) {
-		let collector = BodyCollector()
-		return try await withTaskCancellationHandler {
-			try await withCheckedThrowingContinuation { continuation in
-				collector.start(request, continuation: continuation)
-			}
-		} onCancel: {
-			collector.cancel()
-		}
 	}
 
 	/// Load every image the rendered document shows that layout cannot read
@@ -134,81 +128,89 @@ extension HTMLRenderer {
 	}
 }
 
-/// Collects a response body through a delegate-driven session, rejecting it
-/// as soon as the declared or received size passes the limit.
-private final class BodyCollector: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+/// One image download that is cut off the moment its body outgrows the limit.
+///
+/// URLSession's delegate API, unlike its completion handlers, sees the body
+/// arrive chunk by chunk, and it is the same on every platform's Foundation.
+/// URLSession calls the delegate on its own queue; the lock guards the state
+/// it shares with the task that awaits the result.
+private final class LimitedDownload: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+	private typealias Outcome = Result<(Data, Int?), any Error>
+
+	private let limit: Int
 	private let lock = NSLock()
-	private var data = Data()
-	private var status: Int?
-	private var continuation: CheckedContinuation<(Data, Int?), any Error>?
-	private var session: URLSession?
+	private var received = Data()
 	private var task: URLSessionDataTask?
+	private var continuation: CheckedContinuation<(Data, Int?), any Error>?
+	private var isCancelled = false
 
-	func start(_ request: URLRequest, continuation: CheckedContinuation<(Data, Int?), any Error>) {
-		lock.lock()
-		self.continuation = continuation
-		let session = URLSession(configuration: .ephemeral, delegate: self, delegateQueue: nil)
-		let task = session.dataTask(with: request)
-		self.session = session
-		self.task = task
-		lock.unlock()
-		task.resume()
+	init(limit: Int) {
+		self.limit = limit
 	}
 
-	func cancel() {
-		lock.lock()
-		let task = self.task
-		lock.unlock()
-		task?.cancel()
-	}
-
-	private func finish(_ result: Result<(Data, Int?), any Error>) {
-		lock.lock()
-		let continuation = self.continuation
-		self.continuation = nil
-		let session = self.session
-		self.session = nil
-		lock.unlock()
-		session?.invalidateAndCancel()
-		continuation?.resume(with: result)
-	}
-
-	func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse,
-	                completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
-		lock.lock()
-		status = (response as? HTTPURLResponse)?.statusCode
-		lock.unlock()
-		let declared = response.expectedContentLength
-		if declared > Int64(HTMLRenderer.maximumRemoteImageBytes) {
-			completionHandler(.cancel)
-			finish(.failure(ImageLoadingError.tooLarge(Int(clamping: declared))))
-		} else {
-			completionHandler(.allow)
+	/// The body and HTTP status of `request`.
+	func run(_ request: URLRequest, configuration: URLSessionConfiguration) async throws -> (Data, Int?) {
+		try await withTaskCancellationHandler {
+			try await withCheckedThrowingContinuation { continuation in
+				let session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
+				let task = session.dataTask(with: request)
+				let cancelled = locked { () -> Bool in
+					self.continuation = continuation
+					self.task = task
+					return isCancelled
+				}
+				if cancelled {
+					task.cancel()
+					finish(.failure(CancellationError()))
+				} else {
+					task.resume()
+				}
+				// Releases the session — and with it this delegate — once the task ends.
+				session.finishTasksAndInvalidate()
+			}
+		} onCancel: {
+			let task = locked { () -> URLSessionDataTask? in
+				isCancelled = true
+				return self.task
+			}
+			task?.cancel()
+			finish(.failure(CancellationError()))
 		}
 	}
 
-	func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive chunk: Data) {
-		lock.lock()
-		data.append(chunk)
-		let size = data.count
-		lock.unlock()
-		if size > HTMLRenderer.maximumRemoteImageBytes {
-			dataTask.cancel()
-			finish(.failure(ImageLoadingError.tooLarge(size)))
+	func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+		let size = locked { () -> Int in
+			received.append(data)
+			return received.count
 		}
+		let declared = dataTask.response?.expectedContentLength ?? -1
+		guard size > limit || declared > Int64(limit) else { return }
+		dataTask.cancel()
+		finish(.failure(ImageLoadingError.tooLarge(bytes: max(size, Int(clamping: declared)), limit: limit)))
 	}
 
 	func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: (any Error)?) {
-		lock.lock()
-		let body = data
-		let status = self.status
-		lock.unlock()
 		if let error {
 			finish(.failure(error))
-		} else if body.isEmpty {
-			finish(.failure(ImageLoadingError.noData))
 		} else {
-			finish(.success((body, status)))
+			let status = (task.response as? HTTPURLResponse)?.statusCode
+			finish(.success((locked { received }, status)))
 		}
+	}
+
+	/// Resume the waiting task exactly once; whatever comes after — the
+	/// completion of a transfer this cancelled — is dropped.
+	private func finish(_ outcome: Outcome) {
+		let continuation = locked { () -> CheckedContinuation<(Data, Int?), any Error>? in
+			defer { self.continuation = nil }
+			return self.continuation
+		}
+		continuation?.resume(with: outcome)
+	}
+
+	private func locked<Value>(_ body: () -> Value) -> Value {
+		lock.lock()
+		defer { lock.unlock() }
+		return body()
 	}
 }
