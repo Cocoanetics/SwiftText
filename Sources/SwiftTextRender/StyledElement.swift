@@ -94,7 +94,7 @@ public final class StyledElement: SelectorElement {
 			} else if node.name == "#text" {
 				// Verbatim: `collectInline` collapses it per `white-space`, and the
 				// line box drops what is left over at its edges.
-				children.append(.text(node.sourceText))
+				children.append(.text(Self.normalizingNewlines(node.sourceText)))
 			}
 		}
 
@@ -104,5 +104,15 @@ public final class StyledElement: SelectorElement {
 			child.computedStyle = resolver.style(for: child, inheriting: computedStyle, rootFontSize: rootFontSize)
 			child.buildChildren(resolver: resolver, rootFontSize: rootFontSize)
 		}
+	}
+
+	/// HTML reads CR LF and a lone CR as LF before it tokenizes (the input
+	/// stream preprocessing step). The parser leaves them in place, and email
+	/// bodies travel with CR LF line ends — where Swift sees `"\r\n"` as one
+	/// `Character` that is neither `"\n"` nor whitespace to the inline tokenizer,
+	/// so every source line break would be laid out as a visible word.
+	static func normalizingNewlines(_ text: String) -> String {
+		guard text.unicodeScalars.contains("\r") else { return text }
+		return text.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
 	}
 }

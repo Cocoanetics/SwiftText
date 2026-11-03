@@ -443,7 +443,7 @@ let packageTargets: [Target] = [
 	),
 	.testTarget(
 		name: "SwiftTextRenderTests",
-		dependencies: ["SwiftTextRender", "SwiftTextHTML", "SwiftTextCSS"],
+		dependencies: ["SwiftTextRender", "SwiftTextHTML", "SwiftTextCSS", "SwiftTextPDFWriter"],
 		path: "Tests/SwiftTextRenderTests"
 	)
 ] + htmlTargets + macOSTargets + cliTargets

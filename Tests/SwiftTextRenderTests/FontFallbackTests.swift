@@ -27,6 +27,59 @@ struct FontFallbackTests {
 		#expect(!helvetica.covers("\u{4E00}"))  // CJK
 	}
 
+	/// Viewers' own base-14 metrics disagree with the standard ones here and
+	/// there; declared widths pin every advance to what layout measured.
+	@Test("Base-14 fonts declare the widths layout measured with")
+	func standardFontsDeclareWidths() async throws {
+		let pdf = try await HTMLRenderer.renderPDF(html: "<p style=\"font-family: sans-serif\">±60.96</p>")
+		let text = String(decoding: pdf, as: UTF8.self)
+		let pattern = #"/BaseFont /Helvetica/[^>]*?/FirstChar 32/LastChar 255/Widths \[([0-9 ]+)\]"#
+		let match = try #require(text.range(of: pattern, options: .regularExpression))
+		let array = try #require(text[match].split(separator: "[").last?.dropLast())
+		let widths = array.split(separator: " ").compactMap { Int($0) }
+		#expect(widths.count == 224)
+		#expect(widths[0xB1 - 32] == 584) // ±, 549 in macOS's Helvetica
+		#expect(widths[0x80 - 32] == 556) // €
+		#expect(widths[Int(Character("i").asciiValue!) - 32] == 222)
+		#expect(widths[0x95 - 32] == 350) // •
+	}
+
+	/// Viewers draw the base-14 Euro at different widths — macOS's runs into
+	/// the next digit — so it comes from a real face with the same metrics.
+	@Test("The Euro sign is drawn from an installed metric-compatible face")
+	func euroUsesMetricCompatibleFace() {
+		#expect(!StandardFont.helvetica(bold: false, italic: false).covers("€"))
+		#expect(!StandardFont.times(bold: true, italic: false).covers("€"))
+		// Every viewer's Courier Euro is 600 units wide, like its other glyphs.
+		#expect(StandardFont.courier(bold: false, italic: false).covers("€"))
+
+		let candidates = [
+			"/System/Library/Fonts/Supplemental/Arial.ttf",
+			"/Library/Fonts/Arial.ttf",
+			"/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+			"/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
+			"/usr/share/fonts/liberation-sans/LiberationSans-Regular.ttf"
+		]
+		var style = ComputedStyle.initial
+		style.fontFamily = ["sans-serif"]
+		let fonts = FontBook()
+		let runs = fonts.resolveRuns("€60", style: style)
+		guard candidates.contains(where: FileManager.default.fileExists(atPath:)) else {
+			// Nothing to fall back to: the base-14 face draws it after all.
+			#expect(runs.count == 1)
+			return
+		}
+		#expect(runs.map(\.text) == ["€", "60"])
+		guard case .embedded(let face) = runs.first?.font else {
+			Issue.record("expected the Euro from an embedded face")
+			return
+		}
+		#expect(abs(face.width(of: "€", size: 1000) - 556) < 1) // Helvetica's advance
+
+		fonts.systemFallbackEnabled = false
+		#expect(fonts.resolveRuns("€60", style: style).count == 1)
+	}
+
 	@Test("Base-14 fonts use Adobe WinAnsi advances")
 	func base14WinAnsiAdvances() {
 		let cases: [(String, StandardFont, [Character: Double])] = [

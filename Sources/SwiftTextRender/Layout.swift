@@ -6,14 +6,24 @@
 //  lines greedily using font metrics. Coordinates are CSS pixels with a
 //  y-down, top-left origin; the painter converts to PDF's y-up space.
 //
-//  Not yet modeled: margin collapsing, floats, absolute positioning, tables,
-//  flex/grid. These follow once the vertical slice is proven end to end.
+//  Not yet modeled: floats, absolute positioning, flex/grid, and margin
+//  collapsing beyond adjacent siblings.
 
 import Foundation
 import SwiftTextCSS
 
 public final class LayoutEngine {
 	let fonts: FontBook
+
+	/// Intrinsic widths measured during the current layout. Every enclosing
+	/// table measures a nested table's cells again, so without them the work
+	/// doubles with each level of nesting — and email nests tables deeply.
+	private var intrinsicWidths: [IntrinsicWidthKey: Double] = [:]
+
+	private struct IntrinsicWidthKey: Hashable {
+		let box: ObjectIdentifier
+		let size: IntrinsicSize
+	}
 
 	public init(fonts: FontBook) {
 		self.fonts = fonts
@@ -23,6 +33,8 @@ public final class LayoutEngine {
 	/// `(originX, originY)`. Returns the total margin-box height consumed.
 	@discardableResult
 	public func layout(root: BlockBox, contentWidth: Double, originX: Double, originY: Double) -> Double {
+		intrinsicWidths = [:]
+		defer { intrinsicWidths = [:] }
 		let marginTop = root.style.margin.top.resolved(percentageBasis: contentWidth) ?? 0
 		let marginBottom = root.style.margin.bottom.resolved(percentageBasis: contentWidth) ?? 0
 		let height = layoutBlock(root, containingWidth: contentWidth, marginX: originX, borderBoxTop: originY + marginTop)
@@ -32,10 +44,18 @@ public final class LayoutEngine {
 	/// Lay out a block whose border box top is at `borderBoxTop`. The caller owns
 	/// this box's vertical margins (so adjacent siblings can collapse). Sets the
 	/// box's border-box geometry and returns its border-box height.
-	private func layoutBlock(_ box: BlockBox, containingWidth: Double, marginX: Double, borderBoxTop: Double) -> Double {
+	///
+	/// - Parameter containerAlign: The containing block's `text-align`, whose
+	///   legacy `-webkit-*` values also align a narrower block.
+	private func layoutBlock(_ box: BlockBox, containingWidth: Double, marginX: Double, borderBoxTop: Double,
+	                         containerAlign: TextAlign = .start) -> Double {
 		let style = box.style
 		let basis = containingWidth
-		if style.display == .table {
+		let isTable = style.display == .table
+		// A cell is exactly as wide as its column(s): the width, min-width and
+		// max-width it asked for were already spent sizing them.
+		let isCell = style.display == .tableCell
+		if isTable {
 			resolveCollapsedBorders(in: box)
 		}
 
@@ -48,37 +68,39 @@ public final class LayoutEngine {
 		let paddingBottom = style.padding.bottom.resolved(percentageBasis: basis) ?? 0
 
 		let marginRight = style.margin.right.resolved(percentageBasis: basis) ?? 0
-		let horizontalExtras = marginLeft + marginRight + border.left + border.right + paddingLeft + paddingRight
-		let explicitWidth = style.width.resolved(percentageBasis: basis)
-		let availableWidth = containingWidth - horizontalExtras
-		let unclampedWidth = explicitWidth ?? availableWidth
-		let maximumWidth = style.maxWidth?.resolved(percentageBasis: basis)
-		// `min-width` wins over `max-width` when the two conflict (CSS 2.1 §10.4).
-		let minimumWidth = style.minWidth.resolved(percentageBasis: basis) ?? 0
-		let cappedWidth = min(unclampedWidth, maximumWidth ?? unclampedWidth)
-		let contentWidth = max(0, max(cappedWidth, minimumWidth))
-		let borderBoxWidth = contentWidth + paddingLeft + paddingRight + border.left + border.right
+		let paddingAndBorder = border.left + border.right + paddingLeft + paddingRight
+		let explicitWidth = isCell ? nil : style.width.resolved(percentageBasis: basis)
+		let availableWidth = containingWidth - marginLeft - marginRight - paddingAndBorder
+		let maximumWidth = isCell ? nil : style.maxWidth?.resolved(percentageBasis: basis)
+		let minimumWidth = isCell ? 0 : style.minWidth.resolved(percentageBasis: basis) ?? 0
+		var imageHeight = 0.0
+		let contentWidth: Double
+		if let image = box.image {
+			// Replaced image: size from intrinsic dimensions, honoring CSS
+			// width/height and preserving aspect ratio when only one is given.
+			let size = replacedSize(of: image, style: style, containingWidth: basis)
+			contentWidth = size.width
+			imageHeight = size.height
+		} else if isTable {
+			// A table's widths cover its border box, as browsers size tables.
+			contentWidth = tableContentWidth(box, specifiedWidth: explicitWidth.map { $0 - paddingAndBorder },
+			                                 availableWidth: availableWidth, minimumWidth: minimumWidth - paddingAndBorder,
+			                                 maximumWidth: maximumWidth.map { $0 - paddingAndBorder })
+		} else {
+			let unclampedWidth = explicitWidth ?? availableWidth
+			// `min-width` wins over `max-width` when the two conflict (CSS 2.1 §10.4).
+			let cappedWidth = min(unclampedWidth, maximumWidth ?? unclampedWidth)
+			contentWidth = max(0, max(cappedWidth, minimumWidth))
+		}
+		let borderBoxWidth = contentWidth + paddingAndBorder
 
-		box.x = marginX + marginLeft
+		let freeWidth = containingWidth - marginLeft - borderBoxWidth - marginRight
+		box.x = marginX + marginLeft + horizontalOffset(freeWidth: freeWidth, margin: style.margin, containerAlign: containerAlign)
 		box.y = borderBoxTop
 		box.width = borderBoxWidth
 
-		// Replaced image: size from intrinsic dimensions, honoring CSS width/height
-		// and preserving aspect ratio when only one is given.
-		if let image = box.image {
-			let intrinsicWidth = max(1.0, Double(image.width))
-			let intrinsicHeight = max(1.0, Double(image.height))
-			let cssHeight: Double? = { if case .px(let value) = style.height { return value }; return nil }()
-			let usedWidth: Double
-			let usedHeight: Double
-			switch (explicitWidth, cssHeight) {
-			case let (width?, height?): usedWidth = width; usedHeight = height
-			case let (width?, nil): usedWidth = width; usedHeight = intrinsicHeight * (width / intrinsicWidth)
-			case let (nil, height?): usedHeight = height; usedWidth = intrinsicWidth * (height / intrinsicHeight)
-			case (nil, nil): usedWidth = intrinsicWidth; usedHeight = intrinsicHeight
-			}
-			box.width = usedWidth + paddingLeft + paddingRight + border.left + border.right
-			box.height = usedHeight + paddingTop + paddingBottom + border.top + border.bottom
+		if box.image != nil {
+			box.height = imageHeight + paddingTop + paddingBottom + border.top + border.bottom
 			return box.height
 		}
 
@@ -100,7 +122,8 @@ public final class LayoutEngine {
 				let childMarginTop = childBlock.style.margin.top.resolved(percentageBasis: contentWidth) ?? 0
 				let childMarginBottom = childBlock.style.margin.bottom.resolved(percentageBasis: contentWidth) ?? 0
 				cursorY += started ? max(previousMarginBottom, childMarginTop) : childMarginTop
-				cursorY += layoutBlock(childBlock, containingWidth: contentWidth, marginX: contentX, borderBoxTop: cursorY)
+				cursorY += layoutBlock(childBlock, containingWidth: contentWidth, marginX: contentX, borderBoxTop: cursorY,
+				                       containerAlign: style.textAlign)
 				previousMarginBottom = childMarginBottom
 				started = true
 			}
@@ -123,13 +146,103 @@ public final class LayoutEngine {
 		}
 
 		// Only explicit pixel heights are honored; percentages need a resolved
-		// containing height and are treated as auto for now.
+		// containing height and are treated as auto for now. Tables and their
+		// cells grow to fit their content, so for them a height is a minimum.
 		if case .px(let fixed) = style.height {
-			contentHeight = fixed
+			contentHeight = isTable || isCell ? max(contentHeight, fixed) : fixed
 		}
 
 		box.height = contentHeight + paddingTop + paddingBottom + border.top + border.bottom
 		return box.height
+	}
+
+	/// How far right of its left margin a block sits within its containing
+	/// block when it leaves `freeWidth` unused: auto margins share that space
+	/// out — both centring the box, one pushing it to the other side — and
+	/// failing those, a legacy `-webkit-*` alignment of the container (HTML's
+	/// `<center>` and `align` attributes) aligns the box the same way.
+	private func horizontalOffset(freeWidth: Double, margin: Edges<Length>, containerAlign: TextAlign) -> Double {
+		guard freeWidth > 0 else { return 0 }
+		switch (margin.left == .auto, margin.right == .auto) {
+		case (true, true): return freeWidth / 2
+		case (true, false): return freeWidth
+		case (false, true): return 0
+		case (false, false):
+			switch containerAlign {
+			case .webkitCenter: return freeWidth / 2
+			case .webkitRight: return freeWidth
+			default: return 0
+			}
+		}
+	}
+
+	// MARK: - Replaced images
+
+	/// The used content size of a replaced image: its CSS `width` and `height`
+	/// (only pixel heights; percentage widths need `containingWidth`), else the
+	/// intrinsic size, keeping the aspect ratio when only one is given — then
+	/// clamped by `min-width`/`max-width`, which carry an auto height along.
+	/// That last step is what keeps the ubiquitous `max-width: 100%` email image
+	/// inside its column.
+	///
+	/// With no containing width (intrinsic sizing), percentages act as `auto`.
+	func replacedSize(of image: DecodedImage, style: ComputedStyle, containingWidth: Double?) -> (width: Double, height: Double) {
+		func resolve(_ length: Length) -> Double? {
+			switch length {
+			case .px(let value): return value
+			case .percent(let percent): return containingWidth.map { percent / 100 * $0 }
+			case .auto: return nil
+			}
+		}
+		let intrinsicWidth = max(1.0, Double(image.width))
+		let intrinsicHeight = max(1.0, Double(image.height))
+		let cssWidth = resolve(style.width)
+		let cssHeight: Double? = { if case .px(let value) = style.height { return value }; return nil }()
+		var width: Double
+		var height: Double
+		switch (cssWidth, cssHeight) {
+		case let (specifiedWidth?, specifiedHeight?): width = specifiedWidth; height = specifiedHeight
+		case let (specifiedWidth?, nil): width = specifiedWidth; height = intrinsicHeight * (specifiedWidth / intrinsicWidth)
+		case let (nil, specifiedHeight?): height = specifiedHeight; width = intrinsicWidth * (specifiedHeight / intrinsicHeight)
+		case (nil, nil): width = intrinsicWidth; height = intrinsicHeight
+		}
+
+		let maximum = style.maxWidth.flatMap(resolve) ?? .infinity
+		let clamped = max(resolve(style.minWidth) ?? 0, min(width, maximum))
+		if clamped != width {
+			if cssHeight == nil { height *= clamped / max(width, 1) }
+			width = clamped
+		}
+		return (max(0, width), max(0, height))
+	}
+
+	/// The margin box of a replaced image placed inline, and where its content
+	/// box sits inside that.
+	func replacedBoxMetrics(of image: DecodedImage, style: ComputedStyle, containingWidth: Double?) -> ReplacedBoxMetrics {
+		let basis = containingWidth ?? 0
+		func edge(_ margin: Length, _ padding: Length, _ border: Double) -> Double {
+			(margin.resolved(percentageBasis: basis) ?? 0) + (padding.resolved(percentageBasis: basis) ?? 0) + border
+		}
+		let border = Edges(
+			top: style.borderStyle.top.isVisible ? style.borderWidth.top : 0,
+			right: style.borderStyle.right.isVisible ? style.borderWidth.right : 0,
+			bottom: style.borderStyle.bottom.isVisible ? style.borderWidth.bottom : 0,
+			left: style.borderStyle.left.isVisible ? style.borderWidth.left : 0)
+		let left = edge(style.margin.left, style.padding.left, border.left)
+		let right = edge(style.margin.right, style.padding.right, border.right)
+		let top = edge(style.margin.top, style.padding.top, border.top)
+		let bottom = edge(style.margin.bottom, style.padding.bottom, border.bottom)
+		let size = replacedSize(of: image, style: style, containingWidth: containingWidth)
+		return ReplacedBoxMetrics(width: left + size.width + right, height: top + size.height + bottom,
+		                          contentX: left, contentY: top, contentWidth: size.width, contentHeight: size.height)
+	}
+
+	/// Whether a replaced image gives up its width when its container is
+	/// squeezed: percentage sizes make its min-content contribution zero.
+	func isCompressibleReplaced(_ style: ComputedStyle) -> Bool {
+		if case .percent = style.width { return true }
+		if case .percent? = style.maxWidth { return true }
+		return false
 	}
 
 	/// The first line box found in a subtree, if any.
@@ -416,8 +529,12 @@ public final class LayoutEngine {
 			measured[ObjectIdentifier(placement.cell)] = height
 		}
 
-		// Row heights come from cells confined to a single row.
-		var rowHeights = [Double](repeating: 0, count: rows.count)
+		// Row heights come from cells confined to a single row, and from a pixel
+		// height on the row itself, which like a cell's is a minimum.
+		var rowHeights = rows.map { row -> Double in
+			if case .px(let height) = row.box.style.height { return height }
+			return 0
+		}
 		for placement in placements where placement.rowspan == 1 {
 			rowHeights[placement.row] = max(rowHeights[placement.row], measured[ObjectIdentifier(placement.cell)] ?? 0)
 		}
@@ -481,23 +598,65 @@ public final class LayoutEngine {
 		return max(y, (bounds?.bottom ?? contentTop) + verticalSpacing) - contentTop
 	}
 
-	/// Approximate CSS automatic table layout with each cell's intrinsic widths.
-	/// If the preferred widths do not fit, distribute the reduction over each
-	/// column's max-content slack. If the minimum grid itself does not fit, keep
-	/// narrower columns at min-content and cap the widest columns instead.
-	private func tableColumnWidths(_ placements: [CellPlacement], columnCount: Int,
-	                               availableWidth: Double, spacing: Double) -> [Double] {
-		func intrinsicWidths(measuring measure: (BlockBox) -> Double) -> [Double] {
-			var widths = [Double](repeating: 0, count: columnCount)
+	/// What a table's columns need and ask for, from their cells.
+	private struct ColumnMetrics {
+		/// The narrowest each column can be without overflowing (min-content).
+		var minimum: [Double]
+		/// What each column takes when nothing in it wraps (max-content).
+		var maximum: [Double]
+		/// The border-box width a cell set in pixels, per column.
+		var fixed: [Double?]
+		/// The percentage width a cell set, per column.
+		var percent: [Double?]
 
-			// Establish ordinary columns first. Colspan requirements are applied after
-			// that so they only add the width not already supplied by their columns.
-			for placement in placements where placement.colspan == 1 {
-				widths[placement.column] = max(widths[placement.column], measure(placement.cell))
+		/// The width each column would like: what a cell set in pixels, or its
+		/// percentage of `tableWidth`, else its max-content width — and never less
+		/// than its min-content width. A set width wins over longer content, which
+		/// then wraps, as in browsers. Without a table width (intrinsic sizing) a
+		/// percentage column asks for its content.
+		func preferred(tableWidth: Double?) -> [Double] {
+			minimum.indices.map { column in
+				if let fixed = fixed[column] { return max(minimum[column], fixed) }
+				if let percent = percent[column], let tableWidth { return max(minimum[column], percent / 100 * tableWidth) }
+				return max(minimum[column], maximum[column])
 			}
-			for placement in placements.filter({ $0.colspan > 1 }).sorted(by: { $0.colspan < $1.colspan }) {
-				let end = min(placement.column + placement.colspan, columnCount)
-				let columns = placement.column ..< end
+		}
+
+		/// The columns no cell gave a width, which take a table's spare width.
+		var isAuto: [Bool] {
+			minimum.indices.map { fixed[$0] == nil && percent[$0] == nil }
+		}
+	}
+
+	private func columnMetrics(_ placements: [CellPlacement], columnCount: Int, spacing: Double) -> ColumnMetrics {
+		var metrics = ColumnMetrics(minimum: [Double](repeating: 0, count: columnCount),
+		                            maximum: [Double](repeating: 0, count: columnCount),
+		                            fixed: [Double?](repeating: nil, count: columnCount),
+		                            percent: [Double?](repeating: nil, count: columnCount))
+
+		// Establish ordinary columns first. Colspan requirements are applied after
+		// that so they only add the width not already supplied by their columns.
+		for placement in placements where placement.colspan == 1 {
+			let cell = placement.cell
+			let column = placement.column
+			metrics.minimum[column] = max(metrics.minimum[column], minContentWidth(of: cell))
+			metrics.maximum[column] = max(metrics.maximum[column], maxContentWidth(of: cell))
+			switch cell.style.width {
+			case .px(let width) where width > 0:
+				let border = cell.usedBorder
+				let padding = (cell.style.padding.left.resolved(percentageBasis: 0) ?? 0)
+					+ (cell.style.padding.right.resolved(percentageBasis: 0) ?? 0)
+				metrics.fixed[column] = max(metrics.fixed[column] ?? 0, width + padding + border.left + border.right)
+			case .percent(let percent) where percent > 0:
+				metrics.percent[column] = max(metrics.percent[column] ?? 0, percent)
+			default:
+				break
+			}
+		}
+		let spanning = placements.filter { $0.colspan > 1 }.sorted { $0.colspan < $1.colspan }
+		func widen(_ widths: inout [Double], measuring measure: (BlockBox) -> Double) {
+			for placement in spanning {
+				let columns = placement.column ..< min(placement.column + placement.colspan, columnCount)
 				let current = widths[columns].reduce(0, +) + Double(columns.count - 1) * spacing
 				let deficit = measure(placement.cell) - current
 				if deficit > 0 {
@@ -505,41 +664,124 @@ public final class LayoutEngine {
 					for column in columns { widths[column] += share }
 				}
 			}
-			return widths
 		}
+		widen(&metrics.minimum, measuring: minContentWidth(of:))
+		widen(&metrics.maximum, measuring: maxContentWidth(of:))
+		return metrics
+	}
 
-		let widths = intrinsicWidths(measuring: maxContentWidth(of:))
-		let minimums = intrinsicWidths(measuring: minContentWidth(of:))
-		return TableColumnWidths.fit(preferred: widths, minimum: minimums, to: availableWidth)
+	/// Approximate CSS automatic table layout with each cell's intrinsic widths.
+	/// A table wider than its columns would like gives the spare width to the
+	/// columns no cell set a width for. If the preferred widths do not fit,
+	/// distribute the reduction over each column's max-content slack. If the
+	/// minimum grid itself does not fit, keep narrower columns at min-content
+	/// and cap the widest columns instead.
+	private func tableColumnWidths(_ placements: [CellPlacement], columnCount: Int,
+	                               availableWidth: Double, spacing: Double) -> [Double] {
+		let columns = columnMetrics(placements, columnCount: columnCount, spacing: spacing)
+		let preferred = columns.preferred(tableWidth: availableWidth)
+		if preferred.reduce(0, +) < availableWidth {
+			return TableColumnWidths.expand(preferred, growable: columns.isAuto, to: availableWidth)
+		}
+		return TableColumnWidths.fit(preferred: preferred, minimum: columns.minimum, to: availableWidth)
+	}
+
+	/// The narrowest and the preferred content width of a table's grid, cell
+	/// spacing included.
+	private func tableIntrinsicContentWidths(_ table: BlockBox) -> (minimum: Double, preferred: Double) {
+		let grid = tableGrid(for: table)
+		guard grid.columnCount > 0 else { return (0, 0) }
+		let spacing = table.style.borderCollapse == .collapse ? 0 : table.style.borderSpacing.horizontal
+		let columns = columnMetrics(grid.placements, columnCount: grid.columnCount, spacing: spacing)
+		let gaps = Double(grid.columnCount + 1) * spacing
+		return (columns.minimum.reduce(0, +) + gaps, columns.preferred(tableWidth: nil).reduce(0, +) + gaps)
+	}
+
+	/// A table's content width under automatic layout (CSS 2.1 §17.5.2.2): the
+	/// width it was given, else as wide as its columns would like within the
+	/// space available — shrink-to-fit, as browsers size a table without a
+	/// width — and never narrower than its columns can go, as long as that
+	/// fits. A grid that cannot fit at all is held to the available width; its
+	/// widest columns then shrink rather than run off the page.
+	private func tableContentWidth(_ table: BlockBox, specifiedWidth: Double?, availableWidth: Double,
+	                               minimumWidth: Double, maximumWidth: Double?) -> Double {
+		let intrinsic = tableIntrinsicContentWidths(table)
+		var width = specifiedWidth ?? min(intrinsic.preferred, availableWidth)
+		if let maximumWidth { width = min(width, maximumWidth) }
+		return max(0, width, minimumWidth, min(intrinsic.minimum, availableWidth))
+	}
+
+	private enum IntrinsicSize {
+		/// Broken at every ordinary soft wrap opportunity.
+		case minimum
+		/// With nothing wrapped.
+		case maximum
 	}
 
 	/// The border-box width a block needs when none of its inline content wraps.
 	private func maxContentWidth(of box: BlockBox) -> Double {
-		let border = box.usedBorder
-		let padding = (box.style.padding.left.resolved(percentageBasis: 0) ?? 0)
-			+ (box.style.padding.right.resolved(percentageBasis: 0) ?? 0)
-		let margins = (box.style.margin.left.resolved(percentageBasis: 0) ?? 0)
-			+ (box.style.margin.right.resolved(percentageBasis: 0) ?? 0)
-		let extras = border.left + border.right + padding + margins
+		intrinsicWidth(of: box, .maximum)
+	}
 
-		let contentWidth: Double
+	/// The border-box width needed at ordinary soft wrap opportunities. Emergency
+	/// opportunities from `overflow-wrap: break-word` deliberately do not count;
+	/// `anywhere` and `word-break: break-all` do count.
+	private func minContentWidth(of box: BlockBox) -> Double {
+		intrinsicWidth(of: box, .minimum)
+	}
+
+	private func intrinsicWidth(of box: BlockBox, _ size: IntrinsicSize) -> Double {
+		let key = IntrinsicWidthKey(box: ObjectIdentifier(box), size: size)
+		if let measured = intrinsicWidths[key] { return measured }
+		let width = measureIntrinsicWidth(of: box, size)
+		intrinsicWidths[key] = width
+		return width
+	}
+
+	private func measureIntrinsicWidth(of box: BlockBox, _ size: IntrinsicSize) -> Double {
+		let style = box.style
+		let border = box.usedBorder
+		let padding = (style.padding.left.resolved(percentageBasis: 0) ?? 0)
+			+ (style.padding.right.resolved(percentageBasis: 0) ?? 0)
+		let margins = (style.margin.left.resolved(percentageBasis: 0) ?? 0)
+			+ (style.margin.right.resolved(percentageBasis: 0) ?? 0)
+		let paddingAndBorder = border.left + border.right + padding
+
+		var contentWidth: Double
 		if let image = box.image {
-			contentWidth = box.style.width.resolved(percentageBasis: 0) ?? Double(image.width)
+			contentWidth = size == .minimum && isCompressibleReplaced(style)
+				? 0 : replacedSize(of: image, style: style, containingWidth: nil).width
+		} else if style.display == .table {
+			let widths = tableIntrinsicContentWidths(box)
+			contentWidth = size == .minimum ? widths.minimum : widths.preferred
 		} else if box.establishesInlineContext {
 			var tokens: [InlineToken] = []
-			let source = ObjectIdentifier(box)
-			let decorations = TextDecorationRuns(
-				underline: box.style.underline ? TextDecorationRun(source: source, style: box.style) : nil,
-				lineThrough: box.style.lineThrough ? TextDecorationRun(source: source, style: box.style) : nil)
-			for child in box.children {
-				collectInline(child, into: &tokens, href: nil, decorations: decorations)
+			if size == .minimum {
+				for child in box.children { collectInline(child, into: &tokens, href: nil, decorations: TextDecorationRuns()) }
+				contentWidth = minContentWidth(of: tokens, textIndent: style.textIndent)
+			} else {
+				let source = ObjectIdentifier(box)
+				let decorations = TextDecorationRuns(
+					underline: style.underline ? TextDecorationRun(source: source, style: style) : nil,
+					lineThrough: style.lineThrough ? TextDecorationRun(source: source, style: style) : nil)
+				for child in box.children {
+					collectInline(child, into: &tokens, href: nil, decorations: decorations)
+				}
+				contentWidth = maxContentWidth(of: tokens, textIndent: style.textIndent)
 			}
-			contentWidth = maxContentWidth(of: tokens, textIndent: box.style.textIndent)
 		} else {
-			contentWidth = box.children.compactMap { $0 as? BlockBox }.map(maxContentWidth(of:)).max() ?? 0
+			contentWidth = box.children.compactMap { $0 as? BlockBox }.map { intrinsicWidth(of: $0, size) }.max() ?? 0
 		}
-		let specifiedWidth = box.style.width.resolved(percentageBasis: 0) ?? 0
-		return max(contentWidth, specifiedWidth) + extras
+		// A pixel width is what the box contributes, unless its content needs
+		// more. A table's width covers its border box; a cell's width sizes its
+		// column instead (see `columnMetrics`).
+		if style.display != .tableCell, case .px(let width) = style.width {
+			contentWidth = max(contentWidth, style.display == .table ? width - paddingAndBorder : width)
+		}
+		if case .px(let minimum) = style.minWidth {
+			contentWidth = max(contentWidth, minimum)
+		}
+		return contentWidth + paddingAndBorder + margins
 	}
 
 	private func maxContentWidth(of tokens: [InlineToken], textIndent: Double) -> Double {
@@ -565,6 +807,13 @@ public final class LayoutEngine {
 					+ (style.margin.right.resolved(percentageBasis: 0) ?? 0)
 				hasContent = true
 				pendingSpace = nil
+			case .image(let image, let style, _):
+				if hasContent, let space = pendingSpace {
+					lineWidth += fonts.font(for: space).width(of: " ", size: space.fontSize) + space.wordSpacing
+				}
+				lineWidth += replacedBoxMetrics(of: image, style: style, containingWidth: nil).width
+				hasContent = true
+				pendingSpace = nil
 			case .word(let word, let style, _, _):
 				if hasContent, let space = pendingSpace {
 					lineWidth += fonts.font(for: space).width(of: " ", size: space.fontSize) + space.wordSpacing
@@ -575,31 +824,6 @@ public final class LayoutEngine {
 			}
 		}
 		return max(maximum, lineWidth)
-	}
-
-	/// The border-box width needed at ordinary soft wrap opportunities. Emergency
-	/// opportunities from `overflow-wrap: break-word` deliberately do not count;
-	/// `anywhere` and `word-break: break-all` do count.
-	private func minContentWidth(of box: BlockBox) -> Double {
-		let border = box.usedBorder
-		let padding = (box.style.padding.left.resolved(percentageBasis: 0) ?? 0)
-			+ (box.style.padding.right.resolved(percentageBasis: 0) ?? 0)
-		let margins = (box.style.margin.left.resolved(percentageBasis: 0) ?? 0)
-			+ (box.style.margin.right.resolved(percentageBasis: 0) ?? 0)
-		let extras = border.left + border.right + padding + margins
-
-		let contentWidth: Double
-		if let image = box.image {
-			contentWidth = box.style.width.resolved(percentageBasis: 0) ?? Double(image.width)
-		} else if box.establishesInlineContext {
-			var tokens: [InlineToken] = []
-			for child in box.children { collectInline(child, into: &tokens, href: nil, decorations: TextDecorationRuns()) }
-			contentWidth = minContentWidth(of: tokens, textIndent: box.style.textIndent)
-		} else {
-			contentWidth = box.children.compactMap { $0 as? BlockBox }.map(minContentWidth(of:)).max() ?? 0
-		}
-		let specifiedWidth = box.style.width.resolved(percentageBasis: 0) ?? 0
-		return max(contentWidth, specifiedWidth) + extras
 	}
 
 	private func minContentWidth(of tokens: [InlineToken], textIndent: Double) -> Double {
@@ -639,6 +863,16 @@ public final class LayoutEngine {
 				runWidth += (style.margin.left.resolved(percentageBasis: 0) ?? 0)
 					+ style.fontSize
 					+ (style.margin.right.resolved(percentageBasis: 0) ?? 0)
+			case .image(let image, let style, _):
+				// A line may break on either side of a replaced image, so it is a
+				// run of its own.
+				finishRun()
+				pendingSpace = nil
+				beginContent()
+				let metrics = replacedBoxMetrics(of: image, style: style, containingWidth: nil)
+				runWidth += isCompressibleReplaced(style) ? metrics.width - metrics.contentWidth : metrics.width
+				finishRun()
+				hasContent = false
 			case .word(let word, let style, _, _):
 				prepareContent(wrapping: style.whiteSpace.wraps)
 				beginContent()

@@ -1,13 +1,15 @@
 //  ImageDecoder.swift
 //  SwiftTextRender
 //
-//  Turns raster image bytes into a PDF Image XObject without decoding the
-//  pixels — which keeps the engine dependency-free (no zlib/libjpeg):
+//  Turns raster image bytes into a PDF Image XObject, decoding pixels only
+//  where PDF cannot take the file's own encoding — which keeps the engine
+//  dependency-free (no zlib/libjpeg):
 //   • JPEG embeds verbatim with the DCTDecode filter.
-//   • PNG (grayscale or truecolor, non-interlaced) embeds its raw IDAT stream
-//     with FlateDecode and the PNG predictor, which PDF readers apply natively.
-//  Unsupported variants (palette, alpha, interlaced) still report intrinsic
-//  dimensions so layout can reserve space; the painter draws a placeholder.
+//   • PNG embeds its raw IDAT stream with FlateDecode and the PNG predictor,
+//     which PDF readers apply natively; transparency and interlacing are
+//     unpacked by `PNGImage` into colour plus a soft mask.
+//  Unsupported formats still report intrinsic dimensions where they can so
+//  layout can reserve space; the painter draws a placeholder.
 
 import Foundation
 import SwiftTextPDFWriter
@@ -19,6 +21,16 @@ public struct DecodedImage {
 	public let height: Int
 	/// The Image XObject, or `nil` if the format can't be embedded yet.
 	public let pdfStream: PDFStream?
+	/// The alpha channel as a grayscale Image XObject — the `/SMask` the image
+	/// is drawn through — or `nil` when the image is opaque.
+	public let softMask: PDFStream?
+
+	init(width: Int, height: Int, pdfStream: PDFStream?, softMask: PDFStream? = nil) {
+		self.width = width
+		self.height = height
+		self.pdfStream = pdfStream
+		self.softMask = softMask
+	}
 }
 
 public enum ImageDecoder {
@@ -95,70 +107,6 @@ public enum ImageDecoder {
 	// MARK: - PNG
 
 	private static func decodePNG(_ data: Data) -> DecodedImage? {
-		let bytes = [UInt8](data)
-		func be32(_ offset: Int) -> Int {
-			Int(bytes[offset]) << 24 | Int(bytes[offset + 1]) << 16 | Int(bytes[offset + 2]) << 8 | Int(bytes[offset + 3])
-		}
-
-		var index = 8
-		var width = 0, height = 0, bitDepth = 8, colorType = 0, interlace = 0
-		var sawIHDR = false
-		var idat = Data()
-		while index + 8 <= bytes.count {
-			let length = be32(index)
-			let type = String(bytes: bytes[index + 4 ..< index + 8], encoding: .ascii) ?? ""
-			let dataStart = index + 8
-			guard dataStart + length + 4 <= bytes.count else { break }
-			switch type {
-			case "IHDR":
-				width = be32(dataStart)
-				height = be32(dataStart + 4)
-				bitDepth = Int(bytes[dataStart + 8])
-				colorType = Int(bytes[dataStart + 9])
-				interlace = Int(bytes[dataStart + 12])
-				sawIHDR = true
-			case "IDAT":
-				idat.append(contentsOf: bytes[dataStart ..< dataStart + length])
-			case "IEND":
-				index = bytes.count
-				continue
-			default:
-				break
-			}
-			index = dataStart + length + 4 // skip data and CRC
-		}
-
-		guard sawIHDR, width > 0, height > 0 else { return nil }
-
-		let colors: Int
-		let colorSpace: String
-		switch colorType {
-		case 0: colors = 1; colorSpace = "/DeviceGray"
-		case 2: colors = 3; colorSpace = "/DeviceRGB"
-		default:
-			// Palette (3), grayscale+alpha (4) and truecolor+alpha (6) need extra
-			// handling (palette/SMask); reserve space but don't embed yet.
-			return DecodedImage(width: width, height: height, pdfStream: nil)
-		}
-		guard interlace == 0 else {
-			return DecodedImage(width: width, height: height, pdfStream: nil)
-		}
-
-		let stream = PDFStream(stream: [idat], extra: [
-			("Type", "/XObject"),
-			("Subtype", "/Image"),
-			("Width", width),
-			("Height", height),
-			("ColorSpace", colorSpace),
-			("BitsPerComponent", bitDepth),
-			("Filter", "/FlateDecode"),
-			("DecodeParms", PDFDictionary([
-				("Predictor", 15),
-				("Colors", colors),
-				("BitsPerComponent", bitDepth),
-				("Columns", width)
-			]))
-		])
-		return DecodedImage(width: width, height: height, pdfStream: stream)
+		PNGImage(data)?.decodedImage()
 	}
 }

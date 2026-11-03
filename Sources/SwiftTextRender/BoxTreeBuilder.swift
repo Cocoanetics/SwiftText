@@ -11,27 +11,42 @@ import SwiftTextCSS
 public enum BoxTreeBuilder {
 
 	/// Build a box for a styled element, or `nil` if it is `display: none`.
+	///
+	/// - Parameter loadedImages: Images fetched ahead of layout (see
+	///   `RenderOptions.imageLoader`), by `src` attribute value.
 	public static func build(
 		from element: StyledElement,
 		baseURL: URL? = nil,
+		loadedImages: LoadedImages = [:],
 		warningHandler: ((String) -> Void)? = nil
 	) -> Box? {
 		let style = element.computedStyle
 		if style.display == .none { return nil }
 
-		// Replaced <img>: a leaf block carrying the decoded image or a visible
-		// placeholder when its source cannot be rendered.
+		// Replaced <img>: a leaf carrying the decoded image or a visible
+		// placeholder when its source cannot be rendered. Like any inline
+		// element it sits in the line, unless it is styled block-level.
 		if element.localName == "img" {
-			let box = BlockBox(style: style)
-			box.image = loadImage(
+			let image = loadImage(
 				source: element.attributeValue("src"),
 				baseURL: baseURL,
+				loadedImages: loadedImages,
 				warningHandler: warningHandler)
+			let box: Box
+			if style.display.isBlockLevel {
+				let block = BlockBox(style: style)
+				block.image = image
+				box = block
+			} else {
+				let inline = InlineBox(style: style)
+				inline.image = image
+				box = inline
+			}
 			box.element = element
 			return box
 		}
 
-		let childBoxes = buildChildBoxes(of: element, baseURL: baseURL, warningHandler: warningHandler)
+		let childBoxes = buildChildBoxes(of: element, baseURL: baseURL, loadedImages: loadedImages, warningHandler: warningHandler)
 
 		let box: Box
 		switch style.display {
@@ -132,13 +147,14 @@ public enum BoxTreeBuilder {
 	private static func buildChildBoxes(
 		of element: StyledElement,
 		baseURL: URL?,
+		loadedImages: LoadedImages,
 		warningHandler: ((String) -> Void)?
 	) -> [Box] {
 		var result: [Box] = []
 		for child in element.children {
 			switch child {
 			case .element(let childElement):
-				if let box = build(from: childElement, baseURL: baseURL, warningHandler: warningHandler) {
+				if let box = build(from: childElement, baseURL: baseURL, loadedImages: loadedImages, warningHandler: warningHandler) {
 					result.append(box)
 				}
 			case .text(let text):
@@ -150,11 +166,13 @@ public enum BoxTreeBuilder {
 	}
 
 	private static func loadImage(
-		source: String?,
+		source rawSource: String?,
 		baseURL: URL?,
+		loadedImages: LoadedImages,
 		warningHandler: ((String) -> Void)?
 	) -> DecodedImage {
-		guard let source, !source.isEmpty else {
+		let source = rawSource?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+		guard !source.isEmpty else {
 			warningHandler?("an <img> element has no source; rendering a placeholder")
 			return missingImagePlaceholder()
 		}
@@ -170,17 +188,26 @@ public enum BoxTreeBuilder {
 			return image
 		}
 
-		guard let url = resolvedImageURL(source, baseURL: baseURL) else {
-			warningHandler?("image source '\(source)' is not a local file; rendering a placeholder")
-			return missingImagePlaceholder()
-		}
-
 		let data: Data
-		do {
-			data = try Data(contentsOf: url)
-		} catch {
-			warningHandler?("image source '\(source)' could not be read: \(error.localizedDescription); rendering a placeholder")
-			return missingImagePlaceholder()
+		if let loaded = loadedImages[source] {
+			switch loaded {
+			case .success(let bytes):
+				data = bytes
+			case .failure(let error):
+				warningHandler?("image source '\(source)' could not be loaded: \(error); rendering a placeholder")
+				return missingImagePlaceholder()
+			}
+		} else {
+			guard let url = resolvedImageURL(source, baseURL: baseURL) else {
+				warningHandler?("image source '\(source)' is not a local file; rendering a placeholder")
+				return missingImagePlaceholder()
+			}
+			do {
+				data = try Data(contentsOf: url)
+			} catch {
+				warningHandler?("image source '\(source)' could not be read: \(error.localizedDescription); rendering a placeholder")
+				return missingImagePlaceholder()
+			}
 		}
 
 		guard let image = ImageDecoder.decode(data) else {

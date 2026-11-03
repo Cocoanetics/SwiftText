@@ -64,6 +64,17 @@ public enum FontStyle: String, Equatable, Sendable {
 
 public enum TextAlign: String, Equatable, Sendable {
 	case start, end, left, right, center, justify
+	/// The legacy alignments of HTML's `<center>` and `align` attributes: text
+	/// aligns as `left`/`right`/`center` would, and so does any block-level
+	/// child narrower than the box. Tables do not inherit them.
+	case webkitLeft = "-webkit-left"
+	case webkitRight = "-webkit-right"
+	case webkitCenter = "-webkit-center"
+
+	/// Whether this is one of the legacy `-webkit-*` alignments.
+	public var isLegacy: Bool {
+		self == .webkitLeft || self == .webkitRight || self == .webkitCenter
+	}
 }
 
 public enum Direction: String, Equatable, Sendable {

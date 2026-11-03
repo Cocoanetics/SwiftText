@@ -85,8 +85,14 @@ public struct StandardFont: Equatable {
 	public func descent(size: Double) -> Double { -descentUnits * size / unitsPerEm }
 
 	/// Base-14 fonts use WinAnsiEncoding (CP1252); treat its printable repertoire
-	/// as covered (ASCII, Latin-1, smart quotes, dashes, bullet…).
+	/// as covered (ASCII, Latin-1, smart quotes, dashes, bullet…) — all but the
+	/// Euro sign in the proportional faces. The classic base-14 metrics predate
+	/// the Euro, so every viewer draws its own: 556 units wide for Helvetica in
+	/// Acrobat, pdf.js or Ghostscript, but 744 in the Helvetica and Times macOS
+	/// substitutes, where it runs into the digit after it. No single advance
+	/// suits both, so `€` is drawn from a real face when one is installed.
 	func covers(_ scalar: Unicode.Scalar) -> Bool {
+		if scalar == "€", !baseFontName.hasPrefix("Courier") { return false }
 		guard let byte = String(scalar).data(using: .windowsCP1252)?.first else { return false }
 		return (0x20...0x7E).contains(byte) || byte >= 0x80
 	}
@@ -201,7 +207,7 @@ public final class FontBook {
 		let italic = style.fontStyle != .normal
 		let base14 = StandardFont.helvetica(bold: bold, italic: italic)
 		if base14.covers(scalar) { return .standard(base14) }
-		if systemFallbackEnabled, let system = systemFallback(for: scalar) { return .embedded(system) }
+		if systemFallbackEnabled, let system = systemFallback(for: scalar, style: style) { return .embedded(system) }
 		return primary
 	}
 
@@ -211,8 +217,8 @@ public final class FontBook {
 	}
 
 	/// Lazily load and cache the first bundled system font that renders `scalar`.
-	private func systemFallback(for scalar: Unicode.Scalar) -> EmbeddedFont? {
-		for path in Self.systemCandidates(for: scalar) {
+	private func systemFallback(for scalar: Unicode.Scalar, style: ComputedStyle) -> EmbeddedFont? {
+		for path in Self.systemCandidates(for: scalar, style: style) {
 			if let cached = systemFallbackCache[path] {
 				if let face = cached, face.hasGlyph(for: scalar) { return face }
 				continue
@@ -233,8 +239,27 @@ public final class FontBook {
 
 	/// Candidate system font files for the script of `scalar` (best-effort;
 	/// missing paths are skipped). macOS and common Linux locations.
-	private static func systemCandidates(for scalar: Unicode.Scalar) -> [String] {
+	private static func systemCandidates(for scalar: Unicode.Scalar, style: ComputedStyle) -> [String] {
 		switch scalar.value {
+		case 0x20AC:
+			// The Euro stands in for a base-14 glyph, so it comes from a face with
+			// the base-14 metrics — Arial or Liberation for Helvetica, Times New
+			// Roman or Liberation for Times — in the text's weight and slant.
+			let bold = style.fontWeight >= 600
+			let italic = style.fontStyle != .normal
+			let macStyle = bold ? (italic ? " Bold Italic" : " Bold") : (italic ? " Italic" : "")
+			let liberationStyle = bold ? (italic ? "BoldItalic" : "Bold") : (italic ? "Italic" : "Regular")
+			let family = genericFamily(style.fontFamily) == .serif
+				? (mac: "Times New Roman", liberation: "LiberationSerif")
+				: (mac: "Arial", liberation: "LiberationSans")
+			return [
+				"/System/Library/Fonts/Supplemental/\(family.mac)\(macStyle).ttf",
+				"/Library/Fonts/\(family.mac)\(macStyle).ttf",
+				"/usr/share/fonts/truetype/liberation/\(family.liberation)-\(liberationStyle).ttf",
+				"/usr/share/fonts/truetype/liberation2/\(family.liberation)-\(liberationStyle).ttf",
+				"/usr/share/fonts/liberation-sans/\(family.liberation)-\(liberationStyle).ttf",
+				"/usr/share/fonts/liberation-serif/\(family.liberation)-\(liberationStyle).ttf"
+			]
 		case 0x0600...0x06FF, 0x0750...0x077F, 0x08A0...0x08FF, 0xFB50...0xFDFF, 0xFE70...0xFEFF:
 			return [ // Arabic
 				"/System/Library/Fonts/Supplemental/GeezaPro.ttc",

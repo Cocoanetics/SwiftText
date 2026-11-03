@@ -53,6 +53,17 @@ struct InlineWhitespaceTests {
 		#expect(try await singleLineText("<p>\n  Wort A <strong>fett</strong>\n</p>") == "Wort A fett")
 	}
 
+	/// Email bodies arrive with CR LF line ends. Swift reads `"\r\n"` as a single
+	/// character, so unless it is normalized like HTML does, each source line
+	/// break lays out as a wide invisible word that indents the line after it.
+	@Test("CR LF and lone CR line ends collapse like LF", arguments: [
+		"<p>\r\n    Wort A\r\n<strong>fett</strong>\r\n  danach.\r\n</p>",
+		"<p>\r    Wort A\r<strong>fett</strong>\r  danach.\r</p>"
+	])
+	func carriageReturnsCollapseLikeNewlines(_ html: String) async throws {
+		#expect(try await singleLineText(html) == "Wort A fett danach.")
+	}
+
 	/// A hard break (Markdown's two trailing spaces, or a trailing backslash)
 	/// becomes `<br>`: it must still break the line, and must not leave a
 	/// leading space on the next one.

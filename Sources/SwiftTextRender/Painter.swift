@@ -165,6 +165,14 @@ public final class Painter {
 				stream.stroke()
 			}
 			stream.popState()
+		case .image(let image, let metrics, let top):
+			let marginTop = fragment.y + top
+			drawImage(image, x: fragment.x + metrics.contentX, top: marginTop + metrics.contentY,
+			          width: metrics.contentWidth, height: metrics.contentHeight)
+			if let href = fragment.href {
+				addLinkAnnotation(x: fragment.x, width: metrics.width, top: marginTop,
+				                  bottom: marginTop + metrics.height, anchor: fragment.baseline, href: href)
+			}
 		}
 	}
 
@@ -230,17 +238,28 @@ public final class Painter {
 
 	private func paintImage(_ box: BlockBox, image: DecodedImage) {
 		let border = box.usedBorder
-		let x = box.x + border.left
-		let topColumn = box.y + border.top
-		let width = box.width - border.left - border.right
-		let height = box.height - border.top - border.bottom
+		let style = box.style
+		let paddingLeft = style.padding.left.resolved(percentageBasis: 0) ?? 0
+		let paddingTop = style.padding.top.resolved(percentageBasis: 0) ?? 0
+		let paddingRight = style.padding.right.resolved(percentageBasis: 0) ?? 0
+		let paddingBottom = style.padding.bottom.resolved(percentageBasis: 0) ?? 0
+		drawImage(image,
+		          x: box.x + border.left + paddingLeft,
+		          top: box.y + border.top + paddingTop,
+		          width: box.width - border.left - border.right - paddingLeft - paddingRight,
+		          height: box.height - border.top - border.bottom - paddingTop - paddingBottom)
+	}
+
+	/// Draw an image (or its placeholder) into a content box given in column
+	/// coordinates.
+	private func drawImage(_ image: DecodedImage, x: Double, top: Double, width: Double, height: Double) {
 		guard width > 0, height > 0 else { return }
-		let yUpBottom = geometry.pageHeightPx - pageY(topColumn) - height
+		let yUpBottom = geometry.pageHeightPx - pageY(top) - height
 
 		stream.pushState()
 		if let imageStream = image.pdfStream {
 			// The image is mapped onto the unit square by the CTM.
-			let name = builder.imageResourceName(for: imageStream)
+			let name = builder.imageResourceName(for: imageStream, softMask: image.softMask)
 			stream.setMatrix(width, 0, 0, height, x, yUpBottom)
 			stream.drawXObject(name)
 		} else {
@@ -274,9 +293,9 @@ public final class Painter {
 			let rtl = box.style.direction == .rtl
 			let x: Double
 			switch box.style.textAlign {
-			case .center: x = geometry.marginPx + extra / 2
-			case .right: x = geometry.marginPx + extra
-			case .left: x = geometry.marginPx
+			case .center, .webkitCenter: x = geometry.marginPx + extra / 2
+			case .right, .webkitRight: x = geometry.marginPx + extra
+			case .left, .webkitLeft: x = geometry.marginPx
 			case .end: x = geometry.marginPx + (rtl ? 0 : extra)
 			case .start: x = geometry.marginPx + (rtl ? extra : 0)
 			case .justify: x = geometry.marginPx
@@ -414,15 +433,22 @@ public final class Painter {
 
 	/// A `/Link` annotation covering a fragment, if it falls on this page slice.
 	private func addLinkAnnotation(for fragment: TextFragment, font: Font, href: String) {
-		guard paintingRepeatedHeader || (fragment.baseline >= geometry.columnTop
-		      && fragment.baseline <= geometry.columnTop + geometry.sliceHeightPx) else { return }
 		let ascent = font.ascent(size: fragment.style.fontSize)
 		let descent = font.descent(size: fragment.style.fontSize)
-		let topPageY = pageY(fragment.baseline) - ascent
-		let bottomPageY = pageY(fragment.baseline) + descent
+		addLinkAnnotation(x: fragment.x, width: fragment.width, top: fragment.baseline - ascent,
+		                  bottom: fragment.baseline + descent, anchor: fragment.baseline, href: href)
+	}
+
+	/// A `/Link` annotation over a rectangle in column coordinates, if the line
+	/// it belongs to — identified by its baseline, `anchor` — is on this page.
+	private func addLinkAnnotation(x: Double, width: Double, top: Double, bottom: Double, anchor: Double, href: String) {
+		guard paintingRepeatedHeader || (anchor >= geometry.columnTop
+		      && anchor <= geometry.columnTop + geometry.sliceHeightPx) else { return }
+		let topPageY = pageY(top)
+		let bottomPageY = pageY(bottom)
 		// Annotation rectangles are in default (unscaled, y-up) user space.
-		let x0 = fragment.x * pxToPt
-		let x1 = (fragment.x + fragment.width) * pxToPt
+		let x0 = x * pxToPt
+		let x1 = (x + width) * pxToPt
 		let yTop = (geometry.pageHeightPx - topPageY) * pxToPt
 		let yBottom = (geometry.pageHeightPx - bottomPageY) * pxToPt
 		linkAnnotations.append(PDFDictionary([

@@ -80,9 +80,12 @@ public final class BlockBox: Box {
 	}
 }
 
-/// An inline-level container (e.g. `<span>`, `<em>`).
+/// An inline-level container (e.g. `<span>`, `<em>`), or an inline replaced
+/// image, which sits in the line as a single unbreakable box.
 public final class InlineBox: Box {
 	public var children: [Box] = []
+	/// For an inline `<img>`, the decoded image to draw.
+	public var image: DecodedImage?
 
 	init(style: ComputedStyle, children: [Box] = []) {
 		self.children = children
@@ -114,6 +117,19 @@ public final class LineBox {
 	public init() {}
 }
 
+/// The used geometry of a replaced image placed inline: its margin box, and
+/// where its content box sits inside it.
+struct ReplacedBoxMetrics {
+	/// Margin-box size.
+	let width: Double
+	let height: Double
+	/// The content box, relative to the margin box's top-left corner.
+	let contentX: Double
+	let contentY: Double
+	let contentWidth: Double
+	let contentHeight: Double
+}
+
 /// The element that established a propagated text decoration and the style
 /// whose metrics and color should paint it.
 struct TextDecorationRun: Equatable {
@@ -130,6 +146,9 @@ struct TextDecorationRuns: Equatable {
 public struct TextFragment {
 	enum InlineControl {
 		case checkbox(isChecked: Bool, size: Double, leadingMargin: Double)
+		/// An inline image. `top` is its margin box's offset below the line's
+		/// top, which only `vertical-align` against the finished line decides.
+		case image(DecodedImage, ReplacedBoxMetrics, top: Double)
 	}
 
 	public var text: String
@@ -151,6 +170,12 @@ public struct TextFragment {
 	/// Decorations are identified by their originating element so whitespace
 	/// gaps within one run can be painted without joining separate runs.
 	var decorations: TextDecorationRuns
+
+	/// Whether this fragment is an inline image rather than text.
+	var isReplaced: Bool {
+		if case .image = inlineControl { return true }
+		return false
+	}
 
 	public init(text: String, style: ComputedStyle, x: Double, y: Double, width: Double, baseline: Double, href: String? = nil, bidiLevel: UInt8 = 0, font: Font? = nil) {
 		self.text = text

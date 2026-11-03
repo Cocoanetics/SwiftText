@@ -38,13 +38,22 @@ public struct RenderOptions {
 	/// Disable it to get verbatim, greppable content streams (e.g. in tests that
 	/// assert on literal operator bytes).
 	public var compressStreams: Bool
+	/// Loads the images the document references by URL — `http` and `https`
+	/// with URLSession by default (`HTMLRenderer.urlSessionImageLoader`).
+	/// Supply your own to resolve other schemes, such as an email's `cid:`
+	/// parts, or `nil` to render without touching the network: remote images
+	/// then draw as placeholders. Inline `data:` URIs and local files are read
+	/// either way.
+	public var imageLoader: ImageLoader?
 
-	public init(pageWidthPx: Double = 816, pageHeightPx: Double? = 1056, pageMarginPx: Double = 32, baseDirection: BaseDirection = .auto, compressStreams: Bool = true) {
+	public init(pageWidthPx: Double = 816, pageHeightPx: Double? = 1056, pageMarginPx: Double = 32, baseDirection: BaseDirection = .auto, compressStreams: Bool = true,
+	            imageLoader: ImageLoader? = HTMLRenderer.urlSessionImageLoader) {
 		self.pageWidthPx = pageWidthPx
 		self.pageHeightPx = pageHeightPx
 		self.pageMarginPx = pageMarginPx
 		self.baseDirection = baseDirection
 		self.compressStreams = compressStreams
+		self.imageLoader = imageLoader
 	}
 }
 
@@ -66,7 +75,8 @@ public enum HTMLRenderer {
 	///   - fonts: A font book; register OpenType fonts on it to embed them and
 	///     render arbitrary families/scripts. Defaults to base-14 only.
 	///   - baseURL: The directory local image paths are resolved against.
-	///   - options: Page geometry.
+	///   - options: Page geometry, and how images referenced by URL are loaded
+	///     (fetched over HTTP by default; see `RenderOptions.imageLoader`).
 	///   - title: Optional document title written to the PDF Info dictionary.
 	///   - authors: Document authors written to the PDF Info dictionary.
 	///   - warningHandler: Receives warnings for images that cannot be rendered.
@@ -106,7 +116,12 @@ public enum HTMLRenderer {
 		}
 
 		let styled = StyledElement.build(domElement: root, resolver: resolver, baseDirection: baseDirection)
-		guard let rootBox = BoxTreeBuilder.build(from: styled, baseURL: baseURL, warningHandler: reportWarning) as? BlockBox else { throw RenderError.noRootBox }
+		var loadedImages: LoadedImages = [:]
+		if let imageLoader = options.imageLoader {
+			loadedImages = await loadImages(referencedBy: styled, baseURL: baseURL, using: imageLoader)
+		}
+		guard let rootBox = BoxTreeBuilder.build(from: styled, baseURL: baseURL, loadedImages: loadedImages,
+		                                         warningHandler: reportWarning) as? BlockBox else { throw RenderError.noRootBox }
 
 		let engine = LayoutEngine(fonts: fonts)
 		let margin = options.pageMarginPx
@@ -315,7 +330,8 @@ public enum HTMLRenderer {
 		var words: [String] = []
 		func gather(_ box: Box) {
 			guard let block = box as? BlockBox else { return }
-			for line in block.lines { for fragment in line.fragments { words.append(fragment.text) } }
+			// Inline images contribute fragments without text.
+			for line in block.lines { for fragment in line.fragments where !fragment.text.isEmpty { words.append(fragment.text) } }
 			for child in block.children { gather(child) }
 		}
 		gather(box)

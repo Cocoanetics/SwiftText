@@ -21,7 +21,9 @@ thead { display: table-header-group }
 tbody { display: table-row-group }
 tfoot { display: table-footer-group }
 tr { display: table-row }
-td, th { display: table-cell; padding: 1px }
+thead, tbody, tfoot, tr { vertical-align: middle }
+td, th { display: table-cell; padding: 1px; vertical-align: inherit }
+center { text-align: -webkit-center }
 button, input, select, textarea { display: inline-block }
 area, base, basefont, datalist, head, link, meta, noembed, noframes, param, \
 script, style, template, title { display: none }

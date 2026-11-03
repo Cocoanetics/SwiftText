@@ -32,12 +32,17 @@ public final class FontResourceBuilder {
 		pdf.addObject(resourcesDict)
 	}
 
-	/// The resource name for an image XObject, embedding it on first use.
-	func imageResourceName(for stream: PDFStream) -> String {
+	/// The resource name for an image XObject, embedding it — and the soft mask
+	/// carrying its alpha channel, if any — on first use.
+	func imageResourceName(for stream: PDFStream, softMask: PDFStream? = nil) -> String {
 		let identity = ObjectIdentifier(stream)
 		if let name = imageNames[identity] { return name }
 		let name = "Im\(imageNames.count + 1)"
 		imageNames[identity] = name
+		if let softMask {
+			if softMask.number == nil { pdf.addObject(softMask) }
+			stream.setExtra("SMask", softMask.reference)
+		}
 		if stream.number == nil { pdf.addObject(stream) }
 		xobjectSubdictionary[name] = stream.reference
 		return name
@@ -65,6 +70,15 @@ public final class FontResourceBuilder {
 		usedGlyphs[fontKey, default: [:]][glyph] = scalar
 	}
 
+	/// The first WinAnsiEncoding code a standard font's `/Widths` describes.
+	private static let firstWinAnsiCode = 32
+
+	/// The character each WinAnsiEncoding (Windows CP1252) code from
+	/// `firstWinAnsiCode` to 255 shows; `nil` where CP1252 leaves a code unused.
+	private static let winAnsiScalars: [Unicode.Scalar?] = (firstWinAnsiCode ... 255).map { code in
+		String(data: Data([UInt8(code)]), encoding: .windowsCP1252)?.unicodeScalars.first
+	}
+
 	/// Create the PDF font objects. Call once after all pages are painted.
 	func finalize() {
 		for (key, font) in standardFonts {
@@ -72,7 +86,16 @@ public final class FontResourceBuilder {
 				("Type", "/Font"),
 				("Subtype", "/Type1"),
 				("BaseFont", "/\(font.baseFontName)"),
-				("Encoding", "/WinAnsiEncoding")
+				("Encoding", "/WinAnsiEncoding"),
+				// Without widths a viewer advances by its own copy of the base-14
+				// metrics, which disagree with these here and there (macOS's ±, µ
+				// and ÷, and the Euro the classic set never had). Explicit widths
+				// make every viewer advance exactly as layout measured.
+				("FirstChar", Self.firstWinAnsiCode),
+				("LastChar", Self.winAnsiScalars.count + Self.firstWinAnsiCode - 1),
+				("Widths", PDFArray(Self.winAnsiScalars.map { scalar -> PDFValue in
+					Int((scalar.map(font.advance) ?? 0).rounded())
+				}))
 			])
 		}
 		for (key, font) in embeddedFonts {

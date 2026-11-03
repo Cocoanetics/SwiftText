@@ -115,6 +115,7 @@ public final class StyleResolver {
 		// element's final `direction` (block flow is horizontal, so the inline axis
 		// is left↔right): inline-start is left in LTR, right in RTL.
 		applyLogicalInline(winners, to: &style, rootFontSize: rootFontSize)
+		adjustStyle(&style, for: element)
 		return style
 	}
 
@@ -175,6 +176,15 @@ public final class StyleResolver {
 		}
 
 		considerRules(uaRules)
+		// Presentational hints count as author rules of zero specificity that
+		// precede the style sheets, so CSS for the same property beats them.
+		for declaration in presentationalHints(for: element) {
+			for longhand in expand(declaration) {
+				consider(name: longhand.name, value: longhand.value,
+				         level: cascadeLevel(.author, important: false, inline: false),
+				         specificity: .zero)
+			}
+		}
 		considerRules(authorRules)
 
 		if let inlineStyle = element.attributeValue("style") {
