@@ -747,6 +747,9 @@ public final class LayoutEngine {
 
 	private func measureIntrinsicWidth(of box: BlockBox, _ size: IntrinsicSize) -> Double {
 		let style = box.style
+		// Collapsed borders decide the table's and its cells' used borders, and
+		// the measurement is cached, so they have to be settled first.
+		if style.display == .table { resolveCollapsedBorders(in: box) }
 		let border = box.usedBorder
 		let padding = (style.padding.left.resolved(percentageBasis: 0) ?? 0)
 			+ (style.padding.right.resolved(percentageBasis: 0) ?? 0)

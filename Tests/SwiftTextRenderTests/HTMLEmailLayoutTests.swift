@@ -224,6 +224,15 @@ struct HTMLEmailLayoutTests {
 		for label in labels { #expect(label.lines.count == 1) }
 	}
 
+	@Test("A nested collapsed-border table measures with its resolved borders")
+	func nestedCollapsedTableMeasuresResolvedBorders() async throws {
+		let inner = "<table style=\"border-collapse: collapse\"><tr><td style=\"border: 4px solid black; padding: 0\">A</td><td style=\"border: 4px solid black; padding: 0\">B</td></tr></table>"
+		let alone = try #require(blocks(try await layout(inner, width: 400), "table").first)
+		let nested = try await layout("<table cellspacing=\"0\" cellpadding=\"0\"><tr><td>\(inner)</td></tr></table>", width: 400)
+		let nestedTable = try #require(blocks(nested, "table").last)
+		#expect(abs(nestedTable.width - alone.width) < 0.01)
+	}
+
 	// MARK: - Centring
 
 	@Test("Auto margins centre a block narrower than its container")
