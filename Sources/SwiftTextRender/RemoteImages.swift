@@ -57,25 +57,21 @@ extension HTMLRenderer {
 		if let status, !(200 ... 299).contains(status) {
 			throw ImageLoadingError.httpStatus(status)
 		}
-		guard data.count <= maximumRemoteImageBytes else { throw ImageLoadingError.tooLarge(data.count) }
 		return data
 	}
 
-	/// The body and HTTP status of a request, through URLSession's
-	/// completion-handler API, which every platform's Foundation has (the async
-	/// one is missing from some).
+	/// The body and HTTP status of a request. The body is cut off, and the
+	/// request cancelled, as soon as it exceeds `maximumRemoteImageBytes`, so a
+	/// server cannot make the renderer buffer more than that. Uses URLSession's
+	/// delegate API, which every platform's Foundation has.
 	private static func fetch(_ request: URLRequest) async throws -> (Data, Int?) {
-		try await withCheckedThrowingContinuation { continuation in
-			let task = URLSession.shared.dataTask(with: request) { data, response, error in
-				if let error {
-					continuation.resume(throwing: error)
-				} else if let data {
-					continuation.resume(returning: (data, (response as? HTTPURLResponse)?.statusCode))
-				} else {
-					continuation.resume(throwing: ImageLoadingError.noData)
-				}
+		let collector = BodyCollector()
+		return try await withTaskCancellationHandler {
+			try await withCheckedThrowingContinuation { continuation in
+				collector.start(request, continuation: continuation)
 			}
-			task.resume()
+		} onCancel: {
+			collector.cancel()
 		}
 	}
 
@@ -135,5 +131,84 @@ extension HTMLRenderer {
 		guard let baseURL, !baseURL.isFileURL,
 		      let resolved = URL(string: source, relativeTo: baseURL)?.absoluteURL else { return nil }
 		return resolved
+	}
+}
+
+/// Collects a response body through a delegate-driven session, rejecting it
+/// as soon as the declared or received size passes the limit.
+private final class BodyCollector: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+	private let lock = NSLock()
+	private var data = Data()
+	private var status: Int?
+	private var continuation: CheckedContinuation<(Data, Int?), any Error>?
+	private var session: URLSession?
+	private var task: URLSessionDataTask?
+
+	func start(_ request: URLRequest, continuation: CheckedContinuation<(Data, Int?), any Error>) {
+		lock.lock()
+		self.continuation = continuation
+		let session = URLSession(configuration: .ephemeral, delegate: self, delegateQueue: nil)
+		let task = session.dataTask(with: request)
+		self.session = session
+		self.task = task
+		lock.unlock()
+		task.resume()
+	}
+
+	func cancel() {
+		lock.lock()
+		let task = self.task
+		lock.unlock()
+		task?.cancel()
+	}
+
+	private func finish(_ result: Result<(Data, Int?), any Error>) {
+		lock.lock()
+		let continuation = self.continuation
+		self.continuation = nil
+		let session = self.session
+		self.session = nil
+		lock.unlock()
+		session?.invalidateAndCancel()
+		continuation?.resume(with: result)
+	}
+
+	func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse,
+	                completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
+		lock.lock()
+		status = (response as? HTTPURLResponse)?.statusCode
+		lock.unlock()
+		let declared = response.expectedContentLength
+		if declared > Int64(HTMLRenderer.maximumRemoteImageBytes) {
+			completionHandler(.cancel)
+			finish(.failure(ImageLoadingError.tooLarge(Int(clamping: declared))))
+		} else {
+			completionHandler(.allow)
+		}
+	}
+
+	func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive chunk: Data) {
+		lock.lock()
+		data.append(chunk)
+		let size = data.count
+		lock.unlock()
+		if size > HTMLRenderer.maximumRemoteImageBytes {
+			dataTask.cancel()
+			finish(.failure(ImageLoadingError.tooLarge(size)))
+		}
+	}
+
+	func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: (any Error)?) {
+		lock.lock()
+		let body = data
+		let status = self.status
+		lock.unlock()
+		if let error {
+			finish(.failure(error))
+		} else if body.isEmpty {
+			finish(.failure(ImageLoadingError.noData))
+		} else {
+			finish(.success((body, status)))
+		}
 	}
 }

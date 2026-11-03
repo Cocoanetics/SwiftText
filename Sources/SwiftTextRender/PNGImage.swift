@@ -104,7 +104,8 @@ struct PNGImage {
 				break
 			}
 		}
-		guard width.multipliedReportingOverflow(by: height).partialValue <= Self.maximumDecodedPixels,
+		let pixels = width.multipliedReportingOverflow(by: height)
+		guard !pixels.overflow, pixels.partialValue <= Self.maximumDecodedPixels,
 		      let image = try? unpackedImage() else { return placeholder }
 		return image
 	}

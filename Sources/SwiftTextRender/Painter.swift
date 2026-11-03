@@ -167,6 +167,7 @@ public final class Painter {
 			stream.popState()
 		case .image(let image, let metrics, let top):
 			let marginTop = fragment.y + top
+			paintInlineImageDecorations(fragment: fragment, metrics: metrics, top: marginTop)
 			drawImage(image, x: fragment.x + metrics.contentX, top: marginTop + metrics.contentY,
 			          width: metrics.contentWidth, height: metrics.contentHeight)
 			if let href = fragment.href {
@@ -174,6 +175,24 @@ public final class Painter {
 				                  bottom: marginTop + metrics.height, anchor: fragment.baseline, href: href)
 			}
 		}
+	}
+
+	/// The background and borders of an inline image, which layout reserved
+	/// room for around its content box.
+	private func paintInlineImageDecorations(fragment: TextFragment, metrics: ReplacedBoxMetrics, top: Double) {
+		let style = fragment.style
+		let marginLeft = style.margin.left.resolved(percentageBasis: 0) ?? 0
+		let marginRight = style.margin.right.resolved(percentageBasis: 0) ?? 0
+		let marginTop = style.margin.top.resolved(percentageBasis: 0) ?? 0
+		let marginBottom = style.margin.bottom.resolved(percentageBasis: 0) ?? 0
+		let box = Box(style: style)
+		box.x = fragment.x + marginLeft
+		box.y = top + marginTop
+		box.width = metrics.width - marginLeft - marginRight
+		box.height = metrics.height - marginTop - marginBottom
+		guard box.width > 0, box.height > 0 else { return }
+		paintBackground(box)
+		paintBorders(box)
 	}
 
 	/// Paint a table header group at the top of a continuation page. Its original
