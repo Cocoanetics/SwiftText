@@ -166,7 +166,7 @@ struct PDF: AsyncParsableCommand {
 				html = markdownToHTML(md, paper: paper, landscape: landscape)
 			} else {
 				let md = try String(contentsOf: fileURL, encoding: .utf8)
-				html = markdownToHTML(md, paper: paper, landscape: landscape)
+				html = markdownToHTML(md, paper: paper, landscape: landscape, passThroughRawHTML: true)
 			}
 
 			// Write HTML to temp file in source directory (enables local image access)
@@ -363,10 +363,14 @@ struct PDF: AsyncParsableCommand {
 
 /// Converts a Markdown string to a self-contained HTML document
 /// styled for print output and with CSS `@page` size directives.
+///
+/// Raw HTML passes through only for authored Markdown; text derived from other
+/// formats (e.g. DOCX) keeps its literal angle brackets escaped.
 func markdownToHTML(
 	_ markdown: String,
 	paper: PaperSize,
 	landscape: Bool,
+	passThroughRawHTML: Bool = false,
 	pageBreakBefore: HeadingBreakLevel? = nil,
 	extraCSS: String? = nil,
 	title: String? = nil,
@@ -374,7 +378,7 @@ func markdownToHTML(
 ) -> String {
 	let orientation = landscape ? "landscape" : "portrait"
 	let pageCSS = "\(paper.cssName) \(orientation)"
-	let body = MarkdownToHTML.convert(markdown, options: [.passThroughRawHTML])
+	let body = MarkdownToHTML.convert(markdown, options: passThroughRawHTML ? [.passThroughRawHTML] : [])
 	// Optional forced page break before a given heading level (e.g. h2 so each
 	// chapter starts on a new page). Placed after the base heading rules so it
 	// wins on source order; the leading break is ignored by the print engine

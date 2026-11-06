@@ -128,12 +128,12 @@ struct Render: AsyncParsableCommand {
 
 		switch chosenFormat {
 		case .html:
-			let html = markdownToHTML(markdownText, paper: paper, landscape: landscape, pageBreakBefore: pageBreakBefore,
+			let html = markdownToHTML(markdownText, paper: paper, landscape: landscape, passThroughRawHTML: true, pageBreakBefore: pageBreakBefore,
 			                          extraCSS: userCSS, title: resolvedTitle, authors: author)
 			try writeString(html, to: outputURL)
 			print(outputURL.path)
 		case .pdf:
-			let html = markdownToHTML(markdownText, paper: paper, landscape: landscape, pageBreakBefore: pageBreakBefore,
+			let html = markdownToHTML(markdownText, paper: paper, landscape: landscape, passThroughRawHTML: true, pageBreakBefore: pageBreakBefore,
 			                          extraCSS: userCSS, title: resolvedTitle, authors: author)
 			try await renderPDF(html: html, baseURL: baseURL, outputURL: outputURL,
 			                    title: resolvedTitle, authors: author)
