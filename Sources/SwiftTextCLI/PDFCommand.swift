@@ -374,7 +374,7 @@ func markdownToHTML(
 ) -> String {
 	let orientation = landscape ? "landscape" : "portrait"
 	let pageCSS = "\(paper.cssName) \(orientation)"
-	let body = MarkdownToHTML.convert(markdown)
+	let body = MarkdownToHTML.convert(markdown, options: [.passThroughRawHTML])
 	// Optional forced page break before a given heading level (e.g. h2 so each
 	// chapter starts on a new page). Placed after the base heading rules so it
 	// wins on source order; the leading break is ignored by the print engine
