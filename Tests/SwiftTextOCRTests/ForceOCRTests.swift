@@ -33,6 +33,7 @@ struct ForceOCRTests {
 		let supported = ["en-US", "de-DE"]
 		#expect(RecognitionLanguages.unsupported(["de", "xx", "en-US"], supported: supported) == ["xx"])
 		#expect(RecognitionLanguages.unsupported(["de,en"], supported: supported).isEmpty)
+		#expect(RecognitionLanguages.unsupported(["xx"], supported: []).isEmpty)
 	}
 
 	@Test("Language hints reach the recognition request")

@@ -30,7 +30,9 @@ public enum RecognitionLanguages {
 	/// The requested codes that match no supported language, so a typo can be
 	/// reported instead of silently producing no text.
 	public static func unsupported(_ requested: [String], supported: [String]) -> [String] {
-		parse(requested).filter { code in
+		// With no supported list to check against (no recogniser on this host), nothing can be judged.
+		guard !supported.isEmpty else { return [] }
+		return parse(requested).filter { code in
 			let resolved = resolve([code], supported: supported)
 			return !supported.contains { $0.lowercased() == resolved[0].lowercased() }
 		}
