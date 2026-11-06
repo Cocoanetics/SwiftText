@@ -29,7 +29,7 @@ public enum TextLineSemanticComposer {
 		var blocks = [DocumentBlock]()
 		var metadata = [BlockMetadata]()
 
-		var tableLineIDs = Set<Int>()
+		var claimedByTable = [(lineIDs: Set<Int>, table: DocumentBlock.Table)]()
 
 		for semanticBlock in semantics.blocks {
 			let before = assigned
@@ -39,8 +39,8 @@ public enum TextLineSemanticComposer {
 				assignedLines: &assigned,
 				referenceSize: semantics.referenceSize
 			)
-			if case .table = semanticBlock.block.kind {
-				tableLineIDs.formUnion(assigned.subtracting(before))
+			if case .table(let table)? = result.block?.kind {
+				claimedByTable.append((assigned.subtracting(before), table))
 			}
 			guard let block = result.block, let context = result.metadata else { continue }
 			blocks.append(block)
@@ -71,10 +71,12 @@ public enum TextLineSemanticComposer {
 		blocks.append(contentsOf: newParagraphs.map(\.block))
 		metadata.append(contentsOf: newParagraphs.map(\.metadata))
 
-		let dropped = droppedTableText(
-			in: lineInfos.filter { tableLineIDs.contains($0.id) },
-			blocks: blocks,
-			referenceSize: semantics.referenceSize)
+		let dropped = claimedByTable.flatMap { claim in
+			droppedTableText(
+				in: lineInfos.filter { claim.lineIDs.contains($0.id) },
+				table: claim.table,
+				referenceSize: semantics.referenceSize)
+		}
 		blocks.append(contentsOf: dropped.map(\.block))
 		metadata.append(contentsOf: dropped.map(\.metadata))
 
@@ -597,35 +599,40 @@ private func makeDocumentLines(from infos: [LineInfo]) -> [DocumentBlock.TextLin
 /// A table claims every page line that touches one of its cells, but shows the
 /// segmenter's own cell text. When the segmenter's table covers only some of
 /// the columns of a row the page sets as one line, the line is claimed and its
-/// leading columns vanish. Each fragment of such a line is looked for in what
-/// the blocks print; the ones that are not there are returned as paragraphs,
-/// so nothing the page recognised is lost silently.
+/// leading columns vanish. Each fragment of such a line is looked for among the
+/// rendered cells of the table that claimed it, as a whole cell or a run of
+/// neighbouring cells in a row; every cell answers for one fragment only. The
+/// fragments that no cell shows are returned as paragraphs, so nothing the page
+/// recognised is lost silently.
 private func droppedTableText(
 	in lines: [LineInfo],
-	blocks: [DocumentBlock],
+	table: DocumentBlock.Table,
 	referenceSize: CGSize
 ) -> [(block: DocumentBlock, metadata: BlockMetadata)] {
-	guard !lines.isEmpty else { return [] }
-
 	func squeezed(_ text: String) -> String {
 		String(text.filter { !$0.isWhitespace })
 	}
 
-	var printed = ""
-	for block in blocks {
-		switch block.kind {
-		case .paragraph(let paragraph):
-			printed += squeezed(paragraph.text)
-		case .list(let list):
-			list.items.forEach { printed += squeezed($0.text) }
-		case .table(let table):
-			for cell in table.rows.joined() {
-				printed += squeezed(cell.text)
-				cell.lines.forEach { printed += squeezed($0.text) }
+	// What the renderer prints: one text per cell.
+	let cells = table.rows.map { $0.map { squeezed($0.text) } }
+	var used = cells.map { Array(repeating: false, count: $0.count) }
+
+	func consume(_ key: String) -> Bool {
+		for (rowIndex, row) in cells.enumerated() {
+			for start in row.indices where !used[rowIndex][start] {
+				var joined = ""
+				for end in start..<row.count {
+					if used[rowIndex][end] { break }
+					joined += row[end]
+					if joined == key {
+						for index in start...end { used[rowIndex][index] = true }
+						return true
+					}
+					if joined.count >= key.count { break }
+				}
 			}
-		case .image:
-			break
 		}
+		return false
 	}
 
 	var results = [(block: DocumentBlock, metadata: BlockMetadata)]()
@@ -636,9 +643,7 @@ private func droppedTableText(
 			let text = String(characters[fragment.characters])
 			let key = squeezed(text)
 			guard !key.isEmpty else { continue }
-			if let found = printed.range(of: key) {
-				printed.removeSubrange(found)
-			} else {
+			if !consume(key) {
 				missing.append((text, fragment.bounds))
 			}
 		}

@@ -70,6 +70,40 @@ struct TableLeadingColumnsTests {
 		}
 	}
 
+	/// A leading value that equals a retained cell, or sits inside one, is still
+	/// a cell the Markdown lacks.
+	@Test("A leading fragment equal to or inside a retained cell is still restored")
+	func repeatedAndContainedFragmentsAreRestored() {
+		let line = pageLine([("Wert", 50, 100), ("1.00", 200, 50), ("%", 300, 20), ("1.00 - 4.00", 400, 100)], y: 150)
+		let cellBounds = [CGRect(x: 300, y: 150, width: 20, height: 20), CGRect(x: 400, y: 150, width: 100, height: 20)]
+		let cells = [("%", 0), ("1.00 - 4.00", 1)].map { text, column in
+			DocumentBlock.Table.Cell(
+				rowRange: 0...0, columnRange: column...column, text: text, bounds: cellBounds[column],
+				lines: [DocumentBlock.TextLine(text: text, bounds: cellBounds[column])])
+		}
+		let tableBounds = cellBounds[0].union(cellBounds[1])
+		let heading = CGRect(x: 50, y: 50, width: 100, height: 20)
+		let semantics = DocumentSemantics(
+			referenceSize: pageSize,
+			blocks: [
+				NormalizedDocumentBlock(
+					block: DocumentBlock(bounds: heading, kind: .paragraph(.init(
+						text: "Wert", lines: [.init(text: "Wert", bounds: heading)]))),
+					normalizedBounds: normalized(heading)),
+				NormalizedDocumentBlock(
+					block: DocumentBlock(bounds: tableBounds, kind: .table(.init(rows: [cells]))),
+					normalizedBounds: normalized(tableBounds),
+					tableRows: [cells.enumerated().map { .init(normalizedBounds: normalized(cellBounds[$0.offset]), cell: $0.element) }])
+			],
+			images: [])
+		let blocks = TextLineSemanticComposer.composeBlocks(
+			from: [pageLine([("Wert", 50, 100)], y: 50), line], semantics: semantics, layoutSize: pageSize)
+		let markdown = DocumentBlockMarkdownRenderer.markdown(from: blocks)
+
+		#expect(markdown.components(separatedBy: "Wert").count - 1 == 2, "\(markdown)")
+		#expect(markdown.contains("1.00 Wert") || markdown.contains("Wert 1.00"), "\(markdown)")
+	}
+
 	private func pageLine(_ words: [(String, CGFloat, CGFloat)], y: CGFloat) -> TextLine {
 		TextLine(fragments: words.map { text, x, width in
 			TextFragment(bounds: CGRect(x: x, y: y, width: width, height: 20), string: text, styleRuns: [])
