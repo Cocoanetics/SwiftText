@@ -29,13 +29,19 @@ public enum TextLineSemanticComposer {
 		var blocks = [DocumentBlock]()
 		var metadata = [BlockMetadata]()
 
+		var tableLineIDs = Set<Int>()
+
 		for semanticBlock in semantics.blocks {
+			let before = assigned
 			let result = composeBlock(
 				from: semanticBlock,
 				lineInfos: lineInfos,
 				assignedLines: &assigned,
 				referenceSize: semantics.referenceSize
 			)
+			if case .table = semanticBlock.block.kind {
+				tableLineIDs.formUnion(assigned.subtracting(before))
+			}
 			guard let block = result.block, let context = result.metadata else { continue }
 			blocks.append(block)
 			metadata.append(context)
@@ -64,6 +70,13 @@ public enum TextLineSemanticComposer {
 
 		blocks.append(contentsOf: newParagraphs.map(\.block))
 		metadata.append(contentsOf: newParagraphs.map(\.metadata))
+
+		let dropped = droppedTableText(
+			in: lineInfos.filter { tableLineIDs.contains($0.id) },
+			blocks: blocks,
+			referenceSize: semantics.referenceSize)
+		blocks.append(contentsOf: dropped.map(\.block))
+		metadata.append(contentsOf: dropped.map(\.metadata))
 
 		let (orderedBlocks, orderedMetadata) = sortBlocksWithMetadata(blocks, metadata: metadata)
 		let (splitBlocks, splitMetadata) = splitParagraphBlocks(
@@ -577,6 +590,70 @@ private func makeDocumentLines(from infos: [LineInfo]) -> [DocumentBlock.TextLin
 	infos.map { info in
 		DocumentBlock.TextLine(text: info.text, bounds: info.semanticBounds, runs: info.runs)
 	}
+}
+
+/// Text that page lines carried into a table which the table does not show.
+///
+/// A table claims every page line that touches one of its cells, but shows the
+/// segmenter's own cell text. When the segmenter's table covers only some of
+/// the columns of a row the page sets as one line, the line is claimed and its
+/// leading columns vanish. Each fragment of such a line is looked for in what
+/// the blocks print; the ones that are not there are returned as paragraphs,
+/// so nothing the page recognised is lost silently.
+private func droppedTableText(
+	in lines: [LineInfo],
+	blocks: [DocumentBlock],
+	referenceSize: CGSize
+) -> [(block: DocumentBlock, metadata: BlockMetadata)] {
+	guard !lines.isEmpty else { return [] }
+
+	func squeezed(_ text: String) -> String {
+		String(text.filter { !$0.isWhitespace })
+	}
+
+	var printed = ""
+	for block in blocks {
+		switch block.kind {
+		case .paragraph(let paragraph):
+			printed += squeezed(paragraph.text)
+		case .list(let list):
+			list.items.forEach { printed += squeezed($0.text) }
+		case .table(let table):
+			for cell in table.rows.joined() {
+				printed += squeezed(cell.text)
+				cell.lines.forEach { printed += squeezed($0.text) }
+			}
+		case .image:
+			break
+		}
+	}
+
+	var results = [(block: DocumentBlock, metadata: BlockMetadata)]()
+	for line in lines.sorted(by: { $0.semanticBounds.minY < $1.semanticBounds.minY }) {
+		let characters = Array(line.text)
+		var missing = [(text: String, bounds: CGRect)]()
+		for fragment in line.fragments {
+			let text = String(characters[fragment.characters])
+			let key = squeezed(text)
+			guard !key.isEmpty else { continue }
+			if let found = printed.range(of: key) {
+				printed.removeSubrange(found)
+			} else {
+				missing.append((text, fragment.bounds))
+			}
+		}
+		guard !missing.isEmpty else { continue }
+
+		let text = missing.map(\.text).joined(separator: " ")
+		let bounds = missing.dropFirst().reduce(missing[0].bounds) { $0.union($1.bounds) }
+		let paragraph = DocumentBlock.Paragraph(
+			text: text,
+			lines: [DocumentBlock.TextLine(text: text, bounds: bounds)])
+		results.append((
+			DocumentBlock(bounds: bounds, kind: .paragraph(paragraph)),
+			BlockMetadata(normalizedBounds: bounds.normalized(in: referenceSize))))
+	}
+	return results
 }
 
 private struct RemainingLine {
