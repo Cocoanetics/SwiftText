@@ -139,14 +139,11 @@ struct OCR: AsyncParsableCommand {
 			guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, visionOS 26.0, *) else {
 				throw ValidationError("Vision document segmentation is unavailable on this platform.")
 			}
-			let textLines = pdfDocument.textLines(forceOCR: forceOcr, dpi: CGFloat(dpi), languages: recognitionLanguages)
-			let (blocks, lookupStorage) = try await semanticMarkdownBlocks(for: pdfDocument)
-			var imageLookup = lookupStorage
-			return DocumentBlockMarkdownRenderer.markdown(
-				from: blocks,
-				textLines: convertToDocumentBlockLines(textLines)
-			) { block in
-				imageLookup.pop(for: block)
+			var (pages, imageLookup) = try await semanticMarkdownPages(
+				for: pdfDocument, dpi: CGFloat(dpi), forceOCR: forceOcr, languages: recognitionLanguages,
+				saveImages: saveImagesIfNeeded(images:pageIndex:))
+			return DocumentBlockMarkdownRenderer.markdown(fromPages: pages) { block, pageIndex in
+				imageLookup.pop(for: block, pageIndex: pageIndex)
 			}
 		}
 
@@ -193,24 +190,6 @@ struct OCR: AsyncParsableCommand {
 		return textLines.string()
 	}
 
-	private func extractDocumentBlocks(from pdfDocument: PDFDocument) async throws -> ([DocumentBlock], ImageLookup) {
-		var allBlocks = [DocumentBlock]()
-		var lookupStorage: [String: [String]] = [:]
-
-		for pageIndex in 0..<pdfDocument.pageCount {
-			guard let page = pdfDocument.page(at: pageIndex) else { continue }
-			let (blocks, images) = try await page.documentBlocksWithImages(dpi: CGFloat(dpi), languages: recognitionLanguages)
-			allBlocks.append(contentsOf: blocks)
-
-			let saved = try saveImagesIfNeeded(images: images, pageIndex: pageIndex)
-			for (key, value) in saved.storage {
-				lookupStorage[key, default: []].append(contentsOf: value)
-			}
-		}
-
-		return (allBlocks, ImageLookup(storage: lookupStorage))
-	}
-
 	private func saveImagesIfNeeded(images: [DocumentImage], pageIndex: Int? = nil) throws -> ImageLookup {
 		guard let savePath = saveImages else { return ImageLookup(storage: [:]) }
 
@@ -234,7 +213,7 @@ struct OCR: AsyncParsableCommand {
 			let destinationURL = baseURL.appendingPathComponent(filename)
 			try writePNG(image.image, to: destinationURL)
 
-			let key = rectKey(image.bounds)
+			let key = ImageLookup.key(for: image.bounds, pageIndex: pageIndex ?? 0)
 			lookup[key, default: []].append(destinationURL.path)
 		}
 
@@ -254,10 +233,6 @@ struct OCR: AsyncParsableCommand {
 		}
 	}
 
-	private func rectKey(_ rect: CGRect) -> String {
-		"\(rect.minX.rounded())-\(rect.minY.rounded())-\(rect.width.rounded())-\(rect.height.rounded())"
-	}
-
 	private func writeOutputIfNeeded(_ contents: String) throws {
 		if let outputPath {
 			let expanded = (outputPath as NSString).expandingTildeInPath
@@ -269,40 +244,6 @@ struct OCR: AsyncParsableCommand {
 		}
 
 		print(contents)
-	}
-
-	private func convertToDocumentBlockLines(_ lines: [TextLine]) -> [DocumentBlock.TextLine] {
-		lines.map { line in
-			let bounds = line.fragments.reduce(line.fragments.first?.bounds ?? .zero) { $0.union($1.bounds) }
-			return DocumentBlock.TextLine(text: line.combinedText, bounds: bounds)
-		}
-	}
-
-	@available(iOS 26.0, tvOS 26.0, macOS 26.0, visionOS 26.0, *)
-	private func semanticMarkdownBlocks(for document: PDFDocument) async throws -> ([DocumentBlock], ImageLookup) {
-		var combinedBlocks = [DocumentBlock]()
-		var lookupStorage: [String: [String]] = [:]
-
-		for pageIndex in 0..<document.pageCount {
-			guard let page = document.page(at: pageIndex) else { continue }
-			// The composer reconciles the blocks with the text layer itself.
-			let semantics = try await page.documentSemantics(dpi: CGFloat(dpi), applyPostProcessing: false, languages: recognitionLanguages)
-			let layoutSize = page.bounds(for: .mediaBox).size
-			let lines = page.textLines(forceOCR: forceOcr, dpi: CGFloat(dpi), languages: recognitionLanguages)
-			let grouped = TextLineSemanticComposer.composeBlocks(
-				from: lines,
-				semantics: semantics,
-				layoutSize: layoutSize
-			)
-			combinedBlocks.append(contentsOf: grouped)
-
-			let saved = try saveImagesIfNeeded(images: semantics.images, pageIndex: pageIndex)
-			for (key, value) in saved.storage {
-				lookupStorage[key, default: []].append(contentsOf: value)
-			}
-		}
-
-		return (combinedBlocks, ImageLookup(storage: lookupStorage))
 	}
 
 	@available(iOS 26.0, tvOS 26.0, macOS 26.0, visionOS 26.0, *)
@@ -498,14 +439,10 @@ struct HTML: AsyncParsableCommand {
 			guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, visionOS 26.0, *) else {
 				throw ValidationError("Vision document segmentation is unavailable on this platform.")
 			}
-			let textLines = pdfDocument.textLines()
-			let (blocks, lookupStorage) = try await semanticMarkdownBlocks(for: pdfDocument)
-			var imageLookup = lookupStorage
-			return DocumentBlockMarkdownRenderer.markdown(
-				from: blocks,
-				textLines: convertToDocumentBlockLines(textLines)
-			) { block in
-				imageLookup.pop(for: block)
+			var (pages, imageLookup) = try await semanticMarkdownPages(
+				for: pdfDocument, saveImages: saveImagesIfNeeded(images:pageIndex:))
+			return DocumentBlockMarkdownRenderer.markdown(fromPages: pages) { block, pageIndex in
+				imageLookup.pop(for: block, pageIndex: pageIndex)
 			}
 		}
 
@@ -536,7 +473,7 @@ struct HTML: AsyncParsableCommand {
 			let destinationURL = baseURL.appendingPathComponent(filename)
 			try writePNG(image.image, to: destinationURL)
 
-			let key = rectKey(image.bounds)
+			let key = ImageLookup.key(for: image.bounds, pageIndex: pageIndex ?? 0)
 			lookup[key, default: []].append(destinationURL.path)
 		}
 
@@ -556,43 +493,6 @@ struct HTML: AsyncParsableCommand {
 		}
 	}
 
-	private func rectKey(_ rect: CGRect) -> String {
-		"\(rect.minX.rounded())-\(rect.minY.rounded())-\(rect.width.rounded())-\(rect.height.rounded())"
-	}
-
-	private func convertToDocumentBlockLines(_ lines: [TextLine]) -> [DocumentBlock.TextLine] {
-		lines.map { line in
-			let bounds = line.fragments.reduce(line.fragments.first?.bounds ?? .zero) { $0.union($1.bounds) }
-			return DocumentBlock.TextLine(text: line.combinedText, bounds: bounds)
-		}
-	}
-
-	@available(iOS 26.0, tvOS 26.0, macOS 26.0, visionOS 26.0, *)
-	private func semanticMarkdownBlocks(for document: PDFDocument) async throws -> ([DocumentBlock], ImageLookup) {
-		var combinedBlocks = [DocumentBlock]()
-		var lookupStorage: [String: [String]] = [:]
-
-		for pageIndex in 0..<document.pageCount {
-			guard let page = document.page(at: pageIndex) else { continue }
-			// The composer reconciles the blocks with the text layer itself.
-			let semantics = try await page.documentSemantics(dpi: 300, applyPostProcessing: false)
-			let layoutSize = page.bounds(for: .mediaBox).size
-			let lines = page.textLines()
-			let grouped = TextLineSemanticComposer.composeBlocks(
-				from: lines,
-				semantics: semantics,
-				layoutSize: layoutSize
-			)
-			combinedBlocks.append(contentsOf: grouped)
-
-			let saved = try saveImagesIfNeeded(images: semantics.images, pageIndex: pageIndex)
-			for (key, value) in saved.storage {
-				lookupStorage[key, default: []].append(contentsOf: value)
-			}
-		}
-
-		return (combinedBlocks, ImageLookup(storage: lookupStorage))
-	}
 	#endif
 
 	private func writeOutputIfNeeded(_ contents: String) throws {
@@ -996,13 +896,66 @@ private func resolvedURL(from path: String) -> URL {
 private struct ImageLookup {
 	var storage: [String: [String]]
 
-	mutating func pop(for block: DocumentBlock) -> String? {
-		let key = "\(block.bounds.minX.rounded())-\(block.bounds.minY.rounded())-\(block.bounds.width.rounded())-\(block.bounds.height.rounded())"
+	/// Images are keyed by page as well as position: two pages can have an
+	/// image in the same place.
+	static func key(for rect: CGRect, pageIndex: Int) -> String {
+		"\(pageIndex):\(rect.minX.rounded())-\(rect.minY.rounded())-\(rect.width.rounded())-\(rect.height.rounded())"
+	}
+
+	mutating func pop(for block: DocumentBlock, pageIndex: Int = 0) -> String? {
+		let key = Self.key(for: block.bounds, pageIndex: pageIndex)
 		guard var candidates = storage[key], !candidates.isEmpty else { return nil }
 		let path = candidates.removeFirst()
 		storage[key] = candidates
 		return path
 	}
+}
+
+private func convertToDocumentBlockLines(_ lines: [TextLine]) -> [DocumentBlock.TextLine] {
+	lines.map { line in
+		let bounds = line.fragments.reduce(line.fragments.first?.bounds ?? .zero) { $0.union($1.bounds) }
+		return DocumentBlock.TextLine(text: line.combinedText, bounds: bounds)
+	}
+}
+
+/// Segments each page of a PDF into blocks on its own. Each page keeps its own
+/// text lines so the renderer orders blocks within their page and never across
+/// pages, whose coordinates all start at that page's top.
+@available(iOS 26.0, tvOS 26.0, macOS 26.0, visionOS 26.0, *)
+private func semanticMarkdownPages(
+	for document: PDFDocument,
+	dpi: CGFloat = 300,
+	forceOCR: Bool = false,
+	languages: [String] = [],
+	saveImages: ([DocumentImage], Int?) throws -> ImageLookup
+) async throws -> ([DocumentBlockPage], ImageLookup) {
+	var pages = [DocumentBlockPage]()
+	var lookupStorage: [String: [String]] = [:]
+
+	for pageIndex in 0..<document.pageCount {
+		// An unreadable page stays as an empty one so page indices keep matching
+		// the image lookup keys.
+		guard let page = document.page(at: pageIndex) else {
+			pages.append(DocumentBlockPage(blocks: []))
+			continue
+		}
+		// The composer reconciles the blocks with the text layer itself.
+		let semantics = try await page.documentSemantics(dpi: dpi, applyPostProcessing: false, languages: languages)
+		let layoutSize = page.bounds(for: .mediaBox).size
+		let lines = page.textLines(forceOCR: forceOCR, dpi: dpi, languages: languages)
+		let grouped = TextLineSemanticComposer.composeBlocks(
+			from: lines,
+			semantics: semantics,
+			layoutSize: layoutSize
+		)
+		let saved = try saveImages(semantics.images, pageIndex)
+		pages.append(DocumentBlockPage(blocks: grouped, textLines: convertToDocumentBlockLines(lines)))
+		for (key, value) in saved.storage {
+			lookupStorage[key, default: []].append(contentsOf: value)
+		}
+	}
+
+	return (pages, ImageLookup(storage: lookupStorage))
 }
 
 @available(iOS 26.0, tvOS 26.0, macOS 26.0, visionOS 26.0, *)
