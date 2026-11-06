@@ -107,6 +107,11 @@ struct OCR: AsyncParsableCommand {
 		guard dpi > 0 else {
 			throw ValidationError("--dpi must be greater than zero.")
 		}
+		let supported = RecognitionLanguages.supported
+		let unsupported = RecognitionLanguages.unsupported(language, supported: supported)
+		if !unsupported.isEmpty {
+			throw ValidationError("Unsupported --language: \(unsupported.joined(separator: ", ")). Supported: \(supported.joined(separator: ", ")).")
+		}
 	}
 
 	func run() async throws {

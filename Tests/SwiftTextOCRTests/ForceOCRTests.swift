@@ -28,6 +28,13 @@ struct ForceOCRTests {
 		#expect(RecognitionLanguages.resolve(["xx"], supported: supported) == ["xx"])
 	}
 
+	@Test("Unmatched language codes are reported")
+	func reportsUnsupportedCodes() {
+		let supported = ["en-US", "de-DE"]
+		#expect(RecognitionLanguages.unsupported(["de", "xx", "en-US"], supported: supported) == ["xx"])
+		#expect(RecognitionLanguages.unsupported(["de,en"], supported: supported).isEmpty)
+	}
+
 	@Test("Language hints reach the recognition request")
 	func hintsReachTheRequest() throws {
 		let request = makeTextRecognitionRequest(languages: ["de,en"])

@@ -27,6 +27,15 @@ public enum RecognitionLanguages {
 		return result
 	}
 
+	/// The requested codes that match no supported language, so a typo can be
+	/// reported instead of silently producing no text.
+	public static func unsupported(_ requested: [String], supported: [String]) -> [String] {
+		parse(requested).filter { code in
+			let resolved = resolve([code], supported: supported)
+			return !supported.contains { $0.lowercased() == resolved[0].lowercased() }
+		}
+	}
+
 	/// Maps each requested code to a language the recogniser supports. A bare
 	/// code such as `de` resolves to the first supported identifier for that
 	/// language (`de-DE`); a code with no match passes through unchanged so
@@ -47,6 +56,14 @@ public enum RecognitionLanguages {
 }
 
 #if canImport(Vision)
+public extension RecognitionLanguages {
+	/// The language identifiers Vision's text recogniser supports.
+	@available(iOS 13.0, tvOS 13.0, macOS 10.15, visionOS 1.0, *)
+	static var supported: [String] {
+		(try? VNRecognizeTextRequest().supportedRecognitionLanguages()) ?? []
+	}
+}
+
 @available(iOS 13.0, tvOS 13.0, macOS 10.15, visionOS 1.0, *)
 func makeTextRecognitionRequest(languages: [String]) -> VNRecognizeTextRequest {
 	let request = VNRecognizeTextRequest()

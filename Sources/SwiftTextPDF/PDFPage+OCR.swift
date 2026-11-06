@@ -72,7 +72,7 @@ extension PDFPage {
 			return selectionLines
 		}
 
-		if let ocrLines = textLinesFromOCR(languages: languages) {
+		if let ocrLines = textLinesFromOCR(dpi: dpi, languages: languages) {
 			return ocrLines
 		}
 
@@ -104,9 +104,9 @@ extension PDFPage {
 		return fragments.isEmpty ? nil : fragments.assembledLines(splitVerticalFragments: true)
 	}
 
-	func textLinesFromOCR(languages: [String] = []) -> [TextLine]? {
+	func textLinesFromOCR(dpi: CGFloat = 300, languages: [String] = []) -> [TextLine]? {
 		if #available(iOS 13.0, tvOS 13.0, macOS 10.15, visionOS 1.0, *),
-		   let textLines = try? performOCR(languages: languages) {
+		   let textLines = try? performOCR(dpi: dpi, languages: languages) {
 			return textLines
 		}
 
