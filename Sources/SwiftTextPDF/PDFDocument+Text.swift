@@ -19,12 +19,12 @@ public extension PDFDocument {
 	 - Discussion:
 	   This method processes each page, first attempting to extract text using the PDFKit text selection mechanism. If no selectable text is found, it falls back to OCR using Apple's Vision framework.
 	 */
-	func textLines() -> [TextLine] {
+	func textLines(forceOCR: Bool = false, dpi: CGFloat = 300, languages: [String] = []) -> [TextLine] {
 		var allLines = [TextLine]()
 
 		for pageIndex in 0..<self.pageCount {
 			guard let page = self.page(at: pageIndex) else { continue }
-			allLines.append(contentsOf: page.textLines())
+			allLines.append(contentsOf: page.textLines(forceOCR: forceOCR, dpi: dpi, languages: languages))
 		}
 
 		return allLines

@@ -15,9 +15,9 @@ extension PDFPage {
 	/// The page's document structure as the segmenter reads it. See
 	/// ``SwiftTextOCR/documentSemantics(from:applyPostProcessing:)`` for when to
 	/// turn post-processing off.
-	public func documentSemantics(dpi: CGFloat = 300, applyPostProcessing: Bool = true) async throws -> DocumentSemantics {
+	public func documentSemantics(dpi: CGFloat = 300, applyPostProcessing: Bool = true, languages: [String] = []) async throws -> DocumentSemantics {
 		let (cgImage, _) = try renderedPageImage(dpi: dpi)
-		return try await SwiftTextOCR.documentSemantics(from: cgImage, applyPostProcessing: applyPostProcessing)
+		return try await SwiftTextOCR.documentSemantics(from: cgImage, applyPostProcessing: applyPostProcessing, languages: languages)
 	}
 }
 #endif

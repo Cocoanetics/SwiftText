@@ -92,6 +92,28 @@ struct OCR: AsyncParsableCommand {
 	@Option(name: .shortAndLong, help: "Write output to a file instead of stdout.")
 	var outputPath: String?
 
+	@Flag(name: .long, help: "For PDFs: rasterize each page and run Vision, ignoring any embedded text layer.")
+	var forceOcr: Bool = false
+
+	@Option(name: .long, help: "Rasterization resolution for PDF pages that are OCRed.")
+	var dpi: Int = 300
+
+	@Option(name: .long, help: "Recognition language hint for Vision, e.g. de or en-US. Repeatable or comma-separated (--language de,en).")
+	var language: [String] = []
+
+	private var recognitionLanguages: [String] { RecognitionLanguages.parse(language) }
+
+	func validate() throws {
+		guard dpi > 0 else {
+			throw ValidationError("--dpi must be greater than zero.")
+		}
+		let supported = RecognitionLanguages.supported
+		let unsupported = RecognitionLanguages.unsupported(language, supported: supported)
+		if !unsupported.isEmpty {
+			throw ValidationError("Unsupported --language: \(unsupported.joined(separator: ", ")). Supported: \(supported.joined(separator: ", ")).")
+		}
+	}
+
 	func run() async throws {
 		let fileURL = resolvedURL(from: path)
 		guard FileManager.default.fileExists(atPath: fileURL.path) else {
@@ -117,7 +139,7 @@ struct OCR: AsyncParsableCommand {
 			guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, visionOS 26.0, *) else {
 				throw ValidationError("Vision document segmentation is unavailable on this platform.")
 			}
-			let textLines = pdfDocument.textLines()
+			let textLines = pdfDocument.textLines(forceOCR: forceOcr, dpi: CGFloat(dpi), languages: recognitionLanguages)
 			let (blocks, lookupStorage) = try await semanticMarkdownBlocks(for: pdfDocument)
 			var imageLookup = lookupStorage
 			return DocumentBlockMarkdownRenderer.markdown(
@@ -128,7 +150,7 @@ struct OCR: AsyncParsableCommand {
 			}
 		}
 
-		let textLines = pdfDocument.textLines()
+		let textLines = pdfDocument.textLines(forceOCR: forceOcr, dpi: CGFloat(dpi), languages: recognitionLanguages)
 		if lines {
 			return textLines.map(\.combinedText).joined(separator: "\n")
 		}
@@ -148,7 +170,7 @@ struct OCR: AsyncParsableCommand {
 
 		if markdown {
 			if #available(iOS 26.0, tvOS 26.0, macOS 26.0, visionOS 26.0, *) {
-				let textLines = cgImage.textLines(imageSize: pageSize)
+				let textLines = cgImage.textLines(imageSize: pageSize, languages: recognitionLanguages)
 				let (blocks, lookup) = try await semanticMarkdownBlocks(for: cgImage, pageSize: pageSize, textLines: textLines)
 				var imageLookup = lookup
 				return DocumentBlockMarkdownRenderer.markdown(
@@ -163,7 +185,7 @@ struct OCR: AsyncParsableCommand {
 		}
 
 		// Non-markdown: fallback to OCR lines
-		let textLines = cgImage.textLines(imageSize: pageSize)
+		let textLines = cgImage.textLines(imageSize: pageSize, languages: recognitionLanguages)
 		if lines {
 			return textLines.map(\.combinedText).joined(separator: "\n")
 		}
@@ -177,7 +199,7 @@ struct OCR: AsyncParsableCommand {
 
 		for pageIndex in 0..<pdfDocument.pageCount {
 			guard let page = pdfDocument.page(at: pageIndex) else { continue }
-			let (blocks, images) = try await page.documentBlocksWithImages(dpi: 300)
+			let (blocks, images) = try await page.documentBlocksWithImages(dpi: CGFloat(dpi), languages: recognitionLanguages)
 			allBlocks.append(contentsOf: blocks)
 
 			let saved = try saveImagesIfNeeded(images: images, pageIndex: pageIndex)
@@ -264,9 +286,9 @@ struct OCR: AsyncParsableCommand {
 		for pageIndex in 0..<document.pageCount {
 			guard let page = document.page(at: pageIndex) else { continue }
 			// The composer reconciles the blocks with the text layer itself.
-			let semantics = try await page.documentSemantics(dpi: 300, applyPostProcessing: false)
+			let semantics = try await page.documentSemantics(dpi: CGFloat(dpi), applyPostProcessing: false, languages: recognitionLanguages)
 			let layoutSize = page.bounds(for: .mediaBox).size
-			let lines = page.textLines()
+			let lines = page.textLines(forceOCR: forceOcr, dpi: CGFloat(dpi), languages: recognitionLanguages)
 			let grouped = TextLineSemanticComposer.composeBlocks(
 				from: lines,
 				semantics: semantics,
@@ -285,7 +307,7 @@ struct OCR: AsyncParsableCommand {
 
 	@available(iOS 26.0, tvOS 26.0, macOS 26.0, visionOS 26.0, *)
 	private func semanticMarkdownBlocks(for cgImage: CGImage, pageSize: CGSize, textLines: [TextLine]) async throws -> ([DocumentBlock], ImageLookup) {
-		let semantics = try await documentSemantics(from: cgImage, applyPostProcessing: false)
+		let semantics = try await documentSemantics(from: cgImage, applyPostProcessing: false, languages: recognitionLanguages)
 		let grouped = TextLineSemanticComposer.composeBlocks(
 			from: textLines,
 			semantics: semantics,

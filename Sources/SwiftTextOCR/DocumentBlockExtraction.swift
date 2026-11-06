@@ -29,19 +29,20 @@ public enum DocumentScannerError: Error, CustomStringConvertible {
 }
 
 #if canImport(Vision)
-public func documentBlocks(from cgImage: CGImage, applyPostProcessing: Bool = true) async throws -> (blocks: [DocumentBlock], images: [DocumentImage]) {
+public func documentBlocks(from cgImage: CGImage, applyPostProcessing: Bool = true, languages: [String] = []) async throws -> (blocks: [DocumentBlock], images: [DocumentImage]) {
 	guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, visionOS 26.0, *) else {
 		throw DocumentScannerError.visionUnavailable
 	}
 	let pageSize = CGSize(width: CGFloat(cgImage.width), height: CGFloat(cgImage.height))
-	let recognizeRequest = RecognizeDocumentsRequest()
+	var recognizeRequest = RecognizeDocumentsRequest()
+	applyRecognitionLanguages(languages, to: &recognizeRequest)
 	let observations = try await recognizeRequest.perform(on: cgImage, orientation: nil)
 
 	guard let document = observations.first?.document else {
 		throw DocumentScannerError.unrecognizedDocument
 	}
 
-	let extractor = DocumentBlockExtractor(image: cgImage, pageSize: pageSize)
+	let extractor = DocumentBlockExtractor(image: cgImage, pageSize: pageSize, languages: languages)
 	return try extractor.extractBlocksWithImages(from: document, applyPostProcessing: applyPostProcessing)
 }
 
@@ -61,11 +62,13 @@ struct DocumentBlockExtractor {
 	let image: CGImage
 	let pageSize: CGSize
 	let allowStandaloneSupplementation: Bool
+	let languages: [String]
 
-	init(image: CGImage, pageSize: CGSize, allowStandaloneSupplementation: Bool = true) {
+	init(image: CGImage, pageSize: CGSize, allowStandaloneSupplementation: Bool = true, languages: [String] = []) {
 		self.image = image
 		self.pageSize = pageSize
 		self.allowStandaloneSupplementation = allowStandaloneSupplementation
+		self.languages = languages
 	}
 
 	func extractBlocks(from container: DocumentObservation.Container, applyPostProcessing: Bool = true) throws -> [DocumentBlock] {
@@ -333,7 +336,7 @@ struct DocumentBlockExtractor {
 	}
 
 	private func recognizeTextLines() -> [OCRLine] {
-		guard let textLines = try? image.performOCR(imageSize: pageSize) else {
+		guard let textLines = try? image.performOCR(imageSize: pageSize, languages: languages) else {
 			return []
 		}
 

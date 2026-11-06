@@ -191,16 +191,17 @@ public struct NormalizedDocumentBlock {
 ///   geometry-only merging can join a heading to nearby body text before its
 ///   typography is known, leaving a boundary the composer cannot recover.
 @available(iOS 26.0, tvOS 26.0, macOS 26.0, visionOS 26.0, *)
-public func documentSemantics(from cgImage: CGImage, applyPostProcessing: Bool = true) async throws -> DocumentSemantics {
+public func documentSemantics(from cgImage: CGImage, applyPostProcessing: Bool = true, languages: [String] = []) async throws -> DocumentSemantics {
 	let referenceSize = CGSize(width: CGFloat(cgImage.width), height: CGFloat(cgImage.height))
-	let request = RecognizeDocumentsRequest()
+	var request = RecognizeDocumentsRequest()
+	applyRecognitionLanguages(languages, to: &request)
 	let observations = try await request.perform(on: cgImage, orientation: nil)
 
 	guard let document = observations.first?.document else {
 		throw DocumentScannerError.unrecognizedDocument
 	}
 
-	let extractor = DocumentBlockExtractor(image: cgImage, pageSize: referenceSize, allowStandaloneSupplementation: false)
+	let extractor = DocumentBlockExtractor(image: cgImage, pageSize: referenceSize, allowStandaloneSupplementation: false, languages: languages)
 	let (blocks, images) = try extractor.extractBlocksWithImages(from: document, applyPostProcessing: applyPostProcessing)
 	let normalized = normalize(blocks: blocks, referenceSize: referenceSize)
 	return DocumentSemantics(referenceSize: referenceSize, blocks: normalized, images: images)
