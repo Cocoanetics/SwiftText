@@ -14,16 +14,16 @@ import Vision
 
 #if canImport(Vision)
 extension PDFPage {
-	public func documentBlocks(dpi: CGFloat = 300, applyPostProcessing: Bool = true) async throws -> [DocumentBlock] {
-		return try await documentBlocksWithImages(dpi: dpi, applyPostProcessing: applyPostProcessing).blocks
+	public func documentBlocks(dpi: CGFloat = 300, applyPostProcessing: Bool = true, languages: [String] = []) async throws -> [DocumentBlock] {
+		return try await documentBlocksWithImages(dpi: dpi, applyPostProcessing: applyPostProcessing, languages: languages).blocks
 	}
 
-	public func documentBlocksWithImages(dpi: CGFloat = 300, applyPostProcessing: Bool = true) async throws -> (blocks: [DocumentBlock], images: [DocumentImage]) {
+	public func documentBlocksWithImages(dpi: CGFloat = 300, applyPostProcessing: Bool = true, languages: [String] = []) async throws -> (blocks: [DocumentBlock], images: [DocumentImage]) {
 		guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, visionOS 26.0, *) else {
 			throw DocumentScannerError.visionUnavailable
 		}
 		let (cgImage, _) = try renderedPageImage(dpi: dpi)
-		let result = try await SwiftTextOCR.documentBlocks(from: cgImage, applyPostProcessing: applyPostProcessing)
+		let result = try await SwiftTextOCR.documentBlocks(from: cgImage, applyPostProcessing: applyPostProcessing, languages: languages)
 		return result
 	}
 

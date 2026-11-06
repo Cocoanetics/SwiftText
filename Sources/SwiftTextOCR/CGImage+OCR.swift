@@ -15,6 +15,7 @@ public extension CGImage {
 	 Performs OCR (Optical Character Recognition) on the current image.
 	 
 	 - Parameter imageSize: The size of the image in points. Used to convert normalized Vision coordinates to image coordinates.
+	 - Parameter languages: Language hints for Vision (`de`, `en-US`, ...), most likely first. Empty keeps Vision's default.
 	 - Returns: An array of `TextLine` objects representing the recognized text lines in the image.
 	 - Throws: An `OCRError` if OCR processing or text recognition fails.
 	 - Discussion:
@@ -38,12 +39,11 @@ public extension CGImage {
 	 ```
 	 */
 	@available(iOS 13.0, tvOS 13.0, macOS 10.15, visionOS 1.0, *)
-	func performOCR(imageSize: CGSize) throws -> [TextLine]? {
+	func performOCR(imageSize: CGSize, languages: [String] = []) throws -> [TextLine]? {
 		#if canImport(Vision)
 		// Perform text recognition using Vision
 		let requestHandler = VNImageRequestHandler(cgImage: self, options: [:])
-		let textRecognitionRequest = VNRecognizeTextRequest()
-		textRecognitionRequest.recognitionLevel = .accurate
+		let textRecognitionRequest = makeTextRecognitionRequest(languages: languages)
 
 		do {
 			try requestHandler.perform([textRecognitionRequest])
@@ -102,8 +102,8 @@ public extension CGImage {
 	 This method performs OCR on the image to extract text. Since images don't have selectable text like PDFs, OCR is the only method available.
 	 */
 	@available(iOS 13.0, tvOS 13.0, macOS 10.15, visionOS 1.0, *)
-	func textLines(imageSize: CGSize) -> [TextLine] {
-		return (try? performOCR(imageSize: imageSize)) ?? []
+	func textLines(imageSize: CGSize, languages: [String] = []) -> [TextLine] {
+		return (try? performOCR(imageSize: imageSize, languages: languages)) ?? []
 	}
 
 	/**

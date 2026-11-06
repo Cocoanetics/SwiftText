@@ -58,12 +58,21 @@ extension PDFPage {
 	 - Discussion:
 	   This method first attempts to extract text using the PDFKit text selection mechanism. If no selectable text is found, it falls back to OCR using Apple's Vision framework.
 	 */
-	public func textLines() -> [TextLine] {
+	public func textLines(forceOCR: Bool = false, dpi: CGFloat = 300, languages: [String] = []) -> [TextLine] {
+		if forceOCR {
+			// Ignore the text layer: a scanner's own layer can be worse than a fresh pass.
+			if #available(iOS 13.0, tvOS 13.0, macOS 10.15, visionOS 1.0, *),
+			   let ocrLines = try? performOCR(dpi: dpi, languages: languages) {
+				return ocrLines
+			}
+			return []
+		}
+
 		if let selectionLines = textLinesFromSelections(), !selectionLines.isEmpty {
 			return selectionLines
 		}
 
-		if let ocrLines = textLinesFromOCR() {
+		if let ocrLines = textLinesFromOCR(languages: languages) {
 			return ocrLines
 		}
 
@@ -95,9 +104,9 @@ extension PDFPage {
 		return fragments.isEmpty ? nil : fragments.assembledLines(splitVerticalFragments: true)
 	}
 
-	func textLinesFromOCR() -> [TextLine]? {
+	func textLinesFromOCR(languages: [String] = []) -> [TextLine]? {
 		if #available(iOS 13.0, tvOS 13.0, macOS 10.15, visionOS 1.0, *),
-		   let textLines = try? performOCR() {
+		   let textLines = try? performOCR(languages: languages) {
 			return textLines
 		}
 
@@ -130,10 +139,10 @@ extension PDFPage {
 	 ```
 	 */
 	@available(iOS 13.0, tvOS 13.0, macOS 10.15, visionOS 1.0, *)
-	public func performOCR() throws -> [TextLine]? {
+	public func performOCR(dpi: CGFloat = 300, languages: [String] = []) throws -> [TextLine]? {
 		let pageBounds = self.bounds(for: .mediaBox)
-		let (cgImage, _) = try renderedPageImage()
-		return try cgImage.performOCR(imageSize: pageBounds.size)
+		let (cgImage, _) = try renderedPageImage(dpi: dpi)
+		return try cgImage.performOCR(imageSize: pageBounds.size, languages: languages)
 	}
 
 	/// How a font found in a page's text layer is set.
