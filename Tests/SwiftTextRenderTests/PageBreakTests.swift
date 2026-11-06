@@ -8,6 +8,7 @@ import Testing
 import Foundation
 @testable import SwiftTextRender
 import SwiftTextCSS
+import SwiftTextHTML
 
 #if canImport(PDFKit)
 import PDFKit
@@ -62,6 +63,18 @@ struct PageBreakTests {
 		let data = try await HTMLRenderer.renderPDF(html: legacy)
 		#expect(pageCount(data) == pageCount(modern))
 		#expect(pageCount(data) == 3)
+	}
+
+	@Test("A raw <div> page break in Markdown passes through and paginates")
+	func markdownRawHTMLPageBreak() async throws {
+		let markdown = "# One\n\nText.\n\n<div style=\"page-break-before: always\"></div>\n\n# Two\n"
+		let escaped = MarkdownToHTML.convert(markdown)
+		#expect(escaped.contains("&lt;div"))
+		let html = MarkdownToHTML.convert(markdown, options: [.passThroughRawHTML])
+		#expect(html.contains("<div style=\"page-break-before: always\"></div>"))
+		#expect(!html.contains("&lt;div"))
+		let data = try await HTMLRenderer.renderPDF(html: html)
+		#expect(pageCount(data) == 2)
 	}
 
 	@Test("A forced break with nothing above it does not emit a blank first page")
