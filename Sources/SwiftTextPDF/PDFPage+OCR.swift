@@ -20,29 +20,58 @@ import Vision
 
 private let stderrRedirectLock = NSLock()
 
-/// Runs `body` with file descriptor 2 pointed at /dev/null. PDFKit's
-/// `attributedString` prints `attributedStringScaled …` debug lines straight to
-/// stderr, which would otherwise leak into every text-layer extraction.
+/// Runs `body` with file descriptor 2 pointed at a scratch file, then forwards
+/// everything written meanwhile except PDFKit's `attributedStringScaled …` debug
+/// lines, which it prints straight to stderr and which would otherwise leak into
+/// every text-layer extraction.
+///
+/// Fd 2 is process-wide, so other threads writing to stderr during `body` land in
+/// the scratch file too. They are not lost: their lines are forwarded to the real
+/// stderr afterwards, only delayed until `body` returns (and ordered after it).
 func withStderrSilenced<T>(_ body: () -> T) -> T {
-	// Fd 2 is process-wide: overlapping calls must not save an already-silenced fd.
+	// Overlapping calls must not save an already-redirected fd.
 	stderrRedirectLock.lock()
 	defer { stderrRedirectLock.unlock() }
 	fflush(stderr)
+	guard let scratch = tmpfile() else { return body() }
 	let saved = dup(STDERR_FILENO)
-	let null = open("/dev/null", O_WRONLY)
-	guard saved >= 0, null >= 0 else {
-		if saved >= 0 { close(saved) }
-		if null >= 0 { close(null) }
+	guard saved >= 0 else {
+		fclose(scratch)
 		return body()
 	}
-	dup2(null, STDERR_FILENO)
-	close(null)
-	defer {
-		fflush(stderr)
-		dup2(saved, STDERR_FILENO)
-		close(saved)
+	dup2(fileno(scratch), STDERR_FILENO)
+	let result = body()
+	fflush(stderr)
+	dup2(saved, STDERR_FILENO)
+	close(saved)
+
+	rewind(scratch)
+	var captured = Data()
+	var buffer = [UInt8](repeating: 0, count: 4096)
+	while true {
+		let count = fread(&buffer, 1, buffer.count, scratch)
+		if count == 0 { break }
+		captured.append(buffer, count: count)
 	}
-	return body()
+	fclose(scratch)
+
+	let marker = Data("attributedStringScaled".utf8)
+	let kept = captured.split(separator: UInt8(ascii: "\n"), omittingEmptySubsequences: false)
+		.filter { $0.range(of: marker) == nil }
+	var forwarded = Data(kept.joined(separator: [UInt8(ascii: "\n")]))
+	// Only trailing-newline remnants of dropped lines would remain otherwise.
+	if forwarded.allSatisfy({ $0 == UInt8(ascii: "\n") }) { forwarded = Data() }
+	if !forwarded.isEmpty {
+		forwarded.withUnsafeBytes { raw in
+			var offset = 0
+			while offset < raw.count {
+				let written = write(STDERR_FILENO, raw.baseAddress! + offset, raw.count - offset)
+				if written <= 0 { break }
+				offset += written
+			}
+		}
+	}
+	return result
 }
 
 extension PDFPage {

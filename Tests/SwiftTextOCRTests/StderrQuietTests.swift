@@ -12,7 +12,7 @@ import PDFKit
 import SwiftTextPDF
 
 struct StderrQuietTests {
-	@Test("Text-layer extraction writes nothing to stderr")
+	@Test("Text-layer extraction does not leak PDFKit debug output to stderr")
 	func extractionIsQuiet() throws {
 		let data = NSMutableData()
 		var box = CGRect(x: 0, y: 0, width: 400, height: 200)
@@ -45,8 +45,10 @@ struct StderrQuietTests {
 		close(saved)
 
 		#expect(text == "Hello world")
+		// Other suites share fd 2 while it is redirected, so only PDFKit's own
+		// debug text is checked for, not an empty capture.
 		let noise = try String(contentsOf: capture, encoding: .utf8)
-		#expect(noise.isEmpty, "stderr: \(noise)")
+		#expect(!noise.contains("attributedStringScaled"), "stderr: \(noise)")
 	}
 }
 #endif
