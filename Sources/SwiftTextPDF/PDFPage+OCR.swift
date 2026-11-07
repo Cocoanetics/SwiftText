@@ -18,31 +18,69 @@ import UIKit
 import Vision
 #endif
 
-private let stderrRedirectLock = NSLock()
+/// Recursive so a caller that redirects fd 2 itself (the tests) can hold it
+/// around a nested `withStderrSilenced`.
+let stderrRedirectLock = NSRecursiveLock()
 
-/// Runs `body` with file descriptor 2 pointed at /dev/null. PDFKit's
-/// `attributedString` prints `attributedStringScaled …` debug lines straight to
-/// stderr, which would otherwise leak into every text-layer extraction.
+/// One of PDFKit's debug lines: an os_log-style timestamp and process tag (the name may contain spaces), then
+/// `attributedStringScaled <name>: <value>`. Matching the whole shape (not just
+/// the token) removes only that text, so a partial write from another thread
+/// glued onto the front of it, or an application line that merely mentions the
+/// token, is kept.
+private let pdfKitDebugLine =
+	#"\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d+ [^\n\[]+\[\d+:\d+\] attributedStringScaled [^\n]*\n?"#
+
+/// Runs `body` with file descriptor 2 pointed at a scratch file, then forwards
+/// everything written meanwhile except PDFKit's `attributedStringScaled …` debug
+/// lines, which it prints straight to stderr and which would otherwise leak into
+/// every text-layer extraction.
+///
+/// Fd 2 is process-wide, so other threads writing to stderr during `body` land in
+/// the scratch file too. They are not lost: their bytes are forwarded to the real
+/// stderr afterwards, only delayed until `body` returns (and ordered after it).
+/// Only the PDFKit diagnostic text itself is dropped.
 func withStderrSilenced<T>(_ body: () -> T) -> T {
-	// Fd 2 is process-wide: overlapping calls must not save an already-silenced fd.
+	// Overlapping calls must not save an already-redirected fd.
 	stderrRedirectLock.lock()
 	defer { stderrRedirectLock.unlock() }
 	fflush(stderr)
+	guard let scratch = tmpfile() else { return body() }
 	let saved = dup(STDERR_FILENO)
-	let null = open("/dev/null", O_WRONLY)
-	guard saved >= 0, null >= 0 else {
-		if saved >= 0 { close(saved) }
-		if null >= 0 { close(null) }
+	guard saved >= 0 else {
+		fclose(scratch)
 		return body()
 	}
-	dup2(null, STDERR_FILENO)
-	close(null)
-	defer {
-		fflush(stderr)
-		dup2(saved, STDERR_FILENO)
-		close(saved)
+	dup2(fileno(scratch), STDERR_FILENO)
+	let result = body()
+	fflush(stderr)
+	dup2(saved, STDERR_FILENO)
+	close(saved)
+
+	rewind(scratch)
+	var captured = Data()
+	var buffer = [UInt8](repeating: 0, count: 4096)
+	while true {
+		let count = fread(&buffer, 1, buffer.count, scratch)
+		if count == 0 { break }
+		captured.append(buffer, count: count)
 	}
-	return body()
+	fclose(scratch)
+
+	// Latin-1 maps every byte to one character, so the round trip is lossless.
+	let text = String(data: captured, encoding: .isoLatin1) ?? ""
+	let filtered = text.replacingOccurrences(of: pdfKitDebugLine, with: "", options: .regularExpression)
+	let forwarded = filtered.data(using: .isoLatin1) ?? captured
+	if !forwarded.isEmpty {
+		forwarded.withUnsafeBytes { raw in
+			var offset = 0
+			while offset < raw.count {
+				let written = write(STDERR_FILENO, raw.baseAddress! + offset, raw.count - offset)
+				if written <= 0 { break }
+				offset += written
+			}
+		}
+	}
+	return result
 }
 
 extension PDFPage {
