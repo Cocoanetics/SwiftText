@@ -18,6 +18,33 @@ import UIKit
 import Vision
 #endif
 
+private let stderrRedirectLock = NSLock()
+
+/// Runs `body` with file descriptor 2 pointed at /dev/null. PDFKit's
+/// `attributedString` prints `attributedStringScaled …` debug lines straight to
+/// stderr, which would otherwise leak into every text-layer extraction.
+func withStderrSilenced<T>(_ body: () -> T) -> T {
+	// Fd 2 is process-wide: overlapping calls must not save an already-silenced fd.
+	stderrRedirectLock.lock()
+	defer { stderrRedirectLock.unlock() }
+	fflush(stderr)
+	let saved = dup(STDERR_FILENO)
+	let null = open("/dev/null", O_WRONLY)
+	guard saved >= 0, null >= 0 else {
+		if saved >= 0 { close(saved) }
+		if null >= 0 { close(null) }
+		return body()
+	}
+	dup2(null, STDERR_FILENO)
+	close(null)
+	defer {
+		fflush(stderr)
+		dup2(saved, STDERR_FILENO)
+		close(saved)
+	}
+	return body()
+}
+
 extension PDFPage {
 	/// Renders the PDF page into a bitmap image at the specified DPI and returns the created CGImage with the page's logical size.
 	@available(iOS 13.0, tvOS 13.0, macOS 10.15, visionOS 1.0, *)
@@ -92,7 +119,7 @@ extension PDFPage {
 		// The page's attributed string is indexed like `string`, so a fragment's
 		// range in one addresses the fonts in the other. That is where a text
 		// layer keeps the emphasis and heading sizes the plain string drops.
-		let attributed = attributedString
+		let attributed = withStderrSilenced { attributedString }
 
 		var fragments = [TextFragment]()
 
