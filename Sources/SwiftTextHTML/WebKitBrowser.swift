@@ -349,10 +349,19 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 					return height;
 				}
 
-				// Use the remaining space whenever the header and first row fit.
-				// The whole table's height does not require a break before it: the
-				// fragments below already keep rows together and repeat the header.
-				const startsOnNewPage = measuredHeight([rows[0]], 0) > capacity + 0.5;
+				// Multicolumn layout can understate the eventual print offset after
+				// avoid-break content once the unpaginated flow exceeds one page. Keep
+				// the safe-boundary fallback for that case. Otherwise use the remaining
+				// space whenever the header and first row fit; the fragments below keep
+				// rows together and repeat the header.
+				const previousElement = table.previousElementSibling;
+				const previousStyle = previousElement ? getComputedStyle(previousElement) : null;
+				const followsAvoidBreakContent = previousStyle
+					&& (previousStyle.breakInside === 'avoid' || previousStyle.pageBreakInside === 'avoid');
+				const uncertainOffset = tableRect.height > pageHeight
+					&& tableRect.top > pageHeight
+					&& followsAvoidBreakContent;
+				const startsOnNewPage = uncertainOffset || measuredHeight([rows[0]], 0) > capacity + 0.5;
 				if (startsOnNewPage) {
 					capacity = pageHeight;
 				}

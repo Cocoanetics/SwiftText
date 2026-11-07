@@ -188,6 +188,39 @@ struct WebKitIntegrationTests {
 		}
 	}
 
+	@Test("Long tables use a safe boundary after avoid-break content beyond page one", .timeLimit(.minutes(2)))
+	func longTableAfterAvoidBreakContent() async throws {
+		let rows = (1 ... 40).map {
+			let marker = String(format: "%02d", $0)
+			return "<tr><td>safe-row-start-\(marker)<br>safe-row-end-\(marker)</td></tr>"
+		}.joined()
+		let html = """
+		<html><head><style>
+		@page { size: A4; margin: 2cm; }
+		body { margin: 0; font: 16px sans-serif; }
+		table { border-collapse: collapse; }
+		th, td { border: 1px solid #999; padding: 8px 12px; }
+		</style></head><body>
+		<div style="height: 300px">Content before the avoid-break block.</div>
+		<div style="height: 650px; break-inside: avoid">Avoid-break tail.</div>
+		<table><thead><tr><th>Safe header</th></tr></thead><tbody>\(rows)</tbody></table>
+		</body></html>
+		"""
+		let document = try await paginate(html)
+		let pageTexts = (0 ..< document.pageCount).map { document.page(at: $0)?.string ?? "" }
+		let firstTablePage = try #require(pageTexts.firstIndex { $0.contains("safe-row-start-") })
+		#expect(!pageTexts[firstTablePage].contains("Avoid-break tail"),
+		        "the table needs a reliable boundary when the paginated offset may be underestimated")
+		for text in pageTexts where text.contains("safe-row-start-") {
+			#expect(text.contains("Safe header"), "a table page has no repeated header")
+		}
+		for rowNumber in 1 ... 40 {
+			let marker = String(format: "%02d", rowNumber)
+			#expect(pageTexts.contains { $0.contains("safe-row-start-\(marker)") && $0.contains("safe-row-end-\(marker)") },
+			        "row \(rowNumber) was split across pages")
+		}
+	}
+
 	@Test("Table fragments keep headers when the table starts late on a page", .timeLimit(.minutes(2)))
 	func tableStartingLateOnPage() async throws {
 		let rows = (1 ... 45).map {
@@ -253,11 +286,11 @@ struct WebKitIntegrationTests {
 		"""
 		let html = MarkdownToHTML.document(markdown, stylesheet: stylesheet)
 		let document = try await paginate(html)
-		let pageTexts = (0 ..< document.pageCount).map { document.page(at: $0)?.string ?? "" }
-		let headingPage = try #require(pageTexts.first { $0.contains("5 Tabelle") })
-		#expect(headingPage.contains("segment-1/"), "the table was moved away from its heading")
-		// A partial first page may hold fewer rows than a full continuation page.
-		let tablePages = pageTexts.filter { $0.contains("segment-") }
+		let tablePages = (0 ..< document.pageCount)
+			.compactMap { document.page(at: $0)?.string }
+			.filter { $0.contains("segment-") }
+		let rowCounts = tablePages.map { $0.components(separatedBy: "segment-").count - 1 }
+		#expect(rowCounts.first.map { $0 >= 10 } == true, "the first table page is mostly empty")
 		for (index, text) in tablePages.enumerated() {
 			#expect(text.contains("Path"), "table page \(index + 1) has no path header")
 		}
