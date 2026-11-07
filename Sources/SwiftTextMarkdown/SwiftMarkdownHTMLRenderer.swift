@@ -201,7 +201,8 @@ private struct HTMLRenderer: MarkupVisitor {
 	}
 
 	mutating func visitOrderedList(_ orderedList: OrderedList) {
-		output += "<ol>"
+		// Like the CommonMark reference renderer, only a non-1 start is written.
+		output += orderedList.startIndex == 1 ? "<ol>" : "<ol start=\"\(orderedList.startIndex)\">"
 		for child in orderedList.children { visit(child) }
 		output += "</ol>"
 	}

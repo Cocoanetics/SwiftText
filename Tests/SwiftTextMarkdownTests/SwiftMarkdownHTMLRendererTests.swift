@@ -10,6 +10,13 @@ struct SwiftMarkdownHTMLRendererTests {
 		#expect(SwiftMarkdownHTMLRenderer.convert("###### Deep") == "<h6>Deep</h6>")
 	}
 
+	@Test func orderedListStartNumber() {
+		#expect(SwiftMarkdownHTMLRenderer.convert("8. a\n9. b\n10. c").contains("<ol start=\"8\">"))
+		#expect(SwiftMarkdownHTMLRenderer.convert("1. a").contains("<ol><li>"))
+		#expect(SwiftMarkdownHTMLRenderer.convert("0. a").contains("<ol start=\"0\">"))
+		#expect(SwiftMarkdownHTMLRenderer.convert("7. November 2026") == "<ol start=\"7\"><li>November 2026</li></ol>")
+	}
+
 	@Test func paragraphs() {
 		let html = SwiftMarkdownHTMLRenderer.convert("First paragraph.\n\nSecond paragraph.")
 		#expect(html.contains("<p>First paragraph.</p>"))
