@@ -41,7 +41,7 @@ struct Render: AsyncParsableCommand {
 		abstract: "Render a Markdown file to HTML, PDF, DOCX, Pages, or EPUB. Output format is inferred from -o extension or set via --format."
 	)
 
-	@Argument(help: "Path to a .md/.markdown file. Omit when using --stdin.")
+	@Argument(help: "Path to a .md/.markdown file (HTML input is not supported). Omit when using --stdin.")
 	var input: String?
 
 	@Flag(name: .long, help: "Read Markdown from standard input instead of a file.")
@@ -198,6 +198,19 @@ struct Render: AsyncParsableCommand {
 	}
 
 	// MARK: - Helpers
+
+	/// Rejects input files that are clearly not Markdown, since they would otherwise be
+	/// rendered as Markdown and show their raw source in the output.
+	static func validateMarkdownInput(_ fileURL: URL) throws {
+		let ext = fileURL.pathExtension.lowercased()
+		if ext == "html" || ext == "htm" {
+			throw ValidationError("HTML input is not supported: render takes a .md/.markdown file (or --stdin). Got '\(fileURL.lastPathComponent)'.")
+		}
+		let markdownExtensions: Set<String> = ["", "md", "markdown", "mdown", "mkd", "txt", "text"]
+		guard markdownExtensions.contains(ext) else {
+			throw ValidationError("Unsupported input type '.\(ext)': render takes a .md/.markdown file (or --stdin).")
+		}
+	}
 
 	private func resolvedFormat() throws -> RenderOutputFormat {
 		if let format { return format }
