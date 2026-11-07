@@ -291,10 +291,12 @@ struct DocumentBlockExtractor {
 	}
 
 	private func detectImageBlocks(excluding structured: [DocumentBlock], ocrLines: [OCRLine], captureImages: Bool) throws -> (blocks: [DocumentBlock], images: [DocumentImage]) {
+		// Without standalone supplementation no OCR ran yet, but text Vision left
+		// unstructured would still read as graphics, so recognise it for masking.
 		let textBounds = structured.compactMap { block -> CGRect? in
 			if case .image = block.kind { return nil }
 			return block.bounds
-		} + ocrLines.map(\.bounds)
+		} + (allowStandaloneSupplementation ? ocrLines : recognizeTextLines()).map(\.bounds)
 		let regions = detectVisualRegions(in: image, pageSize: pageSize, excluding: textBounds)
 		let pageBounds = CGRect(origin: .zero, size: pageSize)
 
