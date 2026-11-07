@@ -18,15 +18,17 @@ import UIKit
 import Vision
 #endif
 
-private let stderrRedirectLock = NSLock()
+/// Recursive so a caller that redirects fd 2 itself (the tests) can hold it
+/// around a nested `withStderrSilenced`.
+let stderrRedirectLock = NSRecursiveLock()
 
-/// One of PDFKit's debug lines: an os_log-style timestamp and process tag, then
+/// One of PDFKit's debug lines: an os_log-style timestamp and process tag (the name may contain spaces), then
 /// `attributedStringScaled <name>: <value>`. Matching the whole shape (not just
 /// the token) removes only that text, so a partial write from another thread
 /// glued onto the front of it, or an application line that merely mentions the
 /// token, is kept.
 private let pdfKitDebugLine =
-	#"\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d+ [^\s\[]+\[\d+:\d+\] attributedStringScaled [^\n]*\n?"#
+	#"\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d+ [^\n\[]+\[\d+:\d+\] attributedStringScaled [^\n]*\n?"#
 
 /// Runs `body` with file descriptor 2 pointed at a scratch file, then forwards
 /// everything written meanwhile except PDFKit's `attributedStringScaled …` debug

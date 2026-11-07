@@ -34,6 +34,9 @@ struct StderrQuietTests {
 		FileManager.default.createFile(atPath: capture.path, contents: nil)
 		defer { try? FileManager.default.removeItem(at: capture) }
 
+		// Fd 2 is process-wide: hold the production lock so no other redirect interleaves.
+		stderrRedirectLock.lock()
+		defer { stderrRedirectLock.unlock() }
 		fflush(stderr)
 		let saved = dup(STDERR_FILENO)
 		let fd = open(capture.path, O_WRONLY)
@@ -58,6 +61,9 @@ struct StderrQuietTests {
 		FileManager.default.createFile(atPath: capture.path, contents: nil)
 		defer { try? FileManager.default.removeItem(at: capture) }
 
+		// Fd 2 is process-wide: hold the production lock so no other redirect interleaves.
+		stderrRedirectLock.lock()
+		defer { stderrRedirectLock.unlock() }
 		fflush(stderr)
 		let saved = dup(STDERR_FILENO)
 		let fd = open(capture.path, O_WRONLY)
@@ -65,7 +71,7 @@ struct StderrQuietTests {
 		close(fd)
 		withStderrSilenced {
 			// A partial write glued onto a PDFKit line, then a line that only mentions the token.
-			let noise = "partial 2026-11-07 11:42:21.387 swiftpm-testing-helper[75387:23608572] "
+			let noise = "partial 2026-11-07 11:42:21.387 Swift Text Viewer[75387:23608572] "
 				+ "attributedStringScaled i: 0\nmentions attributedStringScaled in prose\n"
 			fputs(noise, stderr)
 		}
