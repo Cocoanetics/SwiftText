@@ -207,8 +207,8 @@ struct Render: AsyncParsableCommand {
 		if ext == "html" || ext == "htm" {
 			throw ValidationError("HTML input is not supported: render takes a .md/.markdown file (or --stdin). Got '\(fileURL.lastPathComponent)'.")
 		}
-		let markdownExtensions: Set<String> = ["", "md", "markdown", "mdown", "mkd", "txt", "text"]
-		guard markdownExtensions.contains(ext) else {
+		let nonMarkdownExtensions: Set<String> = ["pdf", "docx", "pages", "epub", "xhtml", "png", "jpg", "jpeg", "gif", "zip"]
+		guard !nonMarkdownExtensions.contains(ext) else {
 			throw ValidationError("Unsupported input type '.\(ext)': render takes a .md/.markdown file (or --stdin).")
 		}
 	}

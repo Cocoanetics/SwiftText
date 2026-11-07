@@ -18,9 +18,17 @@ struct RenderInputValidationTests {
 		}
 	}
 
-	@Test("Markdown inputs are accepted", arguments: ["a.md", "a.markdown", "A.MD", "notes.txt"])
+	@Test("Markdown inputs are accepted", arguments: ["a.md", "a.markdown", "A.MD", "notes.txt", "README.mdx", "post.qmd", "file.rmd"])
 	func acceptsMarkdown(path: String) throws {
 		try Render.validateMarkdownInput(URL(fileURLWithPath: path))
+	}
+}
+
+@Suite("render non-Markdown types")
+struct RenderNonMarkdownTests {
+	@Test("binary and document types are rejected", arguments: ["a.pdf", "a.docx", "a.png"])
+	func rejects(path: String) {
+		#expect(throws: ValidationError.self) { try Render.validateMarkdownInput(URL(fileURLWithPath: path)) }
 	}
 }
 
