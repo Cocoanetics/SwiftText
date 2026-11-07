@@ -122,6 +122,14 @@ let cliTargets: [Target] = [
 	.plugin(
 		name: "VersionGeneratorPlugin",
 		capability: .buildTool()
+	),
+	.testTarget(
+		name: "SwiftTextCLITests",
+		dependencies: [
+			"SwiftTextCLI",
+			.product(name: "ArgumentParser", package: "swift-argument-parser", condition: .when(traits: ["CLI"]))
+		],
+		path: "Tests/SwiftTextCLITests"
 	)
 ]
 
