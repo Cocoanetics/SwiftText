@@ -349,14 +349,20 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 					return height;
 				}
 
-				// Once the unpaginated flow is already taller than a page, WebKit's
-				// column layout can understate the final print offset after preceding
-				// avoid-break content. Start a multi-page table on a reliable boundary;
-				// also do so when less than three quarters of the current page remains.
-				let startsOnNewPage = tableRect.height > pageHeight
-					&& (tableRect.top > pageHeight || offset > pageHeight * 0.25);
-				if (startsOnNewPage || measuredHeight([rows[0]], 0) > capacity + 0.5) {
-					startsOnNewPage = true;
+				// Multicolumn layout can understate the eventual print offset after
+				// avoid-break content once the unpaginated flow exceeds one page. Keep
+				// the safe-boundary fallback for that case. Otherwise use the remaining
+				// space whenever the header and first row fit; the fragments below keep
+				// rows together and repeat the header.
+				const previousElement = table.previousElementSibling;
+				const previousStyle = previousElement ? getComputedStyle(previousElement) : null;
+				const followsAvoidBreakContent = previousStyle
+					&& (previousStyle.breakInside === 'avoid' || previousStyle.pageBreakInside === 'avoid');
+				const uncertainOffset = tableRect.height > pageHeight
+					&& tableRect.top > pageHeight
+					&& followsAvoidBreakContent;
+				const startsOnNewPage = uncertainOffset || measuredHeight([rows[0]], 0) > capacity + 0.5;
+				if (startsOnNewPage) {
 					capacity = pageHeight;
 				}
 

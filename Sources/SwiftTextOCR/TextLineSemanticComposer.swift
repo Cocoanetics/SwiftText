@@ -29,13 +29,19 @@ public enum TextLineSemanticComposer {
 		var blocks = [DocumentBlock]()
 		var metadata = [BlockMetadata]()
 
+		var claimedByTable = [(lineIDs: Set<Int>, table: DocumentBlock.Table)]()
+
 		for semanticBlock in semantics.blocks {
+			let before = assigned
 			let result = composeBlock(
 				from: semanticBlock,
 				lineInfos: lineInfos,
 				assignedLines: &assigned,
 				referenceSize: semantics.referenceSize
 			)
+			if case .table(let table)? = result.block?.kind {
+				claimedByTable.append((assigned.subtracting(before), table))
+			}
 			guard let block = result.block, let context = result.metadata else { continue }
 			blocks.append(block)
 			metadata.append(context)
@@ -64,6 +70,15 @@ public enum TextLineSemanticComposer {
 
 		blocks.append(contentsOf: newParagraphs.map(\.block))
 		metadata.append(contentsOf: newParagraphs.map(\.metadata))
+
+		let dropped = claimedByTable.flatMap { claim in
+			droppedTableText(
+				in: lineInfos.filter { claim.lineIDs.contains($0.id) },
+				table: claim.table,
+				referenceSize: semantics.referenceSize)
+		}
+		blocks.append(contentsOf: dropped.map(\.block))
+		metadata.append(contentsOf: dropped.map(\.metadata))
 
 		let (orderedBlocks, orderedMetadata) = sortBlocksWithMetadata(blocks, metadata: metadata)
 		let (splitBlocks, splitMetadata) = splitParagraphBlocks(
@@ -577,6 +592,58 @@ private func makeDocumentLines(from infos: [LineInfo]) -> [DocumentBlock.TextLin
 	infos.map { info in
 		DocumentBlock.TextLine(text: info.text, bounds: info.semanticBounds, runs: info.runs)
 	}
+}
+
+/// Text that page lines carried into a table which the table does not show.
+///
+/// A table claims every page line that touches one of its cells, but shows the
+/// segmenter's own cell text. When the segmenter's table covers only some of
+/// the columns of a row the page sets as one line, the line is claimed and its
+/// leading columns vanish. Whether a fragment of such a line is shown is
+/// decided by where it lies, not by what it says: the segmenter's cell text
+/// may be read differently from the page line, or wrap over several lines. A
+/// fragment that lies mostly inside one of the table's cells is shown by it;
+/// the others are returned as paragraphs, so nothing the page recognised is
+/// lost silently.
+private func droppedTableText(
+	in lines: [LineInfo],
+	table: DocumentBlock.Table,
+	referenceSize: CGSize
+) -> [(block: DocumentBlock, metadata: BlockMetadata)] {
+	let cellBounds = table.rows.joined().map(\.bounds)
+
+	func isShown(_ bounds: CGRect) -> Bool {
+		let area = bounds.width * bounds.height
+		guard area > 0 else { return true }
+		return cellBounds.contains { cell in
+			let overlap = cell.intersection(bounds)
+			return !overlap.isNull && overlap.width * overlap.height > area * 0.5
+		}
+	}
+
+	var results = [(block: DocumentBlock, metadata: BlockMetadata)]()
+	for line in lines.sorted(by: { $0.semanticBounds.minY < $1.semanticBounds.minY }) {
+		let characters = Array(line.text)
+		var missing = [(text: String, bounds: CGRect)]()
+		for fragment in line.fragments {
+			let text = String(characters[fragment.characters])
+			guard !text.allSatisfy(\.isWhitespace) else { continue }
+			if !isShown(fragment.bounds) {
+				missing.append((text, fragment.bounds))
+			}
+		}
+		guard !missing.isEmpty else { continue }
+
+		let text = missing.map(\.text).joined(separator: " ")
+		let bounds = missing.dropFirst().reduce(missing[0].bounds) { $0.union($1.bounds) }
+		let paragraph = DocumentBlock.Paragraph(
+			text: text,
+			lines: [DocumentBlock.TextLine(text: text, bounds: bounds)])
+		results.append((
+			DocumentBlock(bounds: bounds, kind: .paragraph(paragraph)),
+			BlockMetadata(normalizedBounds: bounds.normalized(in: referenceSize))))
+	}
+	return results
 }
 
 private struct RemainingLine {

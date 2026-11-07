@@ -48,8 +48,8 @@ struct StderrQuietTests {
 		close(saved)
 
 		#expect(text == "Hello world")
-		// Other suites share fd 2 while it is redirected, so only PDFKit's own
-		// debug text is checked for, not an empty capture.
+		// The runner reports other, concurrently running tests on stderr too, so
+		// judge only what PDFKit itself prints.
 		let noise = try String(contentsOf: capture, encoding: .utf8)
 		#expect(!noise.contains("attributedStringScaled"), "stderr: \(noise)")
 	}

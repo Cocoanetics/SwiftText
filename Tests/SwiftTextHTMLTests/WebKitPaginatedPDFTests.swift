@@ -142,6 +142,85 @@ struct WebKitIntegrationTests {
 		#expect(tablePages.allSatisfy { $0.contains("Label") && $0.contains("Value") })
 	}
 
+	@Test("Long Markdown tables use the space after introductory paragraphs", .timeLimit(.minutes(2)), arguments: [0, 80])
+	func longTableAfterIntroduction(paragraphHeight: Int) async throws {
+		let rows = (1 ... 40).map {
+			let marker = String(format: "%02d", $0)
+			return "| \(marker) | row-start-\(marker)<br>row-end-\(marker) | | |"
+		}.joined(separator: "\n")
+		let markdown = """
+		# Fragebogen
+
+		Ein kurzer Einleitungsabsatz.
+
+		Noch ein Absatz.
+
+		| Nr. | Frage | Ja | Nein |
+		|---|---|---|---|
+		\(rows)
+		"""
+		let stylesheet = """
+		\(MarkdownToHTML.defaultStylesheet)
+		@page { size: A4; margin: 2cm; }
+		*, *::before, *::after { box-sizing: border-box; }
+		@media print { body { max-width: none; padding: 0; margin: 0; } }
+		h1 { break-after: avoid; break-inside: avoid; }
+		p { min-height: \(paragraphHeight)px; orphans: 2; widows: 2; }
+		thead { display: table-header-group; }
+		tr { page-break-inside: avoid; break-inside: avoid; }
+		"""
+		let html = MarkdownToHTML.document(markdown, stylesheet: stylesheet, options: [.passThroughRawHTML])
+		let document = try await paginate(html)
+		#expect(document.pageCount > 1)
+		let pageTexts = (0 ..< document.pageCount).map { document.page(at: $0)?.string ?? "" }
+		#expect(pageTexts[0].contains("Fragebogen"))
+		#expect(pageTexts[0].contains("row-start-01"), "the first page has room for table rows")
+		for text in pageTexts {
+			#expect(text.contains("row-start-"), "a page was left without table rows")
+			#expect(text.contains("Frage") && text.contains("Nein"), "a table page has no repeated header")
+		}
+		for rowNumber in 1 ... 40 {
+			let marker = String(format: "%02d", rowNumber)
+			#expect(pageTexts.filter { $0.contains("row-start-\(marker)") }.count == 1)
+			#expect(pageTexts.filter { $0.contains("row-end-\(marker)") }.count == 1)
+			#expect(pageTexts.contains { $0.contains("row-start-\(marker)") && $0.contains("row-end-\(marker)") },
+			        "row \(rowNumber) was split across pages")
+		}
+	}
+
+	@Test("Long tables use a safe boundary after avoid-break content beyond page one", .timeLimit(.minutes(2)))
+	func longTableAfterAvoidBreakContent() async throws {
+		let rows = (1 ... 40).map {
+			let marker = String(format: "%02d", $0)
+			return "<tr><td>safe-row-start-\(marker)<br>safe-row-end-\(marker)</td></tr>"
+		}.joined()
+		let html = """
+		<html><head><style>
+		@page { size: A4; margin: 2cm; }
+		body { margin: 0; font: 16px sans-serif; }
+		table { border-collapse: collapse; }
+		th, td { border: 1px solid #999; padding: 8px 12px; }
+		</style></head><body>
+		<div style="height: 300px">Content before the avoid-break block.</div>
+		<div style="height: 650px; break-inside: avoid">Avoid-break tail.</div>
+		<table><thead><tr><th>Safe header</th></tr></thead><tbody>\(rows)</tbody></table>
+		</body></html>
+		"""
+		let document = try await paginate(html)
+		let pageTexts = (0 ..< document.pageCount).map { document.page(at: $0)?.string ?? "" }
+		let firstTablePage = try #require(pageTexts.firstIndex { $0.contains("safe-row-start-") })
+		#expect(!pageTexts[firstTablePage].contains("Avoid-break tail"),
+		        "the table needs a reliable boundary when the paginated offset may be underestimated")
+		for text in pageTexts where text.contains("safe-row-start-") {
+			#expect(text.contains("Safe header"), "a table page has no repeated header")
+		}
+		for rowNumber in 1 ... 40 {
+			let marker = String(format: "%02d", rowNumber)
+			#expect(pageTexts.contains { $0.contains("safe-row-start-\(marker)") && $0.contains("safe-row-end-\(marker)") },
+			        "row \(rowNumber) was split across pages")
+		}
+	}
+
 	@Test("Table fragments keep headers when the table starts late on a page", .timeLimit(.minutes(2)))
 	func tableStartingLateOnPage() async throws {
 		let rows = (1 ... 45).map {
