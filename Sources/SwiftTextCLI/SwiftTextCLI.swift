@@ -147,10 +147,14 @@ struct OCR: AsyncParsableCommand {
 			}
 		}
 
-		if saveImages != nil, #available(iOS 26.0, tvOS 26.0, macOS 26.0, visionOS 26.0, *) {
+		if saveImages != nil {
+			guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, visionOS 26.0, *) else {
+				throw ValidationError("Saving images requires Vision document segmentation, which is unavailable on this platform.")
+			}
 			for pageIndex in 0..<pdfDocument.pageCount {
 				guard let page = pdfDocument.page(at: pageIndex) else { continue }
-				let semantics = try await page.documentSemantics(dpi: CGFloat(dpi), applyPostProcessing: false, languages: recognitionLanguages)
+				// A page without detectable structure simply has no images to save.
+				guard let semantics = try? await page.documentSemantics(dpi: CGFloat(dpi), applyPostProcessing: false, languages: recognitionLanguages) else { continue }
 				_ = try saveImagesIfNeeded(images: semantics.images, pageIndex: pageIndex)
 			}
 		}
@@ -189,9 +193,13 @@ struct OCR: AsyncParsableCommand {
 			}
 		}
 
-		if saveImages != nil, #available(iOS 26.0, tvOS 26.0, macOS 26.0, visionOS 26.0, *) {
-			let semantics = try await documentSemantics(from: cgImage, applyPostProcessing: false, languages: recognitionLanguages)
-			_ = try saveImagesIfNeeded(images: semantics.images)
+		if saveImages != nil {
+			guard #available(iOS 26.0, tvOS 26.0, macOS 26.0, visionOS 26.0, *) else {
+				throw ValidationError("Saving images requires Vision document segmentation, which is unavailable on this platform.")
+			}
+			if let semantics = try? await documentSemantics(from: cgImage, applyPostProcessing: false, languages: recognitionLanguages) {
+				_ = try saveImagesIfNeeded(images: semantics.images)
+			}
 		}
 
 		// Non-markdown: fallback to OCR lines
