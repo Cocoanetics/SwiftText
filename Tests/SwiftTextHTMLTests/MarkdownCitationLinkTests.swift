@@ -39,26 +39,40 @@ struct MarkdownCitationLinkTests {
 		#expect(!html.contains("{#zweite}"))
 	}
 
+	@Test("Citation ids don't clash with footnote anchors, and footnotes link citations too")
+	func footnoteCoexistence() {
+		let md = "Text[^1] and [1].\n\n- [1] Source\n\n[^1]: Note, see [1]."
+		let html = MarkdownToHTML.convert(md, options: [.linkCitations])
+		#expect(html.contains("<li id=\"citation-1\">[1] Source</li>"))
+		#expect(html.contains("id=\"ref-1\">[1]</a></sup>"))
+		#expect(html.contains("see <a href=\"#citation-1\">[1]</a>."))
+	}
+
+	@Test("Inferred title drops the {#id} suffix")
+	func inferredTitle() {
+		#expect(MarkdownToHTML.firstHeadingPlainText("# Report {#report}\n\nx") == "Report")
+	}
+
 	@Test("Default output is unchanged")
 	func defaultsUnchanged() {
 		let html = MarkdownToHTML.convert("## Hi {#x}\n\n- [1] a\n\nSee [1].")
 		#expect(html.contains("<h2>Hi {#x}</h2>"))
-		#expect(!html.contains("ref-1"))
+		#expect(!html.contains("citation-1"))
 	}
 
 	@Test("Numeric citations link to their reference items")
 	func citations() {
 		let html = MarkdownToHTML.convert(Self.repro, options: [.passThroughRawHTML, .linkCitations])
-		#expect(html.contains("<a href=\"#ref-1\">[1]</a>"))
-		#expect(html.contains("<a href=\"#ref-2\">[2]</a>"))
-		#expect(html.contains("<li id=\"ref-1\">[1] Erste Quelle."))
-		#expect(html.contains("<li id=\"ref-2\"><a id=\"q2\"></a>[2] Zweite Quelle.</li>"))
+		#expect(html.contains("<a href=\"#citation-1\">[1]</a>"))
+		#expect(html.contains("<a href=\"#citation-2\">[2]</a>"))
+		#expect(html.contains("<li id=\"citation-1\">[1] Erste Quelle."))
+		#expect(html.contains("<li id=\"citation-2\"><a id=\"q2\"></a>[2] Zweite Quelle.</li>"))
 		#expect(html.contains("<a id=\"q1\"></a>"))
 
 		let plain = MarkdownToHTML.convert("Text [3] and [1].\n\n- [1] First\n- [2] Second", options: [.linkCitations])
-		#expect(plain.contains("[3] and <a href=\"#ref-1\">[1]</a>."))
-		#expect(!plain.contains("href=\"#ref-3\""))
-		#expect(plain.contains("<li id=\"ref-1\">[1] First</li>"))
+		#expect(plain.contains("[3] and <a href=\"#citation-1\">[1]</a>."))
+		#expect(!plain.contains("href=\"#citation-3\""))
+		#expect(plain.contains("<li id=\"citation-1\">[1] First</li>"))
 	}
 
 	#if os(macOS)

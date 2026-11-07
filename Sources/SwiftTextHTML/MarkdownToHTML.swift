@@ -47,8 +47,8 @@ public enum MarkdownToHTML {
 		let document = Document(parsing: markdown, options: [.disableSmartOpts])
 		for child in document.children {
 			guard let heading = child as? Heading else { continue }
-			let text = swiftMarkdownPlainText(of: heading)
-				.trimmingCharacters(in: .whitespacesAndNewlines)
+			let text = SwiftMarkdownHTMLRenderer.splitHeadingID(
+				swiftMarkdownPlainText(of: heading).trimmingCharacters(in: .whitespacesAndNewlines)).text
 			if !text.isEmpty { return text }
 		}
 		return nil

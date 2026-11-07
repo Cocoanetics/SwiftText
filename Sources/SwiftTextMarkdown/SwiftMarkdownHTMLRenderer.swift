@@ -53,10 +53,26 @@ public enum SwiftMarkdownHTMLRenderer {
 		public static let headingIDs = Options(rawValue: 1 << 2)
 
 		/// Makes numeric citations clickable. A list item starting with `[n]` gets
-		/// `id="ref-n"`, and every other `[n]` (or `[n](#anchor)` / `[[n]](#anchor)`
-		/// link) becomes `<a href="#ref-n">[n]</a>` — but only when a matching
+		/// `id="citation-n"`, and every other `[n]` (or `[n](#anchor)` / `[[n]](#anchor)`
+		/// link) becomes `<a href="#citation-n">[n]</a>` — but only when a matching
 		/// reference item exists in the document.
 		public static let linkCitations = Options(rawValue: 1 << 3)
+	}
+
+	/// The `n` of every list item in `document` that starts with `[n]`.
+	public static func citationReferenceNumbers(in document: Document) -> Set<Int> {
+		var renderer = HTMLRenderer(options: [.linkCitations])
+		renderer.collectReferenceNumbers(in: document)
+		return renderer.referenceNumbers
+	}
+
+	/// Splits a trailing `{#custom-id}` heading attribute off the heading's plain text.
+	public static func splitHeadingID(_ text: String) -> (text: String, id: String?) {
+		guard let range = text.range(of: #"\s*\{#([^\s{}<>&"']+)\}$"#, options: .regularExpression) else {
+			return (text, nil)
+		}
+		let attribute = text[range].trimmingCharacters(in: .whitespaces)
+		return (String(text[..<range.lowerBound]), String(attribute.dropFirst(2).dropLast()))
 	}
 
 	public static func convert(_ markdown: String, options: Options = []) -> String {
@@ -67,8 +83,14 @@ public enum SwiftMarkdownHTMLRenderer {
 	/// Renders an already-parsed `Document` to the same HTML fragment shape as
 	/// ``convert(_:)``. Use this entry point when you need to rewrite the AST
 	/// (e.g. with a `MarkupRewriter`) before rendering.
-	public static func convert(document: Document, options: Options = []) -> String {
+	///
+	/// - Parameter citationNumbers: With ``Options/linkCitations``, the reference numbers
+	///   to link. Defaults to those found in `document`; pass the set of the whole source
+	///   when rendering fragments of it separately.
+	public static func convert(document: Document, options: Options = [], citationNumbers: Set<Int>? = nil) -> String {
 		var renderer = HTMLRenderer(options: options)
+		renderer.referenceNumbers = citationNumbers ?? []
+		renderer.hasSharedCitationNumbers = citationNumbers != nil
 		renderer.visit(document)
 		return renderer.flush()
 	}
@@ -86,7 +108,8 @@ private struct HTMLRenderer: MarkupVisitor {
 	private var output: String = ""
 	private var usedHeadingIDs = Set<String>()
 	/// Citation numbers that have a `[n]` reference list item (when linking citations).
-	private var referenceNumbers = Set<Int>()
+	fileprivate(set) var referenceNumbers = Set<Int>()
+	fileprivate var hasSharedCitationNumbers = false
 	private var suppressCitationLinks = false
 	private var alignmentStack: [[Table.ColumnAlignment?]] = []
 
@@ -105,7 +128,7 @@ private struct HTMLRenderer: MarkupVisitor {
 	mutating func visitDocument(_ document: Document) {
 		// Legacy parser joins top-level blocks with "\n". Reproduce that so a
 		// multi-block fixture round-trips byte-identically.
-		if options.contains(.linkCitations) {
+		if options.contains(.linkCitations), !hasSharedCitationNumbers {
 			collectReferenceNumbers(in: document)
 		}
 		let blocks = Array(document.children)
@@ -130,20 +153,14 @@ private struct HTMLRenderer: MarkupVisitor {
 			return
 		}
 		let plain = swiftMarkdownPlainText(of: heading).trimmingCharacters(in: .whitespacesAndNewlines)
-		var explicitID: String?
-		var suffix = ""
-		if let range = plain.range(of: #"\s*\{#([^\s{}<>&"']+)\}$"#, options: .regularExpression) {
-			suffix = String(plain[range])
-			let attribute = suffix.trimmingCharacters(in: .whitespaces)
-			explicitID = String(attribute.dropFirst(2).dropLast())
-		}
+		var explicitID = SwiftMarkdownHTMLRenderer.splitHeadingID(plain).id
+		let attribute = explicitID.map { "{#\($0)}" } ?? ""
 		let saved = output
 		output = ""
 		visitInlines(of: heading)
 		var content = output
 		output = saved
 		if explicitID != nil {
-			let attribute = suffix.trimmingCharacters(in: .whitespaces)
 			if let range = content.range(of: attribute, options: [.backwards]),
 			   content[range.upperBound...].allSatisfy(\.isWhitespace) {
 				content = String(content[..<range.lowerBound])
@@ -213,7 +230,7 @@ private struct HTMLRenderer: MarkupVisitor {
 	mutating func visitLink(_ link: Link) {
 		let href = link.destination ?? ""
 		if let number = citationLinkNumber(for: link) {
-			output += "<a href=\"#ref-\(number)\">[\(number)]</a>"
+			output += "<a href=\"#citation-\(number)\">[\(number)]</a>"
 			return
 		}
 		output += "<a href=\"\(escapeAttribute(href))\">"
@@ -263,7 +280,7 @@ private struct HTMLRenderer: MarkupVisitor {
 	mutating func visitListItem(_ listItem: ListItem) {
 		let isTaskItem: Bool
 		let referenceNumber = options.contains(.linkCitations) ? Self.referenceNumber(of: listItem) : nil
-		let idAttribute = referenceNumber.map { " id=\"ref-\($0)\"" } ?? ""
+		let idAttribute = referenceNumber.map { " id=\"citation-\($0)\"" } ?? ""
 		switch listItem.checkbox {
 		case .checked:
 			isTaskItem = true
@@ -352,7 +369,7 @@ private struct HTMLRenderer: MarkupVisitor {
 			let close = rest.index(afterOpen, offsetBy: digits.count)
 			if !digits.isEmpty, close < rest.endIndex, rest[close] == "]",
 			   let number = Int(digits), referenceNumbers.contains(number) {
-				output += "<a href=\"#ref-\(number)\">[\(number)]</a>"
+				output += "<a href=\"#citation-\(number)\">[\(number)]</a>"
 				rest = rest[rest.index(after: close)...]
 			} else {
 				output += "["
@@ -390,7 +407,7 @@ private struct HTMLRenderer: MarkupVisitor {
 		return Int(digits)
 	}
 
-	private mutating func collectReferenceNumbers(in markup: Markup) {
+	mutating func collectReferenceNumbers(in markup: Markup) {
 		if let item = markup as? ListItem, let number = Self.referenceNumber(of: item) {
 			referenceNumbers.insert(number)
 		}
