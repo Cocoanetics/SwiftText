@@ -18,10 +18,15 @@ import UIKit
 import Vision
 #endif
 
+private let stderrRedirectLock = NSLock()
+
 /// Runs `body` with file descriptor 2 pointed at /dev/null. PDFKit's
 /// `attributedString` prints `attributedStringScaled …` debug lines straight to
 /// stderr, which would otherwise leak into every text-layer extraction.
 func withStderrSilenced<T>(_ body: () -> T) -> T {
+	// Fd 2 is process-wide: overlapping calls must not save an already-silenced fd.
+	stderrRedirectLock.lock()
+	defer { stderrRedirectLock.unlock() }
 	fflush(stderr)
 	let saved = dup(STDERR_FILENO)
 	let null = open("/dev/null", O_WRONLY)
