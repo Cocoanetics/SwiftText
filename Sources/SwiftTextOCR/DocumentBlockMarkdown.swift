@@ -8,6 +8,19 @@
 import Foundation
 import Markdown
 
+/// One page of OCR-extracted blocks. Block and line bounds are measured from
+/// the top of this page, so pages must not be mixed before reading order is
+/// worked out.
+public struct DocumentBlockPage: Equatable, Sendable {
+	public let blocks: [DocumentBlock]
+	public let textLines: [DocumentBlock.TextLine]?
+
+	public init(blocks: [DocumentBlock], textLines: [DocumentBlock.TextLine]? = nil) {
+		self.blocks = blocks
+		self.textLines = textLines
+	}
+}
+
 public struct DocumentBlockMarkdownRenderer {
 
 	/// Builds a swift-markdown `Document` from OCR-extracted blocks, using the
@@ -23,27 +36,45 @@ public struct DocumentBlockMarkdownRenderer {
 		textLines: [DocumentBlock.TextLine]? = nil,
 		imageResolver: ((DocumentBlock) -> String?)? = nil
 	) -> Document {
-		let ordered = orderedBlocks(blocks, textLines: textLines)
+		document(
+			fromPages: [DocumentBlockPage(blocks: blocks, textLines: textLines)],
+			imageResolver: imageResolver.map { resolve in { block, _ in resolve(block) } })
+	}
+
+	/// Builds a swift-markdown `Document` from several pages of blocks.
+	///
+	/// Reading order and paragraph merging are worked out within each page, so
+	/// a page's content never sorts into or merges with another page's. Heading
+	/// levels are measured over the whole document so they stay consistent from
+	/// page to page. With `pageSeparator`, a thematic break (`---`) sits between
+	/// pages that produced content. The image resolver receives the zero-based
+	/// page index alongside each image block.
+	public static func document(
+		fromPages pages: [DocumentBlockPage],
+		pageSeparator: Bool = true,
+		imageResolver: ((DocumentBlock, Int) -> String?)? = nil
+	) -> Document {
+		let orderedPages = pages.map { orderedBlocks($0.blocks, textLines: $0.textLines) }
 		// How this document sets its text decides which sizes are headings, so
 		// it is measured before geometric continuation merging. Otherwise a
 		// nearby title and body paragraph become one mixed-style paragraph before
 		// the title can be recognised.
-		let typography = DocumentTypography(blocks: ordered)
-		let merged = mergeParagraphContinuations(
-			ordered,
-			pageBounds: boundsForPage(from: ordered, textLines: textLines),
-			typography: typography)
-		let blockMarkup: [BlockMarkup] = merged.compactMap { block -> BlockMarkup? in
-			switch block.kind {
-			case .paragraph(let paragraph):
-				return makeParagraph(paragraph, typography: typography)
-			case .list(let list):
-				return makeList(list)
-			case .table(let table):
-				return makeTable(table)
-			case .image:
-				return makeImage(resolved: imageResolver?(block))
+		let typography = DocumentTypography(blocks: orderedPages.flatMap { $0 })
+
+		var blockMarkup: [BlockMarkup] = []
+		for (pageIndex, ordered) in orderedPages.enumerated() {
+			let merged = mergeParagraphContinuations(
+				ordered,
+				pageBounds: boundsForPage(from: ordered, textLines: pages[pageIndex].textLines),
+				typography: typography)
+			let pageMarkup = merged.compactMap { block in
+				makeMarkup(for: block, typography: typography) { imageResolver?($0, pageIndex) }
 			}
+			guard !pageMarkup.isEmpty else { continue }
+			if pageSeparator && !blockMarkup.isEmpty {
+				blockMarkup.append(ThematicBreak())
+			}
+			blockMarkup.append(contentsOf: pageMarkup)
 		}
 		return Document(blockMarkup)
 	}
@@ -57,15 +88,48 @@ public struct DocumentBlockMarkdownRenderer {
 		textLines: [DocumentBlock.TextLine]? = nil,
 		imageResolver: ((DocumentBlock) -> String?)? = nil
 	) -> String {
-		let doc = document(from: blocks, textLines: textLines, imageResolver: imageResolver)
+		format(document(from: blocks, textLines: textLines, imageResolver: imageResolver))
+	}
+
+	/// Renders several pages of blocks to a Markdown string; see
+	/// `document(fromPages:pageSeparator:imageResolver:)`.
+	public static func markdown(
+		fromPages pages: [DocumentBlockPage],
+		pageSeparator: Bool = true,
+		imageResolver: ((DocumentBlock, Int) -> String?)? = nil
+	) -> String {
+		format(document(fromPages: pages, pageSeparator: pageSeparator, imageResolver: imageResolver))
+	}
+
+	private static func format(_ doc: Document) -> String {
 		// Use incrementing numerals for ordered lists. The formatter's default
 		// (`allSame`) emits `1.` for every item — CommonMark-legal but visually
-		// confusing for non-renderer consumers (LLMs, diff tools).
-		let options = MarkupFormatter.Options(orderedListNumerals: .incrementing(start: 1))
+		// confusing for non-renderer consumers (LLMs, diff tools). Page breaks
+		// print as `---`, the same separator plain-text OCR output uses.
+		let options = MarkupFormatter.Options(
+			orderedListNumerals: .incrementing(start: 1),
+			thematicBreakLength: 3)
 		return doc.format(options: options)
 	}
 
 	// MARK: - Block builders
+
+	private static func makeMarkup(
+		for block: DocumentBlock,
+		typography: DocumentTypography,
+		imageResolver: (DocumentBlock) -> String?
+	) -> BlockMarkup? {
+		switch block.kind {
+		case .paragraph(let paragraph):
+			return makeParagraph(paragraph, typography: typography)
+		case .list(let list):
+			return makeList(list)
+		case .table(let table):
+			return makeTable(table)
+		case .image:
+			return makeImage(resolved: imageResolver(block))
+		}
+	}
 
 	private static func makeParagraph(
 		_ paragraph: DocumentBlock.Paragraph,
