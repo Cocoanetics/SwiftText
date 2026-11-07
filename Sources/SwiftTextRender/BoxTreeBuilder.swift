@@ -96,8 +96,10 @@ public enum BoxTreeBuilder {
 	}
 
 	/// An attribute parsed as an HTML valid integer, or `nil` when absent or invalid.
+	/// Values are limited to 32 bits (as browsers do), so stepping by one from
+	/// them can never overflow `Int`.
 	private static func integerAttribute(_ name: String, of element: StyledElement) -> Int? {
-		element.attributeValue(name).flatMap { Int($0.trimmingCharacters(in: .whitespaces)) }
+		element.attributeValue(name).flatMap { Int32($0.trimmingCharacters(in: .whitespaces)) }.map(Int.init)
 	}
 
 	/// Format a 1-based ordinal per a `list-style-type`-like keyword. Also used

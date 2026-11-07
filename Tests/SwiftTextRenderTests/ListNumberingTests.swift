@@ -16,7 +16,11 @@ extension RenderPDFTests {
 		("<ol type=\"a\" start=\"3\" style=\"list-style-type: lower-alpha\"><li>a</li></ol>", ["c."]),
 		("<ol start=\"3\" style=\"list-style-type: upper-roman\"><li>a</li><li>b</li></ol>", ["III.", "IV."]),
 		("<ol start=\"x\"><li>a</li><li>b</li></ol>", ["1.", "2."]),
-		("<ol start=\"0\"><li>a</li><li>b</li></ol>", ["0.", "1."])
+		("<ol start=\"0\"><li>a</li><li>b</li></ol>", ["0.", "1."]),
+		// Out-of-range values are ignored instead of overflowing.
+		("<ol start=\"-9223372036854775808\"><li>a</li><li>b</li></ol>", ["1.", "2."]),
+		("<ol start=\"9223372036854775807\" reversed=\"reversed\"><li>a</li><li>b</li></ol>", ["2.", "1."]),
+		("<ol start=\"2147483647\"><li>a</li><li>b</li></ol>", ["2147483647.", "2147483648."])
 	])
 	func orderedListNumbering(html: String, expected: [String]) async throws {
 		let root = try await layoutTree(html, contentWidth: 400)
