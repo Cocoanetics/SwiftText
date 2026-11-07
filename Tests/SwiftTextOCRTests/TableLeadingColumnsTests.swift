@@ -104,6 +104,38 @@ struct TableLeadingColumnsTests {
 		#expect(markdown.contains("1.00 Wert") || markdown.contains("Wert 1.00"), "\(markdown)")
 	}
 
+	/// A cell that wraps over two page lines, or that the page reads differently
+	/// from the segmenter, is shown by the table: no paragraph repeats it.
+	@Test("Wrapped or differently read cells are not repeated as paragraphs")
+	func shownCellsAreNotDuplicated() {
+		let cellBounds = CGRect(x: 300, y: 150, width: 100, height: 50)
+		let cell = DocumentBlock.Table.Cell(
+			rowRange: 0...0, columnRange: 0...0, text: "Foo\nbar", bounds: cellBounds,
+			lines: [DocumentBlock.TextLine(text: "Foo\nbar", bounds: cellBounds)])
+		let other = CGRect(x: 450, y: 150, width: 60, height: 20)
+		let unit = DocumentBlock.Table.Cell(
+			rowRange: 0...0, columnRange: 1...1, text: "G/", bounds: other,
+			lines: [DocumentBlock.TextLine(text: "G/", bounds: other)])
+		let tableBounds = cellBounds.union(other)
+		let semantics = DocumentSemantics(
+			referenceSize: pageSize,
+			blocks: [NormalizedDocumentBlock(
+				block: DocumentBlock(bounds: tableBounds, kind: .table(.init(rows: [[cell, unit]]))),
+				normalizedBounds: normalized(tableBounds),
+				tableRows: [[
+					.init(normalizedBounds: normalized(cellBounds), cell: cell),
+					.init(normalizedBounds: normalized(other), cell: unit)]])],
+			images: [])
+		let lines = [
+			pageLine([("Foo", 300, 80), ("G/I", 450, 60)], y: 150),
+			pageLine([("bar", 300, 80)], y: 180)
+		]
+		let blocks = TextLineSemanticComposer.composeBlocks(
+			from: lines, semantics: semantics, layoutSize: pageSize)
+
+		#expect(blocks.count == 1, "\(blocks)")
+	}
+
 	private func pageLine(_ words: [(String, CGFloat, CGFloat)], y: CGFloat) -> TextLine {
 		TextLine(fragments: words.map { text, x, width in
 			TextFragment(bounds: CGRect(x: x, y: y, width: width, height: 20), string: text, styleRuns: [])

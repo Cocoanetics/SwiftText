@@ -599,40 +599,26 @@ private func makeDocumentLines(from infos: [LineInfo]) -> [DocumentBlock.TextLin
 /// A table claims every page line that touches one of its cells, but shows the
 /// segmenter's own cell text. When the segmenter's table covers only some of
 /// the columns of a row the page sets as one line, the line is claimed and its
-/// leading columns vanish. Each fragment of such a line is looked for among the
-/// rendered cells of the table that claimed it, as a whole cell or a run of
-/// neighbouring cells in a row; every cell answers for one fragment only. The
-/// fragments that no cell shows are returned as paragraphs, so nothing the page
-/// recognised is lost silently.
+/// leading columns vanish. Whether a fragment of such a line is shown is
+/// decided by where it lies, not by what it says: the segmenter's cell text
+/// may be read differently from the page line, or wrap over several lines. A
+/// fragment that lies mostly inside one of the table's cells is shown by it;
+/// the others are returned as paragraphs, so nothing the page recognised is
+/// lost silently.
 private func droppedTableText(
 	in lines: [LineInfo],
 	table: DocumentBlock.Table,
 	referenceSize: CGSize
 ) -> [(block: DocumentBlock, metadata: BlockMetadata)] {
-	func squeezed(_ text: String) -> String {
-		String(text.filter { !$0.isWhitespace })
-	}
+	let cellBounds = table.rows.joined().map(\.bounds)
 
-	// What the renderer prints: one text per cell.
-	let cells = table.rows.map { $0.map { squeezed($0.text) } }
-	var used = cells.map { Array(repeating: false, count: $0.count) }
-
-	func consume(_ key: String) -> Bool {
-		for (rowIndex, row) in cells.enumerated() {
-			for start in row.indices where !used[rowIndex][start] {
-				var joined = ""
-				for end in start..<row.count {
-					if used[rowIndex][end] { break }
-					joined += row[end]
-					if joined == key {
-						for index in start...end { used[rowIndex][index] = true }
-						return true
-					}
-					if joined.count >= key.count { break }
-				}
-			}
+	func isShown(_ bounds: CGRect) -> Bool {
+		let area = bounds.width * bounds.height
+		guard area > 0 else { return true }
+		return cellBounds.contains { cell in
+			let overlap = cell.intersection(bounds)
+			return !overlap.isNull && overlap.width * overlap.height > area * 0.5
 		}
-		return false
 	}
 
 	var results = [(block: DocumentBlock, metadata: BlockMetadata)]()
@@ -641,9 +627,8 @@ private func droppedTableText(
 		var missing = [(text: String, bounds: CGRect)]()
 		for fragment in line.fragments {
 			let text = String(characters[fragment.characters])
-			let key = squeezed(text)
-			guard !key.isEmpty else { continue }
-			if !consume(key) {
+			guard !text.allSatisfy(\.isWhitespace) else { continue }
+			if !isShown(fragment.bounds) {
 				missing.append((text, fragment.bounds))
 			}
 		}
