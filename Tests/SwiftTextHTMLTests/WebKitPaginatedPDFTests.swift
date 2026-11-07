@@ -295,5 +295,59 @@ struct WebKitIntegrationTests {
 			#expect(text.contains("Path"), "table page \(index + 1) has no path header")
 		}
 	}
+
+	/// #140: an over-wide table must not make WebKit's horizontal fit scale the
+	/// whole document down; only the table is constrained to the page.
+	@Test("A wide table does not shrink the surrounding text", .timeLimit(.minutes(3)))
+	func wideTableKeepsTextSize() async throws {
+		let paragraph = String(repeating: "Dies ist ein Absatz mit genügend Text, damit das Dokument mehrere Seiten lang wird. ", count: 8)
+			.trimmingCharacters(in: .whitespaces) + "\n\n"
+		let headers = ["Datum", "Madopar genommen um", "Beweglichkeit vormittags (1 bis 5)", "nachmittags (1 bis 5)",
+			"abends (1 bis 5)", "Blutdruck liegend / stehend", "Schwindel beim Aufstehen (ja/nein)",
+			"Schlaf (gut/mittel/schlecht)", "Training (was, wie lang)", "Bemerkungen"]
+		let row = "| " + headers.map { _ in "" }.joined(separator: " | ") + " |\n"
+		let table = "| " + headers.joined(separator: " | ") + " |\n|" + String(repeating: "---|", count: 10) + "\n"
+			+ String(repeating: row, count: 5)
+		let narrow = "# Test\n\n" + String(repeating: paragraph, count: 25)
+		let wide = "# Test\n\n" + String(repeating: paragraph, count: 20) + table + "\n" + String(repeating: paragraph, count: 5)
+
+		func html(_ markdown: String) -> String {
+			"""
+			<!DOCTYPE html><html><head><meta charset="utf-8">
+			<style>@page { size: A4 portrait; margin: 0; }
+			\(MarkdownToHTML.defaultStylesheet)
+			body { max-width: none; margin: 0; padding: 40px; }</style></head>
+			<body>\(MarkdownToHTML.convert(markdown))</body></html>
+			"""
+		}
+		func wordWidth(_ document: PDFDocument, _ word: String) throws -> CGFloat {
+			let match = try #require(document.findString(word, withOptions: []).first)
+			let page = try #require(match.pages.first)
+			return match.bounds(for: page).width
+		}
+
+		let narrowDoc = try await paginate(html(narrow), timeout: 60)
+		let wideDoc = try await paginate(html(wide), timeout: 60)
+
+		let narrowWidth = try wordWidth(narrowDoc, "Absatz")
+		let wideWidth = try wordWidth(wideDoc, "Absatz")
+		#expect(abs(wideWidth - narrowWidth) / narrowWidth < 0.03, "body text was scaled: \(wideWidth) vs \(narrowWidth)")
+
+		// Every glyph, table cells included, stays inside the page's horizontal bounds.
+		for index in 0 ..< wideDoc.pageCount {
+			let page = try #require(wideDoc.page(at: index))
+			for character in 0 ..< page.numberOfCharacters {
+				let bounds = page.characterBounds(at: character)
+				guard bounds.width > 0 else { continue }
+				#expect(bounds.minX >= 0 && bounds.maxX <= a4.width, "glyph outside the page on page \(index + 1): \(bounds)")
+			}
+		}
+		let text = (0 ..< wideDoc.pageCount).compactMap { wideDoc.page(at: $0)?.string }.joined()
+			.filter { !$0.isWhitespace }
+		for header in headers {
+			let compact = header.filter { !$0.isWhitespace }
+			#expect(text.contains(compact), "header \(header) lost")
+		}
+	}
 }
 #endif
