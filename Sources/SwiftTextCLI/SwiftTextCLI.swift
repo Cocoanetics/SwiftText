@@ -86,7 +86,7 @@ struct OCR: AsyncParsableCommand {
 	@Flag(name: .shortAndLong, help: "Use Vision document segmentation and emit Markdown (lists/tables/images).")
 	var markdown: Bool = false
 
-	@Option(name: .long, help: "Directory to save detected images when using segmentation (Markdown mode).")
+	@Option(name: .long, help: "Directory to save detected images (photos, charts) as PNG files. Works in plain and Markdown mode.")
 	var saveImages: String?
 
 	@Option(name: .shortAndLong, help: "Write output to a file instead of stdout.")
@@ -147,6 +147,14 @@ struct OCR: AsyncParsableCommand {
 			}
 		}
 
+		if saveImages != nil, #available(iOS 26.0, tvOS 26.0, macOS 26.0, visionOS 26.0, *) {
+			for pageIndex in 0..<pdfDocument.pageCount {
+				guard let page = pdfDocument.page(at: pageIndex) else { continue }
+				let semantics = try await page.documentSemantics(dpi: CGFloat(dpi), applyPostProcessing: false, languages: recognitionLanguages)
+				_ = try saveImagesIfNeeded(images: semantics.images, pageIndex: pageIndex)
+			}
+		}
+
 		let textLines = pdfDocument.textLines(forceOCR: forceOcr, dpi: CGFloat(dpi), languages: recognitionLanguages)
 		if lines {
 			return textLines.map(\.combinedText).joined(separator: "\n")
@@ -179,6 +187,11 @@ struct OCR: AsyncParsableCommand {
 			} else {
 				throw ValidationError("Vision document segmentation is unavailable on this platform.")
 			}
+		}
+
+		if saveImages != nil, #available(iOS 26.0, tvOS 26.0, macOS 26.0, visionOS 26.0, *) {
+			let semantics = try await documentSemantics(from: cgImage, applyPostProcessing: false, languages: recognitionLanguages)
+			_ = try saveImagesIfNeeded(images: semantics.images)
 		}
 
 		// Non-markdown: fallback to OCR lines

@@ -77,7 +77,7 @@ struct DocumentBlockExtractor {
 		var usedOCRTexts = Set<String>()
 
 		var structuredBlocks = gatherStructuredBlocks(from: container, ocrLines: ocrLines, usedOCRLineIDs: &usedOCRLineIDs, usedOCRTexts: &usedOCRTexts)
-		let imageResult = try detectImageBlocks(excluding: structuredBlocks, captureImages: false)
+		let imageResult = try detectImageBlocks(excluding: structuredBlocks, ocrLines: ocrLines, captureImages: false)
 
 		let remainingLines = ocrLines.filter { !usedOCRLineIDs.contains($0.id) }
 		if allowStandaloneSupplementation && !remainingLines.isEmpty {
@@ -96,7 +96,7 @@ struct DocumentBlockExtractor {
 		var usedOCRTexts = Set<String>()
 
 		var structuredBlocks = gatherStructuredBlocks(from: container, ocrLines: ocrLines, usedOCRLineIDs: &usedOCRLineIDs, usedOCRTexts: &usedOCRTexts)
-		let imageResult = try detectImageBlocks(excluding: structuredBlocks, captureImages: true)
+		let imageResult = try detectImageBlocks(excluding: structuredBlocks, ocrLines: ocrLines, captureImages: true)
 
 		let remainingLines = ocrLines.filter { !usedOCRLineIDs.contains($0.id) }
 		if allowStandaloneSupplementation && !remainingLines.isEmpty {
@@ -290,41 +290,18 @@ struct DocumentBlockExtractor {
 		}
 	}
 
-	private func detectImageBlocks(excluding structured: [DocumentBlock], captureImages: Bool) throws -> (blocks: [DocumentBlock], images: [DocumentImage]) {
-		let rectangles = try detectRectangles(in: image, pageSize: pageSize)
-
-		guard !rectangles.isEmpty else {
-			return ([], [])
-		}
-
-		let structuredBounds = structured.map(\.bounds)
-		let pageArea = pageSize.width * pageSize.height
-		let minimumImageArea = pageArea * 0.01
+	private func detectImageBlocks(excluding structured: [DocumentBlock], ocrLines: [OCRLine], captureImages: Bool) throws -> (blocks: [DocumentBlock], images: [DocumentImage]) {
+		let textBounds = structured.compactMap { block -> CGRect? in
+			if case .image = block.kind { return nil }
+			return block.bounds
+		} + ocrLines.map(\.bounds)
+		let regions = detectVisualRegions(in: image, pageSize: pageSize, excluding: textBounds)
 		let pageBounds = CGRect(origin: .zero, size: pageSize)
 
 		var imageBlocks = [DocumentBlock]()
 		var images = [DocumentImage]()
 
-		for rectangleBounds in rectangles {
-			let rect = rectangleBounds
-			let area = rect.width * rect.height
-
-			guard area >= minimumImageArea,
-			      rect.width < pageSize.width * 0.95,
-			      rect.height < pageSize.height * 0.95 else {
-				continue
-			}
-
-			let overlapsStructured = structuredBounds.contains { overlapRatio(between: $0, and: rect) > 0.35 }
-			if overlapsStructured {
-				continue
-			}
-
-			let overlapsImages = imageBlocks.contains { overlapRatio(between: $0.bounds, and: rect) > 0.65 }
-			if overlapsImages {
-				continue
-			}
-
+		for rect in regions.sorted(by: { ($0.minY, $0.minX) < ($1.minY, $1.minX) }) {
 			imageBlocks.append(DocumentBlock(bounds: rect, kind: .image(.init(caption: nil))))
 
 			if captureImages, let cropped = image.cropping(to: rect.integral.clamped(to: pageBounds)) {
