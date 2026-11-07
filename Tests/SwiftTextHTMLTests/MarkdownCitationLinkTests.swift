@@ -50,7 +50,14 @@ struct MarkdownCitationLinkTests {
 
 	@Test("Inferred title drops the {#id} suffix")
 	func inferredTitle() {
-		#expect(MarkdownToHTML.firstHeadingPlainText("# Report {#report}\n\nx") == "Report")
+		#expect(MarkdownToHTML.firstHeadingPlainText("# Report {#report}\n\nx", stripHeadingID: true) == "Report")
+		#expect(MarkdownToHTML.firstHeadingPlainText("# Report {#report}\n\nx") == "Report {#report}")
+	}
+
+	@Test("Citations inside an ordinary link label are not nested anchors")
+	func noNestedAnchors() {
+		let html = MarkdownToHTML.convert("See [the paper [1]](https://x.org).\n\n- [1] Ref", options: [.linkCitations])
+		#expect(html.contains("<a href=\"https://x.org\">the paper [1]</a>"))
 	}
 
 	@Test("Default output is unchanged")

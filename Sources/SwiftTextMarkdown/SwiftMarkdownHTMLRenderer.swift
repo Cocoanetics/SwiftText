@@ -234,7 +234,11 @@ private struct HTMLRenderer: MarkupVisitor {
 			return
 		}
 		output += "<a href=\"\(escapeAttribute(href))\">"
+		// An anchor can't nest another, so a `[n]` in the label stays plain text.
+		let outerSuppression = suppressCitationLinks
+		suppressCitationLinks = true
 		visitInlines(of: link)
+		suppressCitationLinks = outerSuppression
 		output += "</a>"
 	}
 

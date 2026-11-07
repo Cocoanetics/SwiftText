@@ -127,7 +127,7 @@ struct Render: AsyncParsableCommand {
 		let chosenFormat = try resolvedFormat()
 		let outputURL = try resolvedOutputURL(format: chosenFormat)
 		let userCSS = try loadUserCSS()
-		let resolvedTitle = title ?? inferTitle(from: markdownText)
+		let resolvedTitle = title ?? inferTitle(from: markdownText, stripHeadingID: chosenFormat == .html || chosenFormat == .pdf)
 			?? (input.map { URL(fileURLWithPath: $0).deletingPathExtension().lastPathComponent } ?? "Untitled")
 
 		switch chosenFormat {
@@ -182,8 +182,8 @@ struct Render: AsyncParsableCommand {
 	}
 
 	/// The first top-level heading's plain text, used as the default document title.
-	private func inferTitle(from markdown: String) -> String? {
-		MarkdownToHTML.firstHeadingPlainText(markdown)
+	private func inferTitle(from markdown: String, stripHeadingID: Bool) -> String? {
+		MarkdownToHTML.firstHeadingPlainText(markdown, stripHeadingID: stripHeadingID)
 	}
 
 	/// The alert colours of the `--css` file, for the writers that don't read CSS.
