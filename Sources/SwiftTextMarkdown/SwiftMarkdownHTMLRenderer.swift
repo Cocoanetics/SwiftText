@@ -259,10 +259,15 @@ private struct HTMLRenderer: MarkupVisitor {
 
 	// MARK: - Tables
 
+	private static let wideTableColumnCount = 8
+
 	mutating func visitTable(_ table: Table) {
 		alignmentStack.append(table.columnAlignments)
 		defer { alignmentStack.removeLast() }
-		output += "<table>\n"
+		// Marked here so the print CSS can constrain wide tables without `:has()`,
+		// which WebKit only supports from 15.4 (iOS 15.0–15.3 are still deployment targets).
+		let wide = table.columnAlignments.count >= Self.wideTableColumnCount
+		output += wide ? "<table class=\"wide-table\">\n" : "<table>\n"
 		visit(table.head)
 		output += "\n"
 		visit(table.body)
