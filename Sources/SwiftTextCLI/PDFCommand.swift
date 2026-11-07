@@ -495,6 +495,15 @@ func markdownToHTML(
 	    min-width: 4em;
 	}
 	/* Fixed per-cell minimums must not push wide tables off the page. */
+	table.wide-table {
+	    table-layout: fixed;
+	    width: calc(100% - 2px);
+	}
+	table.wide-table th,
+	table.wide-table td {
+	    min-width: 0;
+	    overflow-wrap: anywhere;
+	}
 	table:has(tr > :nth-child(8)) {
 	    table-layout: fixed;
 	    width: calc(100% - 2px);
