@@ -23,3 +23,15 @@ struct RenderInputValidationTests {
 		try Render.validateMarkdownInput(URL(fileURLWithPath: path))
 	}
 }
+
+@Suite("render run rejects HTML input")
+struct RenderRunTests {
+	@Test("run() on an existing .html file throws a ValidationError")
+	func runRejectsHTMLFile() async throws {
+		let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).html")
+		try "<!DOCTYPE html><html><body>x</body></html>".write(to: url, atomically: true, encoding: .utf8)
+		defer { try? FileManager.default.removeItem(at: url) }
+		var command = try Render.parse([url.path, "-o", url.deletingPathExtension().appendingPathExtension("pdf").path])
+		await #expect(throws: ValidationError.self) { try await command.run() }
+	}
+}

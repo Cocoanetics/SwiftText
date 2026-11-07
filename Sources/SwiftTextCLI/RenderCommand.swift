@@ -113,6 +113,7 @@ struct Render: AsyncParsableCommand {
 				throw ValidationError("Provide an input path, or use --stdin.")
 			}
 			let fileURL = resolvedFileURL(input)
+			try Self.validateMarkdownInput(fileURL)
 			guard FileManager.default.fileExists(atPath: fileURL.path) else {
 				throw ValidationError("File not found: \(fileURL.path)")
 			}
