@@ -45,6 +45,34 @@ public enum SwiftMarkdownHTMLRenderer {
 		/// well-formed XML — e.g. EPUB content documents, which reading systems
 		/// parse as XHTML rather than lenient HTML5.
 		public static let xhtml = Options(rawValue: 1 << 1)
+
+		/// Gives every heading an `id` — a GitHub-style slug of its text (lowercased,
+		/// punctuation dropped, spaces hyphenated, Unicode letters kept, duplicates
+		/// suffixed `-1`, `-2`, …) — and honours a trailing `{#custom-id}` attribute,
+		/// which is removed from the rendered text.
+		public static let headingIDs = Options(rawValue: 1 << 2)
+
+		/// Makes numeric citations clickable. A list item starting with `[n]` gets
+		/// `id="citation-n"`, and every other `[n]` (or `[n](#anchor)` / `[[n]](#anchor)`
+		/// link) becomes `<a href="#citation-n">[n]</a>` — but only when a matching
+		/// reference item exists in the document.
+		public static let linkCitations = Options(rawValue: 1 << 3)
+	}
+
+	/// The `n` of every list item in `document` that starts with `[n]`.
+	public static func citationReferenceNumbers(in document: Document) -> Set<Int> {
+		var renderer = HTMLRenderer(options: [.linkCitations])
+		renderer.collectReferenceNumbers(in: document)
+		return renderer.referenceNumbers
+	}
+
+	/// Splits a trailing `{#custom-id}` heading attribute off the heading's plain text.
+	public static func splitHeadingID(_ text: String) -> (text: String, id: String?) {
+		guard let range = text.range(of: #"\s*\{#([^\s{}<>&"']+)\}$"#, options: .regularExpression) else {
+			return (text, nil)
+		}
+		let attribute = text[range].trimmingCharacters(in: .whitespaces)
+		return (String(text[..<range.lowerBound]), String(attribute.dropFirst(2).dropLast()))
 	}
 
 	public static func convert(_ markdown: String, options: Options = []) -> String {
@@ -55,8 +83,14 @@ public enum SwiftMarkdownHTMLRenderer {
 	/// Renders an already-parsed `Document` to the same HTML fragment shape as
 	/// ``convert(_:)``. Use this entry point when you need to rewrite the AST
 	/// (e.g. with a `MarkupRewriter`) before rendering.
-	public static func convert(document: Document, options: Options = []) -> String {
+	///
+	/// - Parameter citationNumbers: With ``Options/linkCitations``, the reference numbers
+	///   to link. Defaults to those found in `document`; pass the set of the whole source
+	///   when rendering fragments of it separately.
+	public static func convert(document: Document, options: Options = [], citationNumbers: Set<Int>? = nil) -> String {
 		var renderer = HTMLRenderer(options: options)
+		renderer.referenceNumbers = citationNumbers ?? []
+		renderer.hasSharedCitationNumbers = citationNumbers != nil
 		renderer.visit(document)
 		return renderer.flush()
 	}
@@ -72,6 +106,11 @@ private struct HTMLRenderer: MarkupVisitor {
 	}
 
 	private var output: String = ""
+	private var usedHeadingIDs = Set<String>()
+	/// Citation numbers that have a `[n]` reference list item (when linking citations).
+	fileprivate(set) var referenceNumbers = Set<Int>()
+	fileprivate var hasSharedCitationNumbers = false
+	private var suppressCitationLinks = false
 	private var alignmentStack: [[Table.ColumnAlignment?]] = []
 
 	/// The close for a void element: `" />"` in XHTML mode, `">"` otherwise.
@@ -89,6 +128,9 @@ private struct HTMLRenderer: MarkupVisitor {
 	mutating func visitDocument(_ document: Document) {
 		// Legacy parser joins top-level blocks with "\n". Reproduce that so a
 		// multi-block fixture round-trips byte-identically.
+		if options.contains(.linkCitations), !hasSharedCitationNumbers {
+			collectReferenceNumbers(in: document)
+		}
 		let blocks = Array(document.children)
 		for (index, block) in blocks.enumerated() {
 			if index > 0 { output += "\n" }
@@ -98,38 +140,62 @@ private struct HTMLRenderer: MarkupVisitor {
 
 	mutating func visitParagraph(_ paragraph: Paragraph) {
 		output += "<p>"
-		for child in paragraph.children { visit(child) }
+		visitInlines(of: paragraph)
 		output += "</p>"
 	}
 
 	mutating func visitHeading(_ heading: Heading) {
 		let level = max(1, min(heading.level, 6))
-		output += "<h\(level)>"
-		for child in heading.children { visit(child) }
-		output += "</h\(level)>"
+		guard options.contains(.headingIDs) else {
+			output += "<h\(level)>"
+			visitInlines(of: heading)
+			output += "</h\(level)>"
+			return
+		}
+		let plain = swiftMarkdownPlainText(of: heading).trimmingCharacters(in: .whitespacesAndNewlines)
+		var explicitID = SwiftMarkdownHTMLRenderer.splitHeadingID(plain).id
+		let attribute = explicitID.map { "{#\($0)}" } ?? ""
+		let saved = output
+		output = ""
+		visitInlines(of: heading)
+		var content = output
+		output = saved
+		if explicitID != nil {
+			if let range = content.range(of: attribute, options: [.backwards]),
+			   content[range.upperBound...].allSatisfy(\.isWhitespace) {
+				content = String(content[..<range.lowerBound])
+				while content.last?.isWhitespace == true { content.removeLast() }
+			} else {
+				explicitID = nil
+			}
+		}
+		let id = explicitID ?? uniqueHeadingID(slug(of: plain))
+		if let explicitID { usedHeadingIDs.insert(explicitID) }
+		let idAttribute = id.isEmpty ? "" : " id=\"\(escapeAttribute(id))\""
+		output += "<h\(level)\(idAttribute)>\(content)</h\(level)>"
 	}
 
 	mutating func visitText(_ text: Text) {
 		// Body text uses the same escape policy as the legacy parser (only
 		// `&<>`). The full `&<>"` policy is reserved for attribute values.
-		output += escapeHTMLNotQuote(text.string)
+		emitText(text.string)
 	}
 
 	mutating func visitEmphasis(_ emphasis: Emphasis) {
 		output += "<em>"
-		for child in emphasis.children { visit(child) }
+		visitInlines(of: emphasis)
 		output += "</em>"
 	}
 
 	mutating func visitStrong(_ strong: Strong) {
 		output += "<strong>"
-		for child in strong.children { visit(child) }
+		visitInlines(of: strong)
 		output += "</strong>"
 	}
 
 	mutating func visitStrikethrough(_ strikethrough: Strikethrough) {
 		output += "<del>"
-		for child in strikethrough.children { visit(child) }
+		visitInlines(of: strikethrough)
 		output += "</del>"
 	}
 
@@ -163,8 +229,16 @@ private struct HTMLRenderer: MarkupVisitor {
 
 	mutating func visitLink(_ link: Link) {
 		let href = link.destination ?? ""
+		if let number = citationLinkNumber(for: link) {
+			output += "<a href=\"#citation-\(number)\">[\(number)]</a>"
+			return
+		}
 		output += "<a href=\"\(escapeAttribute(href))\">"
-		for child in link.children { visit(child) }
+		// An anchor can't nest another, so a `[n]` in the label stays plain text.
+		let outerSuppression = suppressCitationLinks
+		suppressCitationLinks = true
+		visitInlines(of: link)
+		suppressCitationLinks = outerSuppression
 		output += "</a>"
 	}
 
@@ -209,6 +283,8 @@ private struct HTMLRenderer: MarkupVisitor {
 
 	mutating func visitListItem(_ listItem: ListItem) {
 		let isTaskItem: Bool
+		let referenceNumber = options.contains(.linkCitations) ? Self.referenceNumber(of: listItem) : nil
+		let idAttribute = referenceNumber.map { " id=\"citation-\($0)\"" } ?? ""
 		switch listItem.checkbox {
 		case .checked:
 			isTaskItem = true
@@ -216,14 +292,14 @@ private struct HTMLRenderer: MarkupVisitor {
 			// libxml SAX bridge otherwise omits a final valueless attribute, which
 			// would erase the checked state before SwiftTextRender sees the DOM.
 			let input = #"<input type="checkbox" disabled="disabled" checked="checked""# + voidClose
-			output += #"<li class="task-list-item">"# + input + " "
+			output += #"<li class="task-list-item""# + idAttribute + ">" + input + " "
 		case .unchecked:
 			isTaskItem = true
 			let input = #"<input type="checkbox" disabled="disabled""# + voidClose
-			output += #"<li class="task-list-item">"# + input + " "
+			output += #"<li class="task-list-item""# + idAttribute + ">" + input + " "
 		case .none:
 			isTaskItem = false
-			output += "<li>"
+			output += "<li\(idAttribute)>"
 		}
 		let blocks = Array(listItem.children)
 		// Keep a task control and its label in the same inline run even when the
@@ -231,10 +307,16 @@ private struct HTMLRenderer: MarkupVisitor {
 		// items retain the existing unwrapped `<li>foo</li>` shape as well.
 		if let firstParagraph = blocks.first as? Paragraph,
 		   isTaskItem || blocks.count == 1 {
-			for child in firstParagraph.children { visit(child) }
+			suppressCitationLinks = referenceNumber != nil
+			visitInlines(of: firstParagraph)
+			suppressCitationLinks = false
 			for block in blocks.dropFirst() { visit(block) }
 		} else {
-			for child in blocks { visit(child) }
+			for (index, child) in blocks.enumerated() {
+				suppressCitationLinks = index == 0 && referenceNumber != nil
+				visit(child)
+				suppressCitationLinks = false
+			}
 		}
 		output += "</li>"
 	}
@@ -255,6 +337,110 @@ private struct HTMLRenderer: MarkupVisitor {
 
 	mutating func visitLineBreak(_ lineBreak: LineBreak) {
 		output += "<br\(voidClose)"
+	}
+
+	// MARK: - Inlines, headings and citations
+
+	/// Visits the inline children of `parent`, merging adjacent `Text` nodes first —
+	/// cmark splits an unresolved `[1]` into `[`, `1`, `]` — so citations can be
+	/// recognised across them.
+	private mutating func visitInlines(of parent: Markup) {
+		var pending = ""
+		var hasPending = false
+		for child in parent.children {
+			if let text = child as? Text {
+				pending += text.string
+				hasPending = true
+				continue
+			}
+			if hasPending { emitText(pending); pending = ""; hasPending = false }
+			visit(child)
+		}
+		if hasPending { emitText(pending) }
+	}
+
+	private mutating func emitText(_ string: String) {
+		guard options.contains(.linkCitations), !suppressCitationLinks, !referenceNumbers.isEmpty,
+		      string.contains("[") else {
+			output += escapeHTMLNotQuote(string)
+			return
+		}
+		var rest = Substring(string)
+		while let open = rest.firstIndex(of: "[") {
+			output += escapeHTMLNotQuote(String(rest[..<open]))
+			let afterOpen = rest.index(after: open)
+			let digits = rest[afterOpen...].prefix(while: \.isASCII).prefix(while: \.isNumber)
+			let close = rest.index(afterOpen, offsetBy: digits.count)
+			if !digits.isEmpty, close < rest.endIndex, rest[close] == "]",
+			   let number = Int(digits), referenceNumbers.contains(number) {
+				output += "<a href=\"#citation-\(number)\">[\(number)]</a>"
+				rest = rest[rest.index(after: close)...]
+			} else {
+				output += "["
+				rest = rest[afterOpen...]
+			}
+		}
+		output += escapeHTMLNotQuote(String(rest))
+	}
+
+	/// The citation number of a `[n](#anchor)` / `[[n]](#anchor)` link, if it has a reference item.
+	private func citationLinkNumber(for link: Link) -> Int? {
+		guard options.contains(.linkCitations), !suppressCitationLinks,
+		      link.destination?.hasPrefix("#") == true else { return nil }
+		var label = swiftMarkdownPlainText(of: link).trimmingCharacters(in: .whitespaces)
+		if label.hasPrefix("["), label.hasSuffix("]") { label = String(label.dropFirst().dropLast()) }
+		guard !label.isEmpty, label.allSatisfy({ $0.isASCII && $0.isNumber }),
+		      let number = Int(label), referenceNumbers.contains(number) else { return nil }
+		return number
+	}
+
+	/// The `n` of a list item whose text starts with `[n]` (ignoring leading empty anchors).
+	private static func referenceNumber(of listItem: ListItem) -> Int? {
+		guard let paragraph = listItem.children.first(where: { $0 is Paragraph }) as? Paragraph else { return nil }
+		var prefix = ""
+		for child in paragraph.children {
+			if child is InlineHTML { continue }
+			guard let text = child as? Text else { break }
+			prefix += text.string
+			if prefix.count > 12 { break }
+		}
+		guard prefix.hasPrefix("[") else { return nil }
+		let digits = prefix.dropFirst().prefix(while: { $0.isASCII && $0.isNumber })
+		let tail = prefix.dropFirst(1 + digits.count)
+		guard !digits.isEmpty, tail.hasPrefix("]") else { return nil }
+		return Int(digits)
+	}
+
+	mutating func collectReferenceNumbers(in markup: Markup) {
+		if let item = markup as? ListItem, let number = Self.referenceNumber(of: item) {
+			referenceNumbers.insert(number)
+		}
+		for child in markup.children { collectReferenceNumbers(in: child) }
+	}
+
+	/// A GitHub-style slug: lowercased, letters/digits/`-`/`_` kept, spaces hyphenated.
+	private func slug(of text: String) -> String {
+		var result = ""
+		for character in text.lowercased() {
+			if character == " " || character == "-" {
+				result.append("-")
+			} else if character == "_" || character.isLetter || character.isNumber {
+				result.append(character)
+			}
+		}
+		return result
+	}
+
+	private mutating func uniqueHeadingID(_ base: String) -> String {
+		guard !base.isEmpty else { return "" }
+		var candidate = base
+		var counter = 0
+		while usedHeadingIDs.contains(candidate) {
+			counter += 1
+			candidate = "\(base)-\(counter)"
+		}
+		usedHeadingIDs.insert(candidate)
+		return candidate
 	}
 
 	// MARK: - Tables
@@ -300,7 +486,7 @@ private struct HTMLRenderer: MarkupVisitor {
 			guard let cell = child as? Table.Cell else { continue }
 			let style = cellStyle(for: index, alignments: alignments)
 			output += "<\(tag)\(style)>"
-			for inline in cell.children { visit(inline) }
+			visitInlines(of: cell)
 			output += "</\(tag)>"
 			index += 1
 		}

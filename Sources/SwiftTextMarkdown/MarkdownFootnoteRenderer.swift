@@ -47,7 +47,9 @@ public enum MarkdownFootnoteRenderer {
 		let bodyDocument = Document(parsing: cleaned, options: [.disableSmartOpts])
 		var bodyRewriter = FootnoteReferenceRewriter(state: state)
 		let rewrittenBody = bodyRewriter.visit(bodyDocument) as? Document ?? bodyDocument
-		let bodyHTML = SwiftMarkdownHTMLRenderer.convert(document: rewrittenBody, options: options)
+		let citationNumbers = options.contains(.linkCitations)
+			? SwiftMarkdownHTMLRenderer.citationReferenceNumbers(in: bodyDocument) : nil
+		let bodyHTML = SwiftMarkdownHTMLRenderer.convert(document: rewrittenBody, options: options, citationNumbers: citationNumbers)
 
 		// Render each definition body, rewriting nested references too.
 		// Rendering a definition can assign a number to a definition that was
@@ -67,7 +69,7 @@ public enum MarkdownFootnoteRenderer {
 				let defDocument = Document(parsing: definition.body, options: [.disableSmartOpts])
 				var defRewriter = FootnoteReferenceRewriter(state: state)
 				let rewrittenDef = defRewriter.visit(defDocument) as? Document ?? defDocument
-				let defBodyHTML = SwiftMarkdownHTMLRenderer.convert(document: rewrittenDef, options: options)
+				let defBodyHTML = SwiftMarkdownHTMLRenderer.convert(document: rewrittenDef, options: options, citationNumbers: citationNumbers)
 				renderedDefinitions.append((number, defBodyHTML))
 				renderedIDs.insert(definition.id)
 				renderedNewDefinition = true

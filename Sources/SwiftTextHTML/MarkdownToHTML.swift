@@ -43,12 +43,15 @@ public enum MarkdownToHTML {
 	/// inferred document title keeps the literal source punctuation the
 	/// rendered body keeps — `--` does not become an en dash here while
 	/// staying `--` in the text under it.
-	public static func firstHeadingPlainText(_ markdown: String) -> String? {
+	///
+	/// - Parameter stripHeadingID: Drops a trailing `{#id}` attribute, for output
+	///   rendered with ``SwiftMarkdownHTMLRenderer/Options/headingIDs`` (which hides it).
+	public static func firstHeadingPlainText(_ markdown: String, stripHeadingID: Bool = false) -> String? {
 		let document = Document(parsing: markdown, options: [.disableSmartOpts])
 		for child in document.children {
 			guard let heading = child as? Heading else { continue }
-			let text = swiftMarkdownPlainText(of: heading)
-				.trimmingCharacters(in: .whitespacesAndNewlines)
+			var text = swiftMarkdownPlainText(of: heading).trimmingCharacters(in: .whitespacesAndNewlines)
+			if stripHeadingID { text = SwiftMarkdownHTMLRenderer.splitHeadingID(text).text }
 			if !text.isEmpty { return text }
 		}
 		return nil

@@ -68,6 +68,9 @@ struct Render: AsyncParsableCommand {
 	@Option(name: .long, help: "For PDF output, the rendering engine: webkit (macOS only, full CSS) or swift (cross-platform, no WebKit). Defaults to webkit on macOS, swift elsewhere.")
 	var engine: RenderEngine = .platformDefault
 
+	@Flag(name: .long, help: "For HTML and PDF output, make numeric citations clickable: a list item starting with [n] gets id=\"ref-n\" and every other [n] links to it.")
+	var linkCitations: Bool = false
+
 	// MARK: EPUB / shared options
 
 	@Option(name: .long, help: "Custom CSS file for HTML, PDF, and EPUB (appended after the built-in styles, so its rules win). DOCX and Pages take its alert-box colours.")
@@ -124,18 +127,18 @@ struct Render: AsyncParsableCommand {
 		let chosenFormat = try resolvedFormat()
 		let outputURL = try resolvedOutputURL(format: chosenFormat)
 		let userCSS = try loadUserCSS()
-		let resolvedTitle = title ?? inferTitle(from: markdownText)
+		let resolvedTitle = title ?? inferTitle(from: markdownText, stripHeadingID: chosenFormat == .html || chosenFormat == .pdf)
 			?? (input.map { URL(fileURLWithPath: $0).deletingPathExtension().lastPathComponent } ?? "Untitled")
 
 		switch chosenFormat {
 		case .html:
 			let html = markdownToHTML(markdownText, paper: paper, landscape: landscape, passThroughRawHTML: true, pageBreakBefore: pageBreakBefore,
-			                          extraCSS: userCSS, title: resolvedTitle, authors: author)
+			                          extraCSS: userCSS, title: resolvedTitle, authors: author, linkCitations: linkCitations)
 			try writeString(html, to: outputURL)
 			print(outputURL.path)
 		case .pdf:
 			let html = markdownToHTML(markdownText, paper: paper, landscape: landscape, passThroughRawHTML: true, pageBreakBefore: pageBreakBefore,
-			                          extraCSS: userCSS, title: resolvedTitle, authors: author)
+			                          extraCSS: userCSS, title: resolvedTitle, authors: author, linkCitations: linkCitations)
 			try await renderPDF(html: html, baseURL: baseURL, outputURL: outputURL,
 			                    title: resolvedTitle, authors: author)
 			print(outputURL.path)
@@ -179,8 +182,8 @@ struct Render: AsyncParsableCommand {
 	}
 
 	/// The first top-level heading's plain text, used as the default document title.
-	private func inferTitle(from markdown: String) -> String? {
-		MarkdownToHTML.firstHeadingPlainText(markdown)
+	private func inferTitle(from markdown: String, stripHeadingID: Bool) -> String? {
+		MarkdownToHTML.firstHeadingPlainText(markdown, stripHeadingID: stripHeadingID)
 	}
 
 	/// The alert colours of the `--css` file, for the writers that don't read CSS.
