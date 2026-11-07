@@ -151,15 +151,10 @@ extension PDFPage {
 	/// `font-style` — `Helvetica-Bold` is one family member, not Helvetica with
 	/// a weight — so the traits are read from the font rather than parsed out of
 	/// its name.
-	private static func textStyle(from value: Any?) -> TextStyle? {
+	static func textStyle(from value: Any?) -> TextStyle? {
 		#if canImport(AppKit)
 		guard let font = value as? NSFont else { return nil }
-		let traits = NSFontManager.shared.traits(of: font)
-		return TextStyle(
-			fontSize: font.pointSize,
-			isBold: traits.contains(.boldFontMask),
-			isItalic: traits.contains(.italicFontMask),
-			isMonospaced: font.isFixedPitch)
+		return textStyle(of: font as CTFont)
 		#elseif canImport(UIKit)
 		guard let font = value as? UIFont else { return nil }
 		let traits = font.fontDescriptor.symbolicTraits
@@ -172,6 +167,23 @@ extension PDFPage {
 		return nil
 		#endif
 	}
+
+	#if canImport(AppKit)
+	/// Reads the style from the font's own CoreText traits.
+	///
+	/// `NSFontManager.traits(of:)` resolves the font again by its PostScript
+	/// name, which for the system font is a private `.SFNS-…` name CoreText
+	/// refuses (logging a note and substituting Times New Roman). The traits of
+	/// the font object itself need no lookup.
+	static func textStyle(of font: CTFont) -> TextStyle {
+		let traits = CTFontGetSymbolicTraits(font)
+		return TextStyle(
+			fontSize: CTFontGetSize(font),
+			isBold: traits.contains(.traitBold),
+			isItalic: traits.contains(.traitItalic),
+			isMonospaced: traits.contains(.traitMonoSpace))
+	}
+	#endif
 
 	/// The style runs covering `range` of the page's attributed string.
 	///
