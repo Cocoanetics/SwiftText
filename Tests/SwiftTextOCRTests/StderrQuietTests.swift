@@ -9,7 +9,7 @@ import Testing
 #if canImport(PDFKit)
 import CoreText
 import PDFKit
-import SwiftTextPDF
+@testable import SwiftTextPDF
 
 struct StderrQuietTests {
 	@Test("Text-layer extraction does not leak PDFKit debug output to stderr")
@@ -49,6 +49,34 @@ struct StderrQuietTests {
 		// debug text is checked for, not an empty capture.
 		let noise = try String(contentsOf: capture, encoding: .utf8)
 		#expect(!noise.contains("attributedStringScaled"), "stderr: \(noise)")
+	}
+
+	@Test("Silencing drops only the PDFKit diagnostic and forwards other stderr bytes")
+	func unrelatedStderrIsForwarded() throws {
+		let capture = FileManager.default.temporaryDirectory
+			.appendingPathComponent("stderr-\(UUID().uuidString).txt")
+		FileManager.default.createFile(atPath: capture.path, contents: nil)
+		defer { try? FileManager.default.removeItem(at: capture) }
+
+		fflush(stderr)
+		let saved = dup(STDERR_FILENO)
+		let fd = open(capture.path, O_WRONLY)
+		dup2(fd, STDERR_FILENO)
+		close(fd)
+		withStderrSilenced {
+			// A partial write glued onto a PDFKit line, then a line that only mentions the token.
+			let noise = "partial 2026-11-07 11:42:21.387 swiftpm-testing-helper[75387:23608572] "
+				+ "attributedStringScaled i: 0\nmentions attributedStringScaled in prose\n"
+			fputs(noise, stderr)
+		}
+		fflush(stderr)
+		dup2(saved, STDERR_FILENO)
+		close(saved)
+
+		let forwarded = try String(contentsOf: capture, encoding: .utf8)
+		// Parallel suites share fd 2, so look for the expected text, not an exact capture.
+		#expect(forwarded.contains("partial mentions attributedStringScaled in prose\n"), "stderr: \(forwarded)")
+		#expect(!forwarded.contains("attributedStringScaled i: 0"), "stderr: \(forwarded)")
 	}
 }
 #endif
