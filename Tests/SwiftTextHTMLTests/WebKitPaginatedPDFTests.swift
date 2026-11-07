@@ -142,6 +142,52 @@ struct WebKitIntegrationTests {
 		#expect(tablePages.allSatisfy { $0.contains("Label") && $0.contains("Value") })
 	}
 
+	@Test("Long Markdown tables use the space after introductory paragraphs", .timeLimit(.minutes(2)), arguments: [0, 80])
+	func longTableAfterIntroduction(paragraphHeight: Int) async throws {
+		let rows = (1 ... 40).map {
+			let marker = String(format: "%02d", $0)
+			return "| \(marker) | row-start-\(marker)<br>row-end-\(marker) | | |"
+		}.joined(separator: "\n")
+		let markdown = """
+		# Fragebogen
+
+		Ein kurzer Einleitungsabsatz.
+
+		Noch ein Absatz.
+
+		| Nr. | Frage | Ja | Nein |
+		|---|---|---|---|
+		\(rows)
+		"""
+		let stylesheet = """
+		\(MarkdownToHTML.defaultStylesheet)
+		@page { size: A4; margin: 2cm; }
+		*, *::before, *::after { box-sizing: border-box; }
+		@media print { body { max-width: none; padding: 0; margin: 0; } }
+		h1 { break-after: avoid; break-inside: avoid; }
+		p { min-height: \(paragraphHeight)px; orphans: 2; widows: 2; }
+		thead { display: table-header-group; }
+		tr { page-break-inside: avoid; break-inside: avoid; }
+		"""
+		let html = MarkdownToHTML.document(markdown, stylesheet: stylesheet, options: [.passThroughRawHTML])
+		let document = try await paginate(html)
+		#expect(document.pageCount > 1)
+		let pageTexts = (0 ..< document.pageCount).map { document.page(at: $0)?.string ?? "" }
+		#expect(pageTexts[0].contains("Fragebogen"))
+		#expect(pageTexts[0].contains("row-start-01"), "the first page has room for table rows")
+		for text in pageTexts {
+			#expect(text.contains("row-start-"), "a page was left without table rows")
+			#expect(text.contains("Frage") && text.contains("Nein"), "a table page has no repeated header")
+		}
+		for rowNumber in 1 ... 40 {
+			let marker = String(format: "%02d", rowNumber)
+			#expect(pageTexts.filter { $0.contains("row-start-\(marker)") }.count == 1)
+			#expect(pageTexts.filter { $0.contains("row-end-\(marker)") }.count == 1)
+			#expect(pageTexts.contains { $0.contains("row-start-\(marker)") && $0.contains("row-end-\(marker)") },
+			        "row \(rowNumber) was split across pages")
+		}
+	}
+
 	@Test("Table fragments keep headers when the table starts late on a page", .timeLimit(.minutes(2)))
 	func tableStartingLateOnPage() async throws {
 		let rows = (1 ... 45).map {
@@ -207,11 +253,11 @@ struct WebKitIntegrationTests {
 		"""
 		let html = MarkdownToHTML.document(markdown, stylesheet: stylesheet)
 		let document = try await paginate(html)
-		let tablePages = (0 ..< document.pageCount)
-			.compactMap { document.page(at: $0)?.string }
-			.filter { $0.contains("segment-") }
-		let rowCounts = tablePages.map { $0.components(separatedBy: "segment-").count - 1 }
-		#expect(rowCounts.first.map { $0 >= 10 } == true, "the first table page is mostly empty")
+		let pageTexts = (0 ..< document.pageCount).map { document.page(at: $0)?.string ?? "" }
+		let headingPage = try #require(pageTexts.first { $0.contains("5 Tabelle") })
+		#expect(headingPage.contains("segment-1/"), "the table was moved away from its heading")
+		// A partial first page may hold fewer rows than a full continuation page.
+		let tablePages = pageTexts.filter { $0.contains("segment-") }
 		for (index, text) in tablePages.enumerated() {
 			#expect(text.contains("Path"), "table page \(index + 1) has no path header")
 		}
