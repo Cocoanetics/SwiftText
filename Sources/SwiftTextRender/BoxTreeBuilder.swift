@@ -77,15 +77,29 @@ public enum BoxTreeBuilder {
 		}
 	}
 
-	/// This item's 1-based position among its `<li>` siblings.
+	/// This item's ordinal value per the HTML list-numbering rules: counting
+	/// starts at the `<ol start>` value (or 1, or the item count when the list is
+	/// `reversed`), steps by one per `<li>`, and an `<li value>` resets it.
 	private static func listOrdinal(of element: StyledElement) -> Int {
 		guard let parent = element.parent else { return 1 }
-		var ordinal = 0
-		for sibling in parent.elementChildren {
-			if sibling.localName == "li" { ordinal += 1 }
-			if sibling === element { break }
+		let items = parent.elementChildren.filter { $0.localName == "li" }
+		let isOrderedList = parent.localName == "ol"
+		let reversed = isOrderedList && parent.attributeValue("reversed") != nil
+		let step = reversed ? -1 : 1
+		let start = isOrderedList ? integerAttribute("start", of: parent) : nil
+		var ordinal = (start ?? (reversed ? items.count : 1)) - step
+		for item in items {
+			ordinal = integerAttribute("value", of: item) ?? ordinal + step
+			if item === element { break }
 		}
 		return ordinal
+	}
+
+	/// An attribute parsed as an HTML valid integer, or `nil` when absent or invalid.
+	/// Values are limited to 32 bits (as browsers do), so stepping by one from
+	/// them can never overflow `Int`.
+	private static func integerAttribute(_ name: String, of element: StyledElement) -> Int? {
+		element.attributeValue(name).flatMap { Int32($0.trimmingCharacters(in: .whitespaces)) }.map(Int.init)
 	}
 
 	/// Format a 1-based ordinal per a `list-style-type`-like keyword. Also used
