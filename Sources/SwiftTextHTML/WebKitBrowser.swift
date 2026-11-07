@@ -168,10 +168,20 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 	package func exportPaginatedPDFData(paperSize: CGSize) async throws -> Data {
 		let webView = try await loadedWebView()
 		try await prepareTablesForPrinting(in: webView, paperSize: paperSize)
+		#if canImport(PDFKit)
+		let linkTargets = await PDFInternalLinks.collectTargets(in: webView)
+		#endif
 		#if canImport(UIKit)
-		return try Self.paginatedPDFData(from: webView, paperSize: paperSize)
+		let data = try Self.paginatedPDFData(from: webView, paperSize: paperSize)
 		#else
-		return try await Self.paginatedPDFData(from: webView, paperSize: paperSize)
+		let data = try await Self.paginatedPDFData(from: webView, paperSize: paperSize)
+		#endif
+		// WebKit writes `#fragment` links as `/URI` actions on the temporary page URL;
+		// turn them into internal destinations.
+		#if canImport(PDFKit)
+		return PDFInternalLinks.resolve(pdfData: data, pageURL: webView.url, targets: linkTargets)
+		#else
+		return data
 		#endif
 	}
 

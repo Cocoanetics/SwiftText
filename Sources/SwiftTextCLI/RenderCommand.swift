@@ -68,6 +68,9 @@ struct Render: AsyncParsableCommand {
 	@Option(name: .long, help: "For PDF output, the rendering engine: webkit (macOS only, full CSS) or swift (cross-platform, no WebKit). Defaults to webkit on macOS, swift elsewhere.")
 	var engine: RenderEngine = .platformDefault
 
+	@Flag(name: .long, help: "For HTML and PDF output, make numeric citations clickable: a list item starting with [n] gets id=\"ref-n\" and every other [n] links to it.")
+	var linkCitations: Bool = false
+
 	// MARK: EPUB / shared options
 
 	@Option(name: .long, help: "Custom CSS file for HTML, PDF, and EPUB (appended after the built-in styles, so its rules win). DOCX and Pages take its alert-box colours.")
@@ -130,12 +133,12 @@ struct Render: AsyncParsableCommand {
 		switch chosenFormat {
 		case .html:
 			let html = markdownToHTML(markdownText, paper: paper, landscape: landscape, passThroughRawHTML: true, pageBreakBefore: pageBreakBefore,
-			                          extraCSS: userCSS, title: resolvedTitle, authors: author)
+			                          extraCSS: userCSS, title: resolvedTitle, authors: author, linkCitations: linkCitations)
 			try writeString(html, to: outputURL)
 			print(outputURL.path)
 		case .pdf:
 			let html = markdownToHTML(markdownText, paper: paper, landscape: landscape, passThroughRawHTML: true, pageBreakBefore: pageBreakBefore,
-			                          extraCSS: userCSS, title: resolvedTitle, authors: author)
+			                          extraCSS: userCSS, title: resolvedTitle, authors: author, linkCitations: linkCitations)
 			try await renderPDF(html: html, baseURL: baseURL, outputURL: outputURL,
 			                    title: resolvedTitle, authors: author)
 			print(outputURL.path)
