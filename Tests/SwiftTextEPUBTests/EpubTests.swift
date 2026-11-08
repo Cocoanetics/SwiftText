@@ -137,6 +137,29 @@ struct EpubTests {
 		#expect(chapter.contains("id=\"fn-a-b\"") && chapter.contains("id=\"fn-a-b-2\""))
 		#expect(chapter.contains("id=\"ref-a-b\"") && chapter.contains("id=\"ref-a-b-2\""))
 		expectWellFormedXML(chapter, "ch001.xhtml")
+=======
+	// MARK: - Localised navigation labels
+
+	@Test("nav title and landmark labels follow the book language")
+	func localisedNavLabels() {
+		let markdown = "# Book\n\n## Eins\n\nprose"
+		let files = MarkdownToEpub.makeFiles(markdown, metadata: fixedMetadata(language: "de-AT"), options: EpubOptions(chapterLevel: 2))
+		let nav = string(file(files, "OEBPS/nav.xhtml"))
+		#expect(nav.contains("<title>Inhalt</title>"))
+		#expect(nav.contains("epub:type=\"titlepage\">Titelseite</a>"))
+		#expect(nav.contains("epub:type=\"toc\">Inhalt</a>"))
+		#expect(nav.contains("epub:type=\"bodymatter\">Anfang</a>"))
+		#expect(!nav.contains("Table of Contents"))
+	}
+
+	@Test("an unknown language falls back to English nav labels")
+	func unknownLanguageNavLabels() {
+		let files = MarkdownToEpub.makeFiles("# Book\n\n## One\n\nprose", metadata: fixedMetadata(language: "xx"), options: EpubOptions(chapterLevel: 2))
+		let nav = string(file(files, "OEBPS/nav.xhtml"))
+		#expect(nav.contains("<title>Table of Contents</title>"))
+		#expect(nav.contains("epub:type=\"titlepage\">Title Page</a>"))
+		#expect(nav.contains("epub:type=\"bodymatter\">Beginning</a>"))
+>>>>>>> 384c9fb4a34be8d091c0a3ca515d8a001f9c40e0
 	}
 
 	// MARK: - Chapter splitting
