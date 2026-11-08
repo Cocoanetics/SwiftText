@@ -137,7 +137,8 @@ struct EpubTests {
 		#expect(chapter.contains("id=\"fn-a-b\"") && chapter.contains("id=\"fn-a-b-2\""))
 		#expect(chapter.contains("id=\"ref-a-b\"") && chapter.contains("id=\"ref-a-b-2\""))
 		expectWellFormedXML(chapter, "ch001.xhtml")
-=======
+	}
+
 	// MARK: - Localised navigation labels
 
 	@Test("nav title and landmark labels follow the book language")
@@ -159,7 +160,6 @@ struct EpubTests {
 		#expect(nav.contains("<title>Table of Contents</title>"))
 		#expect(nav.contains("epub:type=\"titlepage\">Title Page</a>"))
 		#expect(nav.contains("epub:type=\"bodymatter\">Beginning</a>"))
->>>>>>> 384c9fb4a34be8d091c0a3ca515d8a001f9c40e0
 	}
 
 	// MARK: - Chapter splitting
