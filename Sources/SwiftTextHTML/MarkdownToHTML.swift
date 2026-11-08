@@ -120,6 +120,15 @@ public enum MarkdownToHTML {
 	    min-width: 0;
 	    padding: 0.3em;
 	}
+	/* On screen a wide table scrolls rather than widening the page; print fits
+	   it to the page instead (see the WebKit print preparation). */
+	@media screen {
+	    table.wide-table,
+	    table:has(tr > :nth-child(8)) {
+	        display: block;
+	        overflow-x: auto;
+	    }
+	}
 	th { background: #dcdcdc; font-weight: 600; }
 	tr:nth-child(even) td { background: #f9f9f9; }
 	img { max-width: 100%; height: auto; }
