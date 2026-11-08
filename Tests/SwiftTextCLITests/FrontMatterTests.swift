@@ -29,13 +29,11 @@ struct FrontMatterTests {
 	private func tocEntries(_ html: String) -> [(href: String, level: Int)] {
 		let nav = String(html[html.range(of: "<nav class=\"toc\"")!.lowerBound...html.range(of: "</nav>")!.lowerBound])
 		var entries: [(String, Int)] = []
-		var depth = 0
 		var remainder = nav[...]
-		while let match = remainder.range(of: ##"<ol>|</ol>|<a href="#([^"]*)""##, options: .regularExpression) {
+		while let match = remainder.range(of: ##"toc-depth-(\d)"><a href="#([^"]*)""##, options: .regularExpression) {
 			let token = remainder[match]
-			if token == "<ol>" { depth += 1 } else if token == "</ol>" { depth -= 1 } else {
-				entries.append((String(token.dropFirst(10).dropLast()), depth))
-			}
+			let level = Int(token.dropFirst(10).prefix(1))! + 1
+			entries.append((String(token.dropFirst(23).dropLast()), level))
 			remainder = remainder[match.upperBound...]
 		}
 		return entries
@@ -82,8 +80,8 @@ struct FrontMatterTests {
 		#expect(!html().contains("class=\"toc-page"))
 		#expect(html(pageNumbers: .placeholder).contains("toc-pending\">000"))
 		let resolved = html(pageNumbers: .resolved(["kapitel-1": 3]))
-		#expect(resolved.contains("<span class=\"toc-page\">3</span>"))
-		#expect(resolved.contains("<span class=\"toc-page\"></span>"), "a heading without a page shows no number")
+		#expect(resolved.contains("<td class=\"toc-page\">3</td>"))
+		#expect(resolved.contains("<td class=\"toc-page\"></td>"), "a heading without a page shows no number")
 	}
 
 	@Test("without front matter the output has none")
