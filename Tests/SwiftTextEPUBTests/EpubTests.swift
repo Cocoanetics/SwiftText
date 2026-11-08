@@ -112,7 +112,7 @@ struct EpubTests {
 		#expect(chapter.contains("<sup><a href=\"#fn-a\" id=\"ref-a\" class=\"noteref\" epub:type=\"noteref\" role=\"doc-noteref\">1</a></sup>"))
 		#expect(chapter.contains("<aside id=\"fn-a\" class=\"footnote\" epub:type=\"footnote\" role=\"doc-footnote\">"
 			+ "<p><a href=\"#ref-a\" class=\"footnote-backlink\" epub:type=\"backlink\" role=\"doc-backlink\">1</a> Eine Fußnote.</p></aside>"))
-		#expect(chapter.contains("<section class=\"footnotes\" epub:type=\"footnotes\" role=\"doc-endnotes\">\n<hr/>\n<aside"))
+		#expect(chapter.contains("<section class=\"footnotes\" epub:type=\"footnotes\">\n<hr/>\n<aside"))
 		#expect(!chapter.contains("[^a]"))
 		expectWellFormedXML(chapter, "ch002.xhtml")
 	}

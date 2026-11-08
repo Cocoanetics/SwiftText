@@ -110,7 +110,7 @@ final class EpubFootnoteState {
 		}
 		guard !rendered.isEmpty else { return "" }
 		let asides = rendered.sorted { $0.number < $1.number }.map(\.html).joined(separator: "\n")
-		return "<section class=\"footnotes\" epub:type=\"footnotes\" role=\"doc-endnotes\">\n<hr/>\n\(asides)\n</section>"
+		return "<section class=\"footnotes\" epub:type=\"footnotes\">\n<hr/>\n\(asides)\n</section>"
 	}
 
 	/// Puts the numbered backlink at the start of the note's first paragraph, or in a
