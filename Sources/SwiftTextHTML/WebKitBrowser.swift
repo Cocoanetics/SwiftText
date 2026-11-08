@@ -22,6 +22,10 @@ package struct PDFChapterHeading: Decodable {
 package struct PDFPageFurniturePreparation: Decodable {
 	package let headings: [PDFChapterHeading]
 	package let stylesheet: String
+	/// Where the generated title section starts and where the content after it
+	/// begins; the pages in between are the title section's physical pages.
+	package var titleStart: PDFChapterHeading? = nil
+	package var titleEnd: PDFChapterHeading? = nil
 }
 
 @available(macOS 10.15, iOS 13.0, *)
@@ -244,17 +248,28 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 		let script = """
 		(function() {
 			const normalize = s => s.replace(/\\s+/g, ' ').trim();
-			const headings = \(header ? "true" : "false") ? Array.from(document.querySelectorAll('h\(headingLevel)')).map(heading => {
-				const title = normalize(heading.textContent || '');
+			function locate(element) {
+				const title = normalize(element.textContent || '');
 				const searchText = title.slice(0, 40).trim();
 				const range = document.createRange();
 				range.setStart(document.body, 0);
-				range.setEndBefore(heading);
+				range.setEndBefore(element);
 				const before = normalize(range.toString());
 				let occurrence = 0, from = 0, hit;
 				while (searchText && (hit = before.indexOf(searchText, from)) !== -1) { occurrence++; from = hit + 1; }
 				return { title, searchText, occurrence };
+			}
+			const headings = \(header ? "true" : "false") ? Array.from(document.querySelectorAll('h\(headingLevel)')).map(heading => {
+				return locate(heading);
 			}).filter(h => h.searchText) : [];
+			let titleStart = null, titleEnd = null;
+			const titleSection = document.querySelector('section.titlepage');
+			if (titleSection) {
+				titleStart = locate(titleSection.querySelector('h1') || titleSection);
+				let next = titleSection.nextElementSibling;
+				while (next && !normalize(next.textContent || '')) next = next.nextElementSibling;
+				if (next) titleEnd = locate(next.matches('h1,h2,h3,h4,h5,h6,p,li') ? next : (next.querySelector('h1,h2,h3,h4,h5,h6,p,li') || next));
+			}
 			// Re-emit each authored @page margin with the same selector. Keeping that
 			// selector is important: :first/:left/:right and named-page margins stay scoped.
 			// CSS max() also lets WebKit resolve calc(), var(), viewport units, and
@@ -311,7 +326,7 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 			probe.remove();
 			window.__swiftTextPrintableSize = [(\(paperSize.width) - maximum[1] - maximum[3]) / 0.75,
 				(\(paperSize.height) - maximum[0] - maximum[2]) / 0.75];
-			return JSON.stringify({ headings: headings, stylesheet: style.textContent });
+			return JSON.stringify({ headings: headings, stylesheet: style.textContent, titleStart: titleStart, titleEnd: titleEnd });
 		})();
 		"""
 		guard let json = try await webView.evaluateJavaScript(script) as? String, let data = json.data(using: .utf8) else {

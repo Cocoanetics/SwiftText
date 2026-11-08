@@ -6,7 +6,7 @@ import SwiftTextHTML
 /// Stamps searchable text after WebKit has settled the page count. Links are
 /// rebuilt because drawing a CGPDFPage copies content, not annotations.
 enum PDFPageFurniture {
-	static func add(to data: Data, pageNumbers: Bool, title: String?, headings: [PDFChapterHeading], hasTitlePage: Bool = false) throws -> Data {
+	static func add(to data: Data, pageNumbers: Bool, title: String?, headings: [PDFChapterHeading], titleSection: (start: PDFChapterHeading, end: PDFChapterHeading?)? = nil) throws -> Data {
 		guard pageNumbers || title != nil else { return data }
 		guard let source = PDFDocument(data: data) else { throw WebKitBrowserError.printFailed }
 		var chapters: [Int: String] = [:]
@@ -15,6 +15,18 @@ enum PDFPageFurniture {
 			guard heading.occurrence < matches.count, let page = matches[heading.occurrence].pages.first else { continue }
 			// When several chapters start on one page, the last one is current.
 			chapters[source.index(for: page)] = heading.title
+		}
+		// The generated title section may span several pages, or follow a page the
+		// authored CSS inserted, so its range comes from where it actually lands.
+		func page(of heading: PDFChapterHeading) -> Int? {
+			let matches = source.findString(heading.searchText, withOptions: [])
+			guard heading.occurrence < matches.count, let page = matches[heading.occurrence].pages.first else { return nil }
+			return source.index(for: page)
+		}
+		var bare = 0..<0
+		if let titleSection, let start = page(of: titleSection.start) {
+			let end = titleSection.end.flatMap { page(of: $0) } ?? source.pageCount
+			bare = start..<max(start + 1, end)
 		}
 		let output = NSMutableData()
 		guard let consumer = CGDataConsumer(data: output), let context = CGContext(consumer: consumer, mediaBox: nil, nil) else {
@@ -39,7 +51,7 @@ enum PDFPageFurniture {
 			chapter = chapters[index] ?? chapter
 			NSGraphicsContext.saveGraphicsState()
 			NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
-			let furnished = !(hasTitlePage && index == 0)
+			let furnished = !bare.contains(index)
 			if pageNumbers, furnished {
 				draw(String(index + 1), in: CGRect(x: bounds.minX + 24, y: bounds.minY + 24, width: bounds.width - 48, height: 14), alignment: .center)
 			}
