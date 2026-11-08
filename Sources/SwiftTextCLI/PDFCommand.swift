@@ -380,6 +380,11 @@ func markdownToHTML(
 ) -> String {
 	let orientation = landscape ? "landscape" : "portrait"
 	let pageCSS = "\(paper.cssName) \(orientation)"
+	// Printable area (paper minus the 2cm `@page` margin) in CSS pixels.
+	let paperPoints = paper.pointSize
+	let marginPx = 2 / 2.54 * 96
+	let printableWidth = (landscape ? paperPoints.height : paperPoints.width) / 0.75 - 2 * marginPx
+	let printableHeight = (landscape ? paperPoints.width : paperPoints.height) / 0.75 - 2 * marginPx
 	var options: MarkdownToHTML.Options = [.headingIDs]
 	if passThroughRawHTML { options.insert(.passThroughRawHTML) }
 	if linkCitations { options.insert(.linkCitations) }
@@ -546,14 +551,101 @@ func markdownToHTML(
 	    font-size: 0.95em;
 	}
 	.footnote-definition p { margin: 0.4em 0; }
+	\(footnotes == .page ? footnotePageCSS : "")
 	\(headingBreakCSS)
 	\(extraCSS.map { "\n/* User stylesheet */\n" + $0 } ?? "")
 	</style>
 	</head>
 	<body>
 	\(body)
+	\(footnotes == .page ? footnotePageScript(printableWidth: printableWidth, printableHeight: printableHeight) : "")
 	</body>
 	</html>
+	"""
+}
+
+/// Styles for `--footnotes page`: one box per printed page, the notes in a
+/// rule-topped area at its foot.
+private let footnotePageCSS = """
+.fn-page { display: flex; flex-direction: column; width: 100%; }
+.fn-page:not(:last-child) { page-break-after: always; break-after: page; }
+.fn-body { flex: none; }
+.fn-notes { margin-top: auto; border-top: 1px solid #999; padding-top: 0.4em; font-size: 0.85em; line-height: 1.35; }
+.fn-notes .footnote-definition { margin: 0.2em 0; font-size: inherit; }
+"""
+
+/// Print-time pagination for `--footnotes page`. WebKit has no paged-media
+/// footnotes, so on `beforeprint` the top-level blocks are distributed over page
+/// boxes of exactly one printable page height; every box gets the notes of the
+/// references it holds below its content. A block that overflows moves to a new
+/// page together with its notes; a single block taller than a page still flows
+/// over the page break with its notes after it.
+private func footnotePageScript(printableWidth: Double, printableHeight: Double) -> String {
+	"""
+	<script>
+	window.addEventListener('beforeprint', function () {
+	    var layoutWidth = document.documentElement.clientWidth;
+	    if (layoutWidth <= 0) return;
+	    var pageHeight = Math.floor(\(printableHeight) * layoutWidth / \(printableWidth)) - 2;
+	    var notes = {};
+	    document.querySelectorAll('.footnote-definition').forEach(function (n) { notes[n.id] = n; n.remove(); });
+	    var blocks = Array.from(document.body.children).filter(function (e) { return e.tagName !== 'SCRIPT'; });
+	    // Read the break rules while the blocks are still attached to the document.
+	    var breaksBefore = blocks.map(function (b) {
+	        var style = getComputedStyle(b);
+	        return /^(page|always|left|right)$/.test(style.getPropertyValue('break-before'))
+	            || style.getPropertyValue('page-break-before') === 'always';
+	    });
+	    var holder = document.createElement('div');
+	    blocks.forEach(function (b) { holder.appendChild(b); });
+	    var placed = {};
+	    function newPage() {
+	        var page = document.createElement('div');
+	        page.className = 'fn-page';
+	        page.style.minHeight = pageHeight + 'px';
+	        page.innerHTML = '<div class="fn-body"></div><div class="fn-notes"></div>';
+	        document.body.insertBefore(page, document.body.lastElementChild);
+	        return page;
+	    }
+	    function notesFor(block) {
+	        var found = [];
+	        block.querySelectorAll('sup a[href^="#fn-"]').forEach(function (a) {
+	            var id = a.getAttribute('href').slice(1);
+	            if (notes[id] && !placed[id]) {
+	                placed[id] = true;
+	                found.push(notes[id]);
+	                // A note referenced only from another note goes on the same page.
+	                found = found.concat(notesFor(notes[id]));
+	            }
+	        });
+	        return found;
+	    }
+	    var page = newPage();
+	    blocks.forEach(function (block, index) {
+	        var breaks = breaksBefore[index];
+	        block.style.breakBefore = 'auto';
+	        block.style.pageBreakBefore = 'auto';
+	        var body = page.querySelector('.fn-body'), area = page.querySelector('.fn-notes');
+	        if (breaks && body.children.length) {
+	            page = newPage();
+	            body = page.querySelector('.fn-body'); area = page.querySelector('.fn-notes');
+	        }
+	        body.appendChild(block);
+	        var added = notesFor(block);
+	        added.forEach(function (n) { area.appendChild(n); });
+	        var used = body.offsetHeight + area.offsetHeight;
+	        if (used > pageHeight && body.children.length > 1) {
+	            added.forEach(function (n) { n.remove(); });
+	            page = newPage();
+	            body = page.querySelector('.fn-body'); area = page.querySelector('.fn-notes');
+	            body.appendChild(block);
+	            added.forEach(function (n) { area.appendChild(n); });
+	        }
+	    });
+	    // Drop the unused empty note areas so they draw no rule.
+	    document.querySelectorAll('.fn-notes:empty').forEach(function (n) { n.remove(); });
+	}, { once: true });
+	</script>
 	"""
 }
 
