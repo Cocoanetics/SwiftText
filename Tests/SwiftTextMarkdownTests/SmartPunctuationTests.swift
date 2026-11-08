@@ -28,6 +28,12 @@ struct SmartPunctuationTests {
 		#expect(SmartPunctuation.apply(to: "the dogs' bowls", language: "en") == "the dogs\u{2019} bowls")
 	}
 
+	@Test("a possessive inside a single-quoted phrase keeps the quote open")
+	func possessiveInsideQuote() {
+		#expect(SmartPunctuation.apply(to: "He called it 'the parents' room'", language: "de")
+			== "He called it \u{201A}the parents\u{2019} room\u{2018}")
+	}
+
 	@Test("code, URLs, markers, html and link destinations are untouched")
 	func leftAlone() {
 		let kept = [

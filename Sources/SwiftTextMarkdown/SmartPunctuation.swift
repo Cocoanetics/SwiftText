@@ -314,7 +314,7 @@ public enum SmartPunctuation {
 					replacement = c == "\"" ? quotes.open : quotes.singleOpen
 					if c == "'" { openSingles += 1 }
 				} else if c == "'", previous.isLetter || previous.isNumber,
-				          openSingles == 0 || (next.map { $0.isLetter || $0.isNumber } ?? false) {
+				          openSingles == 0 || (next.map { $0.isLetter || $0.isNumber } ?? false) || hasLaterClosingSingle(chars, after: i) {
 					replacement = "\u{2019}" // apostrophe: inside a word, or after a word with no open quote (Practitioners')
 				} else {
 					if c == "'", openSingles > 0 { openSingles -= 1 }
@@ -328,6 +328,18 @@ public enum SmartPunctuation {
 			}
 		}
 		return (out, pending)
+	}
+
+	/// Whether a later straight `'` could close the open quote (follows a non-space, non-opener, and no letter follows it),
+	/// which makes a word-final `'` before it a possessive apostrophe: 'the parents' room'.
+	private static func hasLaterClosingSingle(_ chars: [Character], after i: Int) -> Bool {
+		for j in (i + 1)..<max(i + 1, chars.count) where chars[j] == "'" {
+			let before = chars[j - 1]
+			guard !before.isWhitespace, !openers.contains(before) else { continue }
+			if j + 1 < chars.count, chars[j + 1].isLetter || chars[j + 1].isNumber { continue }
+			return true
+		}
+		return false
 	}
 
 	private static func closingBacktickRun(_ chars: [Character], from start: Int, length: Int) -> Int? {
