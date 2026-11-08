@@ -103,8 +103,11 @@ enum EpubPackageBuilder {
 	private static func chapterXHTML(chapter: EpubChapter, language: String) -> String {
 		let bodyType = chapter.isFrontmatter ? "frontmatter" : "bodymatter"
 		let sectionType = chapter.isFrontmatter ? "frontmatter" : "chapter"
+		// No id on the section: heading ids (slugs or `{#custom}`) are the only
+		// anchors in the body, so they can't collide with a wrapper id. The TOC
+		// links a chapter by its file alone.
 		let section = """
-		<section id="\(chapter.id)" epub:type="\(sectionType)">
+		<section epub:type="\(sectionType)">
 		\(chapter.bodyXHTML)
 		</section>
 		"""
@@ -165,7 +168,7 @@ enum EpubPackageBuilder {
 
 	private static func navXHTML(metadata: EpubMetadata, chapters: [EpubChapter], hasCover: Bool) -> String {
 		let tocItems = chapters.filter { !$0.isFrontmatter }.map { chapter in
-			let link = "<a href=\"text/\(chapter.id).xhtml#\(chapter.id)\">\(XML.escapeText(chapter.title))</a>"
+			let link = "<a href=\"\(href(chapterID: chapter.id, fragment: nil))\">\(XML.escapeText(chapter.title))</a>"
 			guard !chapter.subentries.isEmpty else { return "      <li>\(link)</li>" }
 			return "      <li>\(link)\n" + navList(chapter.subentries, chapterID: chapter.id, indent: "        ") + "      </li>"
 		}.joined(separator: "\n")
@@ -247,7 +250,7 @@ enum EpubPackageBuilder {
 		}
 
 		for chapter in chapters where !chapter.isFrontmatter {
-			appendNavPoint(title: chapter.title, src: "text/\(chapter.id).xhtml#\(chapter.id)",
+			appendNavPoint(title: chapter.title, src: href(chapterID: chapter.id, fragment: nil),
 			               children: chapter.subentries, chapterID: chapter.id, level: 1)
 		}
 		return """

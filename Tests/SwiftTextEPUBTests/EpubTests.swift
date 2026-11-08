@@ -253,7 +253,7 @@ struct EpubTests {
 		expectWellFormedXML(nav, "nav.xhtml")
 		expectWellFormedXML(ncx, "toc.ncx")
 		#expect(nav.contains("""
-		      <li><a href="text/ch002.xhtml#ch002">Teil 1: Wo Sie stehen</a>
+		      <li><a href="text/ch002.xhtml">Teil 1: Wo Sie stehen</a>
 		        <ol>
 		          <li><a href="text/ch002.xhtml#was-in-der-akte-steht">Was in der Akte steht</a></li>
 		          <li><a href="text/ch002.xhtml#was-die-bilder-zeigen">Was die Bilder zeigen</a></li>
@@ -271,12 +271,23 @@ struct EpubTests {
 		#expect(ncx.contains("""
 		    <navPoint id="navPoint-1" playOrder="1">
 		      <navLabel><text>Teil 1: Wo Sie stehen</text></navLabel>
-		      <content src="text/ch002.xhtml#ch002"/>
+		      <content src="text/ch002.xhtml"/>
 		      <navPoint id="navPoint-2" playOrder="2">
 		        <navLabel><text>Was in der Akte steht</text></navLabel>
 		        <content src="text/ch002.xhtml#was-in-der-akte-steht"/>
 		      </navPoint>
 		"""))
+	}
+
+	@Test("a heading whose slug equals the chapter file id leaves the chapter with unique ids")
+	func headingIDMatchingChapterID() {
+		let files = MarkdownToEpub.makeFiles("# Opening {#ch001}\n\nprose\n\n## ch001\n\nprose", metadata: fixedMetadata(), options: EpubOptions(chapterLevel: 1, tocDepth: 1))
+		let chapter = string(file(files, "OEBPS/text/ch001.xhtml"))
+		#expect(chapter.components(separatedBy: "id=\"ch001\"").count - 1 == 1)
+		#expect(chapter.contains("<h2 id=\"ch001-1\">"))
+		let nav = string(file(files, "OEBPS/nav.xhtml"))
+		#expect(nav.contains("<li><a href=\"text/ch001.xhtml\">Opening</a>"))
+		#expect(nav.contains("<a href=\"text/ch001.xhtml#ch001-1\">ch001</a>"))
 	}
 
 	@Test("deeper --toc-depth nests grandchildren; headings folded into the title aren't repeated")
