@@ -84,6 +84,9 @@ struct Render: AsyncParsableCommand {
 	@Option(name: .long, help: "For PDF output, the rendering engine: webkit (macOS only, full CSS) or swift (cross-platform, no WebKit). Defaults to webkit on macOS, swift elsewhere.")
 	var engine: RenderEngine = .platformDefault
 
+	@Option(name: .long, help: "For PDF output (swift engine), a TrueType/OpenType file used instead of the default sans-serif and serif. One file for bold and italic too; @font-face for families.")
+	var font: String?
+
 	@Flag(name: .long, help: "For HTML, PDF and EPUB output, make numeric citations clickable: a list item starting with [n] gets id=\"citation-n\" and every other [n] links to it.")
 	var linkCitations: Bool = false
 
@@ -437,8 +440,18 @@ struct Render: AsyncParsableCommand {
 		options.pageHeightPx = heightPoints / 0.75
 		options.pageStrings = pageStrings
 		if pageNumbers || runningHeads { options.minimumPageMarginPx = 64 } // 48 pt, as in the webkit engine
+		// Embed every face: print preflight (PDF/A, PDF/X, print-on-demand) rejects unembedded fonts.
+		let fonts = FontBook()
+		fonts.embedsStandardFaces = true
+		if let font {
+			do {
+				try fonts.setOverrideFont(data: Data(contentsOf: URL(fileURLWithPath: (font as NSString).expandingTildeInPath)))
+			} catch {
+				throw ValidationError("Cannot use --font \(font): \(error.localizedDescription)")
+			}
+		}
 		let furniture = SwiftPageFurniture.css(pageNumbers: pageNumbers, title: runningHeads ? title : nil, hasTitlePage: titlePage)
-		let rendered = try await HTMLRenderer.renderPDFWithAnchors(html: html, css: furniture.map { [$0] } ?? [], baseURL: baseURL,
+		let rendered = try await HTMLRenderer.renderPDFWithAnchors(html: html, css: furniture.map { [$0] } ?? [], fonts: fonts, baseURL: baseURL,
 		                                                           options: options, title: title, authors: authors)
 		return (rendered.data, rendered.anchorPages)
 	}
