@@ -20,7 +20,7 @@ struct EpubNavLabels: Equatable {
 		"es": EpubNavLabels(tableOfContents: "Índice", cover: "Portada", titlePage: "Página de título", beginning: "Comienzo"),
 		"it": EpubNavLabels(tableOfContents: "Indice", cover: "Copertina", titlePage: "Frontespizio", beginning: "Inizio"),
 		"nl": EpubNavLabels(tableOfContents: "Inhoudsopgave", cover: "Omslag", titlePage: "Titelpagina", beginning: "Begin"),
-		"pt": EpubNavLabels(tableOfContents: "Índice", cover: "Capa", titlePage: "Folha de rosto", beginning: "Início"),
+		"pt": EpubNavLabels(tableOfContents: "Índice", cover: "Capa", titlePage: "Folha de rosto", beginning: "Início")
 	]
 
 	/// Labels for a BCP 47 tag such as `de-AT`; English for unknown languages.
