@@ -208,6 +208,14 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 	@MainActor
 	@available(macOS 11.0, *)
 	package func exportPaginatedPDFData(paperSize: CGSize) async throws -> Data {
+		try await exportPaginatedPDFDataWithAnchors(paperSize: paperSize).data
+	}
+
+	/// Like ``exportPaginatedPDFData(paperSize:)``, also reporting the zero-based
+	/// page each target of a `#fragment` link in the page lands on.
+	@MainActor
+	@available(macOS 11.0, *)
+	package func exportPaginatedPDFDataWithAnchors(paperSize: CGSize) async throws -> (data: Data, anchorPages: [String: Int]) {
 		let webView = try await loadedWebView()
 		try await prepareTablesForPrinting(in: webView, paperSize: paperSize)
 		#if canImport(PDFKit)
@@ -223,7 +231,7 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 		#if canImport(PDFKit)
 		return PDFInternalLinks.resolve(pdfData: data, pageURL: webView.url, targets: linkTargets)
 		#else
-		return data
+		return (data, [:])
 		#endif
 	}
 
