@@ -73,6 +73,35 @@ struct RenderPageFurnitureTests {
 		}
 	}
 
+	@Test("the webkit engine leaves the title page bare", .timeLimit(.minutes(2)))
+	func webkitTitlePageBare() async throws {
+		let prose = "Langer Absatz mit vielen Wörtern für den Seitenumbruch und die Fortsetzung des Kapitels. "
+		let markdown = (1...3).map { chapter in
+			"# Kapitel \(chapter)\n\n" + (1...6).map { _ in String(repeating: prose, count: 8) }.joined(separator: "\n\n")
+		}.joined(separator: "\n\n")
+		let document = try await render(markdown, arguments: ["--running-heads", "--title-page", "--toc", "--author", "A. Autor"])
+		try #require(document.pageCount > 3)
+		let title = try #require(document.page(at: 0))
+		#expect(text(on: title, from: 0, to: 0.08).isEmpty && text(on: title, from: 0.92, to: 1).isEmpty, "the title page carries no furniture")
+		let contents = try #require(document.page(at: 1))
+		#expect(text(on: contents, from: 0, to: 0.08) == "2", "the contents page keeps its number")
+		#expect(text(on: contents, from: 0.92, to: 1).contains("Ein Buch"))
+	}
+
+	@Test("the webkit engine leaves every page of a multi-page title section bare", .timeLimit(.minutes(2)))
+	func webkitLongTitleSectionBare() async throws {
+		let authors = (1...40).flatMap { ["--author", "Autorin Nummer \($0)"] }
+		let document = try await render("# Kapitel 1\n\nText.", arguments: ["--running-heads", "--title-page"] + authors)
+		let first = try #require(document.findString("Kapitel 1", withOptions: []).first?.pages.first)
+		let chapterIndex = document.index(for: first)
+		try #require(chapterIndex > 1, "the fixture must spill the title section onto a second page")
+		for index in 0..<chapterIndex {
+			let page = try #require(document.page(at: index))
+			#expect(text(on: page, from: 0, to: 0.08).isEmpty && text(on: page, from: 0.92, to: 1).isEmpty, "title page \(index + 1) carries furniture")
+		}
+		#expect(text(on: try #require(document.page(at: chapterIndex)), from: 0, to: 0.08) == String(chapterIndex + 1))
+	}
+
 	@Test("the swift engine draws numbers and running heads, and leaves the title page bare", .timeLimit(.minutes(2)))
 	func swiftEngineFurniture() async throws {
 		let prose = "Langer Absatz mit vielen Wörtern für den Seitenumbruch und die Fortsetzung des Kapitels. "
