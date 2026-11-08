@@ -38,7 +38,72 @@ private final class StallingSchemeHandler: NSObject, WKURLSchemeHandler {
 	func webView(_ webView: WKWebView, stop urlSchemeTask: any WKURLSchemeTask) {}
 }
 
+/// Serves a first page that navigates on a second after it loads, and answers
+/// that second page only after 5 s. Neither page lets its own timers capture it:
+/// `setTimeout` is disabled, so only the Swift-side fallback can.
+@MainActor
+private final class HoppingSchemeHandler: NSObject, WKURLSchemeHandler {
+	static let scheme = "swifttext-hop"
+
+	private var stopped: Set<ObjectIdentifier> = []
+
+	func webView(_ webView: WKWebView, start urlSchemeTask: any WKURLSchemeTask) {
+		guard let url = urlSchemeTask.request.url else { return }
+		if url.path == "/second" {
+			let id = ObjectIdentifier(urlSchemeTask as AnyObject)
+			Task { @MainActor in
+				try? await Task.sleep(nanoseconds: 5_000_000_000)
+				guard !self.stopped.contains(id) else { return }
+				Self.respond(urlSchemeTask, url: url, html: """
+				<html><head><script>window.setTimeout = function() { return 0; };</script></head>
+				<body><p>Second page</p></body></html>
+				""")
+			}
+		} else {
+			Self.respond(urlSchemeTask, url: url, html: """
+			<html><head><script>
+			var later = window.setTimeout.bind(window);
+			window.setTimeout = function() { return 0; };
+			window.addEventListener('load', function() {
+				later(function() { location.href = '\(Self.scheme)://site/second'; }, 1000);
+			});
+			</script></head><body><p>First page</p></body></html>
+			""")
+		}
+	}
+
+	func webView(_ webView: WKWebView, stop urlSchemeTask: any WKURLSchemeTask) {
+		stopped.insert(ObjectIdentifier(urlSchemeTask as AnyObject))
+	}
+
+	private static func respond(_ task: any WKURLSchemeTask, url: URL, html: String) {
+		let data = Data(html.utf8)
+		task.didReceive(URLResponse(url: url, mimeType: "text/html", expectedContentLength: data.count, textEncodingName: "utf-8"))
+		task.didReceive(data)
+		task.didFinish()
+	}
+}
+
 extension WebKitIntegrationTests {
+	/// The first page's fallback is due 3 s after it finished, while the second
+	/// page is still on its way. Starting that navigation must cancel it, or the
+	/// first page — no longer the one being loaded — is captured instead.
+	@Test("A page that navigates on is captured at its destination", .timeLimit(.minutes(1)))
+	@MainActor
+	func webKitBrowserCapturesAfterClientNavigation() async throws {
+		let handler = HoppingSchemeHandler()
+		let browser = WebKitBrowser(url: try #require(URL(string: "\(HoppingSchemeHandler.scheme)://site/first")))
+		browser.configureWebView = { configuration in
+			configuration.setURLSchemeHandler(handler, forURLScheme: HoppingSchemeHandler.scheme)
+		}
+		browser.timeout = 20
+		await browser.waitForLoadCompletion()
+
+		#expect(browser.loadError == nil, "\(String(describing: browser.loadError))")
+		let html = await browser.html()
+		#expect(html?.contains("Second page") == true, "captured: \(html ?? "nil")")
+	}
+
 	@MainActor
 	private func stallingBrowser(handler: StallingSchemeHandler) throws -> WebKitBrowser {
 		let browser = WebKitBrowser(url: try #require(URL(string: "\(StallingSchemeHandler.scheme)://page")))

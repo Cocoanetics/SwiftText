@@ -736,6 +736,15 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 	"""
 
 	// MARK: - WKNavigationDelegate
+	/// A page that navigates on after finishing — a redirect, a client-side
+	/// `location` change — must not be captured by the previous document's
+	/// fallback. The new document's own `didFinish` arms a fresh one.
+	package func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+		guard webView === self.webView else { return }
+		captureFallbackTask?.cancel()
+		captureFallbackTask = nil
+	}
+
 	package func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
 		guard webView === self.webView else { return }
 		loadProgress.committed = true
