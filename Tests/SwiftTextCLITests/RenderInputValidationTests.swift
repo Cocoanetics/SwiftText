@@ -58,3 +58,20 @@ struct RenderHeadingBreakTests {
 		if let always, let reset { #expect(always.lowerBound < reset.lowerBound) }
 	}
 }
+
+@Suite("render footnotes page")
+struct RenderFootnotePageTests {
+	private let markdown = "Satz.[^a]\n\n[^a]: Note."
+
+	@Test("page placement embeds the print-time paginator, section and end do not")
+	func pageEmbedsPaginator() {
+		let page = markdownToHTML(markdown, paper: .a4, landscape: false, footnotes: .page)
+		#expect(page.contains("beforeprint"))
+		#expect(page.contains(".fn-notes"))
+		#expect(page.contains("id=\"fn-1\""))
+		for placement in [FootnotePlacement.section, .end] {
+			let html = markdownToHTML(markdown, paper: .a4, landscape: false, footnotes: placement)
+			#expect(!html.contains("beforeprint"))
+		}
+	}
+}
