@@ -30,6 +30,17 @@ struct HTMLFootnoteConversionTests {
 		#expect(restored == expected)
 	}
 
+	/// Per-chapter numbering shows `[1]` twice; the restored Markdown must still
+	/// give each note its own identifier.
+	@Test func restartedNumberingKeepsUniqueIdentifiers() async throws {
+		let source = "# A\n\nOne.[^a]\n\n[^a]: First.\n\n# B\n\nTwo.[^b]\n\n[^b]: Second."
+		let restored = try await markdown(MarkdownToHTML.convert(source))
+		#expect(restored.contains("One.[^1]"))
+		#expect(restored.contains("Two.[^1-2]"))
+		#expect(restored.contains("[^1]: First."))
+		#expect(restored.contains("[^1-2]: Second."))
+	}
+
 	/// GitHub/GFM-rendered footnotes (`data-footnote-ref`, `<section data-footnotes>`,
 	/// `↩` backref). The backref is dropped and the definition body is clean.
 	@Test func githubFootnotesRestored() async throws {
