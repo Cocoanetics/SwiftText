@@ -9,6 +9,21 @@ struct SmartPunctuationTests {
 			== "Parkinson\u{2019}s disease \u{2013} \u{201C}a quote\u{201D} \u{2013} Alzheimer\u{2019}s\u{2026}")
 	}
 
+	@Test("no-break space after abbreviations")
+	func abbreviations() {
+		let text = "Frau Dr. Sturm und Prof. Huber, Nr. 3, z. B. so."
+		#expect(SmartPunctuation.apply(to: text, language: "de")
+			== "Frau Dr.\u{00A0}Sturm und Prof.\u{00A0}Huber, Nr.\u{00A0}3, z. B. so.")
+		// Nr. is a German abbreviation only; whole words only; end of line keeps its text.
+		#expect(SmartPunctuation.apply(to: "Nr. 3", language: "de-AT") == "Nr.\u{00A0}3")
+		#expect(SmartPunctuation.apply(to: "Nr. 3", language: "den") == "Nr. 3")
+		#expect(SmartPunctuation.apply(to: "Dr. Sturm, Nr. 3") == "Dr.\u{00A0}Sturm, Nr. 3")
+		#expect(SmartPunctuation.apply(to: "See e.g. this, cf. that; the cap. Next Dipl.-Ing. X", language: "de")
+			== "See e.g.\u{00A0}this, cf.\u{00A0}that; the cap. Next Dipl.-Ing.\u{00A0}X")
+		#expect(SmartPunctuation.apply(to: "Ask Mr. Smith.\nThen Dr.") == "Ask Mr.\u{00A0}Smith.\nThen Dr.")
+		#expect(SmartPunctuation.apply(to: "`Dr. X` Dr. Y") == "`Dr. X` Dr.\u{00A0}Y")
+	}
+
 	@Test("em dash and nested quotes")
 	func dashesAndNesting() {
 		#expect(SmartPunctuation.apply(to: "a---b He said \"'Hi'\" ('90s)")

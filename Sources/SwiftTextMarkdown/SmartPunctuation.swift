@@ -7,7 +7,8 @@ import Foundation
 
 /// Typographic punctuation for Markdown source, like pandoc's `smart` extension:
 /// straight quotes and apostrophes become curly, `--` an en dash, `---` an em dash
-/// and `...` an ellipsis.
+/// and `...` an ellipsis. A no-break space follows common abbreviations (`Dr. Sturm`), as in
+/// pandoc, plus the German ones for `de`.
 ///
 /// Works on the Markdown text, so every output format gets the same result. Code
 /// (spans, fenced and indented blocks), raw HTML, URLs, link destinations,
@@ -21,6 +22,18 @@ public enum SmartPunctuation {
 		var close: Character
 		var singleOpen: Character
 		var singleClose: Character
+	}
+
+	/// Abbreviations followed by a no-break space (pandoc's list).
+	private static let abbreviations: Set<String> = [
+		"Mr.", "Mrs.", "Ms.", "Capt.", "Dr.", "Prof.", "Gen.", "Gov.", "e.g.", "i.e.", "Sgt.", "St.", "vol.", "vs.", "Sen.",
+		"Reps.", "Rep.", "Pres.", "Hon.", "Rev.", "Ph.D.", "M.D.", "M.A.", "p.", "pp.", "ch.", "sec.", "cf.", "cp."
+	]
+	private static let germanAbbreviations: Set<String> = ["Dr.", "Prof.", "Nr.", "Hr.", "Fr.", "Dipl.-Ing.", "Mag.", "usw."]
+
+	static func abbreviations(forLanguage language: String) -> Set<String> {
+		let primary = language.lowercased().split(whereSeparator: { $0 == "-" || $0 == "_" }).first
+		return primary == "de" ? abbreviations.union(germanAbbreviations) : abbreviations
 	}
 
 	static func quotes(forLanguage language: String) -> Quotes {
@@ -40,6 +53,7 @@ public enum SmartPunctuation {
 	/// Returns `markdown` with smart punctuation applied; `language` is a BCP-47 tag choosing the quote style.
 	public static func apply(to markdown: String, language: String = "en") -> String {
 		let quotes = quotes(forLanguage: language)
+		let abbreviations = abbreviations(forLanguage: language)
 		let lines = markdown.components(separatedBy: "\n")
 		var result: [String] = []
 		result.reserveCapacity(lines.count)
@@ -106,7 +120,7 @@ public enum SmartPunctuation {
 				let chars = Array(line)
 				if let end = closingBacktickRun(chars, from: 0, length: run) {
 					openSpan = nil
-					let (rest, pending) = convertInline(String(chars[end...]), quotes: quotes, labels: labels, openSingles: &openSingles, closes: closes(after: index))
+					let (rest, pending) = convertInline(String(chars[end...]), quotes: quotes, labels: labels, abbreviations: abbreviations, openSingles: &openSingles, closes: closes(after: index))
 					openSpan = pending
 					result.append(String(chars[..<end]) + rest)
 				} else {
@@ -146,7 +160,7 @@ public enum SmartPunctuation {
 				continue
 			}
 
-			let (converted, pending) = convertInline(line, quotes: quotes, labels: labels, dashes: !isUnattributedHeading(trimmed), openSingles: &openSingles,
+			let (converted, pending) = convertInline(line, quotes: quotes, labels: labels, abbreviations: abbreviations, dashes: !isUnattributedHeading(trimmed), openSingles: &openSingles,
 			                                         closes: closes(after: index))
 			openSpan = pending
 			result.append(converted)
@@ -211,7 +225,7 @@ public enum SmartPunctuation {
 
 	/// Converts one line. When a code span opens here and closes on a later line (`closes` says so),
 	/// the rest of the line is kept verbatim and the run length is returned as pending.
-	private static func convertInline(_ line: String, quotes: Quotes, labels: Set<String>, dashes: Bool = true, openSingles: inout Int,
+	private static func convertInline(_ line: String, quotes: Quotes, labels: Set<String>, abbreviations: Set<String>, dashes: Bool = true, openSingles: inout Int,
 	                                  closes: (Int) -> Bool) -> (String, pending: Int?) {
 		var pending: Int?
 		let chars = Array(line)
@@ -300,6 +314,15 @@ public enum SmartPunctuation {
 					run -= 3
 				}
 				append(String(repeating: ".", count: run))
+				if run == 1, i + 1 < chars.count, chars[i] == " ", !chars[i + 1].isWhitespace {
+					var start = i - 1
+					while start > 0, chars[start - 1].isLetter || chars[start - 1] == "." || chars[start - 1] == "-" { start -= 1 }
+					let wholeWord = start == 0 || !chars[start - 1].isNumber
+					if wholeWord, abbreviations.contains(String(chars[start..<i])) {
+						append(["\u{00A0}"])
+						i += 1
+					}
+				}
 			case "\"", "'":
 				var next: Character?
 				var j = i + 1
