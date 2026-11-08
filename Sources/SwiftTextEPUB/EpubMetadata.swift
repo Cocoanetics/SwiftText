@@ -15,6 +15,9 @@ import Foundation
 public struct EpubMetadata: Sendable {
 	/// The book title (`dc:title`).
 	public var title: String
+	/// An optional subtitle, shown on the title page and written as a second
+	/// `dc:title` refined with `title-type` `subtitle`.
+	public var subtitle: String?
 	/// The author(s), in reading order (`dc:creator`, role `aut`).
 	public var authors: [String]
 	/// BCP-47 language tag (`dc:language`), e.g. `"en"`.
@@ -32,6 +35,7 @@ public struct EpubMetadata: Sendable {
 
 	public init(
 		title: String,
+		subtitle: String? = nil,
 		authors: [String] = [],
 		language: String = "en",
 		identifier: String? = nil,
@@ -40,6 +44,7 @@ public struct EpubMetadata: Sendable {
 		coverImageFilename: String? = nil
 	) {
 		self.title = title
+		self.subtitle = subtitle
 		self.authors = authors
 		self.language = language.isEmpty ? "en" : language
 		self.identifier = identifier ?? "urn:uuid:\(UUID().uuidString.lowercased())"

@@ -94,6 +94,27 @@ struct EpubTests {
 		#expect(opf.contains("unique-identifier=\"pub-id\""))
 	}
 
+	@Test("subtitle appears on the title page and as a refined second dc:title")
+	func subtitleMetadata() {
+		var metadata = fixedMetadata(title: "Ein Buch", authors: ["A. Autor"])
+		metadata.subtitle = "Zweite <Auflage>"
+		let files = MarkdownToEpub.makeFiles("# One\n\nx", metadata: metadata, options: EpubOptions())
+		let page = string(file(files, "OEBPS/text/titlepage.xhtml"))
+		expectWellFormedXML(page, "titlepage")
+		let h1 = page.range(of: "<h1 class=\"title\">")
+		let sub = page.range(of: "<p class=\"subtitle\">Zweite &lt;Auflage&gt;</p>")
+		let author = page.range(of: "<p class=\"author\">")
+		#expect(h1 != nil && sub != nil && author != nil)
+		if let h1, let sub, let author {
+			#expect(h1.lowerBound < sub.lowerBound && sub.lowerBound < author.lowerBound)
+		}
+		let opf = string(file(files, "OEBPS/content.opf"))
+		expectWellFormedXML(opf, "content.opf")
+		#expect(opf.contains("<dc:title id=\"title-sub\">Zweite &lt;Auflage&gt;</dc:title>"))
+		#expect(opf.contains("refines=\"#title-sub\" property=\"title-type\">subtitle</meta>"))
+		#expect(opf.contains("refines=\"#title-main\" property=\"title-type\">main</meta>"))
+	}
+
 	@Test("metadata with XML-special characters is escaped")
 	func metadataEscaping() {
 		let metadata = fixedMetadata(title: "Tom & Jerry <3", authors: ["A \"Quote\" Smith"])
