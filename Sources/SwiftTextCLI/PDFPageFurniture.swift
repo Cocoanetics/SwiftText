@@ -25,7 +25,9 @@ enum PDFPageFurniture {
 		}
 		var bare = 0..<0
 		if let titleSection, let start = page(of: titleSection.start) {
-			let end = titleSection.end.flatMap { page(of: $0) } ?? source.pageCount
+			// Nothing after the title section means it runs to the end; a successor
+			// that cannot be located must not blank the whole document.
+			let end = titleSection.end.map { page(of: $0) ?? start + 1 } ?? source.pageCount
 			bare = start..<max(start + 1, end)
 		}
 		let output = NSMutableData()
