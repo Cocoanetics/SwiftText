@@ -24,6 +24,10 @@ final class EpubFootnoteState {
 	private let resolver: MarkdownFootnoteResolver
 	private var emitted: [Int: Int] = [:]
 	private let slugByID: [String: String]
+	/// Citation linking (`--link-citations`): the numbers that have a reference item
+	/// anywhere in the book, and the chapter file of those that are in another one.
+	var citationNumbers: Set<Int>?
+	var citationFiles: [Int: String] = [:]
 
 	init(definitions: [MarkdownFootnoteParser.Definition]) {
 		self.definitions = definitions
@@ -131,7 +135,7 @@ final class EpubFootnoteState {
 	func render(_ document: Document, options: SwiftMarkdownHTMLRenderer.Options) -> String {
 		var rewriter = EpubFootnoteRewriter(state: self)
 		let rewritten = rewriter.visit(document) as? Document ?? document
-		return SwiftMarkdownHTMLRenderer.convert(document: rewritten, options: options)
+		return SwiftMarkdownHTMLRenderer.convert(document: rewritten, options: options, citationNumbers: citationNumbers, citationFiles: citationFiles)
 	}
 }
 

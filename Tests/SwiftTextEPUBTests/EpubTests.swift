@@ -102,6 +102,32 @@ struct EpubTests {
 		#expect(opf.contains("Tom &amp; Jerry &lt;3"))
 	}
 
+	// MARK: - Citations
+
+	@Test("linkCitations links across chapter files and anchors the source list")
+	func linkCitations() {
+		let markdown = "# Buch\n\n## Teil 1\n\nText mit Zitat [1] und [2].\n\n## Quellen\n\n- [1] Erste Quelle.\n- [2] Zweite Quelle.\n"
+		let on = MarkdownToEpub.makeFiles(markdown, metadata: fixedMetadata(), options: EpubOptions(chapterLevel: 2, linkCitations: true))
+		let text = string(file(on, "OEBPS/text/ch002.xhtml"))
+		#expect(text.contains("<a href=\"ch003.xhtml#citation-1\">[1]</a>"))
+		#expect(text.contains("<a href=\"ch003.xhtml#citation-2\">[2]</a>"))
+		let sources = string(file(on, "OEBPS/text/ch003.xhtml"))
+		#expect(sources.contains("id=\"citation-1\""))
+		expectWellFormedXML(text, "ch002.xhtml")
+		expectWellFormedXML(sources, "ch003.xhtml")
+
+		let off = MarkdownToEpub.makeFiles(markdown, metadata: fixedMetadata(), options: EpubOptions(chapterLevel: 2))
+		#expect(!string(file(off, "OEBPS/text/ch002.xhtml")).contains("citation-"))
+	}
+
+	@Test("linkCitations links in-page when the source list is in the same chapter")
+	func linkCitationsSameFile() {
+		let markdown = "## Teil\n\nZitat [1].\n\n- [1] Quelle.\n"
+		let files = MarkdownToEpub.makeFiles(markdown, metadata: fixedMetadata(), options: EpubOptions(chapterLevel: 2, linkCitations: true))
+		let chapter = string(file(files, "OEBPS/text/ch001.xhtml"))
+		#expect(chapter.contains("<a href=\"#citation-1\">[1]</a>"))
+	}
+
 	// MARK: - Footnotes
 
 	@Test("footnotes become EPUB 3 noterefs with an aside in the referencing chapter")

@@ -87,8 +87,13 @@ public enum SwiftMarkdownHTMLRenderer {
 	/// - Parameter citationNumbers: With ``Options/linkCitations``, the reference numbers
 	///   to link. Defaults to those found in `document`; pass the set of the whole source
 	///   when rendering fragments of it separately.
-	public static func convert(document: Document, options: Options = [], citationNumbers: Set<Int>? = nil) -> String {
+	/// - Parameter citationFiles: With ``Options/linkCitations``, a file name per reference
+	///   number whose list item lives in another document (an EPUB chapter file), so
+	///   the link reads `<a href="file#citation-n">`. Numbers not listed link in-page.
+	public static func convert(document: Document, options: Options = [], citationNumbers: Set<Int>? = nil,
+	                           citationFiles: [Int: String] = [:]) -> String {
 		var renderer = HTMLRenderer(options: options)
+		renderer.citationFiles = citationFiles
 		renderer.referenceNumbers = citationNumbers ?? []
 		renderer.hasSharedCitationNumbers = citationNumbers != nil
 		renderer.visit(document)
@@ -110,6 +115,7 @@ private struct HTMLRenderer: MarkupVisitor {
 	/// Citation numbers that have a `[n]` reference list item (when linking citations).
 	fileprivate(set) var referenceNumbers = Set<Int>()
 	fileprivate var hasSharedCitationNumbers = false
+	fileprivate var citationFiles: [Int: String] = [:]
 	private var suppressCitationLinks = false
 	private var alignmentStack: [[Table.ColumnAlignment?]] = []
 
@@ -230,7 +236,7 @@ private struct HTMLRenderer: MarkupVisitor {
 	mutating func visitLink(_ link: Link) {
 		let href = link.destination ?? ""
 		if let number = citationLinkNumber(for: link) {
-			output += "<a href=\"#citation-\(number)\">[\(number)]</a>"
+			output += "<a href=\"\(citationFiles[number] ?? "")#citation-\(number)\">[\(number)]</a>"
 			return
 		}
 		output += "<a href=\"\(escapeAttribute(href))\">"
@@ -373,7 +379,7 @@ private struct HTMLRenderer: MarkupVisitor {
 			let close = rest.index(afterOpen, offsetBy: digits.count)
 			if !digits.isEmpty, close < rest.endIndex, rest[close] == "]",
 			   let number = Int(digits), referenceNumbers.contains(number) {
-				output += "<a href=\"#citation-\(number)\">[\(number)]</a>"
+				output += "<a href=\"\(citationFiles[number] ?? "")#citation-\(number)\">[\(number)]</a>"
 				rest = rest[rest.index(after: close)...]
 			} else {
 				output += "["
