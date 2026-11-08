@@ -373,10 +373,10 @@ struct Render: AsyncParsableCommand {
 	#if os(macOS)
 	@MainActor
 	private func decoratedPDF(from browser: WebKitBrowser, title: String, authors: [String]) async throws -> Data {
-		let headings = try await browser.preparePageFurniture(paperSize: pageSize(), footer: pageNumbers,
-		                                                     header: runningHeads, headingLevel: pageBreakBefore?.numericLevel ?? 1)
+		let preparation = try await browser.preparePageFurniture(paperSize: pageSize(), footer: pageNumbers,
+		                                                        header: runningHeads, headingLevel: pageBreakBefore?.numericLevel ?? 1)
 		let data = try await browser.exportPaginatedPDFData(paperSize: pageSize())
-		return try PDFPageFurniture.add(to: data, pageNumbers: pageNumbers, title: runningHeads ? title : nil, headings: headings)
+		return try PDFPageFurniture.add(to: data, pageNumbers: pageNumbers, title: runningHeads ? title : nil, headings: preparation.headings)
 			.settingPDFMetadata(title: title, authors: authors)
 	}
 	#endif

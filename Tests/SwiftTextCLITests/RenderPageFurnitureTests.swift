@@ -2,6 +2,7 @@
 import ArgumentParser
 import Foundation
 import PDFKit
+import SwiftTextHTML
 import Testing
 @testable import SwiftTextCLI
 
@@ -30,6 +31,14 @@ struct RenderPageFurnitureTests {
 		let bounds = page.bounds(for: .mediaBox)
 		let band = CGRect(x: bounds.minX, y: bounds.minY + bottom * bounds.height, width: bounds.width, height: (top - bottom) * bounds.height)
 		return (page.selection(for: band)?.string ?? "").split(whereSeparator: \.isWhitespace).joined(separator: " ")
+	}
+
+	private func bodyHeadingTop(_ heading: String, on page: PDFPage, in document: PDFDocument) throws -> CGFloat {
+		let pageTop = page.bounds(for: .mediaBox).maxY
+		let selection = try #require(document.findString(heading, withOptions: []).first {
+			$0.pages.contains(page) && $0.bounds(for: page).maxY < pageTop - 42
+		})
+		return selection.bounds(for: page).maxY
 	}
 
 	@Test("numbers and current chapter occupy the margin bands on every page", .timeLimit(.minutes(2)), arguments: ["section", "page"])
@@ -119,11 +128,40 @@ struct RenderPageFurnitureTests {
 			let header = text(on: page, from: 0.92, to: 1)
 			#expect(header.contains("Ein Buch") && header.contains(heading))
 			#expect(text(on: page, from: 0, to: 0.08).isEmpty)
-			let bodyHeading = try #require(document.findString(heading, withOptions: []).first {
-				$0.pages.contains(page) && $0.bounds(for: page).maxY < page.bounds(for: .mediaBox).maxY - 42
-			})
-			#expect(bodyHeading.bounds(for: page).maxY <= page.bounds(for: .mediaBox).maxY - 80, "larger authored margins must be retained")
+			#expect(try bodyHeadingTop(heading, on: page, in: document) <= page.bounds(for: .mediaBox).maxY - 80,
+			        "larger authored margins must be retained")
 		}
+	}
+
+	@Test("calculated page margins remain larger than the furniture band", .timeLimit(.minutes(1)))
+	func calculatedMargin() async throws {
+		let document = try await render("# Calculated Margin\n\nText.", arguments: ["--running-heads", "--no-page-numbers"],
+		                                css: "@page { margin-top: calc(2cm + 10pt); }")
+		let page = try #require(document.page(at: 0))
+		#expect(try bodyHeadingTop("Calculated Margin", on: page, in: document) <= page.bounds(for: .mediaBox).maxY - 60,
+		        "calc() must be resolved by WebKit instead of replaced with 48pt")
+	}
+
+	@Test("qualified and variable page margins remain scoped in the supplemental stylesheet", .timeLimit(.minutes(1)))
+	func qualifiedMargins() async throws {
+		let html = """
+		<html><head><style>
+		:root { --page-margin: 5cm; }
+		@page { margin: 2cm; }
+		@page :first { margin-top: 0; }
+		@page :left { margin-top: 4cm; }
+		@page named:right { margin-top: var(--page-margin); }
+		</style></head><body><h1>Chapter</h1></body></html>
+		"""
+		let browser = WebKitBrowser(htmlString: html)
+		await browser.waitForLoadCompletion()
+		let preparation = try await browser.preparePageFurniture(paperSize: CGSize(width: 595.28, height: 841.89),
+		                                                         footer: true, header: true, headingLevel: 1)
+		let stylesheet = preparation.stylesheet
+		#expect(stylesheet.contains("@page :first {margin-top:max(48pt, 0px) !important;"))
+		#expect(stylesheet.contains("@page :left {margin-top:max(48pt, 4cm) !important;"))
+		#expect(stylesheet.contains("@page named:right {margin-top:max(48pt, var(--page-margin)) !important;"))
+		#expect(!stylesheet.contains("@page  {margin-top:max(48pt, 4cm)"), "qualified margins must not become document-wide")
 	}
 }
 #endif
