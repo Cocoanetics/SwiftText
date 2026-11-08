@@ -38,7 +38,11 @@ struct SmartPunctuationTests {
 			"<!--\nit's\n-->",
 			"<script>let x = \"a--b\";</script>",
 			"> ```\n> \"code\" --\n> ```",
-			"`code\n\"literal\" --` end"
+			"`code\n\"literal\" --` end",
+			"1. Run:\n\n    ~~~\n    echo \"a\" -- b\n\n    echo \"c\"\n    ~~~",
+			"see [Bob's page] and [here][Bob's page]\n\n[Bob's page]: http://x.y",
+			"## Part one {#part--one}",
+			"## Pros -- cons"
 		]
 		for text in kept {
 			#expect(SmartPunctuation.apply(to: text) == text, "\(text)")

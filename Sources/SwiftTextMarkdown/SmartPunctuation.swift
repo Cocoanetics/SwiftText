@@ -49,6 +49,7 @@ public enum SmartPunctuation {
 		var inFrontMatter = false
 		var inList = false
 		var openSpan: Int?
+		let labels = Set(lines.compactMap { referenceLabel(of: $0.trimmingCharacters(in: .whitespaces)) })
 
 		/// Whether a code span opened by a run of `length` backticks closes later in the same paragraph.
 		func closes(after index: Int) -> (Int) -> Bool {
@@ -102,7 +103,7 @@ public enum SmartPunctuation {
 				let chars = Array(line)
 				if let end = closingBacktickRun(chars, from: 0, length: run) {
 					openSpan = nil
-					let (rest, pending) = convertInline(String(chars[end...]), quotes: quotes, closes: closes(after: index))
+					let (rest, pending) = convertInline(String(chars[end...]), quotes: quotes, labels: labels, closes: closes(after: index))
 					openSpan = pending
 					result.append(String(chars[..<end]) + rest)
 				} else {
@@ -112,7 +113,7 @@ public enum SmartPunctuation {
 			}
 
 			let indent = line.prefix(while: { $0 == " " || $0 == "\t" }).reduce(0) { $0 + ($1 == "\t" ? 4 : 1) }
-			if indent < 4, let marker = fenceMarker(of: strippingQuoteMarkers(trimmed)) {
+			if indent < 4 || inList, let marker = fenceMarker(of: strippingQuoteMarkers(trimmed)) {
 				fence = marker
 				result.append(line)
 				continue
@@ -142,7 +143,8 @@ public enum SmartPunctuation {
 				continue
 			}
 
-			let (converted, pending) = convertInline(line, quotes: quotes, closes: closes(after: index))
+			let (converted, pending) = convertInline(line, quotes: quotes, labels: labels, dashes: !isUnattributedHeading(trimmed),
+			                                         closes: closes(after: index))
 			openSpan = pending
 			result.append(converted)
 		}
@@ -175,6 +177,24 @@ public enum SmartPunctuation {
 		return (rest.first == "." || rest.first == ")") && rest.dropFirst().first == " "
 	}
 
+	/// The normalised label of a `[label]: destination` definition.
+	private static func referenceLabel(of trimmed: String) -> String? {
+		guard isReferenceDefinition(trimmed), let close = trimmed.firstIndex(of: "]") else { return nil }
+		return normalizedLabel(String(trimmed[trimmed.index(after: trimmed.startIndex)..<close]))
+	}
+
+	private static func normalizedLabel(_ label: String) -> String {
+		label.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ").lowercased()
+	}
+
+	/// An ATX heading without an explicit `{#id}`: its generated anchor slug depends on the
+	/// literal hyphens, so dashes there stay as typed to keep `(#pros----cons)` links working.
+	private static func isUnattributedHeading(_ trimmed: String) -> Bool {
+		let hashes = trimmed.prefix(while: { $0 == "#" }).count
+		guard (1...6).contains(hashes), trimmed.dropFirst(hashes).first == " " else { return false }
+		return !trimmed.hasSuffix("}") || !trimmed.contains("{#")
+	}
+
 	/// `[label]: destination "title"` — but not a footnote definition `[^id]: text`, whose text is prose.
 	private static func isReferenceDefinition(_ trimmed: String) -> Bool {
 		guard trimmed.hasPrefix("["), !trimmed.hasPrefix("[^"), let close = trimmed.firstIndex(of: "]") else { return false }
@@ -188,7 +208,8 @@ public enum SmartPunctuation {
 
 	/// Converts one line. When a code span opens here and closes on a later line (`closes` says so),
 	/// the rest of the line is kept verbatim and the run length is returned as pending.
-	private static func convertInline(_ line: String, quotes: Quotes, closes: (Int) -> Bool) -> (String, pending: Int?) {
+	private static func convertInline(_ line: String, quotes: Quotes, labels: Set<String>, dashes: Bool = true,
+	                                  closes: (Int) -> Bool) -> (String, pending: Int?) {
 		var pending: Int?
 		let chars = Array(line)
 		var out = ""
@@ -229,7 +250,8 @@ public enum SmartPunctuation {
 					copyVerbatim(to: i + 1)
 				}
 			case "[":
-				if let end = chars[i...].firstIndex(of: "]"), isMarkerLabel(chars[(i + 1)..<end]) {
+				if let end = chars[i...].firstIndex(of: "]"),
+				   isMarkerLabel(chars[(i + 1)..<end]) || labels.contains(normalizedLabel(String(chars[(i + 1)..<end]))) {
 					copyVerbatim(to: end + 1)
 				} else {
 					copyVerbatim(to: i + 1)
@@ -248,9 +270,18 @@ public enum SmartPunctuation {
 					while end > i, ".,;:!?\"')*_".contains(chars[end - 1]) { end -= 1 }
 					copyVerbatim(to: max(end, i + 1))
 				}
+			case "{":
+				// Heading / attribute lists such as `{#custom-id}` and `{.class}`.
+				if i + 1 < chars.count, chars[i + 1] == "#" || chars[i + 1] == ".", let end = chars[i...].firstIndex(of: "}") {
+					copyVerbatim(to: end + 1)
+				} else {
+					copyVerbatim(to: i + 1)
+				}
 			case "-":
 				let run = chars[i...].prefix(while: { $0 == "-" }).count
-				if run == 3 {
+				if !dashes {
+					append(chars[i..<(i + run)])
+				} else if run == 3 {
 					append("\u{2014}")
 				} else if run == 2 {
 					append("\u{2013}")
