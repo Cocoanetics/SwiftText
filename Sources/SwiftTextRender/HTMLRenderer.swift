@@ -485,9 +485,23 @@ public enum HTMLRenderer {
 		// engine, which emits it. WeasyPrint — which this engine ports —
 		// suppresses it, and a blank first page is not what an author asking for
 		// "start each chapter on a new page" means.
-		let forced = points.forced
+		//
+		// The same goes for two forced breaks with nothing painted between them
+		// (`.toc { break-after: page }` followed by `h1 { break-before: page }`):
+		// WeasyPrint merges adjacent forced breaks, so only the later one is kept,
+		// which starts the next page at the heading's border box.
+		let inRange = points.forced
 			.filter { $0 > points.firstContentY + epsilon && $0 < points.lastContentY - epsilon }
 			.sorted()
+		var forced: [Double] = []
+		for y in inRange {
+			if let previous = forced.last,
+			   !contentFragments.contains(where: { $0.bottom > previous + epsilon && $0.top < y - epsilon }) {
+				forced[forced.count - 1] = y
+			} else {
+				forced.append(y)
+			}
+		}
 
 		// Short documents still need pagination if they carry a forced break.
 		guard columnHeight > contentHeight + epsilon || !forced.isEmpty else {

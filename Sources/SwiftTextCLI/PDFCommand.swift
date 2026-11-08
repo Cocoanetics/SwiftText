@@ -395,11 +395,15 @@ func markdownToHTML(
 	// Optional forced page break before a given heading level (e.g. h2 so each
 	// chapter starts on a new page). Placed after the base heading rules so it
 	// wins on source order. The first block of the document is exempt: WebKit
-	// honours a leading break and would emit a blank first page.
+	// honours a leading break and would emit a blank first page. A front-matter
+	// block already ends with a forced break, so a heading directly after one is
+	// exempt too, or the two breaks would leave a blank page between them.
 	let headingBreakCSS = pageBreakBefore.map { level in
-		"""
-		\(level.rawValue) { page-break-before: always; break-before: page; }
-		body > \(level.rawValue):first-child { page-break-before: auto; break-before: auto; }
+		let heading = level.rawValue
+		let afterFrontMatter = frontMatter == nil ? "" : ", .titlepage + \(heading), nav.toc + \(heading)"
+		return """
+		\(heading) { page-break-before: always; break-before: page; }
+		body > \(heading):first-child\(afterFrontMatter) { page-break-before: auto; break-before: auto; }
 		"""
 	} ?? ""
 	var frontMatterHTML = ""

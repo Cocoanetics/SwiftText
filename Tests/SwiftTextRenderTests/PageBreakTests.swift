@@ -104,6 +104,35 @@ struct PageBreakTests {
 		#expect(pageCount(data) == 3)
 	}
 
+	@Test("Adjacent forced breaks with nothing between them produce one page break")
+	func adjacentForcedBreaksCollapse() async throws {
+		let html = """
+		<style>.a { break-after: page } h1 { break-before: page }</style>
+		<div class="a"><p>Contents</p></div>
+		<h1>Alpha</h1><p>First.</p>
+		<h1>Beta</h1><p>Second.</p>
+		"""
+		let data = try await HTMLRenderer.renderPDF(html: html)
+		#expect(pageCount(data) == 3)
+
+		#if canImport(PDFKit)
+		let document = try #require(PDFDocument(data: data))
+		#expect((try #require(document.page(at: 1)).string ?? "").contains("Alpha"))
+		#endif
+	}
+
+	@Test("A non-empty block between two forced breaks keeps its own page")
+	func contentBetweenForcedBreaksKeepsPage() async throws {
+		let html = """
+		<style>.a { break-after: page } h1 { break-before: page }</style>
+		<div class="a"><p>Contents</p></div>
+		<p>Preface</p>
+		<h1>Alpha</h1><p>First.</p>
+		"""
+		let data = try await HTMLRenderer.renderPDF(html: html)
+		#expect(pageCount(data) == 3)
+	}
+
 	@Test("break-after: page ends a section")
 	func forcedBreakAfter() async throws {
 		let html = """
