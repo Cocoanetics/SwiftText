@@ -402,6 +402,17 @@ func markdownToHTML(
 		body > \(level.rawValue):first-child { page-break-before: auto; break-before: auto; }
 		"""
 	} ?? ""
+	// A front-matter block ends with a forced break; when the body opens with a
+	// breaking heading, that heading breaks too and the two would leave a blank
+	// page between them. The heading keeps its break and the last front-matter
+	// block drops its own, so a user stylesheet that changes the block's break
+	// cannot remove both.
+	var frontMatterBreakCSS = ""
+	if let frontMatter, let level = pageBreakBefore,
+	   body.hasPrefix("<\(level.rawValue)>") || body.hasPrefix("<\(level.rawValue) ") {
+		let last = frontMatter.contents != nil ? "nav.toc" : (frontMatter.titlePage != nil ? ".titlepage" : "")
+		if !last.isEmpty { frontMatterBreakCSS = "\(last) { page-break-after: auto; break-after: auto; }" }
+	}
 	var frontMatterHTML = ""
 	if let titlePage = frontMatter?.titlePage { frontMatterHTML += FrontMatterHTML.titlePage(titlePage) + "\n" }
 	if let contents = frontMatter?.contents {
@@ -561,6 +572,7 @@ func markdownToHTML(
 	\(footnotes == .page ? footnotePageCSS : "")
 	\(headingBreakCSS)
 	\(frontMatter == nil ? "" : FrontMatterHTML.css)
+	\(frontMatterBreakCSS)
 	\(extraCSS.map { "\n/* User stylesheet */\n" + $0 } ?? "")
 	</style>
 	</head>

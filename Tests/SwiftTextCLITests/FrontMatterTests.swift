@@ -92,6 +92,23 @@ struct FrontMatterTests {
 		#expect(!html(titlePage: false, toc: false).contains("<nav"))
 	}
 
+	@Test("the first chapter heading after the contents does not add a second break")
+	func noBlankPageAfterContents() {
+		// The title page and contents each end with a forced break, so a heading
+		// right after them must not break again — that would leave a blank page.
+		let withFront = html()
+		#expect(withFront.contains("nav.toc { page-break-after: auto; break-after: auto; }"))
+		#expect(!withFront.contains("nav.toc + h1"))
+		// A preface between the contents and chapter 1 is not matched by the
+		// sibling selectors, so chapter 1 still breaks before itself.
+		let preface = markdownToHTML("Preface text.\n\n" + Self.book, paper: .a4, landscape: false, pageBreakBefore: .h1,
+		                             frontMatter: FrontMatter(contents: .init(chapterLevel: 1, depth: 1, heading: "Contents", pageNumbers: .none)))
+		#expect(preface.contains("</nav>\n<p>Preface text.</p>"))
+		#expect(!preface.contains("nav.toc { page-break-after: auto"))
+		let plain = markdownToHTML(Self.book, paper: .a4, landscape: false, pageBreakBefore: .h1)
+		#expect(!plain.contains("nav.toc { page-break-after: auto"))
+	}
+
 	@Test("headings are read with their ids and plain text")
 	func headingExtraction() {
 		let found = FrontMatterHTML.headings(in: "<p>x</p><h2 id=\"a-b\">A &amp; <em>B</em></h2><h3>no id</h3>")
