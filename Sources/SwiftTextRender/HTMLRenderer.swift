@@ -45,6 +45,12 @@ public struct RenderOptions {
 	/// then draw as placeholders. Inline `data:` URIs and local files are read
 	/// either way.
 	public var imageLoader: ImageLoader?
+	/// Running strings for margin boxes: `content: string(name)` shows the
+	/// entry at the page's index (the last entry past the end), e.g. the current chapter.
+	public var pageStrings: [String: [String]] = [:]
+	/// A floor for the page margin, in CSS pixels, applied after `@page` rules,
+	/// so margin-box content has a strip to sit in.
+	public var minimumPageMarginPx: Double = 0
 
 	public init(pageWidthPx: Double = 816, pageHeightPx: Double? = 1056, pageMarginPx: Double = 32, baseDirection: BaseDirection = .auto, compressStreams: Bool = true,
 	            imageLoader: ImageLoader? = HTMLRenderer.urlSessionImageLoader) {
@@ -134,6 +140,7 @@ public enum HTMLRenderer {
 		// @page rules in the document override the page geometry.
 		var options = options
 		applyAtPageRules(documentSheets + css, to: &options)
+		options.pageMarginPx = max(options.pageMarginPx, options.minimumPageMarginPx)
 		let pageRules = parsePageRules(documentSheets + css)
 
 		// Resolve the base direction (auto-detect from content for Markdown etc.).
@@ -193,7 +200,8 @@ public enum HTMLRenderer {
 			}
 			if !pageRules.isEmpty {
 				let marginBoxes = resolveMarginBoxes(pageRules, pageIndex: pageIndex, totalPages: totalPages,
-				                                     rootStyle: rootBox.style, rootFontSize: rootBox.style.fontSize)
+				                                     rootStyle: rootBox.style, rootFontSize: rootBox.style.fontSize,
+				                                     strings: options.pageStrings)
 				painter.paintMarginBoxes(marginBoxes)
 			}
 			pdf.addObject(painter.stream)
