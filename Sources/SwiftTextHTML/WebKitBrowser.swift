@@ -11,6 +11,19 @@ import AppKit
 import Foundation
 import WebKit
 
+/// A heading's text and its occurrence in document order, used to locate its
+/// printed page without estimating WebKit's fragmentation offsets.
+package struct PDFChapterHeading: Decodable {
+	package let title: String
+	package let searchText: String
+	package let occurrence: Int
+}
+
+package struct PDFPageFurniturePreparation: Decodable {
+	package let headings: [PDFChapterHeading]
+	package let stylesheet: String
+}
+
 @available(macOS 10.15, iOS 13.0, *)
 package class WebKitBrowser: NSObject, WKNavigationDelegate {
 	// MARK: - Package Properties
@@ -212,6 +225,91 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 		#else
 		return data
 		#endif
+	}
+
+	/// Reserves the furniture bands before any print-time paginator runs and
+	/// collects chapter headings while the original DOM is still intact.
+	@MainActor
+	package func preparePageFurniture(paperSize: CGSize, footer: Bool, header: Bool, headingLevel: Int) async throws -> PDFPageFurniturePreparation {
+		guard footer || header else { return PDFPageFurniturePreparation(headings: [], stylesheet: "") }
+		let webView = try await loadedWebView()
+		let script = """
+		(function() {
+			const normalize = s => s.replace(/\\s+/g, ' ').trim();
+			const headings = \(header ? "true" : "false") ? Array.from(document.querySelectorAll('h\(headingLevel)')).map(heading => {
+				const title = normalize(heading.textContent || '');
+				const searchText = title.slice(0, 40).trim();
+				const range = document.createRange();
+				range.setStart(document.body, 0);
+				range.setEndBefore(heading);
+				const before = normalize(range.toString());
+				let occurrence = 0, from = 0, hit;
+				while (searchText && (hit = before.indexOf(searchText, from)) !== -1) { occurrence++; from = hit + 1; }
+				return { title, searchText, occurrence };
+			}).filter(h => h.searchText) : [];
+			// Re-emit each authored @page margin with the same selector. Keeping that
+			// selector is important: :first/:left/:right and named-page margins stay scoped.
+			// CSS max() also lets WebKit resolve calc(), var(), viewport units, and
+			// other valid lengths instead of replacing syntax this code cannot parse.
+			const pageRules = [];
+			function scan(rules) {
+				for (const rule of Array.from(rules)) {
+					if (rule.type === CSSRule.PAGE_RULE) {
+						pageRules.push(rule);
+					} else if (rule.cssRules && (!rule.media || matchMedia(rule.conditionText).matches || rule.conditionText === 'print')) scan(rule.cssRules);
+				}
+			}
+			for (const sheet of Array.from(document.styleSheets)) { try { scan(sheet.cssRules); } catch (e) {} }
+			function pageSelector(rule) {
+				if (typeof rule.selectorText === 'string') return rule.selectorText.trim();
+				const openingBrace = rule.cssText.indexOf('{');
+				return rule.cssText.slice(0, openingBrace < 0 ? rule.cssText.length : openingBrace)
+					.replace(/^@page\\s*/i, '').trim();
+			}
+			const supplementalRules = ['@page {'
+				+ (\(header ? "true" : "false") ? 'margin-top:48pt !important;' : '')
+				+ (\(footer ? "true" : "false") ? 'margin-bottom:48pt !important;' : '') + '}'];
+			for (const rule of pageRules) {
+				const declarations = [];
+				const top = rule.style.getPropertyValue('margin-top').trim();
+				const bottom = rule.style.getPropertyValue('margin-bottom').trim();
+				if (\(header ? "true" : "false") && top) declarations.push('margin-top:max(48pt, ' + top + ') !important;');
+				if (\(footer ? "true" : "false") && bottom) declarations.push('margin-bottom:max(48pt, ' + bottom + ') !important;');
+				if (declarations.length) supplementalRules.push('@page ' + pageSelector(rule) + ' {' + declarations.join('') + '}');
+			}
+			// The first rule supplies the minimum. The following rules repeat authored
+			// margins in their original order, so normal page-selector cascade applies.
+			const style = document.createElement('style');
+			style.textContent = supplementalRules.join('\\n');
+			document.head.appendChild(style);
+			pageRules.push(...Array.from(style.sheet.cssRules));
+			// The page-footnote paginator needs one safe height before WebKit assigns
+			// :first/:left/:right pages. Resolve every final CSS value in the browser
+			// and use the largest margins; this may leave extra room but cannot overlap
+			// furniture or authored page margins.
+			const probe = document.createElement('div');
+			probe.style.cssText = 'position:absolute;visibility:hidden;width:0;height:0;';
+			document.body.appendChild(probe);
+			const maximum = [0, 0, 0, 0];
+			const properties = ['margin-top', 'margin-right', 'margin-bottom', 'margin-left'];
+			for (const rule of pageRules) properties.forEach((property, index) => {
+				const value = rule.style.getPropertyValue(property);
+				if (!value) return;
+				probe.style.setProperty(property, value);
+				const pixels = parseFloat(getComputedStyle(probe).getPropertyValue(property));
+				if (Number.isFinite(pixels)) maximum[index] = Math.max(maximum[index], pixels * 0.75);
+				probe.style.removeProperty(property);
+			});
+			probe.remove();
+			window.__swiftTextPrintableSize = [(\(paperSize.width) - maximum[1] - maximum[3]) / 0.75,
+				(\(paperSize.height) - maximum[0] - maximum[2]) / 0.75];
+			return JSON.stringify({ headings: headings, stylesheet: style.textContent });
+		})();
+		"""
+		guard let json = try await webView.evaluateJavaScript(script) as? String, let data = json.data(using: .utf8) else {
+			throw WebKitBrowserError.printFailed
+		}
+		return try JSONDecoder().decode(PDFPageFurniturePreparation.self, from: data)
 	}
 
 	/// WebKit's print paginator neither repeats table headers nor keeps a row's

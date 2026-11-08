@@ -69,6 +69,12 @@ struct Render: AsyncParsableCommand {
 	@Flag(name: .long, help: "Use landscape orientation (default: portrait).")
 	var landscape: Bool = false
 
+	@Flag(name: .long, inversion: .prefixedNo, help: "For PDF output with the webkit engine, draw page numbers in the footer (default: on). Use --no-page-numbers to disable.")
+	var pageNumbers: Bool = true
+
+	@Flag(name: .long, help: "For PDF output with the webkit engine, draw the document title and current chapter in the header. Chapters use --page-break-before, or h1 by default.")
+	var runningHeads: Bool = false
+
 	@Option(name: .long, help: "For PDF, HTML, and Pages output, force a page break before every heading of this level (h1–h6). Use h2 to start each chapter on its own page. Omit to disable.")
 	var pageBreakBefore: HeadingBreakLevel?
 
@@ -349,22 +355,31 @@ struct Render: AsyncParsableCommand {
 			browser.frameSize = pageSize()
 			browser.preserveFrameHeight = true
 			await browser.waitForLoadCompletion()
-			let pdfData = try await browser.exportPaginatedPDFData(paperSize: pageSize())
-				.settingPDFMetadata(title: title, authors: authors)
+			let pdfData = try await decoratedPDF(from: browser, title: title, authors: authors)
 			try writeData(pdfData, to: outputURL)
 		} else {
 			let browser = WebKitBrowser(htmlString: html, baseURL: nil)
 			browser.frameSize = pageSize()
 			browser.preserveFrameHeight = true
 			await browser.waitForLoadCompletion()
-			let pdfData = try await browser.exportPaginatedPDFData(paperSize: pageSize())
-				.settingPDFMetadata(title: title, authors: authors)
+			let pdfData = try await decoratedPDF(from: browser, title: title, authors: authors)
 			try writeData(pdfData, to: outputURL)
 		}
 		#else
 		throw ValidationError("The webkit engine is only available on macOS; use --engine swift.")
 		#endif
 	}
+
+	#if os(macOS)
+	@MainActor
+	private func decoratedPDF(from browser: WebKitBrowser, title: String, authors: [String]) async throws -> Data {
+		let preparation = try await browser.preparePageFurniture(paperSize: pageSize(), footer: pageNumbers,
+		                                                        header: runningHeads, headingLevel: pageBreakBefore?.numericLevel ?? 1)
+		let data = try await browser.exportPaginatedPDFData(paperSize: pageSize())
+		return try PDFPageFurniture.add(to: data, pageNumbers: pageNumbers, title: runningHeads ? title : nil, headings: preparation.headings)
+			.settingPDFMetadata(title: title, authors: authors)
+	}
+	#endif
 
 	/// Renders the print HTML to a PDF via the cross-platform SwiftTextRender engine.
 	@available(macOS 12.0, *)
