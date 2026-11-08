@@ -571,15 +571,21 @@ private let footnotePageCSS = """
 .fn-page:not(:last-child) { page-break-after: always; break-after: page; }
 .fn-body { flex: none; }
 .fn-notes { margin-top: auto; border-top: 1px solid #999; padding-top: 0.4em; font-size: 0.85em; line-height: 1.35; }
+.fn-notes:empty { display: none; }
 .fn-notes .footnote-definition { margin: 0.2em 0; font-size: inherit; }
 """
 
 /// Print-time pagination for `--footnotes page`. WebKit has no paged-media
 /// footnotes, so on `beforeprint` the top-level blocks are distributed over page
 /// boxes of exactly one printable page height; every box gets the notes of the
-/// references it holds below its content. A block that overflows moves to a new
-/// page together with its notes; a single block taller than a page still flows
-/// over the page break with its notes after it.
+/// references it holds below its content. The body fills a page until what is
+/// left is the room its notes need: a block that does not fit is split into its
+/// child blocks (list items, quoted paragraphs) or at the last word break that
+/// still fits (keeping two lines on either side), so each part takes the notes
+/// of the references it holds. A heading that would end a page moves to the next
+/// one with the text that follows it, and notes too long for the page are split
+/// and continued at the foot of the next. A block that cannot be split and is
+/// taller than a page still flows over the page break with its notes after it.
 private func footnotePageScript(printableWidth: Double, printableHeight: Double) -> String {
 	"""
 	<script>
@@ -587,6 +593,18 @@ private func footnotePageScript(printableWidth: Double, printableHeight: Double)
 	    var layoutWidth = document.documentElement.clientWidth;
 	    if (layoutWidth <= 0) return;
 	    var pageHeight = Math.floor(\(printableHeight) * layoutWidth / \(printableWidth)) - 2;
+	    // WebKit fires beforeprint before it applies the print media rules, so measure
+	    // with them in force: each @media print block is repeated unconditionally
+	    // right after itself, keeping its place in the cascade.
+	    Array.from(document.styleSheets).forEach(function (sheet) {
+	        try {
+	            for (var i = sheet.cssRules.length - 1; i >= 0; i--) {
+	                var rule = sheet.cssRules[i];
+	                if (!rule.media || Array.prototype.indexOf.call(rule.media, 'print') < 0) continue;
+	                for (var j = rule.cssRules.length - 1; j >= 0; j--) sheet.insertRule(rule.cssRules[j].cssText, i + 1);
+	            }
+	        } catch (e) { /* cross-origin stylesheet */ }
+	    });
 	    var notes = {};
 	    document.querySelectorAll('.footnote-definition').forEach(function (n) { notes[n.id] = n; n.remove(); });
 	    var blocks = Array.from(document.body.children).filter(function (e) { return e.tagName !== 'SCRIPT'; });
@@ -598,15 +616,9 @@ private func footnotePageScript(printableWidth: Double, printableHeight: Double)
 	    });
 	    var holder = document.createElement('div');
 	    blocks.forEach(function (b) { holder.appendChild(b); });
-	    var placed = {};
-	    function newPage() {
-	        var page = document.createElement('div');
-	        page.className = 'fn-page';
-	        page.style.minHeight = pageHeight + 'px';
-	        page.innerHTML = '<div class="fn-body"></div><div class="fn-notes"></div>';
-	        document.body.insertBefore(page, document.body.lastElementChild);
-	        return page;
-	    }
+	    var placed = {}, carry = [], stack = [];
+	    var body, area, parent, count = 0, last = null, lastNotes = [];
+	    function fits() { return body.offsetHeight + area.offsetHeight <= pageHeight; }
 	    function notesFor(block) {
 	        var found = [];
 	        block.querySelectorAll('sup a[href^="#fn-"]').forEach(function (a) {
@@ -620,28 +632,210 @@ private func footnotePageScript(printableWidth: Double, printableHeight: Double)
 	        });
 	        return found;
 	    }
-	    var page = newPage();
+	    function addNotes(block) {
+	        var found = notesFor(block);
+	        found.forEach(function (n) { area.appendChild(n); });
+	        return found;
+	    }
+	    function unplace(found) { found.forEach(function (n) { n.remove(); placed[n.id] = false; }); }
+	    function commit(node, found) { last = node; lastNotes = found; count++; }
+	    // The part of a split block that starts a page: no top margin, no second marker.
+	    function continuation(el) {
+	        el.removeAttribute('id');
+	        el.classList.add('fn-cont');
+	        el.style.marginTop = '0';
+	        if (el.tagName === 'LI') el.style.listStyle = 'none';
+	        return el;
+	    }
+	    function newPage(keepWithNext) {
+	        var levels = body ? [body].concat(stack.map(function (s) { return s.shell; })) : [];
+	        var moving = null, level = -1;
+	        // A heading must not end a page: it moves on with the text that follows it.
+	        if (keepWithNext && last && count > 1 && /^H[1-6]$/.test(last.tagName)) {
+	            level = levels.indexOf(last.parentNode);
+	            if (level >= 0) { moving = last; unplace(lastNotes); moving.remove(); }
+	        }
+	        for (var i = levels.length - 1; i > 0; i--) if (!levels[i].firstChild) levels[i].remove();
+	        var page = document.createElement('div');
+	        page.className = 'fn-page';
+	        page.style.minHeight = pageHeight + 'px';
+	        page.innerHTML = '<div class="fn-body"></div><div class="fn-notes"></div>';
+	        document.body.insertBefore(page, document.body.lastElementChild);
+	        body = page.querySelector('.fn-body'); area = page.querySelector('.fn-notes');
+	        carry.forEach(function (n) { area.appendChild(n); });
+	        carry = [];
+	        parent = body;
+	        levels = [body];
+	        stack.forEach(function (s) {
+	            s.shell = continuation(s.source.cloneNode(false));
+	            parent.appendChild(s.shell);
+	            parent = s.shell;
+	            levels.push(parent);
+	        });
+	        count = 0; last = null; lastNotes = [];
+	        if (moving) {
+	            levels[level].insertBefore(moving, levels[level + 1] || null);
+	            commit(moving, addNotes(moving));
+	        }
+	    }
+	    // The child blocks of a container, or null when it holds text or inline content.
+	    function blockChildren(node) {
+	        if (/^(H[1-6]|TABLE|PRE|FIGURE|IMG)$/.test(node.tagName)) return null;
+	        var kids = [];
+	        for (var c = node.firstChild; c; c = c.nextSibling) {
+	            if (c.nodeType === 3 && c.data.trim()) return null;
+	            if (c.nodeType !== 1) continue;
+	            if (!/^(block|list-item|flex|grid|flow-root)$/.test(getComputedStyle(c).display)) return null;
+	            kids.push(c);
+	        }
+	        return kids.length ? kids : null;
+	    }
+	    // Counts the line boxes of el; a raised reference mark does not start a new one.
+	    function lines(el) {
+	        var style = getComputedStyle(el), range = document.createRange();
+	        var lineHeight = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.2;
+	        range.selectNodeContents(el);
+	        var bottoms = Array.from(range.getClientRects())
+	            .filter(function (r) { return r.width > 0 && r.height > 0; })
+	            .map(function (r) { return r.bottom; })
+	            .sort(function (a, b) { return a - b; });
+	        var count = 0, line = -Infinity;
+	        bottoms.forEach(function (b) { if (b - line > lineHeight / 2) { count++; line = b; } });
+	        return count;
+	    }
+	    function wordBreaks(el) {
+	        var points = [], walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT), text, match;
+	        while ((text = walker.nextNode())) {
+	            var space = /\\s+/g;
+	            while ((match = space.exec(text.data))) points.push([text, match.index + match[0].length]);
+	        }
+	        return points;
+	    }
+	    // The part of el before (head) or after a word break, as a shallow copy of el.
+	    function cut(el, point, head) {
+	        var range = document.createRange();
+	        if (head) { range.setStart(el, 0); range.setEnd(point[0], point[1]); }
+	        else { range.setStart(point[0], point[1]); range.setEnd(el, el.childNodes.length); }
+	        var part = el.cloneNode(false);
+	        part.appendChild(range.cloneContents());
+	        if (head) part.style.marginBottom = '0';
+	        return part;
+	    }
+	    // Moves the notes that overflow the page to the next one; the first of them
+	    // is split at the last word break that still fits.
+	    function spill() {
+	        var moved = [];
+	        while (!fits() && area.lastChild) moved.unshift(area.removeChild(area.lastChild));
+	        if (!fits()) { moved.forEach(function (n) { area.appendChild(n); }); return; }
+	        if (!moved.length) return;
+	        lastNotes = [];
+	        var note = moved[0], points = wordBreaks(note), best = -1, low = 0, high = points.length - 1;
+	        while (low <= high) {
+	            var mid = (low + high) >> 1, head = cut(note, points[mid], true);
+	            area.appendChild(head);
+	            if (fits()) { best = mid; low = mid + 1; } else high = mid - 1;
+	            head.remove();
+	        }
+	        if (best >= 0) {
+	            area.appendChild(cut(note, points[best], true));
+	            moved[0] = continuation(cut(note, points[best], false));
+	        }
+	        carry = moved;
+	    }
+	    // Places the head of a block that does not fit (at least two lines, leaving at
+	    // least two) on this page and its tail on the next. On an empty page whose
+	    // first lines need more room for their notes than there is, those lines are
+	    // placed anyway and the notes split.
+	    function split(node, empty) {
+	        parent.appendChild(node);
+	        var total = lines(node), points = wordBreaks(node);
+	        node.remove();
+	        if (total < 4) return false;
+	        var cache = {};
+	        function probe(i) {
+	            if (cache[i]) return cache[i];
+	            var head = cut(node, points[i], true);
+	            parent.appendChild(head);
+	            var found = addNotes(head);
+	            cache[i] = { lines: lines(head), fits: fits(), bodyFits: body.offsetHeight <= pageHeight };
+	            unplace(found);
+	            head.remove();
+	            return cache[i];
+	        }
+	        var best = -1, low = 0, high = points.length - 1, mid, forced = false;
+	        while (low <= high) {
+	            mid = (low + high) >> 1;
+	            if (probe(mid).fits && probe(mid).lines <= total - 2) { best = mid; low = mid + 1; } else high = mid - 1;
+	        }
+	        if (best < 0 || probe(best).lines < 2) {
+	            if (!empty) return false;
+	            best = -1; low = 0; high = points.length - 1;
+	            while (low <= high) {
+	                mid = (low + high) >> 1;
+	                if (probe(mid).lines <= 2) { best = mid; low = mid + 1; } else high = mid - 1;
+	            }
+	            if (best < 0 || probe(best).lines < 2 || !probe(best).bodyFits) return false;
+	            forced = true;
+	        }
+	        var head = cut(node, points[best], true), tail = continuation(cut(node, points[best], false));
+	        parent.appendChild(head);
+	        commit(head, addNotes(head));
+	        if (forced) spill();
+	        newPage(true);
+	        place(tail);
+	        return true;
+	    }
+	    // Places one block with its notes, splitting it when it does not fit.
+	    function place(node) {
+	        parent.appendChild(node);
+	        var found = addNotes(node);
+	        if (fits()) { commit(node, found); return; }
+	        var empty = count === 0, style = getComputedStyle(node);
+	        // List items carry break-inside: avoid in the base sheet; with notes at the
+	        // foot that would leave the page short, so they split like paragraphs.
+	        var avoid = node.tagName !== 'LI'
+	            && /avoid/.test(style.getPropertyValue('break-inside') + style.getPropertyValue('page-break-inside'));
+	        var kids = blockChildren(node);
+	        var splittable = !kids && !/^(H[1-6]|TABLE|PRE|FIGURE|IMG|HR)$/.test(node.tagName) && !node.querySelector('table, pre');
+	        unplace(found);
+	        node.remove();
+	        if (avoid && !empty) { newPage(true); place(node); return; }
+	        if (kids) {
+	            var shell = node.cloneNode(false);
+	            if (node.tagName === 'OL') {
+	                // Number the items explicitly so a continued list counts on.
+	                var reversed = node.hasAttribute('reversed'), items = kids.filter(function (k) { return k.tagName === 'LI'; });
+	                var number = node.hasAttribute('start') ? parseInt(node.getAttribute('start'), 10) : (reversed ? items.length : 1);
+	                items.forEach(function (li) {
+	                    if (li.hasAttribute('value')) number = parseInt(li.getAttribute('value'), 10);
+	                    li.value = number;
+	                    number += reversed ? -1 : 1;
+	                });
+	            }
+	            parent.appendChild(shell);
+	            stack.push({ source: node, shell: shell });
+	            parent = shell;
+	            kids.forEach(place);
+	            stack.pop();
+	            parent = stack.length ? stack[stack.length - 1].shell : body;
+	            return;
+	        }
+	        // Under a lone heading the first lines go on this page even when their notes
+	        // must be split: on a new page the heading would stand alone.
+	        if (splittable && split(node, empty || (count === 1 && /^H[1-6]$/.test(last.tagName)))) return;
+	        if (!empty) { newPage(true); place(node); return; }
+	        parent.appendChild(node);
+	        commit(node, addNotes(node));
+	        spill();
+	    }
+	    newPage(false);
 	    blocks.forEach(function (block, index) {
-	        var breaks = breaksBefore[index];
 	        block.style.breakBefore = 'auto';
 	        block.style.pageBreakBefore = 'auto';
-	        var body = page.querySelector('.fn-body'), area = page.querySelector('.fn-notes');
-	        if (breaks && body.children.length) {
-	            page = newPage();
-	            body = page.querySelector('.fn-body'); area = page.querySelector('.fn-notes');
-	        }
-	        body.appendChild(block);
-	        var added = notesFor(block);
-	        added.forEach(function (n) { area.appendChild(n); });
-	        var used = body.offsetHeight + area.offsetHeight;
-	        if (used > pageHeight && body.children.length > 1) {
-	            added.forEach(function (n) { n.remove(); });
-	            page = newPage();
-	            body = page.querySelector('.fn-body'); area = page.querySelector('.fn-notes');
-	            body.appendChild(block);
-	            added.forEach(function (n) { area.appendChild(n); });
-	        }
+	        if (breaksBefore[index] && count) newPage(false);
+	        place(block);
 	    });
+	    if (carry.length) newPage(false);
 	    // Drop the unused empty note areas so they draw no rule.
 	    document.querySelectorAll('.fn-notes:empty').forEach(function (n) { n.remove(); });
 	}, { once: true });
