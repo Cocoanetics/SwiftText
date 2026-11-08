@@ -61,18 +61,28 @@ enum ChapterSplitter {
 		return chapters
 	}
 
-	/// A chapter's title is its run of leading consecutive headings, joined with
-	/// ": " — so a `## 1` immediately followed by `### The Birthday…` reads as
-	/// "1: The Birthday…" in the table of contents while both headings still
-	/// appear in the chapter body. Falls back to `fallback` when there is no
-	/// leading heading (e.g. the front-matter section).
+	/// A chapter's title is its split-level heading. Only when that heading is a
+	/// bare label — a number with at most one word, like `1` or `Chapter 1` — are
+	/// the leading consecutive headings joined with ": ", so a `## 1` followed by
+	/// `### The Birthday…` reads as "1: The Birthday…" in the table of contents.
+	/// A heading with real words (`## Teil 1: Wo Sie stehen`) stands alone. Both
+	/// headings appear in the chapter body either way. Falls back to `fallback`
+	/// when there is no leading heading (e.g. the front-matter section).
 	private static func chapterTitle(from blocks: [BlockMarkup], fallback: String) -> String {
 		let leadingHeadings = blocks.prefix { $0 is Heading }.compactMap { $0 as? Heading }
 		let parts = leadingHeadings
 			.map { swiftMarkdownPlainText(of: $0).trimmingCharacters(in: .whitespacesAndNewlines) }
 			.filter { !$0.isEmpty }
-		let title = parts.joined(separator: ": ")
-		return title.isEmpty ? fallback : title
+		guard let first = parts.first else { return fallback }
+		return isBareLabel(first) ? parts.joined(separator: ": ") : first
+	}
+
+	/// True for headings such as `1`, `IV` or `Chapter 1`: a digit-bearing label of
+	/// at most one word, or digits and punctuation alone.
+	private static func isBareLabel(_ text: String) -> Bool {
+		let words = text.split { !$0.isLetter && !$0.isNumber }
+		guard text.contains(where: \.isNumber) else { return false }
+		return words.filter { $0.contains(where: \.isLetter) }.count <= 1
 	}
 
 	/// Renders a run of top-level blocks to an XHTML fragment.
