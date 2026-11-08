@@ -552,7 +552,10 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 				table.remove();
 			}
 
+			\(PrintTableFitting.script)
+
 			function prepare() {
+				for (const table of Array.from(document.querySelectorAll('table'))) fitTable(table);
 				const margins = pageMargins();
 				const printableWidth = paperWidth - margins.left - margins.right;
 				const printableHeight = paperHeight - margins.top - margins.bottom;
@@ -564,7 +567,7 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 				}
 			}
 
-			window.addEventListener('beforeprint', prepare, { once: true });
+			window.addEventListener('beforeprint', () => withPrintStyles(prepare), { once: true });
 		})();
 		"""
 		_ = try await webView.evaluateJavaScript(script)

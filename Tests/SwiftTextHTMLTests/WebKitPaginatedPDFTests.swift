@@ -361,5 +361,48 @@ struct WebKitIntegrationTests {
 			#expect(text.contains(compact), "header \(header) lost")
 		}
 	}
+
+	/// #197: a title row spanning every column, and a table whose rows all span,
+	/// still fit the page instead of making WebKit shrink the whole document.
+	@Test("Spanning wide tables fit without shrinking the text", .timeLimit(.minutes(3)))
+	func spanningWideTablesKeepTextSize() async throws {
+		let words = ["Dokumentennummer", "Aufbewahrungsfrist", "Rechnungsempfänger", "Zahlungsbedingungen",
+			"Lieferantenkennung", "Bestellreferenz", "Kostenstellennummer", "Umsatzsteuersatz",
+			"Buchungsperiode", "Freigabevermerk"]
+		let header = "<tr>" + words.map { "<th>\($0)</th>" }.joined() + "</tr>"
+		let row = "<tr>" + words.map { _ in "<td>x</td>" }.joined() + "</tr>"
+		let titled = "<table><thead><tr><th colspan=\"10\">Titel</th></tr>\(header)</thead><tbody>\(row)</tbody></table>"
+		let spanned = "<table><tr><th colspan=\"4\">\(words[0 ..< 4].joined(separator: " "))</th>"
+			+ "<th colspan=\"6\">\(words[4...].joined(separator: " "))</th></tr>"
+			+ "<tr><td colspan=\"5\">\(String(repeating: "Prüfsumme", count: 8))</td><td colspan=\"5\">x</td></tr></table>"
+
+		func html(_ body: String) -> String {
+			"""
+			<!DOCTYPE html><html lang="de"><head><meta charset="utf-8">
+			<style>@page { size: A4 portrait; margin: 0; }
+			\(MarkdownToHTML.defaultStylesheet)
+			body { max-width: none; margin: 0; padding: 40px; }</style></head>
+			<body><p>Absatz</p>\(body)</body></html>
+			"""
+		}
+		func wordWidth(_ document: PDFDocument) throws -> CGFloat {
+			let match = try #require(document.findString("Absatz", withOptions: []).first)
+			let page = try #require(match.pages.first)
+			return match.bounds(for: page).width
+		}
+
+		let reference = try wordWidth(try await paginate(html("")))
+		for table in [titled, spanned] {
+			let document = try await paginate(html(table))
+			let width = try wordWidth(document)
+			#expect(abs(width - reference) / reference < 0.03, "body text was scaled: \(width) vs \(reference)")
+			let page = try #require(document.page(at: 0))
+			for character in 0 ..< page.numberOfCharacters {
+				let bounds = page.characterBounds(at: character)
+				guard bounds.width > 0 else { continue }
+				#expect(bounds.minX >= 0 && bounds.maxX <= a4.width, "glyph outside the page: \(bounds)")
+			}
+		}
+	}
 }
 #endif

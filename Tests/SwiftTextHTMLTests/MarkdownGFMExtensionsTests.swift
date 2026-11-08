@@ -123,24 +123,17 @@ struct MarkdownGFMExtensionsTests {
 		    min-width: 4em;
 		}
 		"""))
+		#expect(css.contains(#"th:empty::after, td:empty::after { content: "\00a0"; }"#))
+		#expect(!css.contains("table-layout: fixed"))
+		#expect(!css.contains("overflow-wrap: anywhere"))
 		#expect(css.contains("""
 		table.wide-table {
-		    table-layout: fixed;
 		    width: calc(100% - 2px);
 		}
 		table.wide-table th,
 		table.wide-table td {
 		    min-width: 0;
-		    overflow-wrap: anywhere;
-		}
-		table:has(tr > :nth-child(8)) {
-		    table-layout: fixed;
-		    width: calc(100% - 2px);
-		}
-		table:has(tr > :nth-child(8)) th,
-		table:has(tr > :nth-child(8)) td {
-		    min-width: 0;
-		    overflow-wrap: anywhere;
+		    padding: 0.3em;
 		}
 		"""))
 	}
