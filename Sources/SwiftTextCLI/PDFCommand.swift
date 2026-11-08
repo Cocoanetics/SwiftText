@@ -607,23 +607,21 @@ private let footnotePageCSS = """
 private func footnotePageScript(printableWidth: Double, printableHeight: Double) -> String {
 	"""
 	<script>
+	\(PrintTableFitting.script)
 	window.addEventListener('beforeprint', function () {
+	    // WebKit fires beforeprint before it applies the print media rules, so lay
+	    // the notes out with them in force (and screen-only rules off), and with
+	    // wide tables already fitted to the page as they will be printed.
+	    withPrintStyles(function () {
+	        document.querySelectorAll('table').forEach(fitTable);
+	        placeFootnotes();
+	    });
+	}, { once: true });
+	function placeFootnotes() {
 	    var layoutWidth = document.documentElement.clientWidth;
 	    if (layoutWidth <= 0) return;
 	    var printable = window.__swiftTextPrintableSize || [\(printableWidth), \(printableHeight)];
 	    var pageHeight = Math.floor(printable[1] * layoutWidth / printable[0]) - 2;
-	    // WebKit fires beforeprint before it applies the print media rules, so measure
-	    // with them in force: each @media print block is repeated unconditionally
-	    // right after itself, keeping its place in the cascade.
-	    Array.from(document.styleSheets).forEach(function (sheet) {
-	        try {
-	            for (var i = sheet.cssRules.length - 1; i >= 0; i--) {
-	                var rule = sheet.cssRules[i];
-	                if (!rule.media || Array.prototype.indexOf.call(rule.media, 'print') < 0) continue;
-	                for (var j = rule.cssRules.length - 1; j >= 0; j--) sheet.insertRule(rule.cssRules[j].cssText, i + 1);
-	            }
-	        } catch (e) { /* cross-origin stylesheet */ }
-	    });
 	    var notes = {};
 	    document.querySelectorAll('.footnote-definition').forEach(function (n) { notes[n.id] = n; n.remove(); });
 	    var blocks = Array.from(document.body.children).filter(function (e) { return e.tagName !== 'SCRIPT'; });
@@ -863,7 +861,7 @@ private func footnotePageScript(printableWidth: Double, printableHeight: Double)
 	    if (carry.length) newPage(false);
 	    // Drop the unused empty note areas so they draw no rule.
 	    document.querySelectorAll('.fn-notes:empty').forEach(function (n) { n.remove(); });
-	}, { once: true });
+	}
 	</script>
 	"""
 }

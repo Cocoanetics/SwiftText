@@ -552,7 +552,7 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 				table.remove();
 			}
 
-			\(Self.tableFittingScript)
+			\(PrintTableFitting.script)
 
 			function prepare() {
 				for (const table of Array.from(document.querySelectorAll('table'))) fitTable(table);
