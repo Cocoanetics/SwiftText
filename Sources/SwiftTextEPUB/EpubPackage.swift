@@ -168,14 +168,15 @@ enum EpubPackageBuilder {
 			"      <li><a href=\"text/\(chapter.id).xhtml#\(chapter.id)\">\(XML.escapeText(chapter.title))</a></li>"
 		}.joined(separator: "\n")
 
+		let labels = EpubNavLabels.labels(forLanguage: metadata.language)
 		var landmarks = ""
 		if hasCover {
-			landmarks += "      <li><a href=\"text/cover.xhtml\" epub:type=\"cover\">Cover</a></li>\n"
+			landmarks += "      <li><a href=\"text/cover.xhtml\" epub:type=\"cover\">\(XML.escapeText(labels.cover))</a></li>\n"
 		}
-		landmarks += "      <li><a href=\"text/titlepage.xhtml\" epub:type=\"titlepage\">Title Page</a></li>\n"
-		landmarks += "      <li><a href=\"nav.xhtml#toc\" epub:type=\"toc\">Table of Contents</a></li>"
+		landmarks += "      <li><a href=\"text/titlepage.xhtml\" epub:type=\"titlepage\">\(XML.escapeText(labels.titlePage))</a></li>\n"
+		landmarks += "      <li><a href=\"nav.xhtml#toc\" epub:type=\"toc\">\(XML.escapeText(labels.tableOfContents))</a></li>"
 		if let firstBody = chapters.first(where: { !$0.isFrontmatter }) {
-			landmarks += "\n      <li><a href=\"text/\(firstBody.id).xhtml\" epub:type=\"bodymatter\">Beginning</a></li>"
+			landmarks += "\n      <li><a href=\"text/\(firstBody.id).xhtml\" epub:type=\"bodymatter\">\(XML.escapeText(labels.beginning))</a></li>"
 		}
 
 		let body = """
@@ -192,7 +193,7 @@ enum EpubPackageBuilder {
 		</nav>
 		"""
 		return xhtmlDocument(
-			title: "Table of Contents",
+			title: labels.tableOfContents,
 			cssHref: "styles/stylesheet.css",
 			bodyType: "frontmatter",
 			bodyClass: nil,
