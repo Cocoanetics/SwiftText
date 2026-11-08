@@ -8,6 +8,7 @@
 
 import Foundation
 import Markdown
+import SwiftTextMarkdown
 
 /// Options controlling EPUB generation.
 public struct EpubOptions: Sendable {
@@ -52,8 +53,9 @@ public enum MarkdownToEpub {
 		// Parse with smart typography disabled to match the HTML renderer: the
 		// source already carries real typographic characters, so re-substituting
 		// would double-transform them.
-		let document = Document(parsing: markdown, options: [.disableSmartOpts])
-		var chapters = ChapterSplitter.split(document: document, chapterLevel: options.chapterLevel, titleFallback: metadata.title)
+		let (cleaned, footnotes) = MarkdownFootnoteParser.extractDefinitions(from: markdown)
+		let document = Document(parsing: cleaned, options: [.disableSmartOpts])
+		var chapters = ChapterSplitter.split(document: document, chapterLevel: options.chapterLevel, titleFallback: metadata.title, footnotes: footnotes)
 
 		// A table of contents needs at least one entry. If the manuscript has no
 		// heading at the split level, present its whole content as a single
