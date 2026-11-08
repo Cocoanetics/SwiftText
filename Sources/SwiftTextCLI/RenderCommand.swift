@@ -81,7 +81,7 @@ struct Render: AsyncParsableCommand {
 	@Flag(name: .long, help: "For HTML, PDF and EPUB output, make numeric citations clickable: a list item starting with [n] gets id=\"ref-n\" and every other [n] links to it.")
 	var linkCitations: Bool = false
 
-	@Option(name: .long, help: "For HTML and PDF output, footnote placement: section keeps each block where the source puts it (default); end gathers all at the end; page (PDF, webkit engine) sets each note at the foot of its page.")
+	@Option(name: .long, help: "For HTML and PDF output, footnote placement: section = per source block (default); end = all at the end; page = foot of the page (PDF, webkit engine).")
 	var footnotes: FootnotePlacement = .section
 
 	// MARK: EPUB / shared options
