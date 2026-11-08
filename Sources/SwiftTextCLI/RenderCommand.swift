@@ -69,10 +69,10 @@ struct Render: AsyncParsableCommand {
 	@Flag(name: .long, help: "Use landscape orientation (default: portrait).")
 	var landscape: Bool = false
 
-	@Flag(name: .long, inversion: .prefixedNo, help: "For PDF output with the webkit engine, draw page numbers in the footer (default: on). Use --no-page-numbers to disable.")
+	@Flag(name: .long, inversion: .prefixedNo, help: "For PDF output, draw page numbers in the footer (default: on). Use --no-page-numbers to disable.")
 	var pageNumbers: Bool = true
 
-	@Flag(name: .long, help: "For PDF output with the webkit engine, draw the document title and current chapter in the header. Chapters use --page-break-before, or h1 by default.")
+	@Flag(name: .long, help: "For PDF output, draw the document title and current chapter in the header. Chapters use --page-break-before, or h1 by default.")
 	var runningHeads: Bool = false
 
 	@Option(name: .long, help: "For PDF, HTML, and Pages output, force a page break before every heading of this level (h1–h6). Use h2 to start each chapter on its own page. Omit to disable.")
@@ -185,15 +185,23 @@ struct Render: AsyncParsableCommand {
 			if footnotes == .page && engine == .swift {
 				FileHandle.standardError.write(Data("warning: --footnotes page needs the webkit engine; notes stay at the end of their section.\n".utf8))
 			}
-			// The contents' page numbers need the pagination: render once with
-			// fixed-width placeholders, read where each heading landed, then render
-			// again with the numbers (same layout, so the pages don't move).
+			// The contents' page numbers and the running chapter need the pagination:
+			// render once with fixed-width placeholders, read where each heading
+			// landed, then render again with the numbers (same layout, so the pages
+			// don't move; margin boxes sit outside the body).
+			let swiftHeads = engine == .swift && runningHeads
+			let needsSecondPass = toc || swiftHeads
 			var rendered = try await renderPDF(html: printHTML(markdownText, userCSS: userCSS, title: resolvedTitle, pageNumbers: toc ? .placeholder : .none),
 			                                   baseURL: baseURL, title: resolvedTitle, authors: author)
-			if toc {
+			if needsSecondPass {
 				let pages = rendered.anchorPages.mapValues { $0 + 1 }
-				rendered = try await renderPDF(html: printHTML(markdownText, userCSS: userCSS, title: resolvedTitle, pageNumbers: .resolved(pages)),
-				                               baseURL: baseURL, title: resolvedTitle, authors: author)
+				let html = printHTML(markdownText, userCSS: userCSS, title: resolvedTitle, pageNumbers: toc ? .resolved(pages) : .none)
+				var strings: [String: [String]] = [:]
+				if swiftHeads {
+					let level = pageBreakBefore?.numericLevel ?? 1
+					strings["chapter"] = SwiftPageFurniture.chapterTitles(FrontMatterHTML.headings(in: html), level: level, anchorPages: rendered.anchorPages)
+				}
+				rendered = try await renderPDF(html: html, baseURL: baseURL, title: resolvedTitle, authors: author, pageStrings: strings)
 			}
 			try writeData(rendered.data, to: outputURL)
 			print(outputURL.path)
@@ -375,9 +383,9 @@ struct Render: AsyncParsableCommand {
 
 	@MainActor
 	@available(macOS 12.0, *)
-	private func renderPDF(html: String, baseURL: URL?, title: String, authors: [String]) async throws -> PDFOutput {
+	private func renderPDF(html: String, baseURL: URL?, title: String, authors: [String], pageStrings: [String: [String]] = [:]) async throws -> PDFOutput {
 		if engine == .swift {
-			return try await renderPDFSwift(html: html, baseURL: baseURL, title: title, authors: authors)
+			return try await renderPDFSwift(html: html, baseURL: baseURL, title: title, authors: authors, pageStrings: pageStrings)
 		}
 		#if os(macOS)
 		// If we have a baseURL (file input), write HTML next to source so local images can load.
@@ -418,14 +426,17 @@ struct Render: AsyncParsableCommand {
 
 	/// Renders the print HTML to a PDF via the cross-platform SwiftTextRender engine.
 	@available(macOS 12.0, *)
-	private func renderPDFSwift(html: String, baseURL: URL?, title: String, authors: [String]) async throws -> PDFOutput {
+	private func renderPDFSwift(html: String, baseURL: URL?, title: String, authors: [String], pageStrings: [String: [String]]) async throws -> PDFOutput {
 		let size = paper.pointSize
 		let widthPoints = landscape ? size.height : size.width
 		let heightPoints = landscape ? size.width : size.height
 		var options = RenderOptions()
 		options.pageWidthPx = widthPoints / 0.75 // points → CSS pixels
 		options.pageHeightPx = heightPoints / 0.75
-		let rendered = try await HTMLRenderer.renderPDFWithAnchors(html: html, baseURL: baseURL, options: options, title: title, authors: authors)
+		options.pageStrings = pageStrings
+		let furniture = SwiftPageFurniture.css(pageNumbers: pageNumbers, title: runningHeads ? title : nil, hasTitlePage: titlePage)
+		let rendered = try await HTMLRenderer.renderPDFWithAnchors(html: html, css: furniture.map { [$0] } ?? [], baseURL: baseURL,
+		                                                           options: options, title: title, authors: authors)
 		return (rendered.data, rendered.anchorPages)
 	}
 

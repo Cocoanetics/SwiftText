@@ -121,6 +121,7 @@ private enum ContentPart {
 	case literal(String)
 	case pageCounter(style: ListStyleType)
 	case pagesCounter(style: ListStyleType)
+	case runningString(name: String)
 }
 
 /// Parse a `content` value into literal/counter parts. `normal`/`none` (the
@@ -137,6 +138,10 @@ private func parseContentValue(_ value: [ComponentValue]) -> [ContentPart] {
 		switch token.token {
 		case .string(let string):
 			parts.append(.literal(string))
+		case .function(let name, let arguments) where name.lowercased() == "string":
+			// `string(name)`: the caller-supplied running string for the page (`RenderOptions.pageStrings`).
+			guard let first = arguments.first(where: { !$0.isWhitespaceOrComment }), case .ident(let stringName) = first.token else { continue }
+			parts.append(.runningString(name: stringName))
 		case .function(let name, let arguments) where name.lowercased() == "counter":
 			let args = arguments.filter { !$0.isWhitespaceOrComment && !$0.isLiteral(",") }
 			guard let first = args.first, case .ident(let counterName) = first.token else { continue }
@@ -156,12 +161,16 @@ private func parseContentValue(_ value: [ComponentValue]) -> [ContentPart] {
 	return parts
 }
 
-private func renderedText(_ parts: [ContentPart], pageIndex: Int, totalPages: Int) -> String {
+private func renderedText(_ parts: [ContentPart], pageIndex: Int, totalPages: Int, strings: [String: [String]]) -> String {
 	parts.map { part in
 		switch part {
 		case .literal(let string): return string
 		case .pageCounter(let style): return BoxTreeBuilder.formatOrdinal(pageIndex + 1, as: style)
 		case .pagesCounter(let style): return BoxTreeBuilder.formatOrdinal(totalPages, as: style)
+		case .runningString(let name):
+			// Pages past the end of the list keep the last entry.
+			guard let values = strings[name], !values.isEmpty else { return "" }
+			return values[min(pageIndex, values.count - 1)]
 		}
 	}.joined()
 }
@@ -173,7 +182,7 @@ private func renderedText(_ parts: [ContentPart], pageIndex: Int, totalPages: In
 /// box, in source order, so an unqualified base rule and a later `:first`
 /// override can each set only the properties they care about (e.g. `:first`
 /// clearing `content` while the base rule's `font-size` still applies).
-func resolveMarginBoxes(_ rules: [PageRule], pageIndex: Int, totalPages: Int, rootStyle: ComputedStyle, rootFontSize: Double) -> [ResolvedMarginBox] {
+func resolveMarginBoxes(_ rules: [PageRule], pageIndex: Int, totalPages: Int, rootStyle: ComputedStyle, rootFontSize: Double, strings: [String: [String]] = [:]) -> [ResolvedMarginBox] {
 	let matching = rules.filter { $0.selector.matches(pageIndex: pageIndex) }
 	guard !matching.isEmpty else { return [] }
 
@@ -183,7 +192,7 @@ func resolveMarginBoxes(_ rules: [PageRule], pageIndex: Int, totalPages: Int, ro
 		guard let contentDeclaration = declarations.last(where: { $0.lowerName == "content" }) else { continue }
 		let parts = parseContentValue(contentDeclaration.value)
 		guard !parts.isEmpty else { continue }
-		let text = renderedText(parts, pageIndex: pageIndex, totalPages: totalPages)
+		let text = renderedText(parts, pageIndex: pageIndex, totalPages: totalPages, strings: strings)
 		guard !text.isEmpty else { continue }
 
 		// The box's own parent for inheritance: the document root's style (per

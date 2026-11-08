@@ -50,6 +50,47 @@ struct HeadingEntry: Equatable {
 	var text: String
 }
 
+/// Page numbers and running heads for the swift engine, as `@page` margin boxes.
+enum SwiftPageFurniture {
+
+	/// The stylesheet drawing the footer number and/or the header (book title left,
+	/// current chapter right). The title page, when there is one, gets neither.
+	static func css(pageNumbers: Bool, title: String?, hasTitlePage: Bool) -> String? {
+		var boxes: [(area: String, content: String)] = []
+		if pageNumbers { boxes.append(("bottom-center", "counter(page)")) }
+		if let title {
+			boxes.append(("top-left", cssString(title)))
+			boxes.append(("top-right", "string(chapter)"))
+		}
+		guard !boxes.isEmpty else { return nil }
+		let style = "font-size: 9pt; color: #555;"
+		var css = "@page { " + boxes.map { "@\($0.area) { content: \($0.content); \(style) }" }.joined(separator: " ") + " }\n"
+		if hasTitlePage {
+			css += "@page :first { " + boxes.map { "@\($0.area) { content: none; }" }.joined(separator: " ") + " }\n"
+		}
+		return css
+	}
+
+	/// The chapter heading current on each page: the last heading of `level` that starts on or
+	/// before it. `anchorPages` are zero-based; the result has one entry per page up to the last heading.
+	static func chapterTitles(_ headings: [HeadingEntry], level: Int, anchorPages: [String: Int]) -> [String] {
+		var startsOnPage: [Int: String] = [:]
+		for heading in headings where heading.level == level {
+			if let page = anchorPages[heading.id] { startsOnPage[page] = heading.text }
+		}
+		var current = ""
+		return (0...max(startsOnPage.keys.max() ?? 0, anchorPages.values.max() ?? 0)).map { page in
+			current = startsOnPage[page] ?? current
+			return current
+		}
+	}
+
+	private static func cssString(_ value: String) -> String {
+		"\"" + value.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+			.replacingOccurrences(of: "\n", with: " ") + "\""
+	}
+}
+
 enum FrontMatterHTML {
 
 	/// Every `<h1>`…`<h6>` that carries an `id`, in document order, with its plain text.

@@ -9,14 +9,14 @@ import Testing
 @Suite("render PDF page furniture", .serialized)
 @MainActor
 struct RenderPageFurnitureTests {
-	private func render(_ markdown: String, arguments: [String] = [], css: String? = nil) async throws -> PDFDocument {
+	private func render(_ markdown: String, arguments: [String] = [], css: String? = nil, engine: String = "webkit") async throws -> PDFDocument {
 		let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
 		try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 		defer { try? FileManager.default.removeItem(at: directory) }
 		let input = directory.appendingPathComponent("book.md")
 		let output = directory.appendingPathComponent("book.pdf")
 		try markdown.write(to: input, atomically: true, encoding: .utf8)
-		var options = [input.path, "-o", output.path, "--engine", "webkit", "--title", "Ein Buch", "--page-break-before", "h1"] + arguments
+		var options = [input.path, "-o", output.path, "--engine", engine, "--title", "Ein Buch", "--page-break-before", "h1"] + arguments
 		if let css {
 			let stylesheet = directory.appendingPathComponent("furniture.css")
 			try css.write(to: stylesheet, atomically: true, encoding: .utf8)
@@ -71,6 +71,37 @@ struct RenderPageFurnitureTests {
 			#expect(text(on: page, from: 0, to: 42 / page.bounds(for: .mediaBox).height) == String(index + 1), "the footer number must be clear of body text")
 			#expect(!body.isEmpty, "page \(index + 1) must retain its body text")
 		}
+	}
+
+	@Test("the swift engine draws numbers and running heads, and leaves the title page bare", .timeLimit(.minutes(2)))
+	func swiftEngineFurniture() async throws {
+		let prose = "Langer Absatz mit vielen Wörtern für den Seitenumbruch und die Fortsetzung des Kapitels. "
+		let markdown = (1...3).map { chapter in
+			"# Kapitel \(chapter)\n\n" + (1...6).map { _ in String(repeating: prose, count: 8) }.joined(separator: "\n\n")
+		}.joined(separator: "\n\n")
+		let document = try await render(markdown, arguments: ["--running-heads", "--title-page", "--toc", "--author", "A. Autor"], engine: "swift")
+		try #require(document.pageCount > 5)
+		var currentChapter = 0
+		for index in 0..<document.pageCount {
+			let page = try #require(document.page(at: index))
+			let footer = text(on: page, from: 0, to: 0.08)
+			let header = text(on: page, from: 0.92, to: 1)
+			if index == 0 {
+				#expect(footer.isEmpty && header.isEmpty, "the title page carries no furniture")
+				continue
+			}
+			#expect(footer == String(index + 1), "page \(index + 1) has no footer number")
+			#expect(header.contains("Ein Buch"), "page \(index + 1) has no book title")
+			let body = text(on: page, from: 0.08, to: 0.92)
+			for chapter in 1...3 where body.contains("Kapitel \(chapter) Langer") { currentChapter = chapter }
+			if currentChapter > 0 { #expect(header.contains("Kapitel \(currentChapter)"), "page \(index + 1) has the wrong running chapter") }
+		}
+		// The contents' numbers agree with the numbers drawn on the pages.
+		let contents = text(on: try #require(document.page(at: 1)), from: 0.08, to: 0.92)
+		let chapterPage = try #require((0..<document.pageCount).first { index in
+			index > 1 && text(on: document.page(at: index)!, from: 0.08, to: 0.92).contains("Kapitel 2 Langer")
+		})
+		#expect(contents.contains("Kapitel 2 \(chapterPage + 1)"))
 	}
 
 	@Test("numbers default on, may be disabled, and running heads are opt in", .timeLimit(.minutes(1)))

@@ -73,7 +73,8 @@ struct FrontMatterPDFTests {
 		let page = try #require(document.page(at: 1))
 		let text = try #require(page.string)
 		let lines = text.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }
-		#expect(!lines.contains { $0.first?.isNumber == true }, "no list markers in the contents")
+		// A bare "2" is the footer's page number; a list marker would lead a line of text.
+		#expect(!lines.contains { $0.first?.isNumber == true && Int($0) == nil }, "no list markers in the contents")
 		for heading in ["Kapitel 1", "Abschnitt 1.2", "Kapitel 2", "Abschnitt 3.1"] {
 			let line = try #require(lines.first { $0.hasPrefix(heading + " ") }, "no contents line for \(heading)")
 			let number = String(line.dropFirst(heading.count + 1))

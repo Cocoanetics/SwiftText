@@ -45,6 +45,9 @@ public struct RenderOptions {
 	/// then draw as placeholders. Inline `data:` URIs and local files are read
 	/// either way.
 	public var imageLoader: ImageLoader?
+	/// Running strings for margin boxes: `content: string(name)` shows the
+	/// entry at the page's index (the last entry past the end), e.g. the current chapter.
+	public var pageStrings: [String: [String]] = [:]
 
 	public init(pageWidthPx: Double = 816, pageHeightPx: Double? = 1056, pageMarginPx: Double = 32, baseDirection: BaseDirection = .auto, compressStreams: Bool = true,
 	            imageLoader: ImageLoader? = HTMLRenderer.urlSessionImageLoader) {
@@ -193,7 +196,8 @@ public enum HTMLRenderer {
 			}
 			if !pageRules.isEmpty {
 				let marginBoxes = resolveMarginBoxes(pageRules, pageIndex: pageIndex, totalPages: totalPages,
-				                                     rootStyle: rootBox.style, rootFontSize: rootBox.style.fontSize)
+				                                     rootStyle: rootBox.style, rootFontSize: rootBox.style.fontSize,
+				                                     strings: options.pageStrings)
 				painter.paintMarginBoxes(marginBoxes)
 			}
 			pdf.addObject(painter.stream)
