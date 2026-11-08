@@ -1,15 +1,16 @@
 import Foundation
-#if canImport(FoundationNetworking)
-import FoundationNetworking
-#endif
 import SwiftTextCore
 import SwiftTextHTML
 import Testing
 
 @Test
-func htmlDocumentParsesRemoteURL() async throws {
+func htmlDocumentParsesSavedPageWithRemoteBaseURL() async throws {
 	let url = try #require(URL(string: "https://www.cocoanetics.com/2025/12/swifttext/"))
-	let (data, _) = try await URLSession.shared.data(from: url)
+	let fixture = try #require(
+		Bundle.module.url(forResource: "wordpress-blog-post", withExtension: "html"),
+		"the saved fixture is missing from the test bundle"
+	)
+	let data = try Data(contentsOf: fixture)
 	let document = try await HTMLDocument(data: data, baseURL: url)
 	let text = document.text()
 	#expect(!text.isEmpty)
