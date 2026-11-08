@@ -34,6 +34,14 @@ enum HeadingBreakLevel: String, ExpressibleByArgument, CaseIterable {
 	var numericLevel: Int { Int(rawValue.dropFirst()) ?? 1 }
 }
 
+/// Where footnote definitions go in HTML and PDF output.
+enum FootnotePlacement: String, ExpressibleByArgument, CaseIterable {
+	/// One block at the end of the document, numbered continuously.
+	case end
+	/// Each definition block stays where the source puts it, numbering restarting per block.
+	case section
+}
+
 @available(macOS 10.15, macCatalyst 13, iOS 13, tvOS 13, watchOS 6, *)
 struct Render: AsyncParsableCommand {
 	static let configuration = CommandConfiguration(
@@ -70,6 +78,9 @@ struct Render: AsyncParsableCommand {
 
 	@Flag(name: .long, help: "For HTML, PDF and EPUB output, make numeric citations clickable: a list item starting with [n] gets id=\"ref-n\" and every other [n] links to it.")
 	var linkCitations: Bool = false
+
+	@Option(name: .long, help: "For HTML and PDF output, footnote placement: section keeps each block where the source puts it, numbering per block (default); end gathers all at the end.")
+	var footnotes: FootnotePlacement = .section
 
 	// MARK: EPUB / shared options
 
@@ -136,12 +147,12 @@ struct Render: AsyncParsableCommand {
 		switch chosenFormat {
 		case .html:
 			let html = markdownToHTML(markdownText, paper: paper, landscape: landscape, passThroughRawHTML: true, pageBreakBefore: pageBreakBefore,
-			                          extraCSS: userCSS, title: resolvedTitle, authors: author, linkCitations: linkCitations)
+			                          extraCSS: userCSS, title: resolvedTitle, authors: author, linkCitations: linkCitations, footnotes: footnotes)
 			try writeString(html, to: outputURL)
 			print(outputURL.path)
 		case .pdf:
 			let html = markdownToHTML(markdownText, paper: paper, landscape: landscape, passThroughRawHTML: true, pageBreakBefore: pageBreakBefore,
-			                          extraCSS: userCSS, title: resolvedTitle, authors: author, linkCitations: linkCitations)
+			                          extraCSS: userCSS, title: resolvedTitle, authors: author, linkCitations: linkCitations, footnotes: footnotes)
 			try await renderPDF(html: html, baseURL: baseURL, outputURL: outputURL,
 			                    title: resolvedTitle, authors: author)
 			print(outputURL.path)

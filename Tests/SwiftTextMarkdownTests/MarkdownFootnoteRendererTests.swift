@@ -161,6 +161,23 @@ struct MarkdownFootnotePlacementTests {
 		#expect(html.range(of: "<h1>B")!.lowerBound < html.range(of: "id=\"fn-1\"")!.lowerBound)
 	}
 
+	@Test func footnotesAtEndCollectsBlocksWithContinuousNumbering() {
+		let html = MarkdownFootnoteRenderer.convert(
+			"# A\n\nx[^a]\n\n[^a]: One\n\n# B\n\ny[^b]\n\n[^b]: Two", options: [.footnotesAtEnd])
+		#expect(html.contains("<strong>[2]:</strong> Two"))
+		#expect(!html.contains("fnblock"))
+		let heading = html.range(of: "<h1>B")!.lowerBound
+		#expect(heading < html.range(of: "id=\"fn-1\"")!.lowerBound)
+		#expect(html.range(of: "id=\"fn-1\"")!.lowerBound < html.range(of: "id=\"fn-2\"")!.lowerBound)
+	}
+
+	@Test func footnotesAtEndKeepsBlocksAroundTouchingDefinition() {
+		let html = MarkdownFootnoteRenderer.convert("first[^a]\n[^a]: note\nsecond", options: [.footnotesAtEnd])
+		#expect(html.contains("<p>first"))
+		#expect(html.contains("<p>second</p>"))
+		#expect(!html.contains("fnblock"))
+	}
+
 	@Test func duplicateOnlyDefinitionBlockLeavesNoMarker() {
 		let html = MarkdownFootnoteRenderer.convert("x[^a]\n\n[^a]: One\n\nMiddle\n\n[^a]: Dup")
 		#expect(!html.contains("fnblock"))
