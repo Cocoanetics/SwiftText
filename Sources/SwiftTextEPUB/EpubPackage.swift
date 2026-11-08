@@ -124,6 +124,9 @@ enum EpubPackageBuilder {
 	private static func titlePageXHTML(metadata: EpubMetadata) -> String {
 		var body = "<section epub:type=\"titlepage\" class=\"titlepage\">\n"
 		body += "<h1 class=\"title\">\(XML.escapeText(metadata.title))</h1>\n"
+		if let subtitle = metadata.subtitle, !subtitle.isEmpty {
+			body += "<p class=\"subtitle\">\(XML.escapeText(subtitle))</p>\n"
+		}
 		for author in metadata.authors where !author.isEmpty {
 			body += "<p class=\"author\">\(XML.escapeText(author))</p>\n"
 		}
@@ -274,7 +277,14 @@ enum EpubPackageBuilder {
 	private static func opf(metadata: EpubMetadata, chapters: [EpubChapter], cover: CoverImage?) -> String {
 		// Metadata
 		var meta = "    <dc:identifier id=\"pub-id\">\(XML.escapeText(metadata.identifier))</dc:identifier>\n"
-		meta += "    <dc:title>\(XML.escapeText(metadata.title))</dc:title>\n"
+		if let subtitle = metadata.subtitle, !subtitle.isEmpty {
+			meta += "    <dc:title id=\"title-main\">\(XML.escapeText(metadata.title))</dc:title>\n"
+			meta += "    <meta refines=\"#title-main\" property=\"title-type\">main</meta>\n"
+			meta += "    <dc:title id=\"title-sub\">\(XML.escapeText(subtitle))</dc:title>\n"
+			meta += "    <meta refines=\"#title-sub\" property=\"title-type\">subtitle</meta>\n"
+		} else {
+			meta += "    <dc:title>\(XML.escapeText(metadata.title))</dc:title>\n"
+		}
 		meta += "    <dc:language>\(XML.escapeText(metadata.language))</dc:language>\n"
 		for (index, author) in metadata.authors.enumerated() where !author.isEmpty {
 			let id = "creator-\(index + 1)"

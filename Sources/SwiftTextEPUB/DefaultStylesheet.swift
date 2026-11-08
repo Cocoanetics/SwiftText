@@ -122,6 +122,12 @@ enum DefaultStylesheet {
 	  page-break-before: avoid;
 	  break-before: avoid;
 	}
+	p.subtitle {
+	  font-size: 1.6em;
+	  text-indent: 0;
+	  text-align: center;
+	  margin: 0 0 0.8em;
+	}
 	p.author {
 	  font-size: 1.3em;
 	  text-indent: 0;

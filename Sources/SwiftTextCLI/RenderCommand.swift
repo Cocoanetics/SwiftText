@@ -95,6 +95,9 @@ struct Render: AsyncParsableCommand {
 	@Option(name: .long, help: "Document title for HTML, PDF, DOCX, and EPUB output. Defaults to the first top-level heading, or the input filename.")
 	var title: String?
 
+	@Option(name: .long, help: "For EPUB output, a subtitle shown under the title on the title page and added to the package metadata.")
+	var subtitle: String?
+
 	@Option(name: .long, help: "Document author for HTML, PDF, DOCX, and EPUB output. Repeat for multiple authors.")
 	var author: [String] = []
 
@@ -198,6 +201,7 @@ struct Render: AsyncParsableCommand {
 
 		let metadata = EpubMetadata(
 			title: title,
+			subtitle: subtitle,
 			authors: author,
 			language: language,
 			coverImage: coverData,
