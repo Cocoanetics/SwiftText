@@ -200,10 +200,15 @@ public final class FontBook {
 		let key = "\(generic)-\(bold)-\(italic)"
 		if let cached = standardFaceCache[key] { return cached }
 		var face: EmbeddedFont?
-		for path in Self.standardFaceCandidates(generic, bold: bold, italic: italic) {
-			if let loaded = loadFace(path: path, name: Self.postScriptName(from: "Embedded" + ((path as NSString).lastPathComponent as String))) {
-				face = loaded
-				break
+		// A minimal install may lack the exact slant or weight (DejaVu ships no
+		// Oblique in its core package): the nearest installed face still embeds.
+		let variants = [(bold, italic), (bold, false), (false, italic), (false, false)]
+		search: for variant in variants {
+			for path in Self.standardFaceCandidates(generic, bold: variant.0, italic: variant.1) {
+				if let loaded = loadFace(path: path, name: Self.postScriptName(from: "Embedded" + ((path as NSString).lastPathComponent as String))) {
+					face = loaded
+					break search
+				}
 			}
 		}
 		standardFaceCache[key] = .some(face)
