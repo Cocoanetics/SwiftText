@@ -4,6 +4,7 @@
 import Foundation
 import Testing
 @testable import SwiftTextEPUB
+import Markdown
 import SwiftTextMarkdown
 
 @Suite("Markdown → EPUB")
@@ -126,6 +127,14 @@ struct EpubTests {
 		let files = MarkdownToEpub.makeFiles(markdown, metadata: fixedMetadata(), options: EpubOptions(chapterLevel: 2, linkCitations: true))
 		let chapter = string(file(files, "OEBPS/text/ch001.xhtml"))
 		#expect(chapter.contains("<a href=\"#citation-1\">[1]</a>"))
+	}
+
+	@Test("cross-file citation hrefs are attribute-escaped")
+	func citationFileEscaped() {
+		let document = Document(parsing: "Zitat [1].\n\n- [1] Quelle.\n", options: [.disableSmartOpts])
+		let html = SwiftMarkdownHTMLRenderer.convert(document: document.detachedFromParent as? Document ?? document, options: [.xhtml, .linkCitations],
+		                                             citationNumbers: [1], citationFiles: [1: "a&\"b.xhtml"])
+		#expect(html.contains("<a href=\"a&amp;&quot;b.xhtml#citation-1\">[1]</a>"))
 	}
 
 	// MARK: - Footnotes

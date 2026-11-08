@@ -236,7 +236,7 @@ private struct HTMLRenderer: MarkupVisitor {
 	mutating func visitLink(_ link: Link) {
 		let href = link.destination ?? ""
 		if let number = citationLinkNumber(for: link) {
-			output += "<a href=\"\(citationFiles[number] ?? "")#citation-\(number)\">[\(number)]</a>"
+			output += "<a href=\"\(escapeAttribute((citationFiles[number] ?? "") + "#citation-\(number)"))\">[\(number)]</a>"
 			return
 		}
 		output += "<a href=\"\(escapeAttribute(href))\">"
@@ -379,7 +379,7 @@ private struct HTMLRenderer: MarkupVisitor {
 			let close = rest.index(afterOpen, offsetBy: digits.count)
 			if !digits.isEmpty, close < rest.endIndex, rest[close] == "]",
 			   let number = Int(digits), referenceNumbers.contains(number) {
-				output += "<a href=\"\(citationFiles[number] ?? "")#citation-\(number)\">[\(number)]</a>"
+				output += "<a href=\"\(escapeAttribute((citationFiles[number] ?? "") + "#citation-\(number)"))\">[\(number)]</a>"
 				rest = rest[rest.index(after: close)...]
 			} else {
 				output += "["
