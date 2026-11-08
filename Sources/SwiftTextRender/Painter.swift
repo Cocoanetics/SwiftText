@@ -304,14 +304,27 @@ public final class Painter {
 		guard !boxes.isEmpty else { return }
 		// Restore the state saved in `init`, before the content-slice clip.
 		stream.popState()
+		let contentWidth = geometry.pageWidthPx - 2 * geometry.marginPx
 		for box in boxes {
 			let font = fonts.font(for: box.style)
 			let resource = builder.resourceName(for: font)
-			let textWidth = font.width(of: box.text, size: box.style.fontSize)
+			// Boxes sharing an edge each get their own region, so long text is
+			// truncated instead of running into its neighbour.
+			let neighbours = boxes.filter { $0.area.isTop == box.area.isTop && $0.area != box.area }
+			let maxWidth: Double
+			switch box.area {
+			case .topCenter, .bottomCenter: maxWidth = neighbours.isEmpty ? contentWidth : contentWidth / 3
+			default: maxWidth = !neighbours.isEmpty ? contentWidth / 2 - 6 : contentWidth
+			}
+			var text = box.text
+			if font.width(of: text, size: box.style.fontSize) > maxWidth {
+				while !text.isEmpty && font.width(of: text + "…", size: box.style.fontSize) > maxWidth { text.removeLast() }
+				text += "…"
+			}
+			let textWidth = font.width(of: text, size: box.style.fontSize)
 			let ascent = font.ascent(size: box.style.fontSize)
 			let descent = font.descent(size: box.style.fontSize)
 
-			let contentWidth = geometry.pageWidthPx - 2 * geometry.marginPx
 			let extra = max(0, contentWidth - textWidth)
 			let rtl = box.style.direction == .rtl
 			let x: Double
@@ -335,9 +348,9 @@ public final class Painter {
 			stream.moveTextTo(x, geometry.pageHeightPx - baselineY)
 			switch font {
 			case .standard:
-				stream.showRawString(encodeWinAnsi(box.text))
+				stream.showRawString(encodeWinAnsi(text))
 			case .embedded(let embedded):
-				stream.showHexString(encodeGlyphs(box.text, font: embedded, fontKey: font.key))
+				stream.showHexString(encodeGlyphs(text, font: embedded, fontKey: font.key))
 			}
 			stream.endText()
 		}

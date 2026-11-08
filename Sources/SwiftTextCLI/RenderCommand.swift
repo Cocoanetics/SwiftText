@@ -434,6 +434,7 @@ struct Render: AsyncParsableCommand {
 		options.pageWidthPx = widthPoints / 0.75 // points → CSS pixels
 		options.pageHeightPx = heightPoints / 0.75
 		options.pageStrings = pageStrings
+		if pageNumbers || runningHeads { options.minimumPageMarginPx = 64 } // 48 pt, as in the webkit engine
 		let furniture = SwiftPageFurniture.css(pageNumbers: pageNumbers, title: runningHeads ? title : nil, hasTitlePage: titlePage)
 		let rendered = try await HTMLRenderer.renderPDFWithAnchors(html: html, css: furniture.map { [$0] } ?? [], baseURL: baseURL,
 		                                                           options: options, title: title, authors: authors)

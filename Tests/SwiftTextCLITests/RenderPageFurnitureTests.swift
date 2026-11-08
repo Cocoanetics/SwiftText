@@ -104,6 +104,16 @@ struct RenderPageFurnitureTests {
 		#expect(contents.contains("Kapitel 2 \(chapterPage + 1)"))
 	}
 
+	@Test("the swift engine keeps furniture inside the page and apart: zero margins, long heads", .timeLimit(.minutes(1)))
+	func swiftEngineMarginsAndLongHeads() async throws {
+		let long = String(repeating: "Ein sehr langer Kapitelname ", count: 6)
+		let document = try await render("# \(long)\n\nText.", arguments: ["--running-heads", "--title", long], css: "@page { margin: 0; }", engine: "swift")
+		let page = try #require(document.page(at: 0))
+		#expect(text(on: page, from: 0, to: 0.08) == "1", "the footer must stay on the page with a zero margin")
+		let header = text(on: page, from: 0.92, to: 1)
+		#expect(header.contains("…"), "overlong heads are truncated, not overlapped: \(header)")
+	}
+
 	@Test("numbers default on, may be disabled, and running heads are opt in", .timeLimit(.minutes(1)))
 	func defaultsAndOptOut() async throws {
 		let numbered = try await render("# Kapitel 1\n\nText.")
