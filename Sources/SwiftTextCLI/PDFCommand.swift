@@ -592,7 +592,8 @@ private func footnotePageScript(printableWidth: Double, printableHeight: Double)
 	window.addEventListener('beforeprint', function () {
 	    var layoutWidth = document.documentElement.clientWidth;
 	    if (layoutWidth <= 0) return;
-	    var pageHeight = Math.floor(\(printableHeight) * layoutWidth / \(printableWidth)) - 2;
+	    var printable = window.__swiftTextPrintableSize || [\(printableWidth), \(printableHeight)];
+	    var pageHeight = Math.floor(printable[1] * layoutWidth / printable[0]) - 2;
 	    // WebKit fires beforeprint before it applies the print media rules, so measure
 	    // with them in force: each @media print block is repeated unconditionally
 	    // right after itself, keeping its place in the cascade.

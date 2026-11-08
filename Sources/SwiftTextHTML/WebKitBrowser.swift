@@ -11,6 +11,14 @@ import AppKit
 import Foundation
 import WebKit
 
+/// A heading's text and its occurrence in document order, used to locate its
+/// printed page without estimating WebKit's fragmentation offsets.
+package struct PDFChapterHeading: Decodable {
+	package let title: String
+	package let searchText: String
+	package let occurrence: Int
+}
+
 @available(macOS 10.15, iOS 13.0, *)
 package class WebKitBrowser: NSObject, WKNavigationDelegate {
 	// MARK: - Package Properties
@@ -212,6 +220,63 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 		#else
 		return data
 		#endif
+	}
+
+	/// Reserves the furniture bands before any print-time paginator runs and
+	/// collects chapter headings while the original DOM is still intact.
+	@MainActor
+	package func preparePageFurniture(paperSize: CGSize, footer: Bool, header: Bool, headingLevel: Int) async throws -> [PDFChapterHeading] {
+		guard footer || header else { return [] }
+		let webView = try await loadedWebView()
+		let script = """
+		(function() {
+			const normalize = s => s.replace(/\\s+/g, ' ').trim();
+			const headings = \(header ? "true" : "false") ? Array.from(document.querySelectorAll('h\(headingLevel)')).map(heading => {
+				const title = normalize(heading.textContent || '');
+				const searchText = title.slice(0, 40).trim();
+				const range = document.createRange();
+				range.setStart(document.body, 0);
+				range.setEndBefore(heading);
+				const before = normalize(range.toString());
+				let occurrence = 0, from = 0, hit;
+				while (searchText && (hit = before.indexOf(searchText, from)) !== -1) { occurrence++; from = hit + 1; }
+				return { title, searchText, occurrence };
+			}).filter(h => h.searchText) : [];
+			// Read the authored @page margins, retaining margins larger than the
+			// 48pt furniture band. CSS margin boxes themselves are ignored by WebKit.
+			const margins = [0, 0, 0, 0];
+			const names = ['Top', 'Right', 'Bottom', 'Left'];
+			function points(value, reference) {
+				const match = String(value).trim().match(/^([0-9]*\\.?[0-9]+)\\s*(px|pt|pc|in|cm|mm|%)?$/i);
+				if (!match) return 0;
+				const factors = { px: 0.75, pt: 1, pc: 12, in: 72, cm: 72/2.54, mm: 72/25.4, '%': reference/100 };
+				return parseFloat(match[1]) * factors[(match[2] || 'px').toLowerCase()];
+			}
+			function scan(rules) {
+				for (const rule of Array.from(rules)) {
+					if (rule.type === CSSRule.PAGE_RULE) {
+						names.forEach((name, i) => {
+							const value = rule.style['margin' + name];
+							if (value) margins[i] = points(value, i % 2 ? \(paperSize.width) : \(paperSize.height));
+						});
+					} else if (rule.cssRules && (!rule.media || matchMedia(rule.conditionText).matches || rule.conditionText === 'print')) scan(rule.cssRules);
+				}
+			}
+			for (const sheet of Array.from(document.styleSheets)) { try { scan(sheet.cssRules); } catch (e) {} }
+			const style = document.createElement('style');
+			let overrides = '';
+			if (\(header ? "true" : "false")) { margins[0] = Math.max(48, margins[0]); overrides += 'margin-top:' + margins[0] + 'pt !important;'; }
+			if (\(footer ? "true" : "false")) { margins[2] = Math.max(48, margins[2]); overrides += 'margin-bottom:' + margins[2] + 'pt !important;'; }
+			style.textContent = '@page {' + overrides + '}';
+			document.head.appendChild(style);
+			window.__swiftTextPrintableSize = [(\(paperSize.width) - margins[1] - margins[3]) / 0.75, (\(paperSize.height) - margins[0] - margins[2]) / 0.75];
+			return JSON.stringify(headings);
+		})();
+		"""
+		guard let json = try await webView.evaluateJavaScript(script) as? String, let data = json.data(using: .utf8) else {
+			throw WebKitBrowserError.printFailed
+		}
+		return try JSONDecoder().decode([PDFChapterHeading].self, from: data)
 	}
 
 	/// WebKit's print paginator neither repeats table headers nor keeps a row's
