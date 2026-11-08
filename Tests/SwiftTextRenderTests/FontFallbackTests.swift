@@ -189,8 +189,8 @@ struct EmbeddedStandardFaceTests {
 		#expect(!text.contains("/BaseFont /Helvetica"))
 		#expect(!text.contains("/Subtype /Type1"))
 		#expect(text.contains("/FontFile2"))
-		let fonts = text.components(separatedBy: "/Type /Font\n").count - 1
-		#expect(text.components(separatedBy: "/FontFile2").count - 1 >= 3 || fonts >= 3)
+		// Bold and regular at least; italic is its own face only where one is installed.
+		#expect(text.components(separatedBy: "/FontFile2").count - 1 >= 2)
 	}
 }
 
