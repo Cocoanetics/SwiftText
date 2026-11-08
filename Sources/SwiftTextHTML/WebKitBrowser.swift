@@ -19,6 +19,9 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 
 	// MARK: - Internal Properties
 	private static let messageName = "pageLoaded"
+	/// Posted by the capture script as soon as it runs, so a timeout can tell a
+	/// script that never ran from one that ran but never settled.
+	private static let armedMessageName = "captureArmed"
 
 	private var webView: WKWebView!
 	private var htmlResult: String?
@@ -30,6 +33,7 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 	/// would be overwritten by a second caller, stranding the first forever.
 	private var loadContinuations: [CheckedContinuation<Void, Never>] = []
 	private var timeoutTask: Task<Void, Never>?
+	private var commitWatchdogTask: Task<Void, Never>?
 	private var messageProxy: ScriptMessageProxy?
 	private var htmlStringToLoad: String?
 	private var fileURLToLoad: URL?
@@ -50,6 +54,30 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 	/// is suspended or killed (which is what happens when an iOS app is
 	/// backgrounded) before the script is ever injected.
 	package var timeout: TimeInterval = 30
+
+	/// How long a navigation may go without committing before the web view is
+	/// treated as dead, torn down, and the load retried with a fresh one — up to
+	/// ``maxLoadAttempts`` in total. `0` (the default) disables the watchdog.
+	///
+	/// A navigation that never commits means the web content process never
+	/// launched or never answered; nothing on that web view will recover. The
+	/// retry runs inside the same overall ``timeout``, which spans every attempt,
+	/// so enabling this never lengthens how long a load can take.
+	///
+	/// Opt-in because a slow server is indistinguishable from a stall at this
+	/// point: a remote URL still waiting for its first byte would be re-requested.
+	package var commitTimeout: TimeInterval = 0
+
+	/// The most loads ``commitTimeout`` may start, counting the first.
+	package var maxLoadAttempts = 2
+
+	/// How far the current load got. Reported in ``WebKitBrowserError/timedOut(seconds:progress:)``
+	/// so a stall names its phase.
+	package private(set) var loadProgress = WebKitLoadProgress()
+
+	/// Lets a caller adjust each attempt's configuration before its web view is
+	/// created — for instance to register a `WKURLSchemeHandler`.
+	package var configureWebView: ((WKWebViewConfiguration) -> Void)?
 
 	/// Optional frame size override. When set, the WKWebView is created
 	/// with this size so content reflows to the target width (e.g. A4).
@@ -518,6 +546,16 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 	// MARK: - Helpers
 	@MainActor
 	private func load() {
+		// Armed once: the overall timeout spans every attempt.
+		startTimeoutIfNeeded()
+		startAttempt()
+	}
+
+	/// Builds a fresh web view and issues the navigation.
+	@MainActor
+	private func startAttempt() {
+		loadProgress = WebKitLoadProgress(attempt: loadProgress.attempt + 1, maxAttempts: max(1, maxLoadAttempts))
+
 		let config = WKWebViewConfiguration()
 		let contentController = WKUserContentController()
 		// Register a weak proxy rather than `self`. A user-content controller
@@ -530,13 +568,24 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 		proxy.target = self
 		messageProxy = proxy
 		contentController.add(proxy, name: Self.messageName)
+		contentController.add(proxy, name: Self.armedMessageName)
+		// Installed with the configuration rather than evaluated from `didFinish`,
+		// so capture no longer depends on that callback and a JavaScript round trip
+		// after it. `didFinish` still evaluates it as a fallback; the script ignores
+		// a second run.
+		contentController.addUserScript(WKUserScript(
+			source: Self.captureScript,
+			injectionTime: .atDocumentEnd,
+			forMainFrameOnly: true
+		))
 		config.userContentController = contentController
-
-		startTimeoutIfNeeded()
+		configureWebView?(config)
 
 		let initialSize = frameSize ?? CGSize(width: 800, height: 600)
 		webView = WKWebView(frame: CGRect(origin: .zero, size: initialSize), configuration: config)
 		webView.navigationDelegate = self
+
+		startCommitWatchdogIfNeeded()
 
 		if let html = htmlStringToLoad {
 			webView.loadHTMLString(html, baseURL: url == URL(string: "about:blank") ? nil : url)
@@ -546,6 +595,43 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 			let urlRequest = URLRequest(url: url)
 			webView.load(urlRequest)
 		}
+		loadProgress.navigationIssued = true
+	}
+
+	/// Retries the load on a fresh web view if the navigation has not committed
+	/// within ``commitTimeout``.
+	@MainActor
+	private func startCommitWatchdogIfNeeded() {
+		commitWatchdogTask?.cancel()
+		commitWatchdogTask = nil
+		guard commitTimeout > 0, loadProgress.attempt < loadProgress.maxAttempts else { return }
+		let seconds = commitTimeout
+		commitWatchdogTask = Task { @MainActor [weak self] in
+			try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+			guard let self, !Task.isCancelled, !self.isFinished, !self.loadProgress.committed else { return }
+			self.tearDownWebView()
+			self.startAttempt()
+		}
+	}
+
+	/// Abandons the current web view without ending the load, so an attempt can
+	/// be replaced. Its delegate and message handlers are detached first: the
+	/// cancellation `stopLoading()` causes must not be reported as a failure.
+	@MainActor
+	private func tearDownWebView() {
+		removeMessageHandlers()
+		webView?.navigationDelegate = nil
+		webView?.stopLoading()
+		webView = nil
+	}
+
+	@MainActor
+	private func removeMessageHandlers() {
+		let contentController = webView?.configuration.userContentController
+		contentController?.removeScriptMessageHandler(forName: Self.messageName)
+		contentController?.removeScriptMessageHandler(forName: Self.armedMessageName)
+		messageProxy?.target = nil
+		messageProxy = nil
 	}
 
 	/// Arms the Swift-side backstop that guarantees `waitForLoadCompletion()`
@@ -557,7 +643,7 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 		timeoutTask = Task { @MainActor [weak self] in
 			try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
 			guard let self, !Task.isCancelled else { return }
-			self.finish(error: WebKitBrowserError.timedOut(seconds: seconds))
+			self.finish(error: WebKitBrowserError.timedOut(seconds: seconds, progress: self.loadProgress))
 		}
 	}
 
@@ -577,12 +663,12 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 
 		timeoutTask?.cancel()
 		timeoutTask = nil
+		commitWatchdogTask?.cancel()
+		commitWatchdogTask = nil
 
-		// Drop the message handler as soon as the page is captured: it is the one
-		// strong reference WebKit holds on our behalf, and nothing more arrives.
-		webView?.configuration.userContentController.removeScriptMessageHandler(forName: Self.messageName)
-		messageProxy?.target = nil
-		messageProxy = nil
+		// Drop the message handlers as soon as the page is captured: they are the
+		// one strong reference WebKit holds on our behalf, and nothing more arrives.
+		removeMessageHandlers()
 
 		let waiting = loadContinuations
 		loadContinuations.removeAll()
@@ -602,34 +688,60 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 		#endif
 	}
 
+	/// Posts the settled DOM once the page has loaded and stopped mutating: 500 ms
+	/// after the last mutation, or at the latest 3 s after the `load` event.
+	///
+	/// Installed at document end, but it only starts counting once the document is
+	/// complete — exactly as when it was first evaluated from `didFinish` — so an
+	/// earlier injection point does not capture before images and scripts finish.
+	/// Running it a second time is a no-op, and it posts at most once.
+	private static let captureScript = """
+	(function() {
+		if (window.__swiftTextCaptureArmed) return;
+		window.__swiftTextCaptureArmed = true;
+		window.webkit.messageHandlers.captureArmed.postMessage(true);
+
+		var posted = false;
+		var settleTimer = null;
+		var observer = new MutationObserver(function() {
+			if (document.readyState !== 'complete') return;
+			clearTimeout(settleTimer);
+			settleTimer = setTimeout(post, 500);
+		});
+
+		function post() {
+			if (posted) return;
+			posted = true;
+			observer.disconnect();
+			window.webkit.messageHandlers.pageLoaded.postMessage(document.documentElement.outerHTML.toString());
+		}
+
+		function armFallback() {
+			setTimeout(post, 3000);
+		}
+
+		observer.observe(document, { childList: true, subtree: true, attributes: true });
+		if (document.readyState === 'complete') {
+			armFallback();
+		} else {
+			window.addEventListener('load', armFallback);
+		}
+	})();
+	"""
+
 	// MARK: - WKNavigationDelegate
+	package func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+		guard webView === self.webView else { return }
+		loadProgress.committed = true
+		commitWatchdogTask?.cancel()
+		commitWatchdogTask = nil
+	}
+
 	package func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-		let js = """
-		(function() {
-			var observer = new MutationObserver(function(mutations) {
-				clearTimeout(window.observerTimeout);
-				window.observerTimeout = setTimeout(function() {
-					window.webkit.messageHandlers.pageLoaded.postMessage(document.documentElement.outerHTML.toString());
-				}, 500);
-			});
-
-			observer.observe(document, { childList: true, subtree: true, attributes: true });
-
-			window.addEventListener('load', function() {
-				clearTimeout(window.observerTimeout);
-				window.observerTimeout = setTimeout(function() {
-					window.webkit.messageHandlers.pageLoaded.postMessage(document.documentElement.outerHTML.toString());
-				}, 500);
-			});
-
-			setTimeout(function() {
-				observer.disconnect();
-				window.webkit.messageHandlers.pageLoaded.postMessage(document.documentElement.outerHTML.toString());
-			}, 3000);
-		})();
-		"""
-
-		webView.evaluateJavaScript(js) { (_, error) in
+		guard webView === self.webView else { return }
+		loadProgress.navigationFinished = true
+		// Fallback for a document the user script did not reach; a no-op otherwise.
+		webView.evaluateJavaScript(Self.captureScript) { (_, error) in
 			if let error = error {
 				print("Error injecting JavaScript: \(error)")
 			}
@@ -639,12 +751,14 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 	/// A navigation that started and then failed. Without this the injected
 	/// script never runs, so nothing would ever resume the waiters.
 	package func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+		guard webView === self.webView else { return }
 		finish(error: WebKitBrowserError.loadFailed(underlying: error))
 	}
 
 	/// A navigation that never started — bad host, no network, refused
 	/// connection. The common failure, and the one that used to hang forever.
 	package func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+		guard webView === self.webView else { return }
 		finish(error: WebKitBrowserError.loadFailed(underlying: error))
 	}
 
@@ -652,6 +766,7 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 	/// reclaiming it (which is what a backgrounded iOS app's process gets). The
 	/// page is gone and no further callback is coming.
 	package func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+		guard webView === self.webView else { return }
 		finish(error: WebKitBrowserError.webContentProcessTerminated)
 	}
 }
@@ -671,10 +786,14 @@ private final class ScriptMessageProxy: NSObject, WKScriptMessageHandler {
 @available(macOS 10.15, iOS 13.0, *)
 extension WebKitBrowser: WKScriptMessageHandler {
 	@objc package func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+		if message.name == Self.armedMessageName {
+			loadProgress.captureScriptRan = true
+			return
+		}
 		guard message.name == Self.messageName, let html = message.body as? String else {
 			return
 		}
-		guard !isFinished else {
+		guard !isFinished, !didLoad else {
 			return
 		}
 
@@ -767,13 +886,56 @@ extension WKWebView {
 	}
 }
 
+/// How far a WebKit load got, so a timeout says where it stalled.
+public struct WebKitLoadProgress: Sendable, Equatable, CustomStringConvertible {
+	/// The attempt in progress, counting from 1; `0` before the load starts.
+	public var attempt = 0
+	/// The most attempts this load may make.
+	public var maxAttempts = 1
+	/// The current attempt issued its navigation.
+	public var navigationIssued = false
+	/// WebKit committed the navigation: the web content process is answering.
+	public var committed = false
+	/// WebKit reported the navigation finished.
+	public var navigationFinished = false
+	/// The capture script ran in the page.
+	public var captureScriptRan = false
+
+	public init() {}
+
+	init(attempt: Int, maxAttempts: Int) {
+		self.attempt = attempt
+		self.maxAttempts = maxAttempts
+	}
+
+	public var description: String {
+		let phases = [
+			("navigation issued", navigationIssued),
+			("committed", committed),
+			("finished", navigationFinished),
+			("capture script ran", captureScriptRan)
+		]
+		let reached = phases.filter(\.1).map(\.0)
+		let missed = phases.filter { !$0.1 }.map(\.0)
+		var text = "attempt \(attempt) of \(maxAttempts)"
+		if !reached.isEmpty {
+			text += "; reached: " + reached.joined(separator: ", ")
+		}
+		if !missed.isEmpty {
+			text += "; never: " + missed.joined(separator: ", ")
+		}
+		return text
+	}
+}
+
 public enum WebKitBrowserError: Error, LocalizedError {
 	case missingHTML
 	case printFailed
 	/// WebKit reported a navigation failure; `underlying` is its error.
 	case loadFailed(underlying: Error)
-	/// The page never settled within ``WebKitBrowser/timeout``.
-	case timedOut(seconds: TimeInterval)
+	/// The page never settled within ``WebKitBrowser/timeout``; `progress` is how
+	/// far the load got.
+	case timedOut(seconds: TimeInterval, progress: WebKitLoadProgress)
 	/// The web content process died before the page could be captured.
 	case webContentProcessTerminated
 
@@ -785,8 +947,8 @@ public enum WebKitBrowserError: Error, LocalizedError {
 			return "The print operation did not produce a PDF"
 		case .loadFailed(let underlying):
 			return "The page failed to load: \(underlying.localizedDescription)"
-		case .timedOut(let seconds):
-			return "The page did not finish loading within \(Int(seconds)) seconds"
+		case .timedOut(let seconds, let progress):
+			return "The page did not finish loading within \(Int(seconds)) seconds (\(progress))"
 		case .webContentProcessTerminated:
 			return "The web content process terminated before the page was captured"
 		}
