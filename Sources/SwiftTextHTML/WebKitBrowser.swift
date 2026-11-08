@@ -24,8 +24,8 @@ package struct PDFPageFurniturePreparation: Decodable {
 	package let stylesheet: String
 	/// Where the generated title section starts and where the content after it
 	/// begins; the pages in between are the title section's physical pages.
-	package var titleStart: PDFChapterHeading? = nil
-	package var titleEnd: PDFChapterHeading? = nil
+	package var titleStart: PDFChapterHeading?
+	package var titleEnd: PDFChapterHeading?
 }
 
 @available(macOS 10.15, iOS 13.0, *)
@@ -243,7 +243,7 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 	/// collects chapter headings while the original DOM is still intact.
 	@MainActor
 	package func preparePageFurniture(paperSize: CGSize, footer: Bool, header: Bool, headingLevel: Int) async throws -> PDFPageFurniturePreparation {
-		guard footer || header else { return PDFPageFurniturePreparation(headings: [], stylesheet: "") }
+		guard footer || header else { return PDFPageFurniturePreparation(headings: [], stylesheet: "", titleStart: nil, titleEnd: nil) }
 		let webView = try await loadedWebView()
 		let script = """
 		(function() {
