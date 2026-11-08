@@ -31,7 +31,7 @@ enum ChapterSplitter {
 	/// (1–6). Leading content becomes front matter. `titleFallback` names a
 	/// chapter whose heading is empty (or the front matter, which is never
 	/// listed but still needs an id).
-	static func split(document: Document, chapterLevel: Int, titleFallback: String, footnotes: [MarkdownFootnoteParser.Definition] = []) -> [EpubChapter] {
+	static func split(document: Document, chapterLevel: Int, titleFallback: String, footnotes: [MarkdownFootnoteParser.Definition] = [], linkCitations: Bool = false) -> [EpubChapter] {
 		let level = max(1, min(chapterLevel, 6))
 		let blocks = document.children.compactMap { $0 as? BlockMarkup }
 
@@ -48,13 +48,24 @@ enum ChapterSplitter {
 			}
 		}
 
+		let ids = runs.indices.map { String(format: "ch%03d", $0 + 1) }
+		var citations: CitationLinks?
+		if linkCitations {
+			var files: [Int: String] = [:]
+			for (index, run) in runs.enumerated() {
+				let numbers = SwiftMarkdownHTMLRenderer.citationReferenceNumbers(in: Document(run.blocks, inheritSourceRange: false))
+				for number in numbers where files[number] == nil { files[number] = ids[index] }
+			}
+			citations = CitationLinks(files: files)
+		}
+
 		var chapters: [EpubChapter] = []
 		var chapterNumber = 0
 		for run in runs {
 			let isFrontmatter = run.heading == nil
 			chapterNumber += 1
-			let id = String(format: "ch%03d", chapterNumber)
-			let body = renderBody(run.blocks, footnotes: footnotes)
+			let id = ids[chapterNumber - 1]
+			let body = renderBody(run.blocks, footnotes: footnotes, citations: citations?.relative(to: id))
 			let title = chapterTitle(from: run.blocks, fallback: titleFallback)
 			chapters.append(EpubChapter(id: id, title: title, bodyXHTML: body, isFrontmatter: isFrontmatter))
 		}
@@ -92,15 +103,33 @@ enum ChapterSplitter {
 	/// Renders a run of top-level blocks to an XHTML fragment. Footnote
 	/// references become noteref links and the definitions they use are
 	/// appended as footnote asides, so each chapter file is self-contained.
-	private static func renderBody(_ blocks: [BlockMarkup], footnotes: [MarkdownFootnoteParser.Definition]) -> String {
+	private static func renderBody(_ blocks: [BlockMarkup], footnotes: [MarkdownFootnoteParser.Definition],
+	                               citations: (numbers: Set<Int>, files: [Int: String])?) -> String {
 		let subdocument = Document(blocks, inheritSourceRange: false)
+		let options: SwiftMarkdownHTMLRenderer.Options = citations == nil ? [.xhtml] : [.xhtml, .linkCitations]
 		guard !footnotes.isEmpty else {
-			return SwiftMarkdownHTMLRenderer.convert(document: subdocument, options: [.xhtml])
+			return SwiftMarkdownHTMLRenderer.convert(document: subdocument, options: options,
+			                                         citationNumbers: citations?.numbers, citationFiles: citations?.files ?? [:])
 		}
 		let state = EpubFootnoteState(definitions: footnotes)
-		let body = state.render(subdocument, options: [.xhtml])
+		state.citationNumbers = citations?.numbers
+		state.citationFiles = citations?.files ?? [:]
+		let body = state.render(subdocument, options: options)
 		let expanded = state.expandReferences(in: body)
-		let section = state.renderFootnotesSection(options: [.xhtml])
+		let section = state.renderFootnotesSection(options: options)
 		return section.isEmpty ? expanded : expanded + "\n" + section
+	}
+}
+
+/// Where each citation's `[n]` list item lives, as chapter ids.
+private struct CitationLinks {
+	let files: [Int: String]
+
+	/// The link targets as seen from chapter `id`: in-page for its own items,
+	/// `chNNN.xhtml` for the others.
+	func relative(to id: String) -> (numbers: Set<Int>, files: [Int: String]) {
+		var other: [Int: String] = [:]
+		for (number, file) in files where file != id { other[number] = "\(file).xhtml" }
+		return (Set(files.keys), other)
 	}
 }
