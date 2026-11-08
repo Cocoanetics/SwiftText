@@ -100,7 +100,7 @@ enum ChapterSplitter {
 		let state = EpubFootnoteState(definitions: footnotes)
 		let body = state.render(subdocument, options: [.xhtml])
 		let expanded = state.expandReferences(in: body)
-		let asides = state.renderAsides(options: [.xhtml])
-		return asides.isEmpty ? expanded : expanded + "\n" + asides
+		let section = state.renderFootnotesSection(options: [.xhtml])
+		return section.isEmpty ? expanded : expanded + "\n" + section
 	}
 }

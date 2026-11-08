@@ -2,7 +2,9 @@
 //  SwiftTextEPUB
 //
 //  Markdown footnotes (`[^id]` references, `[^id]: text` definitions) as EPUB 3
-//  noteref links plus `<aside epub:type="footnote">` blocks. Each chapter file
+//  noteref links plus `<aside epub:type="footnote">` blocks, gathered in a
+//  `<section epub:type="footnotes">` after a separator rule, each note opening
+//  with a numbered backlink to its reference. Each chapter file
 //  gets its own numbering and carries the definitions it references, so reading
 //  systems can show them as pop-up notes (which need the note in the same file).
 
@@ -75,7 +77,7 @@ final class EpubFootnoteState {
 				emitted[number] = occurrence
 				let slug = slugByID[id] ?? Self.slug(id)
 				let anchor = occurrence == 1 ? "ref-\(slug)" : "ref-\(slug)-\(occurrence)"
-				result += "<sup><a href=\"#fn-\(slug)\" id=\"\(anchor)\" epub:type=\"noteref\">\(number)</a></sup>"
+				result += "<sup><a href=\"#fn-\(slug)\" id=\"\(anchor)\" class=\"noteref\" epub:type=\"noteref\" role=\"doc-noteref\">\(number)</a></sup>"
 			}
 			index = html.index(after: close)
 		}
@@ -87,9 +89,10 @@ final class EpubFootnoteState {
 		String(id.map { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" || $0 == ".") ? $0 : "-" })
 	}
 
-	/// The `<aside>` blocks for every referenced definition, in number order.
-	/// Rendering a definition can reference further ones, so repeat until stable.
-	func renderAsides(options: SwiftMarkdownHTMLRenderer.Options) -> String {
+	/// The footnotes section for every referenced definition, in number order, or
+	/// `""` when none is referenced. Rendering a definition can reference further
+	/// ones, so repeat until stable.
+	func renderFootnotesSection(options: SwiftMarkdownHTMLRenderer.Options) -> String {
 		var rendered: [(number: Int, html: String)] = []
 		var done = Set<String>()
 		var progress = true
@@ -101,10 +104,23 @@ final class EpubFootnoteState {
 				progress = true
 				let body = renderMarkdown(definition.body, options: options)
 				let content = expandReferences(in: body).trimmingCharacters(in: .whitespacesAndNewlines)
-				rendered.append((number, "<aside id=\"fn-\(slugByID[definition.id] ?? Self.slug(definition.id))\" epub:type=\"footnote\">\(content)</aside>"))
+				let slug = slugByID[definition.id] ?? Self.slug(definition.id)
+				rendered.append((number, "<aside id=\"fn-\(slug)\" class=\"footnote\" epub:type=\"footnote\" role=\"doc-footnote\">\(Self.withBacklink(content, number: number, slug: slug))</aside>"))
 			}
 		}
-		return rendered.sorted { $0.number < $1.number }.map(\.html).joined(separator: "\n")
+		guard !rendered.isEmpty else { return "" }
+		let asides = rendered.sorted { $0.number < $1.number }.map(\.html).joined(separator: "\n")
+		return "<section class=\"footnotes\" epub:type=\"footnotes\" role=\"doc-endnotes\">\n<hr/>\n\(asides)\n</section>"
+	}
+
+	/// Puts the numbered backlink at the start of the note's first paragraph, or in a
+	/// paragraph of its own when the note opens with another kind of block.
+	private static func withBacklink(_ content: String, number: Int, slug: String) -> String {
+		let link = "<a href=\"#ref-\(slug)\" class=\"footnote-backlink\" epub:type=\"backlink\" role=\"doc-backlink\">\(number)</a>"
+		if content.hasPrefix("<p>") {
+			return "<p>\(link) " + content.dropFirst(3)
+		}
+		return "<p class=\"footnote-label\">\(link)</p>" + content
 	}
 
 	func renderMarkdown(_ markdown: String, options: SwiftMarkdownHTMLRenderer.Options) -> String {
