@@ -93,10 +93,12 @@ public enum MarkdownFootnoteRenderer {
 				unplaced.append(contentsOf: entries)
 			}
 		}
-		// Drop markers of blocks that rendered nothing (unreferenced definitions).
-		for group in Set(definitions.map { $0.group }) {
-			let marker = "<p>\(footnoteBlockMarker(group))</p>"
-			if let range = result.range(of: marker) { result.removeSubrange(range) }
+		// Drop markers of blocks that rendered nothing (unreferenced or
+		// duplicate-only definitions).
+		let markerOpen = "<p>\(footnoteSentinelOpen)fnblock:"
+		while let start = result.range(of: markerOpen),
+		      let end = result.range(of: "\(footnoteSentinelClose)</p>", range: start.upperBound..<result.endIndex) {
+			result.removeSubrange(start.lowerBound..<end.upperBound)
 		}
 		let trailing = renderDefinitionsBlock(unplaced, state: state)
 		if !trailing.isEmpty { result += "\n" + trailing }

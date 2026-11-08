@@ -146,4 +146,11 @@ struct MarkdownFootnotePlacementTests {
 		let html = MarkdownFootnoteRenderer.convert("# A\n\nx[^a]\n\n# B\n\ny\n\n[^a]: Note")
 		#expect(html.range(of: "<h1>B")!.lowerBound < html.range(of: "id=\"fn-1\"")!.lowerBound)
 	}
+
+	@Test func duplicateOnlyDefinitionBlockLeavesNoMarker() {
+		let html = MarkdownFootnoteRenderer.convert("x[^a]\n\n[^a]: One\n\nMiddle\n\n[^a]: Dup")
+		#expect(!html.contains("fnblock"))
+		#expect(html.contains("Middle"))
+		#expect(!html.contains("Dup"))
+	}
 }
