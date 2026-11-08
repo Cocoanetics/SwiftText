@@ -227,6 +227,9 @@ jobs:
             ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
             ${{ env.VCPKG_DOWNLOADS }}
           key: vcpkg-${{ runner.os }}-${{ steps.vcpkg-key.outputs.image }}-libxml2-zlib-v1
+          # Fall back to the previous image's cache: the libxml2 tarball is the same
+          # across images, and vcpkg's ABI hashing rejects any stale binary package.
+          restore-keys: vcpkg-${{ runner.os }}-
       - name: Install libxml2 + zlib (vcpkg)
         shell: pwsh
         run: |
