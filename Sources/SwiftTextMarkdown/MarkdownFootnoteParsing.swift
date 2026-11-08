@@ -283,9 +283,27 @@ final class FootnoteState {
 	private var nextNumber = 1
 	private var totalReferenceCountByNumber: [Int: Int] = [:]
 	private var emittedReferenceCountByNumber: [Int: Int] = [:]
+	/// Definition block of each id, set only when numbering restarts per block.
+	private let groupByID: [String: Int]?
+	private var nextNumberByGroup: [Int: Int] = [:]
+	private var displayNumberByNumber: [Int: Int] = [:]
 
-	init(definitionIDs: [String]) {
+	/// - Parameter groupByID: definition block per id. When it spans more than
+	///   one block, the displayed numbers restart at 1 in every block (the
+	///   internal numbers, used for anchors, stay unique across the document).
+	init(definitionIDs: [String], groupByID: [String: Int]? = nil) {
 		self.validIDs = Set(definitionIDs)
+		if let groupByID, Set(groupByID.values).count > 1 {
+			self.groupByID = groupByID
+		} else {
+			self.groupByID = nil
+		}
+	}
+
+	/// The number to show for the internal `number` — equal to it unless
+	/// numbering restarts per definition block.
+	func displayNumber(forNumber number: Int) -> Int {
+		displayNumberByNumber[number] ?? number
 	}
 
 	/// Assigns and returns the number for `id` on first reference. Returns
@@ -300,6 +318,12 @@ final class FootnoteState {
 			number = nextNumber
 			numberByID[id] = number
 			nextNumber += 1
+			if let groupByID {
+				let group = groupByID[id] ?? 0
+				let display = nextNumberByGroup[group, default: 1]
+				nextNumberByGroup[group] = display + 1
+				displayNumberByNumber[number] = display
+			}
 		}
 		totalReferenceCountByNumber[number, default: 0] += 1
 		return number

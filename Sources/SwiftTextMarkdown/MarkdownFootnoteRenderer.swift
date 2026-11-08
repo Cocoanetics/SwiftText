@@ -41,7 +41,10 @@ public enum MarkdownFootnoteRenderer {
 			return SwiftMarkdownHTMLRenderer.convert(cleaned, options: options)
 		}
 
-		let state = FootnoteState(definitionIDs: definitions.map { $0.id })
+		let state = FootnoteState(
+			definitionIDs: definitions.map { $0.id },
+			groupByID: Dictionary(definitions.map { ($0.id, $0.group) }, uniquingKeysWith: { first, _ in first })
+		)
 
 		// Rewrite references in the main body.
 		let bodyDocument = Document(parsing: cleaned, options: [.disableSmartOpts])
@@ -144,7 +147,7 @@ private func expandSentinels(in html: String, state: FootnoteState) -> String {
 		if payload.hasPrefix(prefix),
 		   let number = Int(payload.dropFirst(prefix.count)) {
 			let anchorID = state.nextReferenceAnchorID(forNumber: number)
-			result += "<sup><a href=\"#fn-\(number)\" id=\"\(anchorID)\">[\(number)]</a></sup>"
+			result += "<sup><a href=\"#fn-\(number)\" id=\"\(anchorID)\">[\(state.displayNumber(forNumber: number))]</a></sup>"
 		} else {
 			// Unknown payload — pass through verbatim.
 			result.append(contentsOf: html[openIndex...closeIndex])
@@ -173,6 +176,7 @@ private func renderDefinitionsBlock(
 }
 
 private func renderDefinition(number: Int, body: String, state: FootnoteState) -> String {
+	let label = state.displayNumber(forNumber: number)
 	let expandedBody = expandSentinels(in: body, state: state)
 	let bodyContent = expandedBody.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -182,12 +186,12 @@ private func renderDefinition(number: Int, body: String, state: FootnoteState) -
 	   let firstClose = bodyContent.range(of: "</p>"),
 	   firstClose.upperBound == bodyContent.endIndex {
 		let inner = bodyContent.dropFirst(3).dropLast(4)
-		return "<div class=\"footnote-definition\" id=\"fn-\(number)\"><strong>[\(number)]:</strong> \(inner)</div>"
+		return "<div class=\"footnote-definition\" id=\"fn-\(number)\"><strong>[\(label)]:</strong> \(inner)</div>"
 	}
 
 	if bodyContent.isEmpty {
-		return "<div class=\"footnote-definition\" id=\"fn-\(number)\"><strong>[\(number)]:</strong></div>"
+		return "<div class=\"footnote-definition\" id=\"fn-\(number)\"><strong>[\(label)]:</strong></div>"
 	}
 
-	return "<div class=\"footnote-definition\" id=\"fn-\(number)\"><p><strong>[\(number)]:</strong></p>\(bodyContent)</div>"
+	return "<div class=\"footnote-definition\" id=\"fn-\(number)\"><p><strong>[\(label)]:</strong></p>\(bodyContent)</div>"
 }
