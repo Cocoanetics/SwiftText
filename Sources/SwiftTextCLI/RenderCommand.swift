@@ -84,6 +84,9 @@ struct Render: AsyncParsableCommand {
 	@Option(name: .long, help: "For HTML and PDF output, footnote placement: section = per source block (default); end = all at the end; page = foot of the page (PDF, webkit engine).")
 	var footnotes: FootnotePlacement = .section
 
+	@Flag(name: .long, help: "Typographic punctuation for every format: curly quotes and apostrophes (style follows --language), -- as an en dash, --- as an em dash, ... as an ellipsis. Code, URLs and footnote/citation markers stay as typed.")
+	var smart: Bool = false
+
 	// MARK: EPUB / shared options
 
 	@Option(name: .long, help: "Custom CSS file for HTML, PDF, and EPUB (appended after the built-in styles, so its rules win). DOCX and Pages take its alert-box colours.")
@@ -101,7 +104,7 @@ struct Render: AsyncParsableCommand {
 	@Option(name: .long, help: "Document author for HTML, PDF, DOCX, and EPUB output. Repeat for multiple authors.")
 	var author: [String] = []
 
-	@Option(name: .long, help: "For EPUB output, the BCP-47 language tag (dc:language). Default: en.")
+	@Option(name: .long, help: "BCP-47 language tag: dc:language for EPUB, and the quote style for --smart (en “…”, de „…“, fr «…»). Default: en.")
 	var language: String = "en"
 
 	@Option(name: .long, help: "For EPUB output, the heading level (h1–h6) that starts each chapter file. Default: h1.")
@@ -121,14 +124,14 @@ struct Render: AsyncParsableCommand {
 		}
 		#endif
 
-		let markdownText: String
+		let rawMarkdown: String
 		let baseURL: URL?
 
 		if stdin {
 			guard input == nil else {
 				throw ValidationError("Provide either an input path or --stdin, not both.")
 			}
-			markdownText = readAllStdin()
+			rawMarkdown = readAllStdin()
 			baseURL = nil
 		} else {
 			guard let input else {
@@ -139,9 +142,10 @@ struct Render: AsyncParsableCommand {
 			guard FileManager.default.fileExists(atPath: fileURL.path) else {
 				throw ValidationError("File not found: \(fileURL.path)")
 			}
-			markdownText = try String(contentsOf: fileURL, encoding: .utf8)
+			rawMarkdown = try String(contentsOf: fileURL, encoding: .utf8)
 			baseURL = fileURL.deletingLastPathComponent()
 		}
+		let markdownText = smart ? SmartPunctuation.apply(to: rawMarkdown, language: language) : rawMarkdown
 
 		let chosenFormat = try resolvedFormat()
 		let outputURL = try resolvedOutputURL(format: chosenFormat)
