@@ -13,15 +13,21 @@ struct RenderOutlineTests {
 		}.joined(separator: "\n\n")
 	}.joined(separator: "\n\n")
 
-	private func render(engine: String) async throws -> PDFDocument {
+	private func render(engine: String, css: String? = nil) async throws -> PDFDocument {
 		let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
 		try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 		defer { try? FileManager.default.removeItem(at: directory) }
 		let input = directory.appendingPathComponent("buch.md")
 		let output = directory.appendingPathComponent("buch.pdf")
 		try Self.markdown.write(to: input, atomically: true, encoding: .utf8)
-		let command = try Render.parse([input.path, "-o", output.path, "--engine", engine, "--title", "Ein Buch",
-		                                "--title-page", "--toc", "--toc-depth", "1", "--page-break-before", "h1"])
+		var arguments = [input.path, "-o", output.path, "--engine", engine, "--title", "Ein Buch",
+		                 "--title-page", "--toc", "--toc-depth", "1", "--page-break-before", "h1"]
+		if let css {
+			let stylesheet = directory.appendingPathComponent("outline.css")
+			try css.write(to: stylesheet, atomically: true, encoding: .utf8)
+			arguments += ["--css", stylesheet.path]
+		}
+		let command = try Render.parse(arguments)
 		try await command.run()
 		return try #require(PDFDocument(data: Data(contentsOf: output)))
 	}
@@ -74,6 +80,18 @@ struct RenderOutlineTests {
 		let targets = contents.annotations.compactMap { ($0.action as? PDFActionGoTo)?.destination ?? $0.destination }
 		#expect(targets.count == 9)
 		#expect(targets.allSatisfy { $0.page.map { webkit.index(for: $0) >= 2 } ?? false })
+	}
+
+	@Test("headings whose case CSS transforms still get bookmarks", .timeLimit(.minutes(3)))
+	func transformedHeadings() async throws {
+		let document = try await render(engine: "webkit", css: "h1 { text-transform: uppercase; } h2 { text-transform: lowercase; }")
+		let entries = outline(of: document)
+		#expect(entries.count == 10)
+		#expect(entries.dropFirst().map(\.title).prefix(2) == ["Kapitel 1", "Abschnitt 1.1"])
+		for entry in entries.dropFirst() {
+			let index = try #require(entry.page, "\(entry.title) has no destination")
+			#expect(index >= 2, "\(entry.title) points at the front matter")
+		}
 	}
 }
 #endif

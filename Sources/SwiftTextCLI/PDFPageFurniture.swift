@@ -121,7 +121,8 @@ enum PDFOutlineBuilder {
 	static func entries(for headings: [PDFOutlineHeading], in data: Data) -> [Entry] {
 		guard !headings.isEmpty, let document = PDFDocument(data: data) else { return [] }
 		return headings.compactMap { heading in
-			let matches = document.findString(heading.searchText, withOptions: [])
+			// Without case, as a CSS text-transform prints a case the DOM text doesn't have.
+			let matches = document.findString(heading.searchText, withOptions: [.caseInsensitive])
 			guard heading.occurrence < matches.count, let page = matches[heading.occurrence].pages.first else { return nil }
 			let bounds = matches[heading.occurrence].bounds(for: page)
 			return Entry(level: heading.level, title: heading.title, page: document.index(for: page), point: CGPoint(x: 0, y: bounds.maxY + 4))

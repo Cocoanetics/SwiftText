@@ -27,9 +27,12 @@ extension WebKitBrowser {
 				const range = document.createRange();
 				range.setStart(document.body, 0);
 				range.setEndBefore(heading);
-				const before = normalize(range.toString());
+				// Counted without case, as the PDF is searched: CSS text-transform changes
+				// the printed case but not the DOM text.
+				const before = normalize(range.toString()).toLowerCase();
+				const needle = searchText.toLowerCase();
 				let occurrence = 0, from = 0, hit;
-				while ((hit = before.indexOf(searchText, from)) !== -1) { occurrence++; from = hit + 1; }
+				while ((hit = before.indexOf(needle, from)) !== -1) { occurrence++; from = hit + 1; }
 				result.push({ level: Number(heading.tagName.slice(1)), title, searchText, occurrence });
 			}
 			return JSON.stringify(result);
