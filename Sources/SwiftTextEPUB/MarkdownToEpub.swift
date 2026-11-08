@@ -15,12 +15,17 @@ public struct EpubOptions: Sendable {
 	/// Heading level (1–6) at which a new chapter file begins. Content before the
 	/// first heading of this level becomes a front-matter section. Default: 1.
 	public var chapterLevel: Int
+	/// How many heading levels below `chapterLevel` are listed as nested entries
+	/// in the table of contents (nav and NCX). `0` lists only the chapters.
+	/// Default: 0.
+	public var tocDepth: Int
 	/// CSS appended after the bundled stylesheet (so its rules win), shared by
 	/// every content document. `nil` uses only the default stylesheet.
 	public var userCSS: String?
 
-	public init(chapterLevel: Int = 1, userCSS: String? = nil) {
+	public init(chapterLevel: Int = 1, tocDepth: Int = 0, userCSS: String? = nil) {
 		self.chapterLevel = chapterLevel
+		self.tocDepth = tocDepth
 		self.userCSS = userCSS
 	}
 }
@@ -55,7 +60,8 @@ public enum MarkdownToEpub {
 		// would double-transform them.
 		let (cleaned, footnotes) = MarkdownFootnoteParser.extractDefinitions(from: markdown)
 		let document = Document(parsing: cleaned, options: [.disableSmartOpts])
-		var chapters = ChapterSplitter.split(document: document, chapterLevel: options.chapterLevel, titleFallback: metadata.title, footnotes: footnotes)
+		var chapters = ChapterSplitter.split(document: document, chapterLevel: options.chapterLevel, tocDepth: options.tocDepth,
+		                                     titleFallback: metadata.title, footnotes: footnotes)
 
 		// A table of contents needs at least one entry. If the manuscript has no
 		// heading at the split level, present its whole content as a single
@@ -65,7 +71,7 @@ public enum MarkdownToEpub {
 				chapters = [EpubChapter(id: "ch001", title: metadata.title, bodyXHTML: "", isFrontmatter: false)]
 			} else {
 				chapters = chapters.map {
-					EpubChapter(id: $0.id, title: metadata.title, bodyXHTML: $0.bodyXHTML, isFrontmatter: false)
+					EpubChapter(id: $0.id, title: metadata.title, bodyXHTML: $0.bodyXHTML, isFrontmatter: false, subentries: $0.subentries)
 				}
 			}
 		}

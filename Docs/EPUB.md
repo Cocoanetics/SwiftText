@@ -16,6 +16,7 @@ swifttext render manuscript.md -o book.epub \
   --author "Elise Kummer" \
   --language en \
   --chapter-level h2 \
+  --toc-depth 1 \
   --cover cover.jpg \
   --css house-style.css
 ```
@@ -27,6 +28,11 @@ swifttext render manuscript.md -o book.epub \
   `## 1` immediately followed by `### The Birthday…` reads as
   *“1: The Birthday…”* in the navigation while both headings still show in the
   chapter body.
+- **`--toc-depth <n>`** — how many heading levels below `--chapter-level` are
+  listed beneath each chapter in the table of contents (default `0`: chapters
+  only). With `--chapter-level h2 --toc-depth 1`, every `###` becomes a nested
+  entry in `nav.xhtml` and `toc.ncx` linking to the heading's id in its chapter
+  file. Headings already folded into a chapter's label aren't repeated.
 - **`--cover <image>`** — JPEG/PNG/GIF/WebP/SVG. Embedded as the OPF
   `cover-image`, wrapped in an aspect-fit SVG so it fills the screen. Apple
   Books wants a cover at least 1400px wide.
@@ -52,7 +58,7 @@ let metadata = EpubMetadata(
 
 try MarkdownToEpub.convert(
     markdown, to: outputURL, metadata: metadata,
-    options: EpubOptions(chapterLevel: 2, userCSS: nil))
+    options: EpubOptions(chapterLevel: 2, tocDepth: 1, userCSS: nil))
 ```
 
 `EpubMetadata`'s `identifier` (a `urn:uuid:` by default) and `modified`

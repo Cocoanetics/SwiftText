@@ -243,6 +243,54 @@ struct EpubTests {
 		#expect(chapter.contains("Was in der Akte steht"))
 	}
 
+	@Test("--toc-depth nests sub-headings under their chapter in nav and NCX")
+	func nestedTocEntries() {
+		let markdown = "# Buch\n\n## Teil 1: Wo Sie stehen\n\n### Was in der Akte steht\n\nText.\n\n#### Detail\n\nText.\n\n"
+			+ "### Was die Bilder zeigen\n\nText.\n\n## Teil 2: Weiter\n\n### Unterpunkt\n\nText."
+		let files = MarkdownToEpub.makeFiles(markdown, metadata: fixedMetadata(language: "de-AT"), options: EpubOptions(chapterLevel: 2, tocDepth: 1))
+		let nav = string(file(files, "OEBPS/nav.xhtml"))
+		let ncx = string(file(files, "OEBPS/toc.ncx"))
+		expectWellFormedXML(nav, "nav.xhtml")
+		expectWellFormedXML(ncx, "toc.ncx")
+		#expect(nav.contains("""
+		      <li><a href="text/ch002.xhtml#ch002">Teil 1: Wo Sie stehen</a>
+		        <ol>
+		          <li><a href="text/ch002.xhtml#was-in-der-akte-steht">Was in der Akte steht</a></li>
+		          <li><a href="text/ch002.xhtml#was-die-bilder-zeigen">Was die Bilder zeigen</a></li>
+		        </ol>
+		      </li>
+		"""))
+		#expect(nav.contains("<a href=\"text/ch003.xhtml#unterpunkt\">Unterpunkt</a>"))
+		// Only one level below the chapter: the h4 stays out.
+		#expect(!nav.contains("Detail"))
+		// The fragment targets exist in the chapter file.
+		#expect(string(file(files, "OEBPS/text/ch002.xhtml")).contains("<h3 id=\"was-in-der-akte-steht\">"))
+		// NCX: sub-entries nest inside their chapter's navPoint, in reading order.
+		#expect(ncx.components(separatedBy: "<navPoint").count - 1 == 5)
+		#expect(ncx.contains("<meta name=\"dtb:depth\" content=\"2\"/>"))
+		#expect(ncx.contains("""
+		    <navPoint id="navPoint-1" playOrder="1">
+		      <navLabel><text>Teil 1: Wo Sie stehen</text></navLabel>
+		      <content src="text/ch002.xhtml#ch002"/>
+		      <navPoint id="navPoint-2" playOrder="2">
+		        <navLabel><text>Was in der Akte steht</text></navLabel>
+		        <content src="text/ch002.xhtml#was-in-der-akte-steht"/>
+		      </navPoint>
+		"""))
+	}
+
+	@Test("deeper --toc-depth nests grandchildren; headings folded into the title aren't repeated")
+	func deeperTocEntries() {
+		let markdown = "## 1\n\n### The Birthday\n\nprose\n\n### Party {#party}\n\n#### Cake\n\nprose"
+		let files = MarkdownToEpub.makeFiles(markdown, metadata: fixedMetadata(), options: EpubOptions(chapterLevel: 2, tocDepth: 2))
+		let nav = string(file(files, "OEBPS/nav.xhtml"))
+		expectWellFormedXML(nav, "nav.xhtml")
+		#expect(nav.contains(">1: The Birthday</a>"))
+		#expect(!nav.contains(">The Birthday</a>"))
+		#expect(nav.contains("<li><a href=\"text/ch001.xhtml#party\">Party</a>\n            <ol>\n              <li><a href=\"text/ch001.xhtml#cake\">Cake</a></li>"))
+		#expect(string(file(files, "OEBPS/toc.ncx")).contains("<meta name=\"dtb:depth\" content=\"3\"/>"))
+	}
+
 	@Test("content before the first chapter heading becomes front matter, kept out of the TOC")
 	func frontMatter() {
 		let markdown = "# Book Title\n\n*subtitle*\n\n> epigraph\n\n## Chapter One\n\nprose"
