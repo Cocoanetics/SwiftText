@@ -101,29 +101,26 @@ enum FrontMatterHTML {
 		return html + "</nav>"
 	}
 
-	/// Nests a flat, document-ordered run of entries by level: each entry holds the
-	/// following entries of a deeper level.
+	/// One table row per entry, indented by level: the text cell on the left and the page
+	/// number in a right-aligned column. A table, not flexbox, so the swift engine (which
+	/// has no flex layout) draws it too, and not a list, so no list marker can appear.
 	private static func list(_ entries: ArraySlice<HeadingEntry>, pageNumbers: FrontMatter.PageNumbers) -> String {
 		guard !entries.isEmpty else { return "" }
-		var html = "<ol>\n"
-		var index = entries.startIndex
-		while index < entries.endIndex {
-			let entry = entries[index]
-			index += 1
-			let start = index
-			while index < entries.endIndex && entries[index].level > entry.level { index += 1 }
-			html += "<li><a href=\"#\(escape(entry.id, attribute: true))\"><span class=\"toc-text\">\(escape(entry.text))</span>"
+		let top = entries.map(\.level).min() ?? 1
+		var html = "<table class=\"toc-list\">\n"
+		for entry in entries {
+			let indent = max(entry.level - top, 0)
+			html += "<tr><td class=\"toc-text toc-depth-\(indent)\"><a href=\"#\(escape(entry.id, attribute: true))\">\(escape(entry.text))</a></td>"
 			switch pageNumbers {
 			case .none:
-				break
+				html += "</tr>\n"
 			case .placeholder:
-				html += "<span class=\"toc-fill\"></span><span class=\"toc-page toc-pending\">000</span>"
+				html += "<td class=\"toc-page toc-pending\">000</td></tr>\n"
 			case .resolved(let pages):
-				html += "<span class=\"toc-fill\"></span><span class=\"toc-page\">\(pages[entry.id].map(String.init) ?? "")</span>"
+				html += "<td class=\"toc-page\">\(pages[entry.id].map(String.init) ?? "")</td></tr>\n"
 			}
-			html += "</a>\n" + list(entries[start..<index], pageNumbers: pageNumbers) + "</li>\n"
 		}
-		return html + "</ol>\n"
+		return html + "</table>\n"
 	}
 
 	static let css = """
@@ -133,13 +130,15 @@ enum FrontMatterHTML {
 	.titlepage .author { font-size: 1.15em; margin: 0.2em 0; }
 	nav.toc { page-break-after: always; break-after: page; }
 	nav.toc .toc-title { font-size: 2em; font-weight: 600; margin: 0 0 0.8em; }
-	nav.toc ol { list-style: none; margin: 0; padding: 0; }
-	nav.toc ol ol { padding-left: 1.5em; }
-	nav.toc li { margin: 0.25em 0; page-break-inside: auto; break-inside: auto; }
-	nav.toc a { display: flex; align-items: baseline; color: inherit; text-decoration: none; }
-	nav.toc .toc-text { flex: 0 1 auto; }
-	nav.toc .toc-fill { flex: 1 1 1em; min-width: 1em; margin: 0 0.4em; border-bottom: 1px dotted #888; }
-	nav.toc .toc-page { flex: none; min-width: 2.5em; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+	nav.toc table { width: 100%; border-collapse: collapse; border: none; margin: 0; }
+	nav.toc td { border: none; padding: 0.15em 0; background: none; vertical-align: top; }
+	nav.toc a { color: inherit; text-decoration: none; }
+	nav.toc .toc-depth-1 { padding-left: 1.5em; }
+	nav.toc .toc-depth-2 { padding-left: 3em; }
+	nav.toc .toc-depth-3 { padding-left: 4.5em; }
+	nav.toc .toc-depth-4 { padding-left: 6em; }
+	nav.toc .toc-depth-5 { padding-left: 7.5em; }
+	nav.toc .toc-page { width: 2.5em; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 	nav.toc .toc-pending { visibility: hidden; }
 	"""
 

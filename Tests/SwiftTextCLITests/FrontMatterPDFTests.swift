@@ -7,7 +7,7 @@ import Testing
 @Suite("render PDF title page and contents", .serialized)
 @MainActor
 struct FrontMatterPDFTests {
-	private func render(engine: String, footnotes: String = "section") async throws -> PDFDocument {
+	private func render(engine: String, footnotes: String = "section", css: String? = nil) async throws -> PDFDocument {
 		let lorem = "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. "
 		let markdown = (1...3).map { chapter in
 			let sections = (1...2).map { section in
@@ -21,9 +21,15 @@ struct FrontMatterPDFTests {
 		let input = directory.appendingPathComponent("buch.md")
 		let output = directory.appendingPathComponent("buch.pdf")
 		try markdown.write(to: input, atomically: true, encoding: .utf8)
-		let command = try Render.parse([input.path, "-o", output.path, "--engine", engine, "--title", "Ein Buch", "--subtitle", "Ein Untertitel",
-		                                "--author", "A. Autor", "--language", "de", "--page-break-before", "h1", "--toc-depth", "1",
-		                                "--title-page", "--toc", "--footnotes", footnotes])
+		var arguments = [input.path, "-o", output.path, "--engine", engine, "--title", "Ein Buch", "--subtitle", "Ein Untertitel",
+		                 "--author", "A. Autor", "--language", "de", "--page-break-before", "h1", "--toc-depth", "1",
+		                 "--title-page", "--toc", "--footnotes", footnotes]
+		if let css {
+			let cssURL = directory.appendingPathComponent("book.css")
+			try css.write(to: cssURL, atomically: true, encoding: .utf8)
+			arguments += ["--css", cssURL.path]
+		}
+		let command = try Render.parse(arguments)
 		try await command.run()
 		return try #require(PDFDocument(data: Data(contentsOf: output)))
 	}
@@ -58,6 +64,24 @@ struct FrontMatterPDFTests {
 		let first = try #require(document.page(at: 0)?.string)
 		#expect(first.contains("Ein Buch") && !first.contains("Kapitel 1"))
 		#expect(try #require(document.page(at: 1)?.string).contains("Inhalt"))
+	}
+
+	@Test("the swift engine's contents separates and right-aligns the page numbers, with or without --css",
+	      .timeLimit(.minutes(3)), arguments: [nil, "p, li { text-align: justify; }"])
+	func swiftEngineContentsLayout(css: String?) async throws {
+		let document = try await render(engine: "swift", css: css)
+		let page = try #require(document.page(at: 1))
+		let text = try #require(page.string)
+		let lines = text.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }
+		#expect(!lines.contains { $0.first?.isNumber == true }, "no list markers in the contents")
+		for heading in ["Kapitel 1", "Abschnitt 1.2", "Kapitel 2", "Abschnitt 3.1"] {
+			let line = try #require(lines.first { $0.hasPrefix(heading + " ") }, "no contents line for \(heading)")
+			let number = String(line.dropFirst(heading.count + 1))
+			#expect(Int(number) != nil, "\(heading) must be followed by a separate page number, got \(line)")
+			let range = (text as NSString).range(of: line)
+			let selection = try #require(page.selection(for: NSRange(location: range.location + range.length - number.count, length: number.count)))
+			#expect(selection.bounds(for: page).minX > page.bounds(for: .mediaBox).width / 2, "page number of \(heading) must sit at the right margin")
+		}
 	}
 }
 #endif
