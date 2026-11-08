@@ -69,18 +69,21 @@ enum PDFInternalLinks {
 	/// URL (`file:///…/x.html#q1`) into internal `GoTo` destinations.
 	///
 	/// Links whose target can't be located in the PDF are left untouched.
-	static func resolve(pdfData: Data, pageURL: URL?, targets: [FragmentLinkTarget]) -> Data {
-		guard !targets.isEmpty, let document = PDFDocument(data: pdfData) else { return pdfData }
+	///
+	/// Also returns the zero-based page index of every target that was located.
+	static func resolve(pdfData: Data, pageURL: URL?, targets: [FragmentLinkTarget]) -> (data: Data, anchorPages: [String: Int]) {
+		guard !targets.isEmpty, let document = PDFDocument(data: pdfData) else { return (pdfData, [:]) }
 
 		let pageBase = pageURL.map(baseString) ?? "about:blank"
 		var destinations: [String: PDFDestination] = [:]
+		var anchorPages: [String: Int] = [:]
 		for target in targets {
 			let matches = document.findString(target.text, withOptions: [])
 			guard target.index < matches.count,
-			      let selection = Optional(matches[target.index]),
-			      let page = selection.pages.first else { continue }
-			let bounds = selection.bounds(for: page)
+			      let page = matches[target.index].pages.first else { continue }
+			let bounds = matches[target.index].bounds(for: page)
 			destinations[target.id] = PDFDestination(page: page, at: CGPoint(x: 0, y: bounds.maxY + 4))
+			anchorPages[target.id] = document.index(for: page)
 		}
 
 		var changed = false
@@ -95,8 +98,8 @@ enum PDFInternalLinks {
 				changed = true
 			}
 		}
-		guard changed else { return pdfData }
-		return document.dataRepresentation() ?? pdfData
+		guard changed else { return (pdfData, anchorPages) }
+		return (document.dataRepresentation() ?? pdfData, anchorPages)
 	}
 
 	private static func baseString(_ url: URL) -> String {

@@ -376,7 +376,9 @@ func markdownToHTML(
 	title: String? = nil,
 	authors: [String] = [],
 	linkCitations: Bool = false,
-	footnotes: FootnotePlacement = .section
+	footnotes: FootnotePlacement = .section,
+	language: String = "en",
+	frontMatter: FrontMatter? = nil
 ) -> String {
 	let orientation = landscape ? "landscape" : "portrait"
 	let pageCSS = "\(paper.cssName) \(orientation)"
@@ -400,13 +402,18 @@ func markdownToHTML(
 		body > \(level.rawValue):first-child { page-break-before: auto; break-before: auto; }
 		"""
 	} ?? ""
+	var frontMatterHTML = ""
+	if let titlePage = frontMatter?.titlePage { frontMatterHTML += FrontMatterHTML.titlePage(titlePage) + "\n" }
+	if let contents = frontMatter?.contents {
+		frontMatterHTML += FrontMatterHTML.contents(contents, headings: FrontMatterHTML.headings(in: body)) + "\n"
+	}
 	var metadata = title.map { "<title>\(escapeHTMLMetadata($0))</title>\n" } ?? ""
 	for author in authors where !author.isEmpty {
 		metadata += "<meta name=\"author\" content=\"\(escapeHTMLMetadata(author, attribute: true))\">\n"
 	}
 	return """
 	<!DOCTYPE html>
-	<html lang="en">
+	<html lang="\(escapeHTMLMetadata(language, attribute: true))">
 	<head>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
@@ -553,11 +560,12 @@ func markdownToHTML(
 	.footnote-definition p { margin: 0.4em 0; }
 	\(footnotes == .page ? footnotePageCSS : "")
 	\(headingBreakCSS)
+	\(frontMatter == nil ? "" : FrontMatterHTML.css)
 	\(extraCSS.map { "\n/* User stylesheet */\n" + $0 } ?? "")
 	</style>
 	</head>
 	<body>
-	\(body)
+	\(frontMatterHTML)\(body)
 	\(footnotes == .page ? footnotePageScript(printableWidth: printableWidth, printableHeight: printableHeight) : "")
 	</body>
 	</html>
@@ -614,6 +622,11 @@ private func footnotePageScript(printableWidth: Double, printableHeight: Double)
 	        var style = getComputedStyle(b);
 	        return /^(page|always|left|right)$/.test(style.getPropertyValue('break-before'))
 	            || style.getPropertyValue('page-break-before') === 'always';
+	    });
+	    var breaksAfter = blocks.map(function (b) {
+	        var style = getComputedStyle(b);
+	        return /^(page|always|left|right)$/.test(style.getPropertyValue('break-after'))
+	            || style.getPropertyValue('page-break-after') === 'always';
 	    });
 	    var holder = document.createElement('div');
 	    blocks.forEach(function (b) { holder.appendChild(b); });
@@ -835,6 +848,7 @@ private func footnotePageScript(printableWidth: Double, printableHeight: Double)
 	        block.style.pageBreakBefore = 'auto';
 	        if (breaksBefore[index] && count) newPage(false);
 	        place(block);
+	        if (breaksAfter[index] && index < blocks.length - 1) newPage(false);
 	    });
 	    if (carry.length) newPage(false);
 	    // Drop the unused empty note areas so they draw no rule.
@@ -844,7 +858,7 @@ private func footnotePageScript(printableWidth: Double, printableHeight: Double)
 	"""
 }
 
-private func escapeHTMLMetadata(_ value: String, attribute: Bool = false) -> String {
+func escapeHTMLMetadata(_ value: String, attribute: Bool = false) -> String {
 	var escaped = value
 		.replacingOccurrences(of: "&", with: "&amp;")
 		.replacingOccurrences(of: "<", with: "&lt;")

@@ -104,19 +104,25 @@ struct Render: AsyncParsableCommand {
 	@Option(name: .long, help: "Document title for HTML, PDF, DOCX, and EPUB output. Defaults to the first top-level heading, or the input filename.")
 	var title: String?
 
-	@Option(name: .long, help: "For EPUB output, a subtitle shown under the title on the title page and added to the package metadata.")
+	@Flag(name: .long, help: "For HTML and PDF output, start with a title page built from --title, --subtitle and --author (like the EPUB title page).")
+	var titlePage: Bool = false
+
+	@Flag(name: .long, help: "For HTML and PDF output, add a contents page after the title page: the --chapter-level headings and --toc-depth levels below them, as links (PDF: with page numbers).")
+	var toc: Bool = false
+
+	@Option(name: .long, help: "A subtitle shown under the title on the title page (EPUB, or HTML/PDF with --title-page) and added to the EPUB package metadata.")
 	var subtitle: String?
 
 	@Option(name: .long, help: "Document author for HTML, PDF, DOCX, and EPUB output. Repeat for multiple authors.")
 	var author: [String] = []
 
-	@Option(name: .long, help: "BCP-47 language tag: dc:language for EPUB, and the quote style for --smart (en “…”, de „…“, fr «…»). Default: en.")
+	@Option(name: .long, help: "BCP-47 language tag: dc:language for EPUB, <html lang> and the --toc heading for HTML/PDF, and the quote style for --smart (en “…”, de „…“, fr «…»). Default: en.")
 	var language: String = "en"
 
-	@Option(name: .long, help: "For EPUB output, the heading level (h1–h6) that starts each chapter file. Default: h1.")
+	@Option(name: .long, help: "The heading level (h1–h6) that starts each chapter file in EPUB output and is listed first in the HTML/PDF --toc. Default: h1.")
 	var chapterLevel: HeadingBreakLevel = .h1
 
-	@Option(name: .long, help: "For EPUB output, how many heading levels below --chapter-level to nest under each chapter in the table of contents (0–5). Default: 0.")
+	@Option(name: .long, help: "How many heading levels below --chapter-level to nest under each chapter in the EPUB table of contents or the HTML/PDF --toc (0–5). Default: 0.")
 	var tocDepth: Int = 0
 
 	func run() async throws {
@@ -159,23 +165,37 @@ struct Render: AsyncParsableCommand {
 		if linkCitations, chosenFormat == .docx || chosenFormat == .pages {
 			FileHandle.standardError.write(Data("warning: --link-citations has no effect for \(extensionForFormat(chosenFormat)) output (HTML, PDF and EPUB only).\n".utf8))
 		}
+		if titlePage || toc, chosenFormat == .docx || chosenFormat == .pages {
+			FileHandle.standardError.write(Data("warning: --title-page and --toc have no effect for \(extensionForFormat(chosenFormat)) output (HTML and PDF only).\n".utf8))
+		}
+		if chosenFormat == .html || chosenFormat == .pdf || chosenFormat == .epub {
+			guard (0...5).contains(tocDepth) else {
+				throw ValidationError("--toc-depth must be between 0 and 5, got \(tocDepth).")
+			}
+		}
 		let resolvedTitle = title ?? inferTitle(from: markdownText, stripHeadingID: chosenFormat == .html || chosenFormat == .pdf)
 			?? (input.map { URL(fileURLWithPath: $0).deletingPathExtension().lastPathComponent } ?? "Untitled")
 
 		switch chosenFormat {
 		case .html:
-			let html = markdownToHTML(markdownText, paper: paper, landscape: landscape, passThroughRawHTML: true, pageBreakBefore: pageBreakBefore,
-			                          extraCSS: userCSS, title: resolvedTitle, authors: author, linkCitations: linkCitations, footnotes: footnotes)
+			let html = printHTML(markdownText, userCSS: userCSS, title: resolvedTitle, pageNumbers: .none)
 			try writeString(html, to: outputURL)
 			print(outputURL.path)
 		case .pdf:
 			if footnotes == .page && engine == .swift {
 				FileHandle.standardError.write(Data("warning: --footnotes page needs the webkit engine; notes stay at the end of their section.\n".utf8))
 			}
-			let html = markdownToHTML(markdownText, paper: paper, landscape: landscape, passThroughRawHTML: true, pageBreakBefore: pageBreakBefore,
-			                          extraCSS: userCSS, title: resolvedTitle, authors: author, linkCitations: linkCitations, footnotes: footnotes)
-			try await renderPDF(html: html, baseURL: baseURL, outputURL: outputURL,
-			                    title: resolvedTitle, authors: author)
+			// The contents' page numbers need the pagination: render once with
+			// fixed-width placeholders, read where each heading landed, then render
+			// again with the numbers (same layout, so the pages don't move).
+			var rendered = try await renderPDF(html: printHTML(markdownText, userCSS: userCSS, title: resolvedTitle, pageNumbers: toc ? .placeholder : .none),
+			                                   baseURL: baseURL, title: resolvedTitle, authors: author)
+			if toc {
+				let pages = rendered.anchorPages.mapValues { $0 + 1 }
+				rendered = try await renderPDF(html: printHTML(markdownText, userCSS: userCSS, title: resolvedTitle, pageNumbers: .resolved(pages)),
+				                               baseURL: baseURL, title: resolvedTitle, authors: author)
+			}
+			try writeData(rendered.data, to: outputURL)
 			print(outputURL.path)
 		case .docx:
 			try MarkdownToDocx.convert(markdownText, to: outputURL, pageSetup: docxPageSetup(), baseURL: baseURL,
@@ -192,12 +212,26 @@ struct Render: AsyncParsableCommand {
 		}
 	}
 
+	// MARK: - HTML / PDF
+
+	/// The print HTML, with the title page and contents when asked for.
+	private func printHTML(_ markdown: String, userCSS: String?, title: String, pageNumbers: FrontMatter.PageNumbers) -> String {
+		var frontMatter = FrontMatter()
+		if titlePage {
+			frontMatter.titlePage = FrontMatter.TitlePage(title: title, subtitle: subtitle, authors: author)
+		}
+		if toc {
+			frontMatter.contents = FrontMatter.Contents(chapterLevel: chapterLevel.numericLevel, depth: tocDepth,
+			                                            heading: FrontMatter.contentsHeading(forLanguage: language), pageNumbers: pageNumbers)
+		}
+		return markdownToHTML(markdown, paper: paper, landscape: landscape, passThroughRawHTML: true, pageBreakBefore: pageBreakBefore,
+		                      extraCSS: userCSS, title: title, authors: author, linkCitations: linkCitations, footnotes: footnotes,
+		                      language: language, frontMatter: titlePage || toc ? frontMatter : nil)
+	}
+
 	// MARK: - EPUB
 
 	private func renderEPUB(_ markdown: String, baseURL: URL?, outputURL: URL, userCSS: String?, title: String) throws {
-		guard (0...5).contains(tocDepth) else {
-			throw ValidationError("--toc-depth must be between 0 and 5, got \(tocDepth).")
-		}
 		var coverData: Data?
 		var coverFilename: String?
 		if let cover {
@@ -336,12 +370,14 @@ struct Render: AsyncParsableCommand {
 	}
 	#endif
 
+	/// A rendered PDF and the zero-based page each in-document anchor landed on.
+	private typealias PDFOutput = (data: Data, anchorPages: [String: Int])
+
 	@MainActor
 	@available(macOS 12.0, *)
-	private func renderPDF(html: String, baseURL: URL?, outputURL: URL, title: String, authors: [String]) async throws {
+	private func renderPDF(html: String, baseURL: URL?, title: String, authors: [String]) async throws -> PDFOutput {
 		if engine == .swift {
-			try await renderPDFSwift(html: html, baseURL: baseURL, outputURL: outputURL, title: title, authors: authors)
-			return
+			return try await renderPDFSwift(html: html, baseURL: baseURL, title: title, authors: authors)
 		}
 		#if os(macOS)
 		// If we have a baseURL (file input), write HTML next to source so local images can load.
@@ -355,15 +391,13 @@ struct Render: AsyncParsableCommand {
 			browser.frameSize = pageSize()
 			browser.preserveFrameHeight = true
 			await browser.waitForLoadCompletion()
-			let pdfData = try await decoratedPDF(from: browser, title: title, authors: authors)
-			try writeData(pdfData, to: outputURL)
+			return try await decoratedPDF(from: browser, title: title, authors: authors)
 		} else {
 			let browser = WebKitBrowser(htmlString: html, baseURL: nil)
 			browser.frameSize = pageSize()
 			browser.preserveFrameHeight = true
 			await browser.waitForLoadCompletion()
-			let pdfData = try await decoratedPDF(from: browser, title: title, authors: authors)
-			try writeData(pdfData, to: outputURL)
+			return try await decoratedPDF(from: browser, title: title, authors: authors)
 		}
 		#else
 		throw ValidationError("The webkit engine is only available on macOS; use --engine swift.")
@@ -372,26 +406,27 @@ struct Render: AsyncParsableCommand {
 
 	#if os(macOS)
 	@MainActor
-	private func decoratedPDF(from browser: WebKitBrowser, title: String, authors: [String]) async throws -> Data {
+	private func decoratedPDF(from browser: WebKitBrowser, title: String, authors: [String]) async throws -> PDFOutput {
 		let preparation = try await browser.preparePageFurniture(paperSize: pageSize(), footer: pageNumbers,
 		                                                        header: runningHeads, headingLevel: pageBreakBefore?.numericLevel ?? 1)
-		let data = try await browser.exportPaginatedPDFData(paperSize: pageSize())
-		return try PDFPageFurniture.add(to: data, pageNumbers: pageNumbers, title: runningHeads ? title : nil, headings: preparation.headings)
+		let exported = try await browser.exportPaginatedPDFDataWithAnchors(paperSize: pageSize())
+		let data = try PDFPageFurniture.add(to: exported.data, pageNumbers: pageNumbers, title: runningHeads ? title : nil, headings: preparation.headings)
 			.settingPDFMetadata(title: title, authors: authors)
+		return (data, exported.anchorPages)
 	}
 	#endif
 
 	/// Renders the print HTML to a PDF via the cross-platform SwiftTextRender engine.
 	@available(macOS 12.0, *)
-	private func renderPDFSwift(html: String, baseURL: URL?, outputURL: URL, title: String, authors: [String]) async throws {
+	private func renderPDFSwift(html: String, baseURL: URL?, title: String, authors: [String]) async throws -> PDFOutput {
 		let size = paper.pointSize
 		let widthPoints = landscape ? size.height : size.width
 		let heightPoints = landscape ? size.width : size.height
 		var options = RenderOptions()
 		options.pageWidthPx = widthPoints / 0.75 // points → CSS pixels
 		options.pageHeightPx = heightPoints / 0.75
-		let data = try await HTMLRenderer.renderPDF(html: html, baseURL: baseURL, options: options, title: title, authors: authors)
-		try writeData(data, to: outputURL)
+		let rendered = try await HTMLRenderer.renderPDFWithAnchors(html: html, baseURL: baseURL, options: options, title: title, authors: authors)
+		return (rendered.data, rendered.anchorPages)
 	}
 
 	private func writeData(_ data: Data, to url: URL) throws {

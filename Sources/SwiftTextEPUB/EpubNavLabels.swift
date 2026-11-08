@@ -6,13 +6,13 @@
 //  landmark labels), localised by the book's `dc:language`. Foundation-free.
 
 /// Navigation-document strings for one language.
-struct EpubNavLabels: Equatable {
-	let tableOfContents: String
-	let cover: String
-	let titlePage: String
-	let beginning: String
+public struct EpubNavLabels: Equatable, Sendable {
+	public let tableOfContents: String
+	public let cover: String
+	public let titlePage: String
+	public let beginning: String
 
-	static let english = EpubNavLabels(tableOfContents: "Table of Contents", cover: "Cover", titlePage: "Title Page", beginning: "Beginning")
+	public static let english = EpubNavLabels(tableOfContents: "Table of Contents", cover: "Cover", titlePage: "Title Page", beginning: "Beginning")
 
 	private static let table: [String: EpubNavLabels] = [
 		"de": EpubNavLabels(tableOfContents: "Inhalt", cover: "Umschlag", titlePage: "Titelseite", beginning: "Anfang"),
@@ -24,7 +24,7 @@ struct EpubNavLabels: Equatable {
 	]
 
 	/// Labels for a BCP 47 tag such as `de-AT`; English for unknown languages.
-	static func labels(forLanguage language: String) -> EpubNavLabels {
+	public static func labels(forLanguage language: String) -> EpubNavLabels {
 		let primary = language.split(whereSeparator: { $0 == "-" || $0 == "_" }).first.map { $0.lowercased() } ?? ""
 		return table[primary] ?? .english
 	}
