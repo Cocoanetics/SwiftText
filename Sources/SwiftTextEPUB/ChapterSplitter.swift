@@ -78,14 +78,15 @@ enum ChapterSplitter {
 	}
 
 	/// True for headings such as `1`, `IV` or `Chapter 1`: a label of at most one
-	/// word that carries a digit, or a bare Roman numeral.
+	/// word that carries a digit, or a well-formed, upper-case Roman numeral.
 	private static func isBareLabel(_ text: String) -> Bool {
 		let words = text.split { !$0.isLetter && !$0.isNumber }
 		let letterWords = words.filter { $0.contains(where: \.isLetter) }
 		guard letterWords.count <= 1 else { return false }
 		if text.contains(where: \.isNumber) { return true }
 		guard let word = letterWords.first, words.count == 1 else { return false }
-		return word.uppercased().allSatisfy { "IVXLCDM".contains($0) }
+		let numeral = "^M{0,3}(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})$"
+		return !word.isEmpty && String(word).range(of: numeral, options: .regularExpression) != nil
 	}
 
 	/// Renders a run of top-level blocks to an XHTML fragment.
