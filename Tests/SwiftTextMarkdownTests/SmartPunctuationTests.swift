@@ -21,6 +21,25 @@ struct SmartPunctuationTests {
 		#expect(SmartPunctuation.apply(to: "\"mot\"", language: "fr") == "\u{00AB}mot\u{00BB}")
 	}
 
+	@Test("an apostrophe after a word-final s is U+2019 in German too")
+	func trailingApostrophe() {
+		#expect(SmartPunctuation.apply(to: "Practitioners' impressions and the grandparents' views; it's Parkinson's. 'Zitat' hier.", language: "de")
+			== "Practitioners\u{2019} impressions and the grandparents\u{2019} views; it\u{2019}s Parkinson\u{2019}s. \u{201A}Zitat\u{2018} hier.")
+		#expect(SmartPunctuation.apply(to: "the dogs' bowls", language: "en") == "the dogs\u{2019} bowls")
+	}
+
+	@Test("a possessive inside a single-quoted phrase keeps the quote open")
+	func possessiveInsideQuote() {
+		#expect(SmartPunctuation.apply(to: "He called it 'the parents' room'", language: "de")
+			== "He called it \u{201A}the parents\u{2019} room\u{2018}")
+	}
+
+	@Test("a single quote spanning hard-wrapped lines still closes")
+	func quoteAcrossLines() {
+		#expect(SmartPunctuation.apply(to: "He called it 'the big\nidea' yesterday", language: "de")
+			== "He called it \u{201A}the big\nidea\u{2018} yesterday")
+	}
+
 	@Test("code, URLs, markers, html and link destinations are untouched")
 	func leftAlone() {
 		let kept = [
