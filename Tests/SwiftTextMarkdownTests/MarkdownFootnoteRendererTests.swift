@@ -171,6 +171,13 @@ struct MarkdownFootnotePlacementTests {
 		#expect(html.range(of: "id=\"fn-1\"")!.lowerBound < html.range(of: "id=\"fn-2\"")!.lowerBound)
 	}
 
+	@Test func footnotesAtEndKeepsBlocksAroundTouchingDefinition() {
+		let html = MarkdownFootnoteRenderer.convert("first[^a]\n[^a]: note\nsecond", options: [.footnotesAtEnd])
+		#expect(html.contains("<p>first"))
+		#expect(html.contains("<p>second</p>"))
+		#expect(!html.contains("fnblock"))
+	}
+
 	@Test func duplicateOnlyDefinitionBlockLeavesNoMarker() {
 		let html = MarkdownFootnoteRenderer.convert("x[^a]\n\n[^a]: One\n\nMiddle\n\n[^a]: Dup")
 		#expect(!html.contains("fnblock"))
