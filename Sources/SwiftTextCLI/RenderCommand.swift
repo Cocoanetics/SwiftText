@@ -418,7 +418,7 @@ struct Render: AsyncParsableCommand {
 		let preparation = try await browser.preparePageFurniture(paperSize: pageSize(), footer: pageNumbers,
 		                                                        header: runningHeads, headingLevel: pageBreakBefore?.numericLevel ?? 1)
 		let exported = try await browser.exportPaginatedPDFDataWithAnchors(paperSize: pageSize())
-		let data = try PDFPageFurniture.add(to: exported.data, pageNumbers: pageNumbers, title: runningHeads ? title : nil, headings: preparation.headings)
+		let data = try PDFPageFurniture.add(to: exported.data, pageNumbers: pageNumbers, title: runningHeads ? title : nil, headings: preparation.headings, hasTitlePage: titlePage)
 			.settingPDFMetadata(title: title, authors: authors)
 		return (data, exported.anchorPages)
 	}

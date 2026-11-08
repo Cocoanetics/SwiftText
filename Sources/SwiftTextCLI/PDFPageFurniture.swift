@@ -6,7 +6,7 @@ import SwiftTextHTML
 /// Stamps searchable text after WebKit has settled the page count. Links are
 /// rebuilt because drawing a CGPDFPage copies content, not annotations.
 enum PDFPageFurniture {
-	static func add(to data: Data, pageNumbers: Bool, title: String?, headings: [PDFChapterHeading]) throws -> Data {
+	static func add(to data: Data, pageNumbers: Bool, title: String?, headings: [PDFChapterHeading], hasTitlePage: Bool = false) throws -> Data {
 		guard pageNumbers || title != nil else { return data }
 		guard let source = PDFDocument(data: data) else { throw WebKitBrowserError.printFailed }
 		var chapters: [Int: String] = [:]
@@ -39,10 +39,11 @@ enum PDFPageFurniture {
 			chapter = chapters[index] ?? chapter
 			NSGraphicsContext.saveGraphicsState()
 			NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
-			if pageNumbers {
+			let furnished = !(hasTitlePage && index == 0)
+			if pageNumbers, furnished {
 				draw(String(index + 1), in: CGRect(x: bounds.minX + 24, y: bounds.minY + 24, width: bounds.width - 48, height: 14), alignment: .center)
 			}
-			if let title {
+			if let title, furnished {
 				let width = (bounds.width - 72) / 2
 				draw(title, in: CGRect(x: bounds.minX + 24, y: bounds.maxY - 36, width: width, height: 14), alignment: .left)
 				draw(chapter, in: CGRect(x: bounds.midX + 12, y: bounds.maxY - 36, width: width, height: 14), alignment: .right)

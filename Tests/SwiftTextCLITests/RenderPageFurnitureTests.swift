@@ -73,6 +73,21 @@ struct RenderPageFurnitureTests {
 		}
 	}
 
+	@Test("the webkit engine leaves the title page bare", .timeLimit(.minutes(2)))
+	func webkitTitlePageBare() async throws {
+		let prose = "Langer Absatz mit vielen Wörtern für den Seitenumbruch und die Fortsetzung des Kapitels. "
+		let markdown = (1...3).map { chapter in
+			"# Kapitel \(chapter)\n\n" + (1...6).map { _ in String(repeating: prose, count: 8) }.joined(separator: "\n\n")
+		}.joined(separator: "\n\n")
+		let document = try await render(markdown, arguments: ["--running-heads", "--title-page", "--toc", "--author", "A. Autor"])
+		try #require(document.pageCount > 3)
+		let title = try #require(document.page(at: 0))
+		#expect(text(on: title, from: 0, to: 0.08).isEmpty && text(on: title, from: 0.92, to: 1).isEmpty, "the title page carries no furniture")
+		let contents = try #require(document.page(at: 1))
+		#expect(text(on: contents, from: 0, to: 0.08) == "2", "the contents page keeps its number")
+		#expect(text(on: contents, from: 0.92, to: 1).contains("Ein Buch"))
+	}
+
 	@Test("the swift engine draws numbers and running heads, and leaves the title page bare", .timeLimit(.minutes(2)))
 	func swiftEngineFurniture() async throws {
 		let prose = "Langer Absatz mit vielen Wörtern für den Seitenumbruch und die Fortsetzung des Kapitels. "
