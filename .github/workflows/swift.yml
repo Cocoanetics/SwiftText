@@ -161,6 +161,12 @@ jobs:
   test-android-portable:
     # Pinned: the action downloads a host toolchain for the runner's Ubuntu release,
     # so a moving ubuntu-latest can outrun swift.org's builds (26.04 had no 6.3.1).
+    #
+    # The host-toolchain/SDK downloads (swift.org, Google NDK) are not cached here:
+    # swift-android-action@v2 exposes no cache input and manages its own install
+    # paths, so a cache would mean re-implementing its provisioning. A transient
+    # 503/504 on that download (seen once on 2026-11-08, #183) is handled by
+    # re-running the job.
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
@@ -184,15 +190,43 @@ jobs:
   # only the `swifttext` product so the AttributedString link gap (swift#88132) is
   # never in the graph. Off macOS the pdf/render commands default to the pure-Swift
   # SwiftTextRender engine (no WebKit), which is what the render smoke exercises.
+  #
+  # vcpkg's distfiles and built packages are cached across runs. Why: on 2026-11-08
+  # (run 42472644612) vcpkg's libxml2 port fetched
+  # https://github.com/GNOME/libxml2/archive/v2.15.4.tar.gz while GitHub's /archive/
+  # endpoint was answering 503/504, so this job failed before compiling anything and
+  # kept main red for over an hour (#183). The dependency never changes between runs,
+  # so a warm run restores the binary package and downloads nothing. The cache key
+  # carries the runner image version (which pins the preinstalled vcpkg and thus the
+  # port versions), so a vcpkg/dependency bump starts cold and re-fetches. vcpkg
+  # also keys each binary package on its own ABI hash, so a stale hit cannot be
+  # misused. A cold run still downloads; there is no mirror for libxml2 to point
+  # X_VCPKG_ASSET_SOURCES at, so the cache is the mitigation (re-run once to warm it).
   build-windows-cli:
     runs-on: windows-latest
     timeout-minutes: 60
+    env:
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\..\vcpkg-binary-cache
+      VCPKG_DOWNLOADS: ${{ github.workspace }}\..\vcpkg-downloads
     steps:
       - uses: actions/checkout@v6
       - name: Setup Swift
         uses: SwiftyLab/setup-swift@latest
         with:
           swift-version: "6.4.2"
+      - name: Compute vcpkg cache key
+        id: vcpkg-key
+        shell: pwsh
+        run: |
+          "image=$env:ImageVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE, $env:VCPKG_DOWNLOADS | Out-Null
+      - name: Cache vcpkg downloads and binary packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+            ${{ env.VCPKG_DOWNLOADS }}
+          key: vcpkg-${{ runner.os }}-${{ steps.vcpkg-key.outputs.image }}-libxml2-zlib-v1
       - name: Install libxml2 + zlib (vcpkg)
         shell: pwsh
         run: |
