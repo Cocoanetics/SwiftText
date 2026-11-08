@@ -65,6 +65,25 @@ extension WebKitIntegrationTests {
 		#expect(browser.loadProgress.attempt == 2)
 	}
 
+	/// The failure #171 actually caught: the page loaded and the capture script ran,
+	/// but WebKit throttled the script's timers in the off-screen web view and the
+	/// capture never posted. Here the page disables `setTimeout` outright, so only
+	/// the Swift-side fallback can capture it.
+	@Test("A page whose timers never fire is still captured", .timeLimit(.minutes(1)))
+	@MainActor
+	func webKitBrowserCapturesWithoutPageTimers() async throws {
+		let browser = WebKitBrowser(htmlString: """
+		<html><head><script>window.setTimeout = function() { return 0; };</script></head>
+		<body><p>Timerless</p></body></html>
+		""")
+		browser.timeout = 15
+		await browser.waitForLoadCompletion()
+
+		#expect(browser.loadError == nil, "\(String(describing: browser.loadError))")
+		#expect(await browser.html()?.contains("Timerless") == true)
+		#expect(browser.loadProgress.captureScriptRan)
+	}
+
 	/// When every attempt stalls, the timeout reports where: after both attempts,
 	/// the navigation was issued but never committed.
 	@Test("A load that never commits times out naming the stalled phase", .timeLimit(.minutes(1)))

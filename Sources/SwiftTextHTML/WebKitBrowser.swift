@@ -34,6 +34,7 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 	private var loadContinuations: [CheckedContinuation<Void, Never>] = []
 	private var timeoutTask: Task<Void, Never>?
 	private var commitWatchdogTask: Task<Void, Never>?
+	private var captureFallbackTask: Task<Void, Never>?
 	private var messageProxy: ScriptMessageProxy?
 	private var htmlStringToLoad: String?
 	private var fileURLToLoad: URL?
@@ -619,6 +620,8 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 	/// cancellation `stopLoading()` causes must not be reported as a failure.
 	@MainActor
 	private func tearDownWebView() {
+		captureFallbackTask?.cancel()
+		captureFallbackTask = nil
 		removeMessageHandlers()
 		webView?.navigationDelegate = nil
 		webView?.stopLoading()
@@ -665,6 +668,8 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 		timeoutTask = nil
 		commitWatchdogTask?.cancel()
 		commitWatchdogTask = nil
+		captureFallbackTask?.cancel()
+		captureFallbackTask = nil
 
 		// Drop the message handlers as soon as the page is captured: they are the
 		// one strong reference WebKit holds on our behalf, and nothing more arrives.
@@ -689,7 +694,8 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 	}
 
 	/// Posts the settled DOM once the page has loaded and stopped mutating: 500 ms
-	/// after the last mutation, or at the latest 3 s after the `load` event.
+	/// after the last mutation, or at the latest 3 s after the `load` event. That
+	/// cap is backed by a Swift timer as well; see ``startCaptureFallback()``.
 	///
 	/// Installed at document end, but it only starts counting once the document is
 	/// complete — exactly as when it was first evaluated from `didFinish` — so an
@@ -746,6 +752,28 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 				print("Error injecting JavaScript: \(error)")
 			}
 		}
+		startCaptureFallback()
+	}
+
+	/// Captures the DOM 3 s after the navigation finished if the page has not
+	/// posted it by then — the same cap as the script's own fallback, but on a
+	/// Swift timer.
+	///
+	/// The script's `setTimeout` cannot be relied on: WebKit throttles timers in
+	/// a web view that is not on screen, and under load they were seen not to fire
+	/// for the whole 30 s timeout although the page had loaded and the script had
+	/// run (#171). Reading `outerHTML` through `evaluateJavaScript` needs no timer
+	/// in the page.
+	@MainActor
+	private func startCaptureFallback() {
+		captureFallbackTask?.cancel()
+		captureFallbackTask = Task { @MainActor [weak self] in
+			try? await Task.sleep(nanoseconds: 3_000_000_000)
+			guard let self, !Task.isCancelled, !self.isFinished, !self.didLoad, let webView = self.webView else { return }
+			guard let html = try? await webView.evaluateJavaScript("document.documentElement.outerHTML.toString()") as? String,
+			      !Task.isCancelled, webView === self.webView else { return }
+			self.capture(html: html)
+		}
 	}
 
 	/// A navigation that started and then failed. Without this the injected
@@ -793,6 +821,12 @@ extension WebKitBrowser: WKScriptMessageHandler {
 		guard message.name == Self.messageName, let html = message.body as? String else {
 			return
 		}
+		capture(html: html)
+	}
+
+	/// Records the settled DOM and ends the load.
+	@MainActor
+	fileprivate func capture(html: String) {
 		guard !isFinished, !didLoad else {
 			return
 		}
@@ -804,6 +838,8 @@ extension WebKitBrowser: WKScriptMessageHandler {
 		// report a timeout for a page that had in fact loaded.
 		timeoutTask?.cancel()
 		timeoutTask = nil
+		captureFallbackTask?.cancel()
+		captureFallbackTask = nil
 
 		Task { @MainActor in
 			// A failed resize is not a failed load — we already have the HTML.
