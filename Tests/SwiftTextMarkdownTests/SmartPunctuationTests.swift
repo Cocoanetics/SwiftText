@@ -35,7 +35,7 @@ struct SmartPunctuationTests {
 			"---\ntitle: \"It's\"\n---",
 			"| a | b |\n|---|---|",
 			"[ref]: http://x.y \"Title\"",
-			"<!--\nit's\n-->",
+			"<!--\nit's\n-->"
 		]
 		for text in kept {
 			#expect(SmartPunctuation.apply(to: text) == text, "\(text)")

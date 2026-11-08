@@ -84,7 +84,7 @@ struct Render: AsyncParsableCommand {
 	@Option(name: .long, help: "For HTML and PDF output, footnote placement: section = per source block (default); end = all at the end; page = foot of the page (PDF, webkit engine).")
 	var footnotes: FootnotePlacement = .section
 
-	@Flag(name: .long, help: "Typographic punctuation for every format: curly quotes and apostrophes (style follows --language), -- as an en dash, --- as an em dash, ... as an ellipsis. Code, URLs and footnote/citation markers stay as typed.")
+	@Flag(name: .long, help: "Typographic punctuation: curly quotes (style per --language), -- en dash, --- em dash, ... ellipsis. Code, URLs and footnote/citation markers stay as typed.")
 	var smart: Bool = false
 
 	// MARK: EPUB / shared options
