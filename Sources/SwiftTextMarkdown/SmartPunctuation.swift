@@ -32,7 +32,8 @@ public enum SmartPunctuation {
 	private static let germanAbbreviations: Set<String> = ["Dr.", "Prof.", "Nr.", "Hr.", "Fr.", "Dipl.-Ing.", "Mag.", "usw."]
 
 	static func abbreviations(forLanguage language: String) -> Set<String> {
-		language.lowercased().hasPrefix("de") ? abbreviations.union(germanAbbreviations) : abbreviations
+		let primary = language.lowercased().split(whereSeparator: { $0 == "-" || $0 == "_" }).first
+		return primary == "de" ? abbreviations.union(germanAbbreviations) : abbreviations
 	}
 
 	static func quotes(forLanguage language: String) -> Quotes {

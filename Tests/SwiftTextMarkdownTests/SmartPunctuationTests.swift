@@ -15,6 +15,8 @@ struct SmartPunctuationTests {
 		#expect(SmartPunctuation.apply(to: text, language: "de")
 			== "Frau Dr.\u{00A0}Sturm und Prof.\u{00A0}Huber, Nr.\u{00A0}3, z. B. so.")
 		// Nr. is a German abbreviation only; whole words only; end of line keeps its text.
+		#expect(SmartPunctuation.apply(to: "Nr. 3", language: "de-AT") == "Nr.\u{00A0}3")
+		#expect(SmartPunctuation.apply(to: "Nr. 3", language: "den") == "Nr. 3")
 		#expect(SmartPunctuation.apply(to: "Dr. Sturm, Nr. 3") == "Dr.\u{00A0}Sturm, Nr. 3")
 		#expect(SmartPunctuation.apply(to: "See e.g. this, cf. that; the cap. Next Dipl.-Ing. X", language: "de")
 			== "See e.g.\u{00A0}this, cf.\u{00A0}that; the cap. Next Dipl.-Ing.\u{00A0}X")
