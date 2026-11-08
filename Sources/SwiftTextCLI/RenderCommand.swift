@@ -102,6 +102,9 @@ struct Render: AsyncParsableCommand {
 	@Option(name: .long, help: "For EPUB output, the heading level (h1–h6) that starts each chapter file. Default: h1.")
 	var chapterLevel: HeadingBreakLevel = .h1
 
+	@Option(name: .long, help: "For EPUB output, how many heading levels below --chapter-level to nest under each chapter in the table of contents (0–5). Default: 0.")
+	var tocDepth: Int = 0
+
 	func run() async throws {
 		#if os(macOS)
 		guard #available(macOS 12.0, *) else {
@@ -174,6 +177,9 @@ struct Render: AsyncParsableCommand {
 	// MARK: - EPUB
 
 	private func renderEPUB(_ markdown: String, baseURL: URL?, outputURL: URL, userCSS: String?, title: String) throws {
+		guard (0...5).contains(tocDepth) else {
+			throw ValidationError("--toc-depth must be between 0 and 5, got \(tocDepth).")
+		}
 		var coverData: Data?
 		var coverFilename: String?
 		if let cover {
@@ -191,7 +197,7 @@ struct Render: AsyncParsableCommand {
 			language: language,
 			coverImage: coverData,
 			coverImageFilename: coverFilename)
-		let options = EpubOptions(chapterLevel: chapterLevel.numericLevel, userCSS: userCSS, linkCitations: linkCitations)
+		let options = EpubOptions(chapterLevel: chapterLevel.numericLevel, tocDepth: tocDepth, userCSS: userCSS, linkCitations: linkCitations)
 		try MarkdownToEpub.convert(markdown, to: outputURL, metadata: metadata, options: options)
 	}
 
