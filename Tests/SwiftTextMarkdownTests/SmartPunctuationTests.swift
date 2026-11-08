@@ -21,6 +21,13 @@ struct SmartPunctuationTests {
 		#expect(SmartPunctuation.apply(to: "\"mot\"", language: "fr") == "\u{00AB}mot\u{00BB}")
 	}
 
+	@Test("an apostrophe after a word-final s is U+2019 in German too")
+	func trailingApostrophe() {
+		#expect(SmartPunctuation.apply(to: "Practitioners' impressions and the grandparents' views; it's Parkinson's. 'Zitat' hier.", language: "de")
+			== "Practitioners\u{2019} impressions and the grandparents\u{2019} views; it\u{2019}s Parkinson\u{2019}s. \u{201A}Zitat\u{2018} hier.")
+		#expect(SmartPunctuation.apply(to: "the dogs' bowls", language: "en") == "the dogs\u{2019} bowls")
+	}
+
 	@Test("code, URLs, markers, html and link destinations are untouched")
 	func leftAlone() {
 		let kept = [

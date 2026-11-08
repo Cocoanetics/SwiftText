@@ -216,6 +216,8 @@ public enum SmartPunctuation {
 		var i = 0
 		/// Last character before the cursor that is not an emphasis marker (line start counts as whitespace).
 		var previous: Character = " "
+		/// Single quotes opened on this line and not yet closed.
+		var openSingles = 0
 
 		func append(_ s: some Sequence<Character>) {
 			for c in s {
@@ -310,9 +312,12 @@ public enum SmartPunctuation {
 					replacement = "\u{2019}" // '90s
 				} else if afterBoundary, !beforeSpace {
 					replacement = c == "\"" ? quotes.open : quotes.singleOpen
-				} else if c == "'", previous.isLetter || previous.isNumber, let next, next.isLetter || next.isNumber {
-					replacement = "\u{2019}" // apostrophe inside a word
+					if c == "'" { openSingles += 1 }
+				} else if c == "'", previous.isLetter || previous.isNumber,
+				          openSingles == 0 || (next.map { $0.isLetter || $0.isNumber } ?? false) {
+					replacement = "\u{2019}" // apostrophe: inside a word, or after a word with no open quote (Practitioners')
 				} else {
+					if c == "'", openSingles > 0 { openSingles -= 1 }
 					replacement = c == "\"" ? quotes.close : quotes.singleClose
 				}
 				append([replacement])
