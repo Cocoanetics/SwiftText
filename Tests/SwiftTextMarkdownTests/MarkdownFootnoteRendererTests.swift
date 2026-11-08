@@ -142,6 +142,20 @@ struct MarkdownFootnotePlacementTests {
 		#expect(position("Satz zwei") < position("id=\"fn-1\""))
 	}
 
+	@Test func numberingRestartsPerDefinitionBlock() {
+		let input = "# Kapitel 1\n\nEins.[^a] Zwei.[^b]\n\n[^a]: Erste.\n\n[^b]: Zweite.\n\n# Kapitel 2\n\nDrei.[^c]\n\n[^c]: Dritte."
+		let html = MarkdownFootnoteRenderer.convert(input)
+		#expect(html.contains("Drei.<sup><a href=\"#fn-3\" id=\"ref-3\">[1]</a></sup>"))
+		#expect(html.contains("id=\"fn-3\"><strong>[1]:</strong> Dritte."))
+		#expect(html.contains("id=\"fn-2\"><strong>[2]:</strong> Zweite."))
+		#expect(!html.contains("[3]"))
+	}
+
+	@Test func singleTrailingBlockKeepsGlobalNumbering() {
+		let html = MarkdownFootnoteRenderer.convert("# A\n\nx[^a]\n\n# B\n\ny[^b]\n\n[^a]: One\n\n[^b]: Two")
+		#expect(html.contains("<strong>[2]:</strong> Two"))
+	}
+
 	@Test func definitionsAtEndStayEndnotes() {
 		let html = MarkdownFootnoteRenderer.convert("# A\n\nx[^a]\n\n# B\n\ny\n\n[^a]: Note")
 		#expect(html.range(of: "<h1>B")!.lowerBound < html.range(of: "id=\"fn-1\"")!.lowerBound)

@@ -405,6 +405,10 @@ struct DOMMarkupConverter {
 	private func footnoteDefinitionBlock(label: String, body: DOMElement) -> BlockMarkup {
 		var inlines = trimInlines(inlineChildren(of: body))
 		inlines = stripLeadingMarker(inlines, label: label)
+		// A label disambiguated as `1-2` still echoes the visible marker `[1]:`.
+		if let dash = label.lastIndex(of: "-"), Int(label[label.index(after: dash)...]) != nil {
+			inlines = stripLeadingMarker(inlines, label: String(label[..<dash]))
+		}
 		inlines = stripTrailingBackref(inlines)
 		inlines = trimInlines(inlines)
 		let prefix = inlines.isEmpty ? "[^\(label)]:" : "[^\(label)]: "
