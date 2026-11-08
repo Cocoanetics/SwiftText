@@ -342,7 +342,15 @@ public enum HTMLRenderer {
 				guard let family, !family.isEmpty else { continue }
 				var registeredFace = false
 				for source in sources {
-					let url = URL(string: source, relativeTo: baseURL)?.absoluteURL ?? URL(fileURLWithPath: source)
+					// A scheme-less source is a path: relative to the document, or to the working directory without one.
+					let url: URL
+					if let parsed = URL(string: source), parsed.scheme != nil {
+						url = parsed
+					} else if let baseURL {
+						url = URL(string: source, relativeTo: baseURL)?.absoluteURL ?? URL(fileURLWithPath: source, relativeTo: baseURL)
+					} else {
+						url = URL(fileURLWithPath: source)
+					}
 					guard url.isFileURL, let data = try? Data(contentsOf: url) else { continue }
 					if (try? fonts.register(data: data, family: family, bold: bold, italic: italic)) != nil {
 						registeredFace = true

@@ -193,3 +193,22 @@ struct EmbeddedStandardFaceTests {
 		#expect(text.components(separatedBy: "/FontFile2").count - 1 >= 3 || fonts >= 3)
 	}
 }
+
+@Suite("Registered face selection")
+struct RegisteredFaceSelectionTests {
+	@Test("an italic request prefers an italic face over a same-weight upright one")
+	func italicBeforeWeight() throws {
+		let path = ["/System/Library/Fonts/Supplemental/Arial.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"]
+			.first { FileManager.default.fileExists(atPath: $0) }
+		guard let path else { return }
+		let data = try Data(contentsOf: URL(fileURLWithPath: path))
+		let fonts = FontBook()
+		try fonts.register(data: data, family: "Mine")
+		let boldItalic = try fonts.register(data: data, family: "Mine", bold: true, italic: true)
+		var style = ComputedStyle.initial
+		style.fontFamily = ["Mine"]
+		style.fontStyle = .italic
+		guard case .embedded(let chosen) = fonts.font(for: style) else { Issue.record("not embedded"); return }
+		#expect(chosen.postScriptName == boldItalic.postScriptName)
+	}
+}

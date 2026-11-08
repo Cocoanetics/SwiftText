@@ -179,7 +179,8 @@ public final class FontBook {
 		for family in style.fontFamily {
 			if let faces = registered[family.lowercased()] {
 				let face = faces.first { $0.bold == bold && $0.italic == italic }
-					?? faces.first { $0.bold == bold } ?? faces.first { !$0.bold && !$0.italic } ?? faces[0]
+					?? faces.first { $0.italic == italic } ?? faces.first { $0.bold == bold }
+					?? faces.first { !$0.bold && !$0.italic } ?? faces[0]
 				return .embedded(face.font)
 			}
 		}
