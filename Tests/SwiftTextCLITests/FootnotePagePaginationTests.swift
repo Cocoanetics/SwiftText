@@ -20,7 +20,10 @@ struct FootnotePagePaginationTests {
 	/// a long note, then a short second chapter.
 	private var overflowMarkdown: String {
 		let body = String(repeating: "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. ", count: 2)
-		let note = String(repeating: "Mustermann A et al. Eine lange Studie mit einem langen Titel, randomisiert und kontrolliert, in einer Fachzeitschrift mit langem Namen 2024, Übersicht über alle Ergebnisse (Quellenverzeichnis Nr. 1.) Beispiel B et al. Noch eine Studie zum selben Thema, Folgearbeit 2025 (Quellenverzeichnis Nr. 2.) ", count: 2)
+		let study = "Mustermann A et al. Eine lange Studie mit einem langen Titel, randomisiert und kontrolliert, "
+			+ "in einer Fachzeitschrift mit langem Namen 2024, Übersicht über alle Ergebnisse (Quellenverzeichnis Nr. 1.) "
+			+ "Beispiel B et al. Noch eine Studie zum selben Thema, Folgearbeit 2025 (Quellenverzeichnis Nr. 2.) "
+		let note = String(repeating: study, count: 2)
 		var lines = ["# Kapitel 1", ""]
 		lines += (1...7).map { "\($0). **Punkt \($0).** \(body)[^n\($0)]" }
 		lines.append("")
