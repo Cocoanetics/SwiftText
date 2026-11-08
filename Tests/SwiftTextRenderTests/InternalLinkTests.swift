@@ -14,7 +14,6 @@ struct InternalLinkTests {
 
 	private static let html = """
 	<p><a href="#target">jump</a> <a href="#missing">nowhere</a> <a href="https://example.com/x">out</a></p>
-	<div style="break-after: page"></div>
 	<p>filler</p>
 	<h2 id="target" style="break-before: page">Target</h2>
 	"""
@@ -35,5 +34,15 @@ struct InternalLinkTests {
 	func wrapperMatches() async throws {
 		let data = try await HTMLRenderer.renderPDF(html: Self.html, options: Self.options)
 		#expect(data.starts(with: Data("%PDF".utf8)))
+	}
+
+	@Test("An anchor exactly on a page boundary belongs to the following page")
+	func boundaryAnchorIsOnFollowingPage() async throws {
+		let html = """
+		<div style="margin: 0">first</div>
+		<div id="second" style="break-before: page; margin: 0">text</div>
+		"""
+		let result = try await HTMLRenderer.renderPDFWithAnchors(html: html, options: Self.options)
+		#expect(result.anchorPages["second"] == 1)
 	}
 }

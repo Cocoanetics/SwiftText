@@ -261,11 +261,12 @@ public enum HTMLRenderer {
 		return anchors
 	}
 
-	/// The page and `/XYZ` destination for a column y-coordinate.
+	/// The page and `/XYZ` destination for a column y-coordinate. Slices are
+	/// half-open, so a y on a page boundary belongs to the page that follows.
 	private static func destination(forColumnY y: Double, slices: [PageSlice], pages: [PDFDictionary],
 	                                pageHeightPx: Double, margin: Double) -> (pageIndex: Int, array: PDFArray) {
 		var pageIndex = slices.count - 1
-		for (index, slice) in slices.enumerated() where y >= slice.top - 0.5 && y < slice.bottom + 0.5 {
+		for (index, slice) in slices.enumerated() where y >= slice.top - 0.5 && y < slice.bottom - 0.5 {
 			pageIndex = index
 			break
 		}
