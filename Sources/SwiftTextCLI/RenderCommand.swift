@@ -76,7 +76,7 @@ struct Render: AsyncParsableCommand {
 	@Option(name: .long, help: "For PDF output, the rendering engine: webkit (macOS only, full CSS) or swift (cross-platform, no WebKit). Defaults to webkit on macOS, swift elsewhere.")
 	var engine: RenderEngine = .platformDefault
 
-	@Flag(name: .long, help: "For HTML, PDF and EPUB output, make numeric citations clickable: a list item starting with [n] gets id=\"ref-n\" and every other [n] links to it.")
+	@Flag(name: .long, help: "For HTML, PDF and EPUB output, make numeric citations clickable: a list item starting with [n] gets id=\"citation-n\" and every other [n] links to it.")
 	var linkCitations: Bool = false
 
 	@Option(name: .long, help: "For HTML and PDF output, footnote placement: section keeps each block where the source puts it, numbering per block (default); end gathers all at the end.")
