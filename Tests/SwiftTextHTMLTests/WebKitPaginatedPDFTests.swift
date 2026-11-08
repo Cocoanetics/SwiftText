@@ -30,10 +30,9 @@ struct WebKitIntegrationTests {
 
 	private func exportPaginated(_ html: String) async throws -> Data {
 		let browser = WebKitBrowser(htmlString: html)
-		// A navigation that has not committed after 10 s is on a dead web view;
-		// retry once on a fresh one, within the same 30 s budget.
+		// The default commit watchdog retries a navigation that has not committed
+		// after 15 s once on a fresh web view, within this same budget.
 		browser.timeout = 30
-		browser.commitTimeout = 10
 		browser.frameSize = a4
 		// Let WebKit paginate rather than stretching the frame to the content.
 		browser.preserveFrameHeight = true

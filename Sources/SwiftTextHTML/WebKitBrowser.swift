@@ -58,16 +58,16 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 
 	/// How long a navigation may go without committing before the web view is
 	/// treated as dead, torn down, and the load retried with a fresh one — up to
-	/// ``maxLoadAttempts`` in total. `0` (the default) disables the watchdog.
+	/// ``maxLoadAttempts`` in total. Set to `0` to disable the watchdog.
 	///
 	/// A navigation that never commits means the web content process never
-	/// launched or never answered; nothing on that web view will recover. The
-	/// retry runs inside the same overall ``timeout``, which spans every attempt,
-	/// so enabling this never lengthens how long a load can take.
-	///
-	/// Opt-in because a slow server is indistinguishable from a stall at this
-	/// point: a remote URL still waiting for its first byte would be re-requested.
-	package var commitTimeout: TimeInterval = 0
+	/// launched or never answered; nothing on that web view will recover. Only
+	/// that stall restarts the load: once the navigation commits, the watchdog is
+	/// gone. The retry runs inside the same overall ``timeout``, which spans every
+	/// attempt, so it never lengthens how long a load can take — and a load whose
+	/// ``timeout`` is shorter than this (the 10 s JavaScript-rendered fetch) never
+	/// restarts at all.
+	package var commitTimeout: TimeInterval = 15
 
 	/// The most loads ``commitTimeout`` may start, counting the first.
 	package var maxLoadAttempts = 2
