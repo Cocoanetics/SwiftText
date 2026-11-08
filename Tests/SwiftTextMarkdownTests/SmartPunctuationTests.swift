@@ -35,7 +35,10 @@ struct SmartPunctuationTests {
 			"---\ntitle: \"It's\"\n---",
 			"| a | b |\n|---|---|",
 			"[ref]: http://x.y \"Title\"",
-			"<!--\nit's\n-->"
+			"<!--\nit's\n-->",
+			"<script>let x = \"a--b\";</script>",
+			"> ```\n> \"code\" --\n> ```",
+			"`code\n\"literal\" --` end"
 		]
 		for text in kept {
 			#expect(SmartPunctuation.apply(to: text) == text, "\(text)")
@@ -46,6 +49,16 @@ struct SmartPunctuationTests {
 	func proseBlocks() {
 		#expect(SmartPunctuation.apply(to: "[^1]: Smith's \"note\"") == "[^1]: Smith\u{2019}s \u{201C}note\u{201D}")
 		#expect(SmartPunctuation.apply(to: "- it's\n\n    still item's text") == "- it\u{2019}s\n\n    still item\u{2019}s text")
+	}
+
+	@Test("a leading thematic break without a closing delimiter is not front matter")
+	func notFrontMatter() {
+		#expect(SmartPunctuation.apply(to: "---\nit's") == "---\nit\u{2019}s")
+	}
+
+	@Test("text around a multi-line code span is converted")
+	func multilineSpan() {
+		#expect(SmartPunctuation.apply(to: "a's `x\ny` b's") == "a\u{2019}s `x\ny` b\u{2019}s")
 	}
 
 	@Test("existing typographic characters survive")

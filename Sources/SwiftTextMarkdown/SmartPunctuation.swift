@@ -48,11 +48,24 @@ public enum SmartPunctuation {
 		var rawBlockEnd: String?
 		var inFrontMatter = false
 		var inList = false
+		var openSpan: Int?
+
+		/// Whether a code span opened by a run of `length` backticks closes later in the same paragraph.
+		func closes(after index: Int) -> (Int) -> Bool {
+			{ length in
+				for next in lines[(index + 1)...] {
+					if next.trimmingCharacters(in: .whitespaces).isEmpty { return false }
+					if closingBacktickRun(Array(next), from: 0, length: length) != nil { return true }
+				}
+				return false
+			}
+		}
 
 		for (index, line) in lines.enumerated() {
 			let trimmed = line.trimmingCharacters(in: .whitespaces)
 
-			if index == 0, trimmed == "---", lines.count > 1 {
+			if index == 0, trimmed == "---",
+			   lines.dropFirst().contains(where: { $0.trimmingCharacters(in: .whitespaces) == "---" || $0.trimmingCharacters(in: .whitespaces) == "..." }) {
 				inFrontMatter = true
 				result.append(line)
 				continue
@@ -64,8 +77,9 @@ public enum SmartPunctuation {
 			}
 
 			if let open = fence {
-				if let closing = fenceMarker(of: trimmed), closing.marker == open.marker, closing.length >= open.length,
-				   trimmed.allSatisfy({ $0 == open.marker }) {
+				let content = strippingQuoteMarkers(trimmed)
+				if let closing = fenceMarker(of: content), closing.marker == open.marker, closing.length >= open.length,
+				   content.allSatisfy({ $0 == open.marker }) {
 					fence = nil
 				}
 				result.append(line)
@@ -83,8 +97,22 @@ public enum SmartPunctuation {
 				continue
 			}
 
+			// Continuation of a code span that opened on an earlier line.
+			if let run = openSpan {
+				let chars = Array(line)
+				if let end = closingBacktickRun(chars, from: 0, length: run) {
+					openSpan = nil
+					let (rest, pending) = convertInline(String(chars[end...]), quotes: quotes, closes: closes(after: index))
+					openSpan = pending
+					result.append(String(chars[..<end]) + rest)
+				} else {
+					result.append(line)
+				}
+				continue
+			}
+
 			let indent = line.prefix(while: { $0 == " " || $0 == "\t" }).reduce(0) { $0 + ($1 == "\t" ? 4 : 1) }
-			if indent < 4, let marker = fenceMarker(of: trimmed) {
+			if indent < 4, let marker = fenceMarker(of: strippingQuoteMarkers(trimmed)) {
 				fence = marker
 				result.append(line)
 				continue
@@ -103,8 +131,8 @@ public enum SmartPunctuation {
 				result.append(line)
 				continue
 			}
-			if let tag = ["pre", "script", "style"].first(where: { lower.hasPrefix("<\($0)") }), !lower.contains("</\(tag)>") {
-				rawBlockEnd = "</\(tag)>"
+			if let tag = ["pre", "script", "style"].first(where: { lower.hasPrefix("<\($0)") }) {
+				if !lower.contains("</\(tag)>") { rawBlockEnd = "</\(tag)>" }
 				result.append(line)
 				continue
 			}
@@ -114,7 +142,9 @@ public enum SmartPunctuation {
 				continue
 			}
 
-			result.append(convertInline(line, quotes: quotes))
+			let (converted, pending) = convertInline(line, quotes: quotes, closes: closes(after: index))
+			openSpan = pending
+			result.append(converted)
 		}
 		return result.joined(separator: "\n")
 	}
@@ -125,6 +155,15 @@ public enum SmartPunctuation {
 		guard let first = trimmed.first, first == "`" || first == "~" else { return nil }
 		let length = trimmed.prefix(while: { $0 == first }).count
 		return length >= 3 ? (first, length) : nil
+	}
+
+	/// Removes leading block-quote markers (`> `), so a fence inside a quote is recognised.
+	private static func strippingQuoteMarkers(_ trimmed: String) -> String {
+		var rest = Substring(trimmed)
+		while rest.first == ">" {
+			rest = rest.dropFirst().drop(while: { $0 == " " })
+		}
+		return String(rest)
 	}
 
 	private static func isListItem(_ trimmed: String) -> Bool {
@@ -147,7 +186,10 @@ public enum SmartPunctuation {
 	private static let emphasis: Set<Character> = ["*", "_", "~"]
 	private static let openers: Set<Character> = ["(", "[", "{", "<", "/", "\u{2014}", "\u{2013}", "\u{201C}", "\u{2018}", "\u{201E}", "\u{201A}", "\u{00AB}"]
 
-	private static func convertInline(_ line: String, quotes: Quotes) -> String {
+	/// Converts one line. When a code span opens here and closes on a later line (`closes` says so),
+	/// the rest of the line is kept verbatim and the run length is returned as pending.
+	private static func convertInline(_ line: String, quotes: Quotes, closes: (Int) -> Bool) -> (String, pending: Int?) {
+		var pending: Int?
 		let chars = Array(line)
 		var out = ""
 		var i = 0
@@ -174,6 +216,9 @@ public enum SmartPunctuation {
 				let run = chars[i...].prefix(while: { $0 == "`" }).count
 				if let end = closingBacktickRun(chars, from: i + run, length: run) {
 					copyVerbatim(to: end)
+				} else if closes(run) {
+					pending = run
+					copyVerbatim(to: chars.count)
 				} else {
 					copyVerbatim(to: i + run)
 				}
@@ -246,7 +291,7 @@ public enum SmartPunctuation {
 				i += 1
 			}
 		}
-		return out
+		return (out, pending)
 	}
 
 	private static func closingBacktickRun(_ chars: [Character], from start: Int, length: Int) -> Int? {
