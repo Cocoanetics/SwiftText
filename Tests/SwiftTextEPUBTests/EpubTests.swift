@@ -125,6 +125,13 @@ struct EpubTests {
 		#expect(nav.contains("2: The Journey"))
 	}
 
+	@Test("a Roman-numeral chapter heading is joined with its sub-heading")
+	func romanNumeralTitles() {
+		let markdown = "# Book\n\n## IV\n\n### The Journey\n\nprose"
+		let files = MarkdownToEpub.makeFiles(markdown, metadata: fixedMetadata(), options: EpubOptions(chapterLevel: 2))
+		#expect(string(file(files, "OEBPS/nav.xhtml")).contains("IV: The Journey"))
+	}
+
 	@Test("a chapter heading with words is not joined with the sub-heading that follows it")
 	func wordedHeadingStandsAlone() {
 		let markdown = "# Buch\n\nEinleitung.\n\n## Teil 1: Wo Sie stehen\n\n### Was in der Akte steht\n\nText.\n\n## Teil 2: Weiter\n\nAbsatz.\n\n### Unterpunkt\n\nMehr Text."

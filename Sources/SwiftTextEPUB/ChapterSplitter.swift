@@ -77,12 +77,15 @@ enum ChapterSplitter {
 		return isBareLabel(first) ? parts.joined(separator: ": ") : first
 	}
 
-	/// True for headings such as `1`, `IV` or `Chapter 1`: a digit-bearing label of
-	/// at most one word, or digits and punctuation alone.
+	/// True for headings such as `1`, `IV` or `Chapter 1`: a label of at most one
+	/// word that carries a digit, or a bare Roman numeral.
 	private static func isBareLabel(_ text: String) -> Bool {
 		let words = text.split { !$0.isLetter && !$0.isNumber }
-		guard text.contains(where: \.isNumber) else { return false }
-		return words.filter { $0.contains(where: \.isLetter) }.count <= 1
+		let letterWords = words.filter { $0.contains(where: \.isLetter) }
+		guard letterWords.count <= 1 else { return false }
+		if text.contains(where: \.isNumber) { return true }
+		guard let word = letterWords.first, words.count == 1 else { return false }
+		return word.uppercased().allSatisfy { "IVXLCDM".contains($0) }
 	}
 
 	/// Renders a run of top-level blocks to an XHTML fragment.
