@@ -129,6 +129,16 @@ struct EpubTests {
 		expectWellFormedXML(two, "ch002.xhtml")
 	}
 
+	@Test("colliding sanitized footnote ids stay unique and image alt text stays well-formed")
+	func footnoteIDCollisionsAndImages() {
+		let markdown = "## One\n\nA[^a/b] B[^a-b] ![pic[^a-b]](i.png)\n\n[^a/b]: First.\n\n[^a-b]: Second.\n"
+		let files = MarkdownToEpub.makeFiles(markdown, metadata: fixedMetadata(), options: EpubOptions(chapterLevel: 2))
+		let chapter = string(file(files, "OEBPS/text/ch001.xhtml"))
+		#expect(chapter.contains("id=\"fn-a-b\"") && chapter.contains("id=\"fn-a-b-2\""))
+		#expect(chapter.contains("id=\"ref-a-b\"") && chapter.contains("id=\"ref-a-b-2\""))
+		expectWellFormedXML(chapter, "ch001.xhtml")
+	}
+
 	// MARK: - Chapter splitting
 
 	@Test("splits into one file per heading at the chosen level")

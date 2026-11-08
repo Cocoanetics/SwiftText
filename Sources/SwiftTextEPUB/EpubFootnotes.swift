@@ -21,10 +21,26 @@ final class EpubFootnoteState {
 	let definitions: [MarkdownFootnoteParser.Definition]
 	private let resolver: MarkdownFootnoteResolver
 	private var emitted: [Int: Int] = [:]
+	private let slugByID: [String: String]
 
 	init(definitions: [MarkdownFootnoteParser.Definition]) {
 		self.definitions = definitions
 		self.resolver = MarkdownFootnoteResolver(definitionIDs: definitions.map(\.id))
+		// Sanitizing can map different ids to one slug; suffix later ones so
+		// every fragment id in the chapter stays unique.
+		var used = Set<String>()
+		var slugs: [String: String] = [:]
+		for definition in definitions {
+			let base = Self.slug(definition.id)
+			var candidate = base
+			var n = 1
+			while !used.insert(candidate).inserted {
+				n += 1
+				candidate = "\(base)-\(n)"
+			}
+			slugs[definition.id] = candidate
+		}
+		self.slugByID = slugs
 	}
 
 	/// `text` with each matched reference replaced by a sentinel carrying its number.
@@ -57,7 +73,7 @@ final class EpubFootnoteState {
 			if let number = Int(payload), let id = id(forNumber: number) {
 				let occurrence = (emitted[number] ?? 0) + 1
 				emitted[number] = occurrence
-				let slug = Self.slug(id)
+				let slug = slugByID[id] ?? Self.slug(id)
 				let anchor = occurrence == 1 ? "ref-\(slug)" : "ref-\(slug)-\(occurrence)"
 				result += "<sup><a href=\"#fn-\(slug)\" id=\"\(anchor)\" epub:type=\"noteref\">\(number)</a></sup>"
 			}
@@ -85,7 +101,7 @@ final class EpubFootnoteState {
 				progress = true
 				let body = renderMarkdown(definition.body, options: options)
 				let content = expandReferences(in: body).trimmingCharacters(in: .whitespacesAndNewlines)
-				rendered.append((number, "<aside id=\"fn-\(Self.slug(definition.id))\" epub:type=\"footnote\">\(content)</aside>"))
+				rendered.append((number, "<aside id=\"fn-\(slugByID[definition.id] ?? Self.slug(definition.id))\" epub:type=\"footnote\">\(content)</aside>"))
 			}
 		}
 		return rendered.sorted { $0.number < $1.number }.map(\.html).joined(separator: "\n")
@@ -105,6 +121,11 @@ final class EpubFootnoteState {
 
 private struct EpubFootnoteRewriter: MarkupRewriter {
 	let state: EpubFootnoteState
+
+	// Alt text is rendered into an attribute, so a reference there must stay literal.
+	mutating func visitImage(_ image: Image) -> Markup? {
+		image
+	}
 
 	mutating func visitText(_ text: Text) -> Markup? {
 		guard text.string.contains("[^") else { return text }
