@@ -109,8 +109,10 @@ struct EpubTests {
 		let markdown = "# Buch\n\n## Kapitel 1\n\nText mit Fußnote.[^a]\n\n[^a]: Eine Fußnote.\n"
 		let files = MarkdownToEpub.makeFiles(markdown, metadata: fixedMetadata(), options: EpubOptions(chapterLevel: 2))
 		let chapter = string(file(files, "OEBPS/text/ch002.xhtml"))
-		#expect(chapter.contains("<sup><a href=\"#fn-a\" id=\"ref-a\" epub:type=\"noteref\">1</a></sup>"))
-		#expect(chapter.contains("<aside id=\"fn-a\" epub:type=\"footnote\"><p>Eine Fußnote.</p></aside>"))
+		#expect(chapter.contains("<sup><a href=\"#fn-a\" id=\"ref-a\" class=\"noteref\" epub:type=\"noteref\" role=\"doc-noteref\">1</a></sup>"))
+		#expect(chapter.contains("<aside id=\"fn-a\" class=\"footnote\" epub:type=\"footnote\" role=\"doc-footnote\">"
+			+ "<p><a href=\"#ref-a\" class=\"footnote-backlink\" epub:type=\"backlink\" role=\"doc-backlink\">1</a> Eine Fußnote.</p></aside>"))
+		#expect(chapter.contains("<section class=\"footnotes\" epub:type=\"footnotes\">\n<hr/>\n<aside"))
 		#expect(!chapter.contains("[^a]"))
 		expectWellFormedXML(chapter, "ch002.xhtml")
 	}
@@ -123,10 +125,38 @@ struct EpubTests {
 		let two = string(file(files, "OEBPS/text/ch002.xhtml"))
 		#expect(one.contains("id=\"fn-x\"") && one.contains("id=\"fn-y\"") && !one.contains("id=\"fn-z\""))
 		#expect(two.contains("id=\"fn-z\"") && two.contains("id=\"fn-y\"") && !two.contains("id=\"fn-x\""))
-		#expect(two.contains("href=\"#fn-z\" id=\"ref-z\" epub:type=\"noteref\">1</a>"))
-		#expect(two.contains("href=\"#fn-y\" id=\"ref-y\" epub:type=\"noteref\">2</a>"))
+		#expect(two.contains("href=\"#fn-z\" id=\"ref-z\" class=\"noteref\" epub:type=\"noteref\" role=\"doc-noteref\">1</a>"))
+		#expect(two.contains("href=\"#fn-y\" id=\"ref-y\" class=\"noteref\" epub:type=\"noteref\" role=\"doc-noteref\">2</a>"))
 		expectWellFormedXML(one, "ch001.xhtml")
 		expectWellFormedXML(two, "ch002.xhtml")
+	}
+
+	@Test("a note opening with a list gets a separate label paragraph; no notes, no section")
+	func footnoteLabelAndNoSection() {
+		let markdown = "## One\n\nA[^l]\n\n[^l]:\n    - item\n\n## Two\n\nplain\n"
+		let files = MarkdownToEpub.makeFiles(markdown, metadata: fixedMetadata(), options: EpubOptions(chapterLevel: 2))
+		let one = string(file(files, "OEBPS/text/ch001.xhtml"))
+		let two = string(file(files, "OEBPS/text/ch002.xhtml"))
+		#expect(one.contains("<p class=\"footnote-label\"><a href=\"#ref-l\""))
+		#expect(!two.contains("class=\"footnotes\""))
+		expectWellFormedXML(one, "ch001.xhtml")
+	}
+
+	@Test("a note referenced only from another note links back into that note")
+	func nestedFootnoteBacklink() {
+		let markdown = "## One\n\nA[^a]\n\n[^a]: See[^b].\n\n[^b]: Deep.\n"
+		let files = MarkdownToEpub.makeFiles(markdown, metadata: fixedMetadata(), options: EpubOptions(chapterLevel: 2))
+		let chapter = string(file(files, "OEBPS/text/ch001.xhtml"))
+		#expect(chapter.contains("href=\"#ref-b\" class=\"footnote-backlink\""))
+		#expect(chapter.contains("id=\"ref-b\""))
+		expectWellFormedXML(chapter, "ch001.xhtml")
+	}
+
+	@Test("the stylesheet declares the epub namespace first and styles footnotes")
+	func footnoteStylesheet() {
+		#expect(DefaultStylesheet.css.hasPrefix("@namespace epub"))
+		#expect(DefaultStylesheet.css.contains("section.footnotes"))
+		#expect(DefaultStylesheet.css.contains("aside.footnote p"))
 	}
 
 	@Test("colliding sanitized footnote ids stay unique and image alt text stays well-formed")
