@@ -153,4 +153,10 @@ struct MarkdownFootnotePlacementTests {
 		#expect(html.contains("Middle"))
 		#expect(!html.contains("Dup"))
 	}
+
+	@Test func definitionLookalikeInCodeFenceLeavesNoMarker() {
+		let html = MarkdownFootnoteRenderer.convert("x[^a]\n\n```\n[^b]: code\n```\n\n[^a]: Note")
+		#expect(!html.contains("fnblock"))
+		#expect(!html.contains(footnoteSentinelOpen))
+	}
 }

@@ -100,6 +100,13 @@ public enum MarkdownFootnoteRenderer {
 		      let end = result.range(of: "\(footnoteSentinelClose)</p>", range: start.upperBound..<result.endIndex) {
 			result.removeSubrange(start.lowerBound..<end.upperBound)
 		}
+		// Markers that landed somewhere other than their own paragraph (a
+		// definition-looking line inside a fenced code block) are removed too.
+		let bareOpen = "\(footnoteSentinelOpen)fnblock:"
+		while let start = result.range(of: bareOpen),
+		      let end = result.range(of: String(footnoteSentinelClose), range: start.upperBound..<result.endIndex) {
+			result.removeSubrange(start.lowerBound..<end.upperBound)
+		}
 		let trailing = renderDefinitionsBlock(unplaced, state: state)
 		if !trailing.isEmpty { result += "\n" + trailing }
 		return result.trimmingCharacters(in: .newlines)
