@@ -150,6 +150,10 @@ public final class LayoutEngine {
 		// cells grow to fit their content, so for them a height is a minimum.
 		if case .px(let fixed) = style.height {
 			contentHeight = isTable || isCell ? max(contentHeight, fixed) : fixed
+		} else if isCell, contentHeight == 0 {
+			// An empty cell still holds a line, so a fill-in row is tall enough to
+			// write in rather than collapsing to its padding.
+			contentHeight = style.resolvedLineHeight()
 		}
 
 		box.height = contentHeight + paddingTop + paddingBottom + border.top + border.bottom

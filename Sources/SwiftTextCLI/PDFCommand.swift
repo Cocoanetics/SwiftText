@@ -513,24 +513,25 @@ func markdownToHTML(
 	    word-break: normal;
 	    min-width: 4em;
 	}
-	/* Fixed per-cell minimums must not push wide tables off the page. */
+	/* An empty cell keeps a line's height, so fill-in rows have room to write in. */
+	th:empty::after, td:empty::after { content: "\\00a0"; }
+	/* Fixed per-cell minimums must not push wide tables off the page. Columns still
+	   size by content, so a word only breaks if it alone is wider than that. */
 	table.wide-table {
-	    table-layout: fixed;
 	    width: calc(100% - 2px);
 	}
 	table.wide-table th,
 	table.wide-table td {
 	    min-width: 0;
-	    overflow-wrap: anywhere;
+	    padding: 0.3em;
 	}
 	table:has(tr > :nth-child(8)) {
-	    table-layout: fixed;
 	    width: calc(100% - 2px);
 	}
 	table:has(tr > :nth-child(8)) th,
 	table:has(tr > :nth-child(8)) td {
 	    min-width: 0;
-	    overflow-wrap: anywhere;
+	    padding: 0.3em;
 	}
 	th { background: #dcdcdc; font-weight: 600; }
 	tr:nth-child(even) td { background: #f9f9f9; }
