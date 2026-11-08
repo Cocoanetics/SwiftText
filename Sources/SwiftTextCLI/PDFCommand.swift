@@ -375,13 +375,15 @@ func markdownToHTML(
 	extraCSS: String? = nil,
 	title: String? = nil,
 	authors: [String] = [],
-	linkCitations: Bool = false
+	linkCitations: Bool = false,
+	footnotes: FootnotePlacement = .section
 ) -> String {
 	let orientation = landscape ? "landscape" : "portrait"
 	let pageCSS = "\(paper.cssName) \(orientation)"
 	var options: MarkdownToHTML.Options = [.headingIDs]
 	if passThroughRawHTML { options.insert(.passThroughRawHTML) }
 	if linkCitations { options.insert(.linkCitations) }
+	if footnotes == .end { options.insert(.footnotesAtEnd) }
 	let body = MarkdownToHTML.convert(markdown, options: options)
 	// Optional forced page break before a given heading level (e.g. h2 so each
 	// chapter starts on a new page). Placed after the base heading rules so it

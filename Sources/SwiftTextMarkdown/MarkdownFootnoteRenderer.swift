@@ -34,7 +34,8 @@ public enum MarkdownFootnoteRenderer {
 	public static func convert(
 		_ markdown: String, options: SwiftMarkdownHTMLRenderer.Options = []
 	) -> String {
-		let (cleaned, definitions) = extractFootnoteDefinitions(from: markdown, leavingMarkers: true)
+		let atEnd = options.contains(.footnotesAtEnd)
+		let (cleaned, definitions) = extractFootnoteDefinitions(from: markdown, leavingMarkers: !atEnd)
 
 		// Fast path: no definitions at all -> nothing to rewrite, render directly.
 		if definitions.isEmpty {
@@ -43,7 +44,7 @@ public enum MarkdownFootnoteRenderer {
 
 		let state = FootnoteState(
 			definitionIDs: definitions.map { $0.id },
-			groupByID: Dictionary(definitions.map { ($0.id, $0.group) }, uniquingKeysWith: { first, _ in first })
+			groupByID: atEnd ? nil : Dictionary(definitions.map { ($0.id, $0.group) }, uniquingKeysWith: { first, _ in first })
 		)
 
 		// Rewrite references in the main body.

@@ -57,6 +57,11 @@ public enum SwiftMarkdownHTMLRenderer {
 		/// link) becomes `<a href="#citation-n">[n]</a>` — but only when a matching
 		/// reference item exists in the document.
 		public static let linkCitations = Options(rawValue: 1 << 3)
+
+		/// Collects every footnote definition in one block at the end of the
+		/// document, numbered continuously, instead of keeping each definition
+		/// block where the source puts it (per-block numbering).
+		public static let footnotesAtEnd = Options(rawValue: 1 << 4)
 	}
 
 	/// The `n` of every list item in `document` that starts with `[n]`.
