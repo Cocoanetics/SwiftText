@@ -22,11 +22,16 @@ public struct EpubOptions: Sendable {
 	/// CSS appended after the bundled stylesheet (so its rules win), shared by
 	/// every content document. `nil` uses only the default stylesheet.
 	public var userCSS: String?
+	/// Makes numeric citations clickable: a list item starting with `[n]` gets
+	/// `id="citation-n"` and every other `[n]` links to it — across chapter files
+	/// when the source list is in another one.
+	public var linkCitations: Bool
 
-	public init(chapterLevel: Int = 1, tocDepth: Int = 0, userCSS: String? = nil) {
+	public init(chapterLevel: Int = 1, tocDepth: Int = 0, userCSS: String? = nil, linkCitations: Bool = false) {
 		self.chapterLevel = chapterLevel
 		self.tocDepth = tocDepth
 		self.userCSS = userCSS
+		self.linkCitations = linkCitations
 	}
 }
 
@@ -61,7 +66,7 @@ public enum MarkdownToEpub {
 		let (cleaned, footnotes) = MarkdownFootnoteParser.extractDefinitions(from: markdown)
 		let document = Document(parsing: cleaned, options: [.disableSmartOpts])
 		var chapters = ChapterSplitter.split(document: document, chapterLevel: options.chapterLevel, tocDepth: options.tocDepth,
-		                                     titleFallback: metadata.title, footnotes: footnotes)
+		                                     titleFallback: metadata.title, footnotes: footnotes, linkCitations: options.linkCitations)
 
 		// A table of contents needs at least one entry. If the manuscript has no
 		// heading at the split level, present its whole content as a single
