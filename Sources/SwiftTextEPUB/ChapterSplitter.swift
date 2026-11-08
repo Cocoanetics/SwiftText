@@ -31,7 +31,7 @@ enum ChapterSplitter {
 	/// (1–6). Leading content becomes front matter. `titleFallback` names a
 	/// chapter whose heading is empty (or the front matter, which is never
 	/// listed but still needs an id).
-	static func split(document: Document, chapterLevel: Int, titleFallback: String) -> [EpubChapter] {
+	static func split(document: Document, chapterLevel: Int, titleFallback: String, footnotes: [MarkdownFootnoteParser.Definition] = []) -> [EpubChapter] {
 		let level = max(1, min(chapterLevel, 6))
 		let blocks = document.children.compactMap { $0 as? BlockMarkup }
 
@@ -54,7 +54,7 @@ enum ChapterSplitter {
 			let isFrontmatter = run.heading == nil
 			chapterNumber += 1
 			let id = String(format: "ch%03d", chapterNumber)
-			let body = renderBody(run.blocks)
+			let body = renderBody(run.blocks, footnotes: footnotes)
 			let title = chapterTitle(from: run.blocks, fallback: titleFallback)
 			chapters.append(EpubChapter(id: id, title: title, bodyXHTML: body, isFrontmatter: isFrontmatter))
 		}
@@ -89,9 +89,18 @@ enum ChapterSplitter {
 		return !word.isEmpty && String(word).range(of: numeral, options: .regularExpression) != nil
 	}
 
-	/// Renders a run of top-level blocks to an XHTML fragment.
-	private static func renderBody(_ blocks: [BlockMarkup]) -> String {
+	/// Renders a run of top-level blocks to an XHTML fragment. Footnote
+	/// references become noteref links and the definitions they use are
+	/// appended as footnote asides, so each chapter file is self-contained.
+	private static func renderBody(_ blocks: [BlockMarkup], footnotes: [MarkdownFootnoteParser.Definition]) -> String {
 		let subdocument = Document(blocks, inheritSourceRange: false)
-		return SwiftMarkdownHTMLRenderer.convert(document: subdocument, options: [.xhtml])
+		guard !footnotes.isEmpty else {
+			return SwiftMarkdownHTMLRenderer.convert(document: subdocument, options: [.xhtml])
+		}
+		let state = EpubFootnoteState(definitions: footnotes)
+		let body = state.render(subdocument, options: [.xhtml])
+		let expanded = state.expandReferences(in: body)
+		let asides = state.renderAsides(options: [.xhtml])
+		return asides.isEmpty ? expanded : expanded + "\n" + asides
 	}
 }

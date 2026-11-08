@@ -102,6 +102,33 @@ struct EpubTests {
 		#expect(opf.contains("Tom &amp; Jerry &lt;3"))
 	}
 
+	// MARK: - Footnotes
+
+	@Test("footnotes become EPUB 3 noterefs with an aside in the referencing chapter")
+	func footnotes() {
+		let markdown = "# Buch\n\n## Kapitel 1\n\nText mit Fußnote.[^a]\n\n[^a]: Eine Fußnote.\n"
+		let files = MarkdownToEpub.makeFiles(markdown, metadata: fixedMetadata(), options: EpubOptions(chapterLevel: 2))
+		let chapter = string(file(files, "OEBPS/text/ch002.xhtml"))
+		#expect(chapter.contains("<sup><a href=\"#fn-a\" id=\"ref-a\" epub:type=\"noteref\">1</a></sup>"))
+		#expect(chapter.contains("<aside id=\"fn-a\" epub:type=\"footnote\"><p>Eine Fußnote.</p></aside>"))
+		#expect(!chapter.contains("[^a]"))
+		expectWellFormedXML(chapter, "ch002.xhtml")
+	}
+
+	@Test("each chapter carries its own footnotes, numbered per chapter")
+	func footnotesAcrossChapters() {
+		let markdown = "## One\n\nA[^x] B[^y]\n\n## Two\n\nC[^z] D[^y]\n\n[^x]: Ex.\n\n[^y]: Why.\n\n[^z]: Zed.\n"
+		let files = MarkdownToEpub.makeFiles(markdown, metadata: fixedMetadata(), options: EpubOptions(chapterLevel: 2))
+		let one = string(file(files, "OEBPS/text/ch001.xhtml"))
+		let two = string(file(files, "OEBPS/text/ch002.xhtml"))
+		#expect(one.contains("id=\"fn-x\"") && one.contains("id=\"fn-y\"") && !one.contains("id=\"fn-z\""))
+		#expect(two.contains("id=\"fn-z\"") && two.contains("id=\"fn-y\"") && !two.contains("id=\"fn-x\""))
+		#expect(two.contains("href=\"#fn-z\" id=\"ref-z\" epub:type=\"noteref\">1</a>"))
+		#expect(two.contains("href=\"#fn-y\" id=\"ref-y\" epub:type=\"noteref\">2</a>"))
+		expectWellFormedXML(one, "ch001.xhtml")
+		expectWellFormedXML(two, "ch002.xhtml")
+	}
+
 	// MARK: - Chapter splitting
 
 	@Test("splits into one file per heading at the chosen level")
