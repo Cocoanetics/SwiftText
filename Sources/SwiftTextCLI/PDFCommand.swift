@@ -375,21 +375,24 @@ func markdownToHTML(
 	extraCSS: String? = nil,
 	title: String? = nil,
 	authors: [String] = [],
-	linkCitations: Bool = false
+	linkCitations: Bool = false,
+	footnotes: FootnotePlacement = .section
 ) -> String {
 	let orientation = landscape ? "landscape" : "portrait"
 	let pageCSS = "\(paper.cssName) \(orientation)"
 	var options: MarkdownToHTML.Options = [.headingIDs]
 	if passThroughRawHTML { options.insert(.passThroughRawHTML) }
 	if linkCitations { options.insert(.linkCitations) }
+	if footnotes == .end { options.insert(.footnotesAtEnd) }
 	let body = MarkdownToHTML.convert(markdown, options: options)
 	// Optional forced page break before a given heading level (e.g. h2 so each
 	// chapter starts on a new page). Placed after the base heading rules so it
-	// wins on source order; the leading break is ignored by the print engine
-	// when the heading is the first box, so no blank first page is emitted.
+	// wins on source order. The first block of the document is exempt: WebKit
+	// honours a leading break and would emit a blank first page.
 	let headingBreakCSS = pageBreakBefore.map { level in
 		"""
 		\(level.rawValue) { page-break-before: always; break-before: page; }
+		body > \(level.rawValue):first-child { page-break-before: auto; break-before: auto; }
 		"""
 	} ?? ""
 	var metadata = title.map { "<title>\(escapeHTMLMetadata($0))</title>\n" } ?? ""

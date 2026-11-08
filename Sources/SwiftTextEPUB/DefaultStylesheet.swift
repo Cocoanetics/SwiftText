@@ -4,7 +4,7 @@
 //  The bundled reading stylesheet, referenced by every content document. Tuned
 //  for long-form prose: a serif face, first-line-indented paragraphs with no
 //  inter-paragraph gap (the print-book convention), a centered scene-break rule,
-//  each chapter starting on a new page, and a centered title page. User CSS
+//  each chapter starting on a new page, and a centered title page, and footnotes set off by a short rule. User CSS
 //  passed to the converter is appended after this so author rules win.
 
 import SwiftTextMarkdown
@@ -16,6 +16,7 @@ enum DefaultStylesheet {
 		+ "/* Like after a scene break, the paragraph after a box starts flush. */\n.markdown-alert + p { text-indent: 0; }\n"
 
 	private static let bookCSS = """
+	@namespace epub "http://www.idpf.org/2007/ops";
 	/* SwiftText EPUB base stylesheet */
 	html {
 	  font-family: Georgia, "Times New Roman", serif;
@@ -26,6 +27,27 @@ enum DefaultStylesheet {
 	  margin: 0 5%;
 	  widows: 2;
 	  orphans: 2;
+	}
+	/* Footnotes */
+	section.footnotes {
+	  margin-top: 2em;
+	  font-size: 0.9em;
+	}
+	section.footnotes > hr {
+	  width: 30%;
+	  margin: 0 0 0.6em;
+	  border: 0;
+	  border-top: 1px solid currentColor;
+	}
+	aside.footnote {
+	  margin: 0.3em 0;
+	}
+	aside.footnote p {
+	  text-indent: 0;
+	  text-align: left;
+	}
+	a.footnote-backlink, a.noteref {
+	  text-decoration: none;
 	}
 	h1, h2, h3, h4, h5, h6 {
 	  font-weight: bold;
