@@ -395,17 +395,24 @@ func markdownToHTML(
 	// Optional forced page break before a given heading level (e.g. h2 so each
 	// chapter starts on a new page). Placed after the base heading rules so it
 	// wins on source order. The first block of the document is exempt: WebKit
-	// honours a leading break and would emit a blank first page. A front-matter
-	// block already ends with a forced break, so a heading directly after one is
-	// exempt too, or the two breaks would leave a blank page between them.
+	// honours a leading break and would emit a blank first page.
 	let headingBreakCSS = pageBreakBefore.map { level in
-		let heading = level.rawValue
-		let afterFrontMatter = frontMatter == nil ? "" : ", .titlepage + \(heading), nav.toc + \(heading)"
-		return """
-		\(heading) { page-break-before: always; break-before: page; }
-		body > \(heading):first-child\(afterFrontMatter) { page-break-before: auto; break-before: auto; }
+		"""
+		\(level.rawValue) { page-break-before: always; break-before: page; }
+		body > \(level.rawValue):first-child { page-break-before: auto; break-before: auto; }
 		"""
 	} ?? ""
+	// A front-matter block ends with a forced break; when the body opens with a
+	// breaking heading, that heading breaks too and the two would leave a blank
+	// page between them. The heading keeps its break and the last front-matter
+	// block drops its own, so a user stylesheet that changes the block's break
+	// cannot remove both.
+	var frontMatterBreakCSS = ""
+	if let frontMatter, let level = pageBreakBefore,
+	   body.hasPrefix("<\(level.rawValue)>") || body.hasPrefix("<\(level.rawValue) ") {
+		let last = frontMatter.contents != nil ? "nav.toc" : (frontMatter.titlePage != nil ? ".titlepage" : "")
+		if !last.isEmpty { frontMatterBreakCSS = "\(last) { page-break-after: auto; break-after: auto; }" }
+	}
 	var frontMatterHTML = ""
 	if let titlePage = frontMatter?.titlePage { frontMatterHTML += FrontMatterHTML.titlePage(titlePage) + "\n" }
 	if let contents = frontMatter?.contents {
@@ -565,6 +572,7 @@ func markdownToHTML(
 	\(footnotes == .page ? footnotePageCSS : "")
 	\(headingBreakCSS)
 	\(frontMatter == nil ? "" : FrontMatterHTML.css)
+	\(frontMatterBreakCSS)
 	\(extraCSS.map { "\n/* User stylesheet */\n" + $0 } ?? "")
 	</style>
 	</head>
