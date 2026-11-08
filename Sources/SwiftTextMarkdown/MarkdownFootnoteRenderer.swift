@@ -34,7 +34,7 @@ public enum MarkdownFootnoteRenderer {
 	public static func convert(
 		_ markdown: String, options: SwiftMarkdownHTMLRenderer.Options = []
 	) -> String {
-		let (cleaned, definitions) = extractFootnoteDefinitions(from: markdown)
+		let (cleaned, definitions) = extractFootnoteDefinitions(from: markdown, leavingMarkers: true)
 
 		// Fast path: no definitions at all -> nothing to rewrite, render directly.
 		if definitions.isEmpty {
@@ -56,7 +56,7 @@ public enum MarkdownFootnoteRenderer {
 		// only ever referenced from another definition's body — and that other
 		// definition may appear earlier in the source. Re-scan until no pass
 		// renders anything new so such chains resolve regardless of source order.
-		var renderedDefinitions: [(number: Int, html: String)] = []
+		var renderedDefinitions: [(number: Int, group: Int, html: String)] = []
 		var renderedIDs = Set<String>()
 		var renderedNewDefinition = true
 		while renderedNewDefinition {
@@ -70,7 +70,7 @@ public enum MarkdownFootnoteRenderer {
 				var defRewriter = FootnoteReferenceRewriter(state: state)
 				let rewrittenDef = defRewriter.visit(defDocument) as? Document ?? defDocument
 				let defBodyHTML = SwiftMarkdownHTMLRenderer.convert(document: rewrittenDef, options: options, citationNumbers: citationNumbers)
-				renderedDefinitions.append((number, defBodyHTML))
+				renderedDefinitions.append((number, definition.group, defBodyHTML))
 				renderedIDs.insert(definition.id)
 				renderedNewDefinition = true
 			}
@@ -79,12 +79,28 @@ public enum MarkdownFootnoteRenderer {
 		// Two-pass sentinel expansion so nested refs inside definition bodies
 		// also get the correct per-occurrence anchor id.
 		let expandedBody = expandSentinels(in: bodyHTML, state: state)
-		let definitionsHTML = renderDefinitionsBlock(renderedDefinitions, state: state)
-
-		if definitionsHTML.isEmpty {
-			return expandedBody
+		// Put each definition block back where the source had it; blocks whose
+		// marker didn't survive rendering fall back to the end of the document.
+		var result = expandedBody
+		var unplaced: [(number: Int, html: String)] = []
+		for group in Set(renderedDefinitions.map { $0.group }).sorted() {
+			let entries = renderedDefinitions.filter { $0.group == group }.map { ($0.number, $0.html) }
+			let block = renderDefinitionsBlock(entries, state: state)
+			let marker = "<p>\(footnoteBlockMarker(group))</p>"
+			if let range = result.range(of: marker) {
+				result.replaceSubrange(range, with: block)
+			} else {
+				unplaced.append(contentsOf: entries)
+			}
 		}
-		return expandedBody + "\n" + definitionsHTML
+		// Drop markers of blocks that rendered nothing (unreferenced definitions).
+		for group in Set(definitions.map { $0.group }) {
+			let marker = "<p>\(footnoteBlockMarker(group))</p>"
+			if let range = result.range(of: marker) { result.removeSubrange(range) }
+		}
+		let trailing = renderDefinitionsBlock(unplaced, state: state)
+		if !trailing.isEmpty { result += "\n" + trailing }
+		return result.trimmingCharacters(in: .newlines)
 	}
 }
 
@@ -122,7 +138,7 @@ private func expandSentinels(in html: String, state: FootnoteState) -> String {
 			result += "<sup><a href=\"#fn-\(number)\" id=\"\(anchorID)\">[\(number)]</a></sup>"
 		} else {
 			// Unknown payload — pass through verbatim.
-			result.append(contentsOf: html[openIndex...html.index(after: closeIndex)])
+			result.append(contentsOf: html[openIndex...closeIndex])
 		}
 		index = html.index(after: closeIndex)
 	}

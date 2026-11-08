@@ -81,6 +81,13 @@ public final class MarkdownFootnoteResolver {
 struct FootnoteDefinition {
 	let id: String
 	let body: String
+	/// Index of the contiguous definition block this definition came from.
+	var group: Int = 0
+}
+
+/// Marker paragraph left in the cleaned source where a definition block sat.
+func footnoteBlockMarker(_ group: Int) -> String {
+	"\(footnoteSentinelOpen)fnblock:\(group)\(footnoteSentinelClose)"
 }
 
 /// Scans source markdown for `[^id]: …` definition blocks. Returns the source
@@ -91,7 +98,8 @@ struct FootnoteDefinition {
 /// Indentation is stripped from continuation lines so the captured body is plain
 /// Markdown.
 func extractFootnoteDefinitions(
-	from source: String
+	from source: String,
+	leavingMarkers: Bool = false
 ) -> (cleaned: String, definitions: [FootnoteDefinition]) {
 	let normalized = source
 		.replacingOccurrences(of: "\r\n", with: "\n")
@@ -103,6 +111,8 @@ func extractFootnoteDefinitions(
 
 	var definitions: [FootnoteDefinition] = []
 	var seenIDs = Set<String>()
+	var group = -1
+	var lastKeptWasDefinition = false
 
 	var i = 0
 	while i < lines.count {
@@ -110,8 +120,17 @@ func extractFootnoteDefinitions(
 
 		guard let start = parseDefinitionStart(line) else {
 			keptLines.append(line)
+			if !line.trimmingCharacters(in: .whitespaces).isEmpty { lastKeptWasDefinition = false }
 			i += 1
 			continue
+		}
+
+		if !lastKeptWasDefinition {
+			group += 1
+			if leavingMarkers {
+				keptLines.append(contentsOf: ["", footnoteBlockMarker(group), ""])
+			}
+			lastKeptWasDefinition = true
 		}
 
 		// Collect body lines: the inline content after `]:`, plus any
@@ -149,7 +168,7 @@ func extractFootnoteDefinitions(
 
 		// Skip duplicate definitions — first wins.
 		if !seenIDs.contains(start.id) {
-			definitions.append(FootnoteDefinition(id: start.id, body: bodyLines.joined(separator: "\n")))
+			definitions.append(FootnoteDefinition(id: start.id, body: bodyLines.joined(separator: "\n"), group: group))
 			seenIDs.insert(start.id)
 		}
 
