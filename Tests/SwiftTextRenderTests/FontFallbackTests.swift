@@ -158,3 +158,38 @@ struct FontFallbackTests {
 	}
 	#endif
 }
+
+@Suite("Standard faces are embedded")
+struct EmbeddedStandardFaceTests {
+	private func render(embedding: Bool) async throws -> String {
+		let fonts = FontBook()
+		fonts.embedsStandardFaces = embedding
+		let pdf = try await HTMLRenderer.renderPDF(
+			html: "<h1 style=\"font-family: sans-serif\">Titel</h1><p style=\"font-family: sans-serif\">Ein <b>fetter</b> Satz mit <i>Kursiv</i>.</p>",
+			fonts: fonts)
+		return String(decoding: pdf, as: UTF8.self)
+	}
+
+	@Test("font dictionaries are indirect objects, not inline in /Resources")
+	func fontsAreIndirect() async throws {
+		let text = try await render(embedding: false)
+		#expect(text.contains("/BaseFont /Helvetica"))
+		let font = try #require(text.range(of: "/Font <<"))
+		let dictionary = text[font.upperBound...].prefix { $0 != ">" }
+		#expect(!dictionary.contains("<<"))
+		#expect(dictionary.contains(" 0 R"))
+	}
+
+	@Test("no base-14 font is left unembedded")
+	func noUnembeddedBase14() async throws {
+		let text = try await render(embedding: true)
+		let installed = ["/System/Library/Fonts/Supplemental/Arial.ttf", "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+		                 "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"].contains { FileManager.default.fileExists(atPath: $0) }
+		guard installed else { return }
+		#expect(!text.contains("/BaseFont /Helvetica"))
+		#expect(!text.contains("/Subtype /Type1"))
+		#expect(text.contains("/FontFile2"))
+		let fonts = text.components(separatedBy: "/Type /Font\n").count - 1
+		#expect(text.components(separatedBy: "/FontFile2").count - 1 >= 3 || fonts >= 3)
+	}
+}

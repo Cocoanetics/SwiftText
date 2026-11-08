@@ -142,6 +142,7 @@ public enum HTMLRenderer {
 		applyAtPageRules(documentSheets + css, to: &options)
 		options.pageMarginPx = max(options.pageMarginPx, options.minimumPageMarginPx)
 		let pageRules = parsePageRules(documentSheets + css)
+		registerFontFaces(documentSheets + css, baseURL: baseURL, in: fonts, warn: reportWarning)
 
 		// Resolve the base direction (auto-detect from content for Markdown etc.).
 		let baseDirection: Direction
@@ -299,6 +300,60 @@ public enum HTMLRenderer {
 	}()
 
 	/// Apply `@page { size; margin }` declarations to the render options.
+	/// Register every `@font-face` whose `src` is a readable local font file, so a
+	/// matching `font-family` is drawn with (and embeds) that face.
+	private static func registerFontFaces(_ sheets: [String], baseURL: URL?, in fonts: FontBook, warn: (String) -> Void) {
+		for sheet in sheets {
+			for node in parseStylesheet(sheet, skipComments: true, skipWhitespace: true) {
+				guard case .atRule(let rule) = node, rule.lowerAtKeyword == "font-face", let content = rule.content else { continue }
+				var family: String?
+				var sources: [String] = []
+				var bold = false
+				var italic = false
+				for declaration in parseDeclarations(content) {
+					let tokens = declaration.value.filter { !$0.isWhitespaceOrComment }
+					switch declaration.lowerName {
+					case "font-family":
+						family = tokens.compactMap { token -> String? in
+							switch token.token {
+							case .string(let name), .ident(let name): return name
+							default: return nil
+							}
+						}.joined(separator: " ")
+					case "src":
+						for token in tokens {
+							switch token.token {
+							case .url(let url): sources.append(url)
+							case .function(let name, let arguments) where name.lowercased() == "url":
+								if let first = arguments.first(where: { !$0.isWhitespaceOrComment }), case .string(let url) = first.token {
+									sources.append(url)
+								}
+							default: break
+							}
+						}
+					case "font-weight":
+						if case .ident(let ident) = tokens.first?.token { bold = ident.lowercased() == "bold" }
+						if case .number(let number, _, _) = tokens.first?.token { bold = number >= 600 }
+					case "font-style":
+						if case .ident(let ident) = tokens.first?.token { italic = ident.lowercased() != "normal" }
+					default: break
+					}
+				}
+				guard let family, !family.isEmpty else { continue }
+				var registeredFace = false
+				for source in sources {
+					let url = URL(string: source, relativeTo: baseURL)?.absoluteURL ?? URL(fileURLWithPath: source)
+					guard url.isFileURL, let data = try? Data(contentsOf: url) else { continue }
+					if (try? fonts.register(data: data, family: family, bold: bold, italic: italic)) != nil {
+						registeredFace = true
+						break
+					}
+				}
+				if !registeredFace { warn("@font-face \(family): no usable local font file in src") }
+			}
+		}
+	}
+
 	private static func applyAtPageRules(_ sheets: [String], to options: inout RenderOptions) {
 		for sheet in sheets {
 			for node in parseStylesheet(sheet, skipComments: true, skipWhitespace: true) {

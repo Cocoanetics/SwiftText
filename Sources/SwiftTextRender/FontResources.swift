@@ -82,7 +82,7 @@ public final class FontResourceBuilder {
 	/// Create the PDF font objects. Call once after all pages are painted.
 	func finalize() {
 		for (key, font) in standardFonts {
-			fontSubdictionary[resourceNames[key]!] = PDFDictionary([
+			let dictionary = PDFDictionary([
 				("Type", "/Font"),
 				("Subtype", "/Type1"),
 				("BaseFont", "/\(font.baseFontName)"),
@@ -97,6 +97,8 @@ public final class FontResourceBuilder {
 					Int((scalar.map(font.advance) ?? 0).rounded())
 				}))
 			])
+			pdf.addObject(dictionary)
+			fontSubdictionary[resourceNames[key]!] = dictionary.reference
 		}
 		for (key, font) in embeddedFonts {
 			fontSubdictionary[resourceNames[key]!] = buildType0Font(font, glyphs: usedGlyphs[key] ?? [:]).reference

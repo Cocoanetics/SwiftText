@@ -130,7 +130,7 @@ public struct EmbeddedFont {
 /// Selects fonts for computed styles. Registered fonts (by family name) embed;
 /// everything else falls back to base-14.
 public final class FontBook {
-	private var registered: [String: EmbeddedFont] = [:]
+	private var registered: [String: [(bold: Bool, italic: Bool, font: EmbeddedFont)]] = [:]
 	/// Registered fonts in registration order (fallback search order).
 	private var registrationOrder: [EmbeddedFont] = []
 	/// Loaded system fallback faces, by file path (nil = tried and unusable).
@@ -138,33 +138,116 @@ public final class FontBook {
 	/// Whether to fall back to bundled system fonts for glyphs no registered or
 	/// base-14 font can render. Disable for hermetic/deterministic rendering.
 	public var systemFallbackEnabled = true
+	/// Whether the generic families (sans-serif, serif, monospace) are drawn with
+	/// an embedded system face — Arial/Liberation/DejaVu in the text's weight and
+	/// slant — instead of the unembedded base-14 fonts. Print preflight rejects
+	/// unembedded fonts, so the CLI turns this on. A family with no installed face
+	/// still falls back to base-14.
+	public var embedsStandardFaces = false
+	/// A font that replaces every generic family but monospace (a single file has
+	/// no bold or italic, so those render in its one face).
+	public var overrideFont: EmbeddedFont?
+	private var standardFaceCache: [String: EmbeddedFont?] = [:]
 
 	public init() {}
+
+	/// Load a TrueType/OpenType file as an ``overrideFont``.
+	@discardableResult
+	public func setOverrideFont(data: Data, fontIndex: Int = 0) throws -> EmbeddedFont {
+		let font = EmbeddedFont(otf: try OpenTypeFont(data: data, fontIndex: fontIndex), postScriptName: "CustomFont")
+		overrideFont = font
+		return font
+	}
 
 	/// Register a TrueType/OpenType font to be used (and embedded) whenever a
 	/// style's `font-family` names `family` (case-insensitive).
 	@discardableResult
-	public func register(data: Data, family: String, fontIndex: Int = 0) throws -> EmbeddedFont {
+	public func register(data: Data, family: String, fontIndex: Int = 0,
+	                     bold: Bool = false, italic: Bool = false) throws -> EmbeddedFont {
 		let otf = try OpenTypeFont(data: data, fontIndex: fontIndex)
-		let font = EmbeddedFont(otf: otf, postScriptName: Self.postScriptName(from: family))
-		registered[family.lowercased()] = font
+		let variant = (bold ? "Bold" : "") + (italic ? "Italic" : "")
+		let font = EmbeddedFont(otf: otf, postScriptName: Self.postScriptName(from: family) + variant)
+		registered[family.lowercased(), default: []].removeAll { $0.bold == bold && $0.italic == italic }
+		registered[family.lowercased(), default: []].append((bold, italic, font))
 		registrationOrder.append(font)
 		return font
 	}
 
 	public func font(for style: ComputedStyle) -> Font {
-		for family in style.fontFamily {
-			if let embedded = registered[family.lowercased()] {
-				return .embedded(embedded)
-			}
-		}
 		let bold = style.fontWeight >= 600
 		let italic = style.fontStyle != .normal
-		switch Self.genericFamily(style.fontFamily) {
+		for family in style.fontFamily {
+			if let faces = registered[family.lowercased()] {
+				let face = faces.first { $0.bold == bold && $0.italic == italic }
+					?? faces.first { $0.bold == bold } ?? faces.first { !$0.bold && !$0.italic } ?? faces[0]
+				return .embedded(face.font)
+			}
+		}
+		let generic = Self.genericFamily(style.fontFamily)
+		if let overrideFont, generic != .monospace { return .embedded(overrideFont) }
+		if embedsStandardFaces, let face = standardFace(generic, bold: bold, italic: italic) {
+			return .embedded(face)
+		}
+		switch generic {
 		case .monospace: return .standard(.courier(bold: bold, italic: italic))
 		case .serif: return .standard(.times(bold: bold, italic: italic))
 		case .sansSerif: return .standard(.helvetica(bold: bold, italic: italic))
 		}
+	}
+
+	/// The installed face standing in for a generic family, loaded once.
+	private func standardFace(_ generic: GenericFamily, bold: Bool, italic: Bool) -> EmbeddedFont? {
+		let key = "\(generic)-\(bold)-\(italic)"
+		if let cached = standardFaceCache[key] { return cached }
+		var face: EmbeddedFont?
+		for path in Self.standardFaceCandidates(generic, bold: bold, italic: italic) {
+			if let loaded = loadFace(path: path, name: Self.postScriptName(from: "Embedded" + ((path as NSString).lastPathComponent as String))) {
+				face = loaded
+				break
+			}
+		}
+		standardFaceCache[key] = .some(face)
+		return face
+	}
+
+	private func loadFace(path: String, name: String) -> EmbeddedFont? {
+		guard FileManager.default.fileExists(atPath: path),
+		      let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+		      let otf = try? OpenTypeFont(data: data, fontIndex: 0) else { return nil }
+		return EmbeddedFont(otf: otf, postScriptName: name)
+	}
+
+	/// System files for a generic family's face, metric-compatible first.
+	private static func standardFaceCandidates(_ generic: GenericFamily, bold: Bool, italic: Bool) -> [String] {
+		let macStyle = bold ? (italic ? " Bold Italic" : " Bold") : (italic ? " Italic" : "")
+		let liberationStyle = bold ? (italic ? "BoldItalic" : "Bold") : (italic ? "Italic" : "Regular")
+		let windowsStyle = bold ? (italic ? "bi" : "bd") : (italic ? "i" : "")
+		let dejaVuStyle = bold ? (italic ? "-BoldOblique" : "-Bold") : (italic ? "-Oblique" : "")
+		let dejaVuSerifStyle = bold ? (italic ? "-BoldItalic" : "-Bold") : (italic ? "-Italic" : "")
+		let mac: String, liberationName: String, liberationDirectory: String, windows: String, dejaVu: String
+		switch generic {
+		case .sansSerif:
+			(mac, liberationName, liberationDirectory, windows) = ("Arial", "LiberationSans", "liberation-sans", "arial")
+			dejaVu = "DejaVuSans" + dejaVuStyle
+		case .serif:
+			(mac, liberationName, liberationDirectory, windows) = ("Times New Roman", "LiberationSerif", "liberation-serif", "times")
+			dejaVu = "DejaVuSerif" + dejaVuSerifStyle
+		case .monospace:
+			(mac, liberationName, liberationDirectory, windows) = ("Courier New", "LiberationMono", "liberation-mono", "cour")
+			dejaVu = "DejaVuSansMono" + dejaVuStyle
+		}
+		return [
+			"/System/Library/Fonts/Supplemental/\(mac)\(macStyle).ttf",
+			"/Library/Fonts/\(mac)\(macStyle).ttf",
+			"/usr/share/fonts/truetype/liberation/\(liberationName)-\(liberationStyle).ttf",
+			"/usr/share/fonts/truetype/liberation2/\(liberationName)-\(liberationStyle).ttf",
+			"/usr/share/fonts/\(liberationDirectory)/\(liberationName)-\(liberationStyle).ttf",
+			"/usr/share/fonts/liberation/\(liberationName)-\(liberationStyle).ttf",
+			"/usr/share/fonts/truetype/dejavu/\(dejaVu).ttf",
+			"/usr/share/fonts/dejavu/\(dejaVu).ttf",
+			"/usr/share/fonts/TTF/\(dejaVu).ttf",
+			"C:\\Windows\\Fonts\\\(windows)\(windowsStyle).ttf"
+		]
 	}
 
 	// MARK: - Font fallback
@@ -206,7 +289,8 @@ public final class FontBook {
 		let bold = style.fontWeight >= 600
 		let italic = style.fontStyle != .normal
 		let base14 = StandardFont.helvetica(bold: bold, italic: italic)
-		if base14.covers(scalar) { return .standard(base14) }
+		// With embedding on, never reintroduce an unembedded base-14 face.
+		if !embedsStandardFaces, base14.covers(scalar) { return .standard(base14) }
 		if systemFallbackEnabled, let system = systemFallback(for: scalar, style: style) { return .embedded(system) }
 		return primary
 	}
@@ -223,14 +307,11 @@ public final class FontBook {
 				if let face = cached, face.hasGlyph(for: scalar) { return face }
 				continue
 			}
-			guard FileManager.default.fileExists(atPath: path),
-			      let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
-			      let otf = try? OpenTypeFont(data: data, fontIndex: 0) else {
+			let name = Self.postScriptName(from: "Fallback" + ((path as NSString).lastPathComponent as String))
+			guard let face = loadFace(path: path, name: name) else {
 				systemFallbackCache[path] = .some(nil)
 				continue
 			}
-			let name = Self.postScriptName(from: "Fallback" + ((path as NSString).lastPathComponent as String))
-			let face = EmbeddedFont(otf: otf, postScriptName: name)
 			systemFallbackCache[path] = .some(face)
 			if face.hasGlyph(for: scalar) { return face }
 		}
