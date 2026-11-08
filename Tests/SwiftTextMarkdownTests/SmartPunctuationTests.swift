@@ -34,6 +34,12 @@ struct SmartPunctuationTests {
 			== "He called it \u{201A}the parents\u{2019} room\u{2018}")
 	}
 
+	@Test("a single quote spanning hard-wrapped lines still closes")
+	func quoteAcrossLines() {
+		#expect(SmartPunctuation.apply(to: "He called it 'the big\nidea' yesterday", language: "de")
+			== "He called it \u{201A}the big\nidea\u{2018} yesterday")
+	}
+
 	@Test("code, URLs, markers, html and link destinations are untouched")
 	func leftAlone() {
 		let kept = [

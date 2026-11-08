@@ -49,6 +49,8 @@ public enum SmartPunctuation {
 		var inFrontMatter = false
 		var inList = false
 		var openSpan: Int?
+		/// Single quotes opened in the current paragraph and not yet closed.
+		var openSingles = 0
 		let labels = Set(lines.compactMap { referenceLabel(of: $0.trimmingCharacters(in: .whitespaces)) })
 
 		/// Whether a code span opened by a run of `length` backticks closes later in the same paragraph.
@@ -94,6 +96,7 @@ public enum SmartPunctuation {
 
 			let blank = trimmed.isEmpty
 			if blank {
+				openSingles = 0
 				result.append(line)
 				continue
 			}
@@ -103,7 +106,7 @@ public enum SmartPunctuation {
 				let chars = Array(line)
 				if let end = closingBacktickRun(chars, from: 0, length: run) {
 					openSpan = nil
-					let (rest, pending) = convertInline(String(chars[end...]), quotes: quotes, labels: labels, closes: closes(after: index))
+					let (rest, pending) = convertInline(String(chars[end...]), quotes: quotes, labels: labels, openSingles: &openSingles, closes: closes(after: index))
 					openSpan = pending
 					result.append(String(chars[..<end]) + rest)
 				} else {
@@ -143,7 +146,7 @@ public enum SmartPunctuation {
 				continue
 			}
 
-			let (converted, pending) = convertInline(line, quotes: quotes, labels: labels, dashes: !isUnattributedHeading(trimmed),
+			let (converted, pending) = convertInline(line, quotes: quotes, labels: labels, dashes: !isUnattributedHeading(trimmed), openSingles: &openSingles,
 			                                         closes: closes(after: index))
 			openSpan = pending
 			result.append(converted)
@@ -208,7 +211,7 @@ public enum SmartPunctuation {
 
 	/// Converts one line. When a code span opens here and closes on a later line (`closes` says so),
 	/// the rest of the line is kept verbatim and the run length is returned as pending.
-	private static func convertInline(_ line: String, quotes: Quotes, labels: Set<String>, dashes: Bool = true,
+	private static func convertInline(_ line: String, quotes: Quotes, labels: Set<String>, dashes: Bool = true, openSingles: inout Int,
 	                                  closes: (Int) -> Bool) -> (String, pending: Int?) {
 		var pending: Int?
 		let chars = Array(line)
@@ -216,8 +219,6 @@ public enum SmartPunctuation {
 		var i = 0
 		/// Last character before the cursor that is not an emphasis marker (line start counts as whitespace).
 		var previous: Character = " "
-		/// Single quotes opened on this line and not yet closed.
-		var openSingles = 0
 
 		func append(_ s: some Sequence<Character>) {
 			for c in s {
