@@ -611,7 +611,12 @@ private func footnotePageScript(printableWidth: Double, printableHeight: Double)
 	        var found = [];
 	        block.querySelectorAll('sup a[href^="#fn-"]').forEach(function (a) {
 	            var id = a.getAttribute('href').slice(1);
-	            if (notes[id] && !placed[id]) { placed[id] = true; found.push(notes[id]); }
+	            if (notes[id] && !placed[id]) {
+	                placed[id] = true;
+	                found.push(notes[id]);
+	                // A note referenced only from another note goes on the same page.
+	                found = found.concat(notesFor(notes[id]));
+	            }
 	        });
 	        return found;
 	    }
