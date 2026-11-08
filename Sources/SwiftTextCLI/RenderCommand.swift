@@ -420,10 +420,12 @@ struct Render: AsyncParsableCommand {
 	private func decoratedPDF(from browser: WebKitBrowser, title: String, authors: [String]) async throws -> PDFOutput {
 		let preparation = try await browser.preparePageFurniture(paperSize: pageSize(), footer: pageNumbers,
 		                                                        header: runningHeads, headingLevel: pageBreakBefore?.numericLevel ?? 1)
+		let headings = try await browser.outlineHeadings()
 		let exported = try await browser.exportPaginatedPDFDataWithAnchors(paperSize: pageSize())
 		let titleSection = preparation.titleStart.map { ($0, preparation.titleEnd) }
 		let data = try PDFPageFurniture.add(to: exported.data, pageNumbers: pageNumbers, title: runningHeads ? title : nil,
-		                                    headings: preparation.headings, titleSection: titleSection)
+		                                    headings: preparation.headings, titleSection: titleSection,
+		                                    outline: PDFOutlineBuilder.entries(for: headings, in: exported.data))
 			.settingPDFMetadata(title: title, authors: authors)
 		return (data, exported.anchorPages)
 	}

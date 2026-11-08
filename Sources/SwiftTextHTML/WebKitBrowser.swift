@@ -170,7 +170,7 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 	}
 
 	@MainActor
-	private func loadedWebView() async throws -> WKWebView {
+	func loadedWebView() async throws -> WKWebView {
 		try await ensureLoaded()
 		return webView
 	}

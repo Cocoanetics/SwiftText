@@ -3,11 +3,12 @@ import AppKit
 import PDFKit
 import SwiftTextHTML
 
-/// Stamps searchable text after WebKit has settled the page count. Links are
-/// rebuilt because drawing a CGPDFPage copies content, not annotations.
+/// Stamps searchable text and writes the outline after WebKit has settled the page
+/// count. Links are rebuilt because drawing a CGPDFPage copies content, not annotations.
 enum PDFPageFurniture {
-	static func add(to data: Data, pageNumbers: Bool, title: String?, headings: [PDFChapterHeading], titleSection: (start: PDFChapterHeading, end: PDFChapterHeading?)? = nil) throws -> Data {
-		guard pageNumbers || title != nil else { return data }
+	static func add(to data: Data, pageNumbers: Bool, title: String?, headings: [PDFChapterHeading], titleSection: (start: PDFChapterHeading, end: PDFChapterHeading?)? = nil,
+	                outline: [PDFOutlineBuilder.Entry] = []) throws -> Data {
+		guard pageNumbers || title != nil || !outline.isEmpty else { return data }
 		guard let source = PDFDocument(data: data) else { throw WebKitBrowserError.printFailed }
 		var chapters: [Int: String] = [:]
 		for heading in headings {
@@ -65,6 +66,9 @@ enum PDFPageFurniture {
 			NSGraphicsContext.restoreGraphicsState()
 			context.endPage()
 		}
+		// PDFKit drops an `outlineRoot` set on a document read from data when writing it
+		// out, but keeps an outline already in the file, so it is written here.
+		if let dictionary = PDFOutlineBuilder.dictionary(for: outline) { CGPDFContextSetOutline(context, dictionary) }
 		context.closePDF()
 		guard let result = PDFDocument(data: output as Data) else { throw WebKitBrowserError.printFailed }
 		result.documentAttributes = source.documentAttributes
@@ -99,6 +103,53 @@ enum PDFPageFurniture {
 			}
 		}
 		return links
+	}
+}
+
+/// The PDF outline (bookmarks) for the webkit engine: every heading, nested by
+/// level, as the swift engine writes it.
+enum PDFOutlineBuilder {
+	struct Entry {
+		let level: Int
+		let title: String
+		let page: Int
+		let point: CGPoint
+	}
+
+	/// Locates each heading in `data` — the PDF as WebKit printed it, before page
+	/// furniture repeats chapter titles in the header. Headings not found are left out.
+	static func entries(for headings: [PDFOutlineHeading], in data: Data) -> [Entry] {
+		guard !headings.isEmpty, let document = PDFDocument(data: data) else { return [] }
+		return headings.compactMap { heading in
+			let matches = document.findString(heading.searchText, withOptions: [])
+			guard heading.occurrence < matches.count, let page = matches[heading.occurrence].pages.first else { return nil }
+			let bounds = matches[heading.occurrence].bounds(for: page)
+			return Entry(level: heading.level, title: heading.title, page: document.index(for: page), point: CGPoint(x: 0, y: bounds.maxY + 4))
+		}
+	}
+
+	/// The Core Graphics outline: each entry nested under the last one of a higher
+	/// level, opening its page at the heading.
+	static func dictionary(for entries: [Entry]) -> CFDictionary? {
+		guard !entries.isEmpty else { return nil }
+		// Children are gathered per entry first, as the dictionaries are values.
+		var children: [[Int]] = Array(repeating: [], count: entries.count)
+		var roots: [Int] = []
+		var stack: [Int] = []
+		for (position, entry) in entries.enumerated() {
+			while let top = stack.last, entries[top].level >= entry.level { stack.removeLast() }
+			if let parent = stack.last { children[parent].append(position) } else { roots.append(position) }
+			stack.append(position)
+		}
+		func item(_ position: Int) -> [String: Any] {
+			let entry = entries[position]
+			var node: [String: Any] = [kCGPDFOutlineTitle as String: entry.title,
+			                           kCGPDFOutlineDestination as String: entry.page + 1,
+			                           kCGPDFOutlineDestinationRect as String: CGRect(origin: entry.point, size: .zero).dictionaryRepresentation]
+			if !children[position].isEmpty { node[kCGPDFOutlineChildren as String] = children[position].map(item) }
+			return node
+		}
+		return [kCGPDFOutlineChildren as String: roots.map(item)] as CFDictionary
 	}
 }
 #endif
