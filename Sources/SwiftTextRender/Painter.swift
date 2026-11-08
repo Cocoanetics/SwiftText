@@ -44,10 +44,17 @@ public final class Painter {
 
 	private let builder: FontResourceBuilder
 	private var linkAnnotations: [PDFDictionary] = []
+	private let internalAnchors: Set<String>
+	/// Annotations whose `href` names a known anchor. Their `/A` action is a
+	/// `/URI` placeholder until the caller, who knows the page objects, swaps in
+	/// a `/GoTo`.
+	public private(set) var internalLinks: [(annotation: PDFDictionary, id: String)] = []
 	private var paintOffsetY = 0.0
 	private var paintingRepeatedHeader = false
 
-	public init(geometry: PageGeometry, fonts: FontBook, builder: FontResourceBuilder, compress: Bool = true) {
+	public init(geometry: PageGeometry, fonts: FontBook, builder: FontResourceBuilder, compress: Bool = true,
+	            internalAnchors: Set<String> = []) {
+		self.internalAnchors = internalAnchors
 		self.geometry = geometry
 		self.fonts = fonts
 		self.builder = builder
@@ -467,13 +474,19 @@ public final class Painter {
 		let x1 = (x + width) * pxToPt
 		let yTop = (geometry.pageHeightPx - topPageY) * pxToPt
 		let yBottom = (geometry.pageHeightPx - bottomPageY) * pxToPt
-		linkAnnotations.append(PDFDictionary([
+		let annotation = PDFDictionary([
 			("Type", "/Annot"),
 			("Subtype", "/Link"),
 			("Rect", PDFArray([x0, yBottom, x1, yTop])),
 			("Border", PDFArray([0, 0, 0])),
 			("A", PDFDictionary([("S", "/URI"), ("URI", PDFString(href))]))
-		]))
+		])
+		linkAnnotations.append(annotation)
+		if href.hasPrefix("#") {
+			let fragment = String(href.dropFirst())
+			let id = internalAnchors.contains(fragment) ? fragment : fragment.removingPercentEncoding
+			if let id, internalAnchors.contains(id) { internalLinks.append((annotation, id)) }
+		}
 	}
 
 	/// The link annotations collected while painting this page.

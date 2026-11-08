@@ -62,6 +62,14 @@ public enum RenderError: Error {
 	case noRootBox
 }
 
+/// A rendered PDF together with the page each in-document anchor lands on.
+public struct RenderedPDF: Sendable {
+	/// The PDF bytes.
+	public let data: Data
+	/// Zero-based page index for every element `id` (and `<a name>`).
+	public let anchorPages: [String: Int]
+}
+
 /// Renders HTML (with optional CSS) to a PDF, cross-platform.
 public enum HTMLRenderer {
 
@@ -91,6 +99,27 @@ public enum HTMLRenderer {
 		authors: [String] = [],
 		warningHandler: ((String) -> Void)? = nil
 	) async throws -> Data {
+		try await renderPDFWithAnchors(html: html, css: css, fonts: fonts, baseURL: baseURL, options: options,
+		                               title: title, authors: authors, warningHandler: warningHandler).data
+	}
+
+	/// Render an HTML string to PDF bytes, also reporting which page each
+	/// element `id` (and `<a name>`) lands on.
+	///
+	/// Takes the same parameters as ``renderPDF(html:css:fonts:baseURL:options:title:authors:warningHandler:)``.
+	/// In-document `<a href="#id">` links to a known anchor are written as
+	/// internal `/GoTo` destinations; unknown fragments and external URLs stay
+	/// `/URI` actions.
+	public static func renderPDFWithAnchors(
+		html: String,
+		css: [String] = [],
+		fonts: FontBook = FontBook(),
+		baseURL: URL? = nil,
+		options: RenderOptions = RenderOptions(),
+		title: String? = nil,
+		authors: [String] = [],
+		warningHandler: ((String) -> Void)? = nil
+	) async throws -> RenderedPDF {
 		let builder = try await DomBuilder(html: Data(html.utf8), baseURL: baseURL)
 		guard let root = builder.root else { throw RenderError.noDocument }
 		let reportWarning = warningHandler ?? { warning in
@@ -138,6 +167,10 @@ public enum HTMLRenderer {
 			? [PageSlice(top: 0, bottom: columnHeight, repeatedHeader: nil)]
 			: paginate(rootBox, columnHeight: columnHeight, pageHeightPx: pageHeightPx, margin: margin)
 
+		let anchorYs = collectAnchors(rootBox)
+		let anchorNames = Set(anchorYs.keys)
+		var internalLinks: [(annotation: PDFDictionary, id: String)] = []
+
 		let pdf = PDF()
 		if let title, !title.isEmpty {
 			pdf.info["Title"] = PDFString(title)
@@ -152,7 +185,8 @@ public enum HTMLRenderer {
 			let geometry = PageGeometry(pageWidthPx: options.pageWidthPx, pageHeightPx: pageHeightPx,
 			                            marginPx: margin, columnTop: slice.top, sliceHeightPx: slice.bottom - slice.top,
 			                            contentOffsetPx: slice.repeatedHeader?.reservedHeight ?? 0)
-			let painter = Painter(geometry: geometry, fonts: fonts, builder: fontBuilder, compress: options.compressStreams)
+			let painter = Painter(geometry: geometry, fonts: fonts, builder: fontBuilder, compress: options.compressStreams,
+			                      internalAnchors: anchorNames)
 			painter.paint(rootBox)
 			if let header = slice.repeatedHeader {
 				painter.paintRepeatedTableHeader(header.box)
@@ -170,6 +204,7 @@ public enum HTMLRenderer {
 				("Contents", painter.stream.reference),
 				("Resources", fontBuilder.resourcesReference)
 			])
+			internalLinks += painter.internalLinks
 			let annotations = painter.annotations()
 			if !annotations.isEmpty {
 				var references: [PDFValue] = []
@@ -185,7 +220,58 @@ public enum HTMLRenderer {
 		// Build the shared font objects now that every page's glyph use is known.
 		fontBuilder.finalize()
 		addOutline(to: pdf, root: rootBox, slices: slices, pages: pageObjects, pageHeightPx: pageHeightPx, margin: margin)
-		return pdf.write()
+
+		var anchorPages: [String: Int] = [:]
+		var destinations: [String: PDFArray] = [:]
+		for (id, y) in anchorYs where !pageObjects.isEmpty {
+			let target = destination(forColumnY: y, slices: slices, pages: pageObjects,
+			                         pageHeightPx: pageHeightPx, margin: margin)
+			anchorPages[id] = target.pageIndex
+			destinations[id] = target.array
+		}
+		for link in internalLinks {
+			guard let array = destinations[link.id] else { continue }
+			link.annotation["A"] = PDFDictionary([("S", "/GoTo"), ("D", array)])
+		}
+		return RenderedPDF(data: pdf.write(), anchorPages: anchorPages)
+	}
+
+	/// The column y of every element carrying an `id` (and of `<a name>`).
+	/// An inline element has no geometry of its own, so it maps to the top of
+	/// the block that contains it. The first element with a given id wins.
+	private static func collectAnchors(_ root: Box) -> [String: Double] {
+		var anchors: [String: Double] = [:]
+		func record(_ box: Box, y: Double) {
+			guard let element = box.element else { return }
+			if let id = element.attributeValue("id"), !id.isEmpty, anchors[id] == nil { anchors[id] = y }
+			if element.localName == "a", let name = element.attributeValue("name"), !name.isEmpty,
+			   anchors[name] == nil { anchors[name] = y }
+		}
+		func walk(_ box: Box, blockY: Double) {
+			var blockY = blockY
+			if box is BlockBox { blockY = box.y }
+			record(box, y: blockY)
+			if let block = box as? BlockBox {
+				for child in block.children { walk(child, blockY: blockY) }
+			} else if let inline = box as? InlineBox {
+				for child in inline.children { walk(child, blockY: blockY) }
+			}
+		}
+		walk(root, blockY: root.y)
+		return anchors
+	}
+
+	/// The page and `/XYZ` destination for a column y-coordinate.
+	private static func destination(forColumnY y: Double, slices: [PageSlice], pages: [PDFDictionary],
+	                                pageHeightPx: Double, margin: Double) -> (pageIndex: Int, array: PDFArray) {
+		var pageIndex = slices.count - 1
+		for (index, slice) in slices.enumerated() where y >= slice.top - 0.5 && y < slice.bottom + 0.5 {
+			pageIndex = index
+			break
+		}
+		let pageY = margin + (slices[pageIndex].repeatedHeader?.reservedHeight ?? 0) + (y - slices[pageIndex].top)
+		let topPt = (pageHeightPx - pageY) * pxToPt
+		return (pageIndex, PDFArray([pages[pageIndex].reference, "/XYZ", margin * pxToPt, topPt, "null"]))
 	}
 
 	// MARK: - @page rules
@@ -273,17 +359,6 @@ public enum HTMLRenderer {
 			stack.append(index)
 		}
 
-		func destination(forColumnY y: Double) -> PDFArray {
-			var pageIndex = slices.count - 1
-			for (index, slice) in slices.enumerated() where y >= slice.top - 0.5 && y < slice.bottom + 0.5 {
-				pageIndex = index
-				break
-			}
-			let pageY = margin + (slices[pageIndex].repeatedHeader?.reservedHeight ?? 0) + (y - slices[pageIndex].top)
-			let topPt = (pageHeightPx - pageY) * pxToPt
-			return PDFArray([pages[pageIndex].reference, "/XYZ", margin * pxToPt, topPt, "null"])
-		}
-
 		let outlineRoot = PDFDictionary([("Type", "/Outlines")])
 		pdf.addObject(outlineRoot)
 		for index in nodes.indices { pdf.addObject(nodes[index].dict) }
@@ -294,7 +369,8 @@ public enum HTMLRenderer {
 				let dict = node.dict
 				dict["Title"] = PDFString(node.title)
 				dict["Parent"] = parentReference
-				dict["Dest"] = destination(forColumnY: node.y)
+				dict["Dest"] = destination(forColumnY: node.y, slices: slices, pages: pages,
+				                           pageHeightPx: pageHeightPx, margin: margin).array
 				if position > 0 { dict["Prev"] = nodes[siblings[position - 1]].dict.reference }
 				if position < siblings.count - 1 { dict["Next"] = nodes[siblings[position + 1]].dict.reference }
 				if !node.children.isEmpty {
