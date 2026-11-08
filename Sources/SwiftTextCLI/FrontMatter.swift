@@ -64,7 +64,9 @@ enum FrontMatterHTML {
 			      let open = match.firstIndex(of: ">"), let close = match.range(of: "</h", options: .backwards) else { continue }
 			let id = String(match[idRange].dropFirst(4).dropLast())
 			let inner = String(match[match.index(after: open)..<close.lowerBound])
-			let text = unescape(inner.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression))
+			// An image contributes its alt text, which is escaped inside the attribute.
+			let withAlt = inner.replacingOccurrences(of: ##"<img\b[^>]*?\balt="([^"]*)"[^>]*>"##, with: "$1", options: .regularExpression)
+			let text = unescape(withAlt.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression))
 				.trimmingCharacters(in: .whitespacesAndNewlines)
 			if !id.isEmpty && !text.isEmpty { result.append(HeadingEntry(level: level, id: id, text: text)) }
 		}

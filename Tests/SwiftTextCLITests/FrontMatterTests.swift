@@ -98,5 +98,7 @@ struct FrontMatterTests {
 	func headingExtraction() {
 		let found = FrontMatterHTML.headings(in: "<p>x</p><h2 id=\"a-b\">A &amp; <em>B</em></h2><h3>no id</h3>")
 		#expect(found == [HeadingEntry(level: 2, id: "a-b", text: "A & B")])
+		let image = FrontMatterHTML.headings(in: "<h1 id=\"c\"><img src=\"cover.png\" alt=\"Chapter &amp; One\"></h1>")
+		#expect(image == [HeadingEntry(level: 1, id: "c", text: "Chapter & One")])
 	}
 }
