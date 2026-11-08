@@ -4,6 +4,7 @@
 import Foundation
 import Testing
 @testable import SwiftTextEPUB
+import Markdown
 import SwiftTextMarkdown
 
 @Suite("Markdown → EPUB")
@@ -102,6 +103,130 @@ struct EpubTests {
 		#expect(opf.contains("Tom &amp; Jerry &lt;3"))
 	}
 
+	// MARK: - Citations
+
+	@Test("linkCitations links across chapter files and anchors the source list")
+	func linkCitations() {
+		let markdown = "# Buch\n\n## Teil 1\n\nText mit Zitat [1] und [2].\n\n## Quellen\n\n- [1] Erste Quelle.\n- [2] Zweite Quelle.\n"
+		let on = MarkdownToEpub.makeFiles(markdown, metadata: fixedMetadata(), options: EpubOptions(chapterLevel: 2, linkCitations: true))
+		let text = string(file(on, "OEBPS/text/ch002.xhtml"))
+		#expect(text.contains("<a href=\"ch003.xhtml#citation-1\">[1]</a>"))
+		#expect(text.contains("<a href=\"ch003.xhtml#citation-2\">[2]</a>"))
+		let sources = string(file(on, "OEBPS/text/ch003.xhtml"))
+		#expect(sources.contains("id=\"citation-1\""))
+		expectWellFormedXML(text, "ch002.xhtml")
+		expectWellFormedXML(sources, "ch003.xhtml")
+
+		let off = MarkdownToEpub.makeFiles(markdown, metadata: fixedMetadata(), options: EpubOptions(chapterLevel: 2))
+		#expect(!string(file(off, "OEBPS/text/ch002.xhtml")).contains("citation-"))
+	}
+
+	@Test("linkCitations links in-page when the source list is in the same chapter")
+	func linkCitationsSameFile() {
+		let markdown = "## Teil\n\nZitat [1].\n\n- [1] Quelle.\n"
+		let files = MarkdownToEpub.makeFiles(markdown, metadata: fixedMetadata(), options: EpubOptions(chapterLevel: 2, linkCitations: true))
+		let chapter = string(file(files, "OEBPS/text/ch001.xhtml"))
+		#expect(chapter.contains("<a href=\"#citation-1\">[1]</a>"))
+	}
+
+	@Test("cross-file citation hrefs are attribute-escaped")
+	func citationFileEscaped() {
+		let document = Document(parsing: "Zitat [1].\n\n- [1] Quelle.\n", options: [.disableSmartOpts])
+		let html = SwiftMarkdownHTMLRenderer.convert(document: document.detachedFromParent as? Document ?? document, options: [.xhtml, .linkCitations],
+		                                             citationNumbers: [1], citationFiles: [1: "a&\"b.xhtml"])
+		#expect(html.contains("<a href=\"a&amp;&quot;b.xhtml#citation-1\">[1]</a>"))
+	}
+
+	// MARK: - Footnotes
+
+	@Test("footnotes become EPUB 3 noterefs with an aside in the referencing chapter")
+	func footnotes() {
+		let markdown = "# Buch\n\n## Kapitel 1\n\nText mit Fußnote.[^a]\n\n[^a]: Eine Fußnote.\n"
+		let files = MarkdownToEpub.makeFiles(markdown, metadata: fixedMetadata(), options: EpubOptions(chapterLevel: 2))
+		let chapter = string(file(files, "OEBPS/text/ch002.xhtml"))
+		#expect(chapter.contains("<sup><a href=\"#fn-a\" id=\"ref-a\" class=\"noteref\" epub:type=\"noteref\" role=\"doc-noteref\">1</a></sup>"))
+		#expect(chapter.contains("<aside id=\"fn-a\" class=\"footnote\" epub:type=\"footnote\" role=\"doc-footnote\">"
+			+ "<p><a href=\"#ref-a\" class=\"footnote-backlink\" epub:type=\"backlink\" role=\"doc-backlink\">1</a> Eine Fußnote.</p></aside>"))
+		#expect(chapter.contains("<section class=\"footnotes\" epub:type=\"footnotes\">\n<hr/>\n<aside"))
+		#expect(!chapter.contains("[^a]"))
+		expectWellFormedXML(chapter, "ch002.xhtml")
+	}
+
+	@Test("each chapter carries its own footnotes, numbered per chapter")
+	func footnotesAcrossChapters() {
+		let markdown = "## One\n\nA[^x] B[^y]\n\n## Two\n\nC[^z] D[^y]\n\n[^x]: Ex.\n\n[^y]: Why.\n\n[^z]: Zed.\n"
+		let files = MarkdownToEpub.makeFiles(markdown, metadata: fixedMetadata(), options: EpubOptions(chapterLevel: 2))
+		let one = string(file(files, "OEBPS/text/ch001.xhtml"))
+		let two = string(file(files, "OEBPS/text/ch002.xhtml"))
+		#expect(one.contains("id=\"fn-x\"") && one.contains("id=\"fn-y\"") && !one.contains("id=\"fn-z\""))
+		#expect(two.contains("id=\"fn-z\"") && two.contains("id=\"fn-y\"") && !two.contains("id=\"fn-x\""))
+		#expect(two.contains("href=\"#fn-z\" id=\"ref-z\" class=\"noteref\" epub:type=\"noteref\" role=\"doc-noteref\">1</a>"))
+		#expect(two.contains("href=\"#fn-y\" id=\"ref-y\" class=\"noteref\" epub:type=\"noteref\" role=\"doc-noteref\">2</a>"))
+		expectWellFormedXML(one, "ch001.xhtml")
+		expectWellFormedXML(two, "ch002.xhtml")
+	}
+
+	@Test("a note opening with a list gets a separate label paragraph; no notes, no section")
+	func footnoteLabelAndNoSection() {
+		let markdown = "## One\n\nA[^l]\n\n[^l]:\n    - item\n\n## Two\n\nplain\n"
+		let files = MarkdownToEpub.makeFiles(markdown, metadata: fixedMetadata(), options: EpubOptions(chapterLevel: 2))
+		let one = string(file(files, "OEBPS/text/ch001.xhtml"))
+		let two = string(file(files, "OEBPS/text/ch002.xhtml"))
+		#expect(one.contains("<p class=\"footnote-label\"><a href=\"#ref-l\""))
+		#expect(!two.contains("class=\"footnotes\""))
+		expectWellFormedXML(one, "ch001.xhtml")
+	}
+
+	@Test("a note referenced only from another note links back into that note")
+	func nestedFootnoteBacklink() {
+		let markdown = "## One\n\nA[^a]\n\n[^a]: See[^b].\n\n[^b]: Deep.\n"
+		let files = MarkdownToEpub.makeFiles(markdown, metadata: fixedMetadata(), options: EpubOptions(chapterLevel: 2))
+		let chapter = string(file(files, "OEBPS/text/ch001.xhtml"))
+		#expect(chapter.contains("href=\"#ref-b\" class=\"footnote-backlink\""))
+		#expect(chapter.contains("id=\"ref-b\""))
+		expectWellFormedXML(chapter, "ch001.xhtml")
+	}
+
+	@Test("the stylesheet declares the epub namespace first and styles footnotes")
+	func footnoteStylesheet() {
+		#expect(DefaultStylesheet.css.hasPrefix("@namespace epub"))
+		#expect(DefaultStylesheet.css.contains("section.footnotes"))
+		#expect(DefaultStylesheet.css.contains("aside.footnote p"))
+	}
+
+	@Test("colliding sanitized footnote ids stay unique and image alt text stays well-formed")
+	func footnoteIDCollisionsAndImages() {
+		let markdown = "## One\n\nA[^a/b] B[^a-b] ![pic[^a-b]](i.png)\n\n[^a/b]: First.\n\n[^a-b]: Second.\n"
+		let files = MarkdownToEpub.makeFiles(markdown, metadata: fixedMetadata(), options: EpubOptions(chapterLevel: 2))
+		let chapter = string(file(files, "OEBPS/text/ch001.xhtml"))
+		#expect(chapter.contains("id=\"fn-a-b\"") && chapter.contains("id=\"fn-a-b-2\""))
+		#expect(chapter.contains("id=\"ref-a-b\"") && chapter.contains("id=\"ref-a-b-2\""))
+		expectWellFormedXML(chapter, "ch001.xhtml")
+	}
+
+	// MARK: - Localised navigation labels
+
+	@Test("nav title and landmark labels follow the book language")
+	func localisedNavLabels() {
+		let markdown = "# Book\n\n## Eins\n\nprose"
+		let files = MarkdownToEpub.makeFiles(markdown, metadata: fixedMetadata(language: "de-AT"), options: EpubOptions(chapterLevel: 2))
+		let nav = string(file(files, "OEBPS/nav.xhtml"))
+		#expect(nav.contains("<title>Inhalt</title>"))
+		#expect(nav.contains("epub:type=\"titlepage\">Titelseite</a>"))
+		#expect(nav.contains("epub:type=\"toc\">Inhalt</a>"))
+		#expect(nav.contains("epub:type=\"bodymatter\">Anfang</a>"))
+		#expect(!nav.contains("Table of Contents"))
+	}
+
+	@Test("an unknown language falls back to English nav labels")
+	func unknownLanguageNavLabels() {
+		let files = MarkdownToEpub.makeFiles("# Book\n\n## One\n\nprose", metadata: fixedMetadata(language: "xx"), options: EpubOptions(chapterLevel: 2))
+		let nav = string(file(files, "OEBPS/nav.xhtml"))
+		#expect(nav.contains("<title>Table of Contents</title>"))
+		#expect(nav.contains("epub:type=\"titlepage\">Title Page</a>"))
+		#expect(nav.contains("epub:type=\"bodymatter\">Beginning</a>"))
+	}
+
 	// MARK: - Chapter splitting
 
 	@Test("splits into one file per heading at the chosen level")
@@ -123,6 +248,34 @@ struct EpubTests {
 		let nav = string(file(files, "OEBPS/nav.xhtml"))
 		#expect(nav.contains("1: The Birthday"))
 		#expect(nav.contains("2: The Journey"))
+	}
+
+	@Test("a Roman-numeral chapter heading is joined with its sub-heading")
+	func romanNumeralTitles() {
+		let markdown = "# Book\n\n## IV\n\n### The Journey\n\nprose"
+		let files = MarkdownToEpub.makeFiles(markdown, metadata: fixedMetadata(), options: EpubOptions(chapterLevel: 2))
+		#expect(string(file(files, "OEBPS/nav.xhtml")).contains("IV: The Journey"))
+	}
+
+	@Test("a one-word heading that merely uses Roman-numeral letters stands alone")
+	func romanLookalikeTitles() {
+		let markdown = "# Book\n\n## Civil\n\n### Contracts\n\nprose"
+		let files = MarkdownToEpub.makeFiles(markdown, metadata: fixedMetadata(), options: EpubOptions(chapterLevel: 2))
+		let nav = string(file(files, "OEBPS/nav.xhtml"))
+		#expect(nav.contains(">Civil</a>"))
+		#expect(!nav.contains("Contracts"))
+	}
+
+	@Test("a chapter heading with words is not joined with the sub-heading that follows it")
+	func wordedHeadingStandsAlone() {
+		let markdown = "# Buch\n\nEinleitung.\n\n## Teil 1: Wo Sie stehen\n\n### Was in der Akte steht\n\nText.\n\n## Teil 2: Weiter\n\nAbsatz.\n\n### Unterpunkt\n\nMehr Text."
+		let files = MarkdownToEpub.makeFiles(markdown, metadata: fixedMetadata(), options: EpubOptions(chapterLevel: 2))
+		let nav = string(file(files, "OEBPS/nav.xhtml"))
+		#expect(nav.contains(">Teil 1: Wo Sie stehen</a>"))
+		#expect(nav.contains(">Teil 2: Weiter</a>"))
+		#expect(!nav.contains("Was in der Akte steht"))
+		let chapter = string(file(files, "OEBPS/text/ch002.xhtml"))
+		#expect(chapter.contains("Was in der Akte steht"))
 	}
 
 	@Test("content before the first chapter heading becomes front matter, kept out of the TOC")

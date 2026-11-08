@@ -85,6 +85,20 @@ private struct FootnoteScanner {
 		collectReferences(in: root, labelForID: &labelForID, refIDs: &refIDs)
 		guard !labelForID.isEmpty else { return nil }
 
+		// Numbering that restarts per definition block shows the same marker on
+		// several notes; Markdown ids must stay unique, so disambiguate repeats.
+		var usedLabels: Set<String> = []
+		for defID in labelForID.keys.sorted(by: { (order[ObjectIdentifier(byID[$0]!)] ?? 0) < (order[ObjectIdentifier(byID[$1]!)] ?? 0) }) {
+			let label = labelForID[defID]!
+			var candidate = label
+			var n = 1
+			while !usedLabels.insert(candidate).inserted {
+				n += 1
+				candidate = "\(label)-\(n)"
+			}
+			labelForID[defID] = candidate
+		}
+
 		// 2. Suppress containers, gather the ordered definition list.
 		var skip: Set<ObjectIdentifier> = []
 		var processedContainers: Set<ObjectIdentifier> = []

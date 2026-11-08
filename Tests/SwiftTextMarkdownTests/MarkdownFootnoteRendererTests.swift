@@ -112,3 +112,65 @@ struct MarkdownFootnoteRendererTests {
 		#expect(html.contains("<div class=\"footnote-definition\" id=\"fn-1\"><strong>[1]:</strong> Note</div>"))
 	}
 }
+
+@Suite("MarkdownFootnoteRenderer placement")
+struct MarkdownFootnotePlacementTests {
+
+	@Test func perChapterDefinitionsStayAfterTheirChapter() {
+		let input = """
+		# Buch
+
+		# Kapitel 1
+
+		Satz eins.[^a] Satz zwei.[^b]
+
+		[^a]: Erste Note.
+
+		[^b]: Zweite Note.
+
+		# Kapitel 2
+
+		Satz drei.[^c]
+
+		[^c]: Dritte Note.
+		"""
+		let html = MarkdownFootnoteRenderer.convert(input)
+		func position(_ s: String) -> String.Index { html.range(of: s)!.lowerBound }
+		#expect(position("id=\"fn-1\"") < position("Kapitel 2"))
+		#expect(position("id=\"fn-2\"") < position("Kapitel 2"))
+		#expect(position("id=\"fn-3\"") > position("Kapitel 2"))
+		#expect(position("Satz zwei") < position("id=\"fn-1\""))
+	}
+
+	@Test func numberingRestartsPerDefinitionBlock() {
+		let input = "# Kapitel 1\n\nEins.[^a] Zwei.[^b]\n\n[^a]: Erste.\n\n[^b]: Zweite.\n\n# Kapitel 2\n\nDrei.[^c]\n\n[^c]: Dritte."
+		let html = MarkdownFootnoteRenderer.convert(input)
+		#expect(html.contains("Drei.<sup><a href=\"#fn-3\" id=\"ref-3\">[1]</a></sup>"))
+		#expect(html.contains("id=\"fn-3\"><strong>[1]:</strong> Dritte."))
+		#expect(html.contains("id=\"fn-2\"><strong>[2]:</strong> Zweite."))
+		#expect(!html.contains("[3]"))
+	}
+
+	@Test func singleTrailingBlockKeepsGlobalNumbering() {
+		let html = MarkdownFootnoteRenderer.convert("# A\n\nx[^a]\n\n# B\n\ny[^b]\n\n[^a]: One\n\n[^b]: Two")
+		#expect(html.contains("<strong>[2]:</strong> Two"))
+	}
+
+	@Test func definitionsAtEndStayEndnotes() {
+		let html = MarkdownFootnoteRenderer.convert("# A\n\nx[^a]\n\n# B\n\ny\n\n[^a]: Note")
+		#expect(html.range(of: "<h1>B")!.lowerBound < html.range(of: "id=\"fn-1\"")!.lowerBound)
+	}
+
+	@Test func duplicateOnlyDefinitionBlockLeavesNoMarker() {
+		let html = MarkdownFootnoteRenderer.convert("x[^a]\n\n[^a]: One\n\nMiddle\n\n[^a]: Dup")
+		#expect(!html.contains("fnblock"))
+		#expect(html.contains("Middle"))
+		#expect(!html.contains("Dup"))
+	}
+
+	@Test func definitionLookalikeInCodeFenceLeavesNoMarker() {
+		let html = MarkdownFootnoteRenderer.convert("x[^a]\n\n```\n[^b]: code\n```\n\n[^a]: Note")
+		#expect(!html.contains("fnblock"))
+		#expect(!html.contains(footnoteSentinelOpen))
+	}
+}

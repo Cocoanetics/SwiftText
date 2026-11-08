@@ -16,15 +16,27 @@ import Testing
 @MainActor
 struct WebKitIntegrationTests {
 	private let a4 = CGSize(width: 595.28, height: 841.89)
+	private static var isWarmedUp = false
 
-	private func paginate(_ html: String, timeout: TimeInterval = 30) async throws -> PDFDocument {
+	private func paginate(_ html: String) async throws -> PDFDocument {
+		// The first web view of the run pays for launching the web content
+		// process. Spend that on a trivial page rather than on a test's fixture.
+		if !Self.isWarmedUp {
+			Self.isWarmedUp = true
+			_ = try? await exportPaginated("<html><body>x</body></html>")
+		}
+		return try #require(PDFDocument(data: try await exportPaginated(html)), "the export produced no readable PDF")
+	}
+
+	private func exportPaginated(_ html: String) async throws -> Data {
 		let browser = WebKitBrowser(htmlString: html)
-		browser.timeout = timeout
+		// The default commit watchdog retries a navigation that has not committed
+		// after 15 s once on a fresh web view, within this same budget.
+		browser.timeout = 30
 		browser.frameSize = a4
 		// Let WebKit paginate rather than stretching the frame to the content.
 		browser.preserveFrameHeight = true
-		let data = try await browser.exportPaginatedPDFData(paperSize: a4)
-		return try #require(PDFDocument(data: data), "the export produced no readable PDF")
+		return try await browser.exportPaginatedPDFData(paperSize: a4)
 	}
 
 	/// Forced breaks are the reason this path exists at all: `exportPDFData`
@@ -69,7 +81,7 @@ struct WebKitIntegrationTests {
 	@Test("Content that overflows the page is split", .timeLimit(.minutes(2)))
 	func naturalOverflow() async throws {
 		let paragraphs = (1 ... 200).map { "<p>Paragraph number \($0) of the overflow fixture.</p>" }.joined()
-		let document = try await paginate("<html><body>\(paragraphs)</body></html>", timeout: 60)
+		let document = try await paginate("<html><body>\(paragraphs)</body></html>")
 		#expect(document.pageCount > 1)
 		// The first page must carry real content — a paginator that emits blank
 		// pages would still satisfy a bare count check.
@@ -326,8 +338,8 @@ struct WebKitIntegrationTests {
 			return match.bounds(for: page).width
 		}
 
-		let narrowDoc = try await paginate(html(narrow), timeout: 60)
-		let wideDoc = try await paginate(html(wide), timeout: 60)
+		let narrowDoc = try await paginate(html(narrow))
+		let wideDoc = try await paginate(html(wide))
 
 		let narrowWidth = try wordWidth(narrowDoc, "Absatz")
 		let wideWidth = try wordWidth(wideDoc, "Absatz")

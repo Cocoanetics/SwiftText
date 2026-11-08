@@ -43,3 +43,18 @@ struct RenderRunTests {
 		await #expect(throws: ValidationError.self) { try await command.run() }
 	}
 }
+
+@Suite("render heading page breaks")
+struct RenderHeadingBreakTests {
+	@Test("the first block of the document is exempt from the heading break")
+	func firstBlockExempt() {
+		let html = markdownToHTML("# Buch\n\n# Kapitel 1\n\nText.\n\n# Kapitel 2\n\nText.",
+		                          paper: .a4, landscape: false, pageBreakBefore: .h1)
+		#expect(html.contains("h1 { page-break-before: always; break-before: page; }"))
+		let exempt = "body > h1:first-child { page-break-before: auto; break-before: auto; }"
+		let always = html.range(of: "h1 { page-break-before: always")
+		let reset = html.range(of: exempt)
+		#expect(reset != nil)
+		if let always, let reset { #expect(always.lowerBound < reset.lowerBound) }
+	}
+}
