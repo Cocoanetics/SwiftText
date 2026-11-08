@@ -552,7 +552,12 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 				table.remove();
 			}
 
+			\(Self.tableFittingScript)
+
 			function prepare() {
+				withPrintStyles(() => {
+					for (const table of Array.from(document.querySelectorAll('table'))) fitTable(table);
+				});
 				const margins = pageMargins();
 				const printableWidth = paperWidth - margins.left - margins.right;
 				const printableHeight = paperHeight - margins.top - margins.bottom;
