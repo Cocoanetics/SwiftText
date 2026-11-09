@@ -146,7 +146,9 @@ public final class FontBook {
 	public var embedsStandardFaces = false
 	/// A font that replaces every generic family but monospace (a single file has
 	/// no bold or italic, so those render in its one face).
-	public var overrideFont: EmbeddedFont?
+	public var overrideFont: EmbeddedFont? {
+		didSet { overrideFaces = [] }
+	}
 	private var standardFaceCache: [String: EmbeddedFont?] = [:]
 	/// Every face of a font collection given to ``setOverrideFont(data:fontIndex:)``,
 	/// so bold and italic text uses the matching face.
@@ -165,13 +167,12 @@ public final class FontBook {
 		if fontIndex == nil, OpenTypeFont.faceCount(in: data) > 1 {
 			let faces = try Self.collectionFaces(data: data, namePrefix: "CustomFont")
 			if let regular = Self.pickFace(faces, bold: false, italic: false) {
-				overrideFaces = faces
 				overrideFont = regular
+				overrideFaces = faces
 				return regular
 			}
 		}
 		let font = EmbeddedFont(otf: try OpenTypeFont(data: data, fontIndex: fontIndex ?? 0), postScriptName: "CustomFont")
-		overrideFaces = []
 		overrideFont = font
 		return font
 	}

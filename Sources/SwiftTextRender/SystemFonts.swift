@@ -28,7 +28,8 @@ extension FontBook {
 		for url in urls {
 			guard let data = try? Data(contentsOf: url),
 			      let found = try? collectionFaces(data: data, namePrefix: prefix, family: family) else { continue }
-			for face in found where !faces.contains(where: { $0.bold == face.bold && $0.italic == face.italic }) {
+			// Skip fonts whose licence forbids embedding (restricted, bitmap-only) or subsetting.
+			for face in found where face.font.otf.fsType & 0x0302 == 0 && !faces.contains(where: { $0.bold == face.bold && $0.italic == face.italic }) {
 				faces.append(face)
 			}
 		}

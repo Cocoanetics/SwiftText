@@ -36,6 +36,8 @@ public struct OpenTypeFont {
 	public let isBold: Bool
 	/// Whether the font is styled italic/oblique.
 	public let isItalic: Bool
+	/// The `OS/2` `fsType` embedding-permission flags (0 without an `OS/2` table).
+	public let fsType: Int
 	/// The raw `OS/2` `fsSelection` flags (0 without an `OS/2` table).
 	public let fsSelection: Int
 	/// The subfamily name from the `name` table (nameID 17, else 2), e.g. "Bold Italic".
@@ -138,11 +140,13 @@ public struct OpenTypeFont {
 			weightClass = (try? fonts.u16(os2 + 4)) ?? 400
 			let fsSelection = (try? fonts.u16(os2 + 62)) ?? 0
 			self.fsSelection = fsSelection
+			fsType = (try? fonts.u16(os2 + 8)) ?? 0
 			isItalic = (macStyle & 0x0002) != 0 || (fsSelection & 0x0001) != 0
 			isBold = (macStyle & 0x0001) != 0 || (fsSelection & 0x0020) != 0
 		} else {
 			weightClass = 400
 			fsSelection = 0
+			fsType = 0
 			isItalic = (macStyle & 0x0002) != 0
 			isBold = (macStyle & 0x0001) != 0
 		}
