@@ -1013,6 +1013,10 @@ public enum HTMLRenderer {
 	/// which all share (or nearly share) the edge that follows a kept-with-next box.
 	private static func discourageLeadingEdges(of block: BlockBox, into points: inout BreakPoints) {
 		points.discouraged.insert(block.y)
+		// Padding or a border can put the first line's edge below the block's own.
+		if block.establishesInlineContext, let line = block.lines.first {
+			points.discouraged.insert(line.y)
+		}
 		guard !block.establishesInlineContext,
 		      let first = block.children.compactMap({ $0 as? BlockBox }).first else { return }
 		discourageLeadingEdges(of: first, into: &points)
