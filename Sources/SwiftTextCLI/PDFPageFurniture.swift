@@ -11,19 +11,17 @@ enum PDFPageFurniture {
 	                outline: [PDFOutlineBuilder.Entry] = [], blankPages: Set<Int> = []) throws -> Data {
 		guard pageNumbers || title != nil || !outline.isEmpty else { return data }
 		guard let source = PDFDocument(data: data) else { throw WebKitBrowserError.printFailed }
+		let locator = PDFTextLocator(document: source)
 		var chapters: [Int: String] = [:]
 		for heading in headings {
-			let matches = source.findString(heading.searchText, withOptions: [])
-			guard heading.occurrence < matches.count, let page = matches[heading.occurrence].pages.first else { continue }
+			guard let found = locator.locate(heading.searchText, occurrence: heading.occurrence) else { continue }
 			// When several chapters start on one page, the last one is current.
-			chapters[source.index(for: page)] = heading.title
+			chapters[found.pageIndex] = heading.title
 		}
 		// The generated title section may span several pages, or follow a page the
 		// authored CSS inserted, so its range comes from where it actually lands.
 		func page(of heading: PDFChapterHeading) -> Int? {
-			let matches = source.findString(heading.searchText, withOptions: [])
-			guard heading.occurrence < matches.count, let page = matches[heading.occurrence].pages.first else { return nil }
-			return source.index(for: page)
+			locator.locate(heading.searchText, occurrence: heading.occurrence)?.pageIndex
 		}
 		var bare = 0..<0
 		if let titleSection, let start = page(of: titleSection.start) {
@@ -133,12 +131,10 @@ enum PDFOutlineBuilder {
 	/// furniture repeats chapter titles in the header. Headings not found are left out.
 	static func entries(for headings: [PDFOutlineHeading], in data: Data) -> [Entry] {
 		guard !headings.isEmpty, let document = PDFDocument(data: data) else { return [] }
+		let locator = PDFTextLocator(document: document)
 		return headings.compactMap { heading in
-			// Without case, as a CSS text-transform prints a case the DOM text doesn't have.
-			let matches = document.findString(heading.searchText, withOptions: [.caseInsensitive])
-			guard heading.occurrence < matches.count, let page = matches[heading.occurrence].pages.first else { return nil }
-			let bounds = matches[heading.occurrence].bounds(for: page)
-			return Entry(level: heading.level, title: heading.title, page: document.index(for: page), point: CGPoint(x: 0, y: bounds.maxY + 4))
+			guard let found = locator.locate(heading.searchText, occurrence: heading.occurrence) else { return nil }
+			return Entry(level: heading.level, title: heading.title, page: found.pageIndex, point: CGPoint(x: 0, y: found.bounds.maxY + 4))
 		}
 	}
 

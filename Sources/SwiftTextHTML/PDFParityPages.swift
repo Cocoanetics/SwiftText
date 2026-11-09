@@ -52,6 +52,7 @@ enum PDFParityPages {
 	static func prepareBreaks(in webView: WKWebView) async -> [SideBreakRequest] {
 		let script = """
 		(function() {
+			\(PDFTextLocator.occurrenceScript)
 			const normalize = s => s.replace(/\\s+/g, ' ').trim();
 			const sides = new Set(['left', 'right', 'recto', 'verso']);
 			const forced = new Set(['page', 'always', 'left', 'right', 'recto', 'verso']);
@@ -81,14 +82,7 @@ enum PDFParityPages {
 				}
 				text = text.slice(0, 40).trim();
 				if (!text) return null;
-				const range = document.createRange();
-				range.setStart(document.body, 0);
-				range.setEndBefore(element);
-				const before = normalize(range.toString()).toLowerCase();
-				const needle = text.toLowerCase();
-				let index = 0, from = 0, hit;
-				while ((hit = before.indexOf(needle, from)) !== -1) { index += 1; from = hit + 1; }
-				return { text, index };
+				return { text, index: occurrencesBefore(element, text) };
 			}
 			const result = [];
 			for (const element of all) {
@@ -115,10 +109,10 @@ enum PDFParityPages {
 	/// precedes. Returns the PDF and the zero-based indices of the blank pages in it.
 	static func insertingBlankPages(into data: Data, requests: [SideBreakRequest]) -> (data: Data, blankPages: Set<Int>) {
 		guard !requests.isEmpty, let document = PDFDocument(data: data) else { return (data, []) }
+		let locator = PDFTextLocator(document: document)
 		let located = requests.compactMap { request -> (page: Int, right: Bool)? in
-			let matches = document.findString(request.text, withOptions: [.caseInsensitive])
-			guard request.index < matches.count, let page = matches[request.index].pages.first else { return nil }
-			return (document.index(for: page), request.right)
+			guard let found = locator.locate(request.text, occurrence: request.index) else { return nil }
+			return (found.pageIndex, request.right)
 		}
 		let plan = blankPages(for: located)
 		guard !plan.before.isEmpty else { return (data, []) }

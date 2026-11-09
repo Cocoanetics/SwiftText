@@ -23,8 +23,8 @@ enum PDFInternalLinks {
 	static func collectTargets(in webView: WKWebView) async -> [FragmentLinkTarget] {
 		let script = """
 		(function() {
+			\(PDFTextLocator.occurrenceScript)
 			const normalize = s => s.replace(/\\s+/g, ' ').trim();
-			const bodyText = normalize(document.body.textContent || '');
 			const result = [];
 			const seen = new Set();
 			for (const link of Array.from(document.querySelectorAll('a[href^="#"]'))) {
@@ -48,13 +48,7 @@ enum PDFInternalLinks {
 				}
 				text = text.slice(0, 40).trim();
 				if (!text) continue;
-				const range = document.createRange();
-				range.setStart(document.body, 0);
-				range.setEndBefore(target);
-				const before = normalize(range.toString());
-				let index = 0, from = 0, hit;
-				while ((hit = before.indexOf(text, from)) !== -1) { index += 1; from = hit + 1; }
-				result.push({ id: id, text: text, index: index });
+				result.push({ id: id, text: text, index: occurrencesBefore(target, text) });
 			}
 			return JSON.stringify(result);
 		})();
@@ -77,13 +71,12 @@ enum PDFInternalLinks {
 		let pageBase = pageURL.map(baseString) ?? "about:blank"
 		var destinations: [String: PDFDestination] = [:]
 		var anchorPages: [String: Int] = [:]
+		let locator = PDFTextLocator(document: document)
 		for target in targets {
-			let matches = document.findString(target.text, withOptions: [])
-			guard target.index < matches.count,
-			      let page = matches[target.index].pages.first else { continue }
-			let bounds = matches[target.index].bounds(for: page)
-			destinations[target.id] = PDFDestination(page: page, at: CGPoint(x: 0, y: bounds.maxY + 4))
-			anchorPages[target.id] = document.index(for: page)
+			guard let found = locator.locate(target.text, occurrence: target.index),
+			      let page = document.page(at: found.pageIndex) else { continue }
+			destinations[target.id] = PDFDestination(page: page, at: CGPoint(x: 0, y: found.bounds.maxY + 4))
+			anchorPages[target.id] = found.pageIndex
 		}
 
 		var changed = false
