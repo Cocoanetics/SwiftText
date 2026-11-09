@@ -220,22 +220,39 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 	@MainActor
 	@available(macOS 11.0, *)
 	package func exportPaginatedPDFDataWithAnchors(paperSize: CGSize) async throws -> (data: Data, anchorPages: [String: Int]) {
+		let exported = try await exportPaginatedPDFDataWithBlankPages(paperSize: paperSize)
+		return (exported.data, exported.anchorPages)
+	}
+
+	/// Like ``exportPaginatedPDFDataWithAnchors(paperSize:)``, also reporting the
+	/// zero-based pages that were inserted blank so a block with
+	/// `break-before: left|right|recto|verso` starts on the requested side.
+	@MainActor
+	@available(macOS 11.0, *)
+	package func exportPaginatedPDFDataWithBlankPages(paperSize: CGSize) async throws -> (data: Data, anchorPages: [String: Int], blankPages: Set<Int>) {
 		let webView = try await loadedWebView()
 		try await prepareTablesForPrinting(in: webView, paperSize: paperSize)
+		let sideBreaks = await PDFParityPages.prepareBreaks(in: webView)
 		#if canImport(PDFKit)
 		let linkTargets = await PDFInternalLinks.collectTargets(in: webView)
 		#endif
 		#if canImport(UIKit)
-		let data = try Self.paginatedPDFData(from: webView, paperSize: paperSize)
+		var data = try Self.paginatedPDFData(from: webView, paperSize: paperSize)
 		#else
-		let data = try await Self.paginatedPDFData(from: webView, paperSize: paperSize)
+		var data = try await Self.paginatedPDFData(from: webView, paperSize: paperSize)
+		#endif
+		var blankPages: Set<Int> = []
+		#if canImport(PDFKit)
+		// Blank pages go in before links are resolved, so every page index below is final.
+		(data, blankPages) = PDFParityPages.insertingBlankPages(into: data, requests: sideBreaks)
 		#endif
 		// WebKit writes `#fragment` links as `/URI` actions on the temporary page URL;
 		// turn them into internal destinations.
 		#if canImport(PDFKit)
-		return PDFInternalLinks.resolve(pdfData: data, pageURL: webView.url, targets: linkTargets)
+		let resolved = PDFInternalLinks.resolve(pdfData: data, pageURL: webView.url, targets: linkTargets)
+		return (resolved.data, resolved.anchorPages, blankPages)
 		#else
-		return (data, [:])
+		return (data, [:], blankPages)
 		#endif
 	}
 
