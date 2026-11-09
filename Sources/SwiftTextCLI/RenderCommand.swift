@@ -46,7 +46,7 @@ enum FootnotePlacement: String, ExpressibleByArgument, CaseIterable {
 	case end
 	/// Each definition block stays where the source puts it, numbering restarting per block.
 	case section
-	/// PDF (webkit engine): each note at the foot of the page that holds its reference.
+	/// PDF: each note at the foot of the page that holds its reference.
 	case page
 }
 
@@ -100,7 +100,7 @@ struct Render: AsyncParsableCommand {
 	@Flag(name: .long, help: "For HTML, PDF and EPUB output, make numeric citations clickable: a list item starting with [n] gets id=\"citation-n\" and every other [n] links to it.")
 	var linkCitations: Bool = false
 
-	@Option(name: .long, help: "For HTML and PDF output, footnote placement: section = per source block (default); end = all at the end; page = foot of the page (PDF, webkit engine).")
+	@Option(name: .long, help: "For HTML and PDF output, footnote placement: section = per source block (default); end = all at the end; page = foot of the page (PDF).")
 	var footnotes: FootnotePlacement = .section
 
 	@Flag(name: .long, help: "Typographic punctuation: curly quotes (style per --language), -- en dash, --- em dash, ... ellipsis. Code, URLs and footnote/citation markers stay as typed.")
@@ -195,9 +195,6 @@ struct Render: AsyncParsableCommand {
 			try writeString(html, to: outputURL)
 			print(outputURL.path)
 		case .pdf:
-			if footnotes == .page && engine == .swift {
-				FileHandle.standardError.write(Data("warning: --footnotes page needs the webkit engine; notes stay at the end of their section.\n".utf8))
-			}
 			// The contents' page numbers and the running chapter need the pagination:
 			// render once with fixed-width placeholders, read where each heading
 			// landed, then render again with the numbers (same layout, so the pages
@@ -462,6 +459,7 @@ struct Render: AsyncParsableCommand {
 		options.pageWidthPx = widthPoints / 0.75 // points → CSS pixels
 		options.pageHeightPx = heightPoints / 0.75
 		options.pageStrings = pageStrings
+		options.pageFootnotes = footnotes == .page
 		if pageNumbers || runningHeads { options.minimumPageMarginPx = 64 } // 48 pt, as in the webkit engine
 		// Embed every face: print preflight (PDF/A, PDF/X, print-on-demand) rejects unembedded fonts.
 		let fonts = FontBook()
