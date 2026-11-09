@@ -84,7 +84,8 @@ struct Render: AsyncParsableCommand {
 	@Option(name: .long, help: "For PDF, HTML, and Pages output, force a page break before every heading of this level (h1–h6). Use h2 to start each chapter on its own page. Omit to disable.")
 	var pageBreakBefore: HeadingBreakLevel?
 
-	@Option(name: .long, help: "For PDF output, start each chapter on a right (odd) or left (even) page, adding a blank page when needed (counted, no running head or number). Level: --page-break-before, else --chapter-level.")
+	@Option(name: .long, help: "For PDF output, start each chapter on a right (odd) or left (even) page, adding a blank page when needed "
+	       + "(counted, no running head or number). Level: --page-break-before, else --chapter-level.")
 	var chapterStart: ChapterStart?
 
 	@Flag(name: .long, help: "For Pages output, write a directory-package bundle instead of a single file.")
