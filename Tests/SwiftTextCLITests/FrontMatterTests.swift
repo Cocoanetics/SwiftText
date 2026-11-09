@@ -155,6 +155,27 @@ struct FrontMatterTests {
 	@Test("the EPUB path drops every marker")
 	func epubDropsMarker() {
 		let result = FrontMatterHTML.placeContentsMarker(in: "a\n\n<!-- toc -->\n\n[TOC]\n\nb", keepFirst: false)
-		#expect(!result.found && !result.markdown.contains("toc") && !result.markdown.contains("TOC"))
+		#expect(result.placeholder == nil && !result.markdown.contains("toc") && !result.markdown.contains("TOC"))
+	}
+
+	@Test("a contents marker right before a breaking heading drops the contents' own break")
+	func markerBeforeHeading() {
+		let output = place("Impressum\n\n<!-- toc -->\n\n# Vorwort\n\nText\n")
+		#expect(output.contains("nav.toc { page-break-after: auto; break-after: auto; }"))
+		#expect(!place("<!-- toc -->\n\nImpressum\n\n# Vorwort\n").contains("nav.toc { page-break-after: auto"))
+	}
+
+	@Test("a longer fence is not closed by a shorter one")
+	func nestedFence() {
+		let source = "````\n```\n[TOC]\n```\n````\n\n# A\n"
+		#expect(FrontMatterHTML.placeContentsMarker(in: source).placeholder == nil)
+	}
+
+	@Test("authored text equal to the placeholder word is kept")
+	func authoredSentinel() {
+		let output = place("SWIFTTEXTCONTENTSMARKER\n\n<!-- toc -->\n\n# A\n", toc: true)
+		#expect(output.contains("<p>SWIFTTEXTCONTENTSMARKER</p>"))
+		#expect(output.components(separatedBy: "<nav class=\"toc\"").count == 2)
+		#expect(place("SWIFTTEXTCONTENTSMARKER\n\n# A\n").contains("<p>SWIFTTEXTCONTENTSMARKER</p>"))
 	}
 }

@@ -124,8 +124,22 @@ enum FrontMatterHTML {
 		}
 	}
 
-	/// The paragraph a contents marker line becomes while the Markdown is converted.
-	static let contentsMarkerParagraph = "<p>SWIFTTEXTCONTENTSMARKER</p>"
+	/// The opening fence of a code block: its character and length.
+	private static func fenceOpening(_ line: Substring) -> (mark: Character, length: Int)? {
+		let trimmed = line.drop { $0 == " " }
+		guard line.count - trimmed.count < 4, let mark = trimmed.first, mark == "`" || mark == "~" else { return nil }
+		let length = trimmed.prefix { $0 == mark }.count
+		guard length >= 3 else { return nil }
+		// A backtick fence's info string cannot contain a backtick.
+		if mark == "`", trimmed.dropFirst(length).contains("`") { return nil }
+		return (mark, length)
+	}
+
+	/// Whether a line closes a fence: at least as long, same character, nothing else.
+	private static func closesFence(_ line: Substring, _ fence: (mark: Character, length: Int)) -> Bool {
+		guard let opening = fenceOpening(line), opening.mark == fence.mark, opening.length >= fence.length else { return false }
+		return line.drop { $0 == " " }.dropFirst(opening.length).allSatisfy { $0 == " " || $0 == "\t" }
+	}
 
 	/// Whether a line is a contents marker: `<!-- toc -->` or `[TOC]` alone on it.
 	private static func isContentsMarker(_ line: Substring) -> Bool {
@@ -137,26 +151,31 @@ enum FrontMatterHTML {
 
 	/// Replaces the first contents marker line (outside code fences) with a placeholder
 	/// paragraph and drops any later ones, so none of them reaches the output as text.
-	/// With `keepFirst` false (EPUB, which has no printed contents page) all of them are dropped.
-	static func placeContentsMarker(in markdown: String, keepFirst: Bool = true) -> (markdown: String, found: Bool) {
+	/// The placeholder is a word the Markdown does not contain, so authored text cannot
+	/// be mistaken for it; `placeholder` is the paragraph it converts to, nil if no marker.
+	/// With `keepFirst` false (EPUB, which has no printed contents page) all are dropped.
+	static func placeContentsMarker(in markdown: String, keepFirst: Bool = true) -> (markdown: String, placeholder: String?) {
 		var found = false
-		var fence: Character?
+		var fence: (mark: Character, length: Int)?
+		var token = "SWIFTTEXTCONTENTSMARKER"
+		while markdown.contains(token) { token += "X" }
 		var lines: [String] = []
 		for line in markdown.split(separator: "\n", omittingEmptySubsequences: false) {
-			let trimmed = line.drop { $0 == " " }
-			if let mark = trimmed.first, mark == "`" || mark == "~", trimmed.prefix(3).allSatisfy({ $0 == mark }) {
-				if fence == nil { fence = mark } else if fence == mark { fence = nil }
-			} else if fence == nil, isContentsMarker(line) {
+			if let open = fence {
+				if closesFence(line, open) { fence = nil }
+			} else if let open = fenceOpening(line) {
+				fence = open
+			} else if isContentsMarker(line) {
 				if !found {
 					found = true
-					if !keepFirst { continue }
-					lines.append(contentsOf: ["", "SWIFTTEXTCONTENTSMARKER", ""])
+					if keepFirst { lines.append(contentsOf: ["", token, ""]) }
 				}
 				continue
 			}
 			lines.append(String(line))
 		}
-		return found ? (lines.joined(separator: "\n"), keepFirst) : (markdown, false)
+		guard found else { return (markdown, nil) }
+		return (lines.joined(separator: "\n"), keepFirst ? "<p>\(token)</p>" : nil)
 	}
 
 	static func titlePage(_ page: FrontMatter.TitlePage) -> String {
