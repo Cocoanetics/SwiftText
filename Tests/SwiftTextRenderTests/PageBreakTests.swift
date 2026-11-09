@@ -341,4 +341,47 @@ struct PageBreakTests {
 		#expect(child.breakBefore == .auto)
 		#expect(child.breakInside == .auto)
 	}
+
+	#if canImport(PDFKit)
+	/// Whether any page of the PDF ends with the text `Zwischen`.
+	private func headingEndsAPage(_ data: Data) -> Bool {
+		guard let document = PDFDocument(data: data) else { return false }
+		return (0..<document.pageCount).contains { index in
+			(document.page(at: index)?.string ?? "")
+				.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix("Zwischen")
+		}
+	}
+	#endif
+
+	@Test("A heading is never left alone at the foot of a page before a list, table, quote or code")
+	func headingStaysWithFollowingBlock() async throws {
+		#if canImport(PDFKit)
+		let followers = [
+			"<ul><li>Eins</li><li>Zwei</li></ul>",
+			"<table><tr><td>Eins</td></tr></table>",
+			"<blockquote>Eins</blockquote>",
+			"<pre>Eins</pre>"
+		]
+		for follower in followers {
+			// Sweep the filler height so the heading lands at the foot of page 1
+			// for at least one count.
+			for count in 15...70 {
+				let filler = (1...count).map { "<p>Zeile \($0)</p>" }.joined()
+				let data = try await HTMLRenderer.renderPDF(html: filler + "<h2>Zwischen</h2>" + follower)
+				#expect(!headingEndsAPage(data), "\(follower) after \(count) paragraphs")
+			}
+		}
+		#endif
+	}
+
+	@Test("A heading whose list cannot fit on any page is not moved forever")
+	func headingBeforeTallListTerminates() async throws {
+		let items = (1...300).map { "<li>Punkt \($0)</li>" }.joined()
+		let data = try await HTMLRenderer.renderPDF(html: "<h2>Zwischen</h2><ul>\(items)</ul>")
+		#expect(pageCount(data) >= 2)
+		#if canImport(PDFKit)
+		let document = try #require(PDFDocument(data: data))
+		#expect((document.page(at: 0)?.string ?? "").contains("Zwischen"))
+		#endif
+	}
 }

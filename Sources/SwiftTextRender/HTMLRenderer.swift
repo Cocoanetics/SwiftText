@@ -994,8 +994,28 @@ public enum HTMLRenderer {
 				}
 			}
 		} else {
-			for child in block.children { collectBreaks(child, into: &points) }
+			var keepWithNext = false
+			for child in block.children {
+				if keepWithNext, let next = child as? BlockBox {
+					// A `break-after: avoid` box (every heading) stays with the start of
+					// whatever follows — list, table, quote, code, image — so the edges
+					// at the top of that block and of its first descendants are
+					// discouraged too, not only the heading's own bottom edge.
+					discourageLeadingEdges(of: next, into: &points)
+				}
+				collectBreaks(child, into: &points)
+				keepWithNext = (child as? BlockBox)?.style.breakAfter == .avoid
+			}
 		}
+	}
+
+	/// Discourage a break at the top of `block` and of each first child below it,
+	/// which all share (or nearly share) the edge that follows a kept-with-next box.
+	private static func discourageLeadingEdges(of block: BlockBox, into points: inout BreakPoints) {
+		points.discouraged.insert(block.y)
+		guard !block.establishesInlineContext,
+		      let first = block.children.compactMap({ $0 as? BlockBox }).first else { return }
+		discourageLeadingEdges(of: first, into: &points)
 	}
 
 }
