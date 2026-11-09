@@ -411,5 +411,22 @@ struct RenderPageFurnitureTests {
 		let right = try leftEdge(0), left = try leftEdge(1)
 		#expect(abs((right - left) / 72 * 25.4 - 5) < 1.5, "inside margin should be 5 mm wider on the recto, got \(right) vs \(left)")
 	}
+
+	@Test("webkit: page-foot notes fit their page with :left/:right margins", .timeLimit(.minutes(3)))
+	func pageFootnotesWithSideMargins() async throws {
+		let line = "Dies ist ein Satz mit etwas Text, damit die Zeilen gefüllt werden und der Absatz mehrere Zeilen lang wird. "
+		let note = "Eine längere Fußnote mit Quellenangabe, Autor A, Autorin B: Titel der Veröffentlichung, Zeitschrift 2024, Seiten 1–12."
+		let paragraphs = (1...40).map { "\(String(repeating: line, count: 3))[^\($0)]" }.joined(separator: "\n\n")
+		let definitions = (1...40).map { "[^\($0)]: \(note)" }.joined(separator: "\n")
+		let markdown = "# Kapitel\n\n\(paragraphs)\n\n\(definitions)\n"
+		let symmetric = try await render(markdown, arguments: ["--footnotes", "page"], css: "@page { margin: 20mm 20mm 22mm 20mm; }")
+		let sided = try await render(markdown, arguments: ["--footnotes", "page"],
+		                             css: "@page :left { margin: 20mm 17mm 22mm 22mm; }\n@page :right { margin: 20mm 22mm 22mm 17mm; }")
+		#expect(sided.pageCount == symmetric.pageCount, "\(sided.pageCount) pages with side margins, \(symmetric.pageCount) with one margin")
+		for index in 0..<sided.pageCount {
+			let words = (sided.page(at: index)?.string ?? "").split(whereSeparator: \.isWhitespace).count
+			#expect(words > 20, "page \(index + 1) holds only \(words) words")
+		}
+	}
 }
 #endif
