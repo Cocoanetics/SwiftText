@@ -30,6 +30,7 @@ script, style, template, title { display: none }
 
 blockquote, dl, figure, menu, ol, p, pre, ul { margin-top: 1em; margin-bottom: 1em }
 body { margin: 8px }
+h1, h2, h3, h4, h5, h6 { break-after: avoid }
 h1 { font-size: 2em; font-weight: bold; margin-top: .67em; margin-bottom: .67em }
 h2 { font-size: 1.5em; font-weight: bold; margin-top: .83em; margin-bottom: .83em }
 h3 { font-size: 1.17em; font-weight: bold; margin-top: 1em; margin-bottom: 1em }
