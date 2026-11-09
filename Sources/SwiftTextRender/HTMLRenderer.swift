@@ -28,8 +28,13 @@ public struct RenderOptions {
 	/// otherwise content is paginated to this height (default ≈ US Letter,
 	/// 1056px = 11in @96dpi).
 	public var pageHeightPx: Double?
-	/// Page margin in CSS pixels applied on all sides.
-	public var pageMarginPx: Double
+	/// The four page margins in CSS pixels; `@page` margins set them per side.
+	public var pageMargins: PageMargins
+	/// Page margin in CSS pixels applied on all sides. Reads the top margin.
+	public var pageMarginPx: Double {
+		get { pageMargins.top }
+		set { pageMargins = PageMargins(newValue) }
+	}
 	/// The document base direction. `.auto` (default) detects RTL from content,
 	/// which is what makes Markdown (no `dir` markup) render RTL automatically.
 	public var baseDirection: BaseDirection
@@ -56,7 +61,7 @@ public struct RenderOptions {
 	            imageLoader: ImageLoader? = HTMLRenderer.urlSessionImageLoader) {
 		self.pageWidthPx = pageWidthPx
 		self.pageHeightPx = pageHeightPx
-		self.pageMarginPx = pageMarginPx
+		self.pageMargins = PageMargins(pageMarginPx)
 		self.baseDirection = baseDirection
 		self.compressStreams = compressStreams
 		self.imageLoader = imageLoader
@@ -140,7 +145,7 @@ public enum HTMLRenderer {
 		// @page rules in the document override the page geometry.
 		var options = options
 		applyAtPageRules(documentSheets + css, to: &options)
-		options.pageMarginPx = max(options.pageMarginPx, options.minimumPageMarginPx)
+		options.pageMargins = options.pageMargins.floored(at: options.minimumPageMarginPx)
 		let pageRules = parsePageRules(documentSheets + css)
 		registerFontFaces(documentSheets + css, baseURL: baseURL, in: fonts, warn: reportWarning)
 
@@ -161,8 +166,8 @@ public enum HTMLRenderer {
 		                                         warningHandler: reportWarning) as? BlockBox else { throw RenderError.noRootBox }
 
 		let engine = LayoutEngine(fonts: fonts)
-		let margin = options.pageMarginPx
-		let contentWidth = max(0, options.pageWidthPx - 2 * margin)
+		let margin = options.pageMargins.left
+		let contentWidth = max(0, options.pageWidthPx - options.pageMargins.horizontal)
 		// Lay the document out as a single tall column (origin at column y = 0).
 		let columnHeight = engine.layout(root: rootBox, contentWidth: contentWidth, originX: margin, originY: 0)
 		var laidOut = ColumnKey(contentWidth: contentWidth, margin: margin)
@@ -174,7 +179,7 @@ public enum HTMLRenderer {
 			? [PageRun(kind: .gap(after: nil, before: nil), name: nil, options: options)]
 			: pageRuns(in: rootBox, options: options, rules: pageStyleRules)
 		func ensureLayout(for run: PageRun) {
-			let key = ColumnKey(contentWidth: max(0, run.options.pageWidthPx - 2 * run.margin), margin: run.margin)
+			let key = ColumnKey(contentWidth: max(0, run.options.pageWidthPx - run.margins.horizontal), margin: run.margins.left)
 			guard key != laidOut else { return }
 			_ = engine.layout(root: rootBox, contentWidth: key.contentWidth, originX: key.margin, originY: 0)
 			laidOut = key
@@ -196,7 +201,7 @@ public enum HTMLRenderer {
 				// on, so fragmentation is skipped: a single auto-height page.
 				let slices: [PageSlice]
 				if let pageHeight = runs[index].options.pageHeightPx {
-					slices = paginate(rootBox, from: from, to: to, pageHeightPx: pageHeight, margin: runs[index].margin,
+					slices = paginate(rootBox, from: from, to: to, pageHeightPx: pageHeight, margins: runs[index].margins,
 					                  pageOffset: pageCount, skippingEmpty: skippingEmpty)
 				} else {
 					slices = [PageSlice(top: 0, bottom: columnHeight, repeatedHeader: nil)]
@@ -239,9 +244,9 @@ public enum HTMLRenderer {
 			let pageHeightPx = run.pageHeightPx(columnHeight: columnHeight)
 			for (offset, slice) in run.slices.enumerated() {
 				let pageIndex = run.firstPage + offset
-				let shift = pageShift(rules: pageStyleRules, pageIndex: pageIndex, name: run.name, baseMargin: run.margin)
+				let shift = pageShift(rules: pageStyleRules, pageIndex: pageIndex, name: run.name, baseMargin: run.margins.left)
 				let geometry = PageGeometry(pageWidthPx: run.options.pageWidthPx, pageHeightPx: pageHeightPx,
-				                            marginPx: run.margin, columnTop: slice.top, sliceHeightPx: slice.bottom - slice.top,
+				                            margins: run.margins, columnTop: slice.top, sliceHeightPx: slice.bottom - slice.top,
 				                            contentOffsetPx: slice.repeatedHeader?.reservedHeight ?? 0, offsetXPx: shift)
 				let painter = Painter(geometry: geometry, fonts: fonts, builder: fontBuilder, compress: options.compressStreams,
 				                      internalAnchors: anchorNames)
@@ -292,7 +297,7 @@ public enum HTMLRenderer {
 			let runPages = Array(pageObjects[run.firstPage ..< run.firstPage + run.slices.count])
 			let pageHeightPx = run.pageHeightPx(columnHeight: columnHeight)
 			func target(_ y: Double) -> (pageIndex: Int, array: PDFArray) {
-				destination(forColumnY: y, slices: run.slices, pages: runPages, pageHeightPx: pageHeightPx, margin: run.margin)
+				destination(forColumnY: y, slices: run.slices, pages: runPages, pageHeightPx: pageHeightPx, margins: run.margins)
 			}
 			for (id, y) in run.anchors where anchorPages[id] == nil {
 				let resolved = target(y)
@@ -337,15 +342,15 @@ public enum HTMLRenderer {
 	/// The page and `/XYZ` destination for a column y-coordinate. Slices are
 	/// half-open, so a y on a page boundary belongs to the page that follows.
 	private static func destination(forColumnY y: Double, slices: [PageSlice], pages: [PDFDictionary],
-	                                pageHeightPx: Double, margin: Double) -> (pageIndex: Int, array: PDFArray) {
+	                                pageHeightPx: Double, margins: PageMargins) -> (pageIndex: Int, array: PDFArray) {
 		var pageIndex = slices.count - 1
 		for (index, slice) in slices.enumerated() where y >= slice.top - 0.5 && y < slice.bottom - 0.5 {
 			pageIndex = index
 			break
 		}
-		let pageY = margin + (slices[pageIndex].repeatedHeader?.reservedHeight ?? 0) + (y - slices[pageIndex].top)
+		let pageY = margins.top + (slices[pageIndex].repeatedHeader?.reservedHeight ?? 0) + (y - slices[pageIndex].top)
 		let topPt = (pageHeightPx - pageY) * pxToPt
-		return (pageIndex, PDFArray([pages[pageIndex].reference, "/XYZ", margin * pxToPt, topPt, "null"]))
+		return (pageIndex, PDFArray([pages[pageIndex].reference, "/XYZ", margins.left * pxToPt, topPt, "null"]))
 	}
 
 	// MARK: - @page rules
@@ -437,7 +442,7 @@ public enum HTMLRenderer {
 				for declaration in parseDeclarations(content) {
 					switch declaration.lowerName {
 					case "size": applyPageSize(declaration.value, to: &options)
-					case "margin": applyPageMargin(declaration.value, to: &options)
+					case "margin", "margin-top", "margin-right", "margin-bottom", "margin-left": applyPageMargin(declaration, to: &options)
 					default: break
 					}
 				}
@@ -470,11 +475,32 @@ public enum HTMLRenderer {
 		}
 	}
 
-	private static func applyPageMargin(_ value: [ComponentValue], to options: inout RenderOptions) {
-		// A single uniform margin is supported; the first value is used.
-		guard let token = value.first(where: { !$0.isWhitespaceOrComment }),
-		      let length = parseLength([token], fontSize: 16, rootFontSize: 16), case .px(let pixels) = length else { return }
-		options.pageMarginPx = pixels
+	/// Apply a `margin` shorthand (one to four values: top, right, bottom, left)
+	/// or a `margin-top` ... `margin-left` longhand to the page margins.
+	private static func applyPageMargin(_ declaration: Declaration, to options: inout RenderOptions) {
+		// An unsupported component (a percentage, `auto`) would shift the others
+		// into the wrong positions, so the whole declaration is ignored.
+		var lengths: [Double] = []
+		for token in declaration.value where !token.isWhitespaceOrComment {
+			guard let length = parseLength([token], fontSize: 16, rootFontSize: 16), case .px(let pixels) = length else { return }
+			lengths.append(pixels)
+		}
+		if declaration.lowerName != "margin", lengths.count != 1 { return }
+		switch declaration.lowerName {
+		case "margin-top": if let first = lengths.first { options.pageMargins.top = first }
+		case "margin-right": if let first = lengths.first { options.pageMargins.right = first }
+		case "margin-bottom": if let first = lengths.first { options.pageMargins.bottom = first }
+		case "margin-left": if let first = lengths.first { options.pageMargins.left = first }
+		case "margin":
+			switch lengths.count {
+			case 1: options.pageMargins = PageMargins(lengths[0])
+			case 2: options.pageMargins = PageMargins(top: lengths[0], right: lengths[1], bottom: lengths[0], left: lengths[1])
+			case 3: options.pageMargins = PageMargins(top: lengths[0], right: lengths[1], bottom: lengths[2], left: lengths[1])
+			case 4: options.pageMargins = PageMargins(top: lengths[0], right: lengths[1], bottom: lengths[2], left: lengths[3])
+			default: break
+			}
+		default: break
+		}
 	}
 
 	// MARK: - Bookmarks / outline
@@ -642,10 +668,10 @@ public enum HTMLRenderer {
 			self.options = options
 		}
 
-		var margin: Double { options.pageMarginPx }
+		var margins: PageMargins { options.pageMargins }
 
 		func pageHeightPx(columnHeight: Double) -> Double {
-			options.pageHeightPx ?? (columnHeight + 2 * margin)
+			options.pageHeightPx ?? (columnHeight + margins.vertical)
 		}
 	}
 
@@ -689,12 +715,12 @@ public enum HTMLRenderer {
 				for declaration in rule.declarations {
 					switch declaration.lowerName {
 					case "size": applyPageSize(declaration.value, to: &namedOptions)
-					case "margin": applyPageMargin(declaration.value, to: &namedOptions)
+					case "margin", "margin-top", "margin-right", "margin-bottom", "margin-left": applyPageMargin(declaration, to: &namedOptions)
 					default: break
 					}
 				}
 			}
-			namedOptions.pageMarginPx = max(namedOptions.pageMarginPx, namedOptions.minimumPageMarginPx)
+			namedOptions.pageMargins = namedOptions.pageMargins.floored(at: namedOptions.minimumPageMarginPx)
 			runs.append(PageRun(kind: .named(first: block, last: last), name: name, options: namedOptions))
 			previous = last
 		}
@@ -775,9 +801,9 @@ public enum HTMLRenderer {
 	/// Only the column range `from ..< to` is paginated — one page run — and
 	/// `pageOffset` is the number of pages before it, which fixes the side the
 	/// first page falls on. An empty range yields no slices when `skippingEmpty`.
-	private static func paginate(_ root: BlockBox, from: Double, to columnHeight: Double, pageHeightPx: Double, margin: Double,
+	private static func paginate(_ root: BlockBox, from: Double, to columnHeight: Double, pageHeightPx: Double, margins: PageMargins,
 	                             pageOffset: Int, skippingEmpty: Bool) -> [PageSlice] {
-		let contentHeight = max(1, pageHeightPx - 2 * margin)
+		let contentHeight = max(1, pageHeightPx - margins.vertical)
 		let epsilon = breakEpsilon
 
 		var points = BreakPoints()
