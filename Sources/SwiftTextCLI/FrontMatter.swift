@@ -127,7 +127,8 @@ enum FrontMatterHTML {
 	/// The opening fence of a code block: its character and length.
 	private static func fenceOpening(_ line: Substring) -> (mark: Character, length: Int)? {
 		let trimmed = line.drop { $0 == " " }
-		guard line.count - trimmed.count < 4, let mark = trimmed.first, mark == "`" || mark == "~" else { return nil }
+		// Any indent: a fence can sit inside a list item.
+		guard let mark = trimmed.first, mark == "`" || mark == "~" else { return nil }
 		let length = trimmed.prefix { $0 == mark }.count
 		guard length >= 3 else { return nil }
 		// A backtick fence's info string cannot contain a backtick.
@@ -143,6 +144,8 @@ enum FrontMatterHTML {
 
 	/// Whether a line is a contents marker: `<!-- toc -->` or `[TOC]` alone on it.
 	private static func isContentsMarker(_ line: Substring) -> Bool {
+		// Four spaces or a tab of indent make an indented code block, not a marker.
+		guard !line.hasPrefix("    "), !line.hasPrefix("\t") else { return false }
 		let trimmed = line.trimmingCharacters(in: .whitespaces)
 		if trimmed.caseInsensitiveCompare("[TOC]") == .orderedSame { return true }
 		guard trimmed.hasPrefix("<!--"), trimmed.hasSuffix("-->"), trimmed.count >= 7 else { return false }
@@ -160,6 +163,8 @@ enum FrontMatterHTML {
 		var token = "SWIFTTEXTCONTENTSMARKER"
 		while markdown.contains(token) { token += "X" }
 		var lines: [String] = []
+		// "\r\n" is a single Character in Swift, so normalise before splitting on "\n".
+		let markdown = markdown.replacingOccurrences(of: "\r\n", with: "\n")
 		for line in markdown.split(separator: "\n", omittingEmptySubsequences: false) {
 			if let open = fence {
 				if closesFence(line, open) { fence = nil }

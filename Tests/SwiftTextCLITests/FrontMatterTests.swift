@@ -178,4 +178,11 @@ struct FrontMatterTests {
 		#expect(output.components(separatedBy: "<nav class=\"toc\"").count == 2)
 		#expect(place("SWIFTTEXTCONTENTSMARKER\n\n# A\n").contains("<p>SWIFTTEXTCONTENTSMARKER</p>"))
 	}
+
+	@Test("CRLF line endings and indented examples")
+	func crlfAndIndent() {
+		#expect(FrontMatterHTML.placeContentsMarker(in: "a\r\n\r\n[TOC]\r\n\r\nb\r\n").placeholder != nil)
+		#expect(FrontMatterHTML.placeContentsMarker(in: "Example:\n\n    <!-- toc -->\n").placeholder == nil)
+		#expect(FrontMatterHTML.placeContentsMarker(in: "- Example:\n\n  ```\n  [TOC]\n  ```\n").placeholder == nil)
+	}
 }
