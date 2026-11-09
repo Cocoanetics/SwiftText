@@ -85,7 +85,7 @@ struct RenderPageFurnitureTests {
 		#expect(text(on: title, from: 0, to: 0.08).isEmpty && text(on: title, from: 0.92, to: 1).isEmpty, "the title page carries no furniture")
 		let contents = try #require(document.page(at: 1))
 		#expect(text(on: contents, from: 0, to: 0.08) == "2", "the contents page keeps its number")
-		#expect(text(on: contents, from: 0.92, to: 1).contains("Ein Buch"))
+		#expect(text(on: contents, from: 0.92, to: 1).isEmpty, "no running head before the first chapter")
 	}
 
 	@Test("the webkit engine leaves every page of a multi-page title section bare", .timeLimit(.minutes(2)))
