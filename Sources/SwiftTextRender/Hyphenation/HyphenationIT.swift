@@ -37,6 +37,5 @@ extension HyphenationPatterns {
 1z 2zb 2zd 2zl 2zn 2zp 2zt 2zs 2zv 2zz 2z. 2z'. 2z’. 2z'' 2z’’ .z2
 """#,
 		exceptions: #"""
-Not Found
 """#)
 }

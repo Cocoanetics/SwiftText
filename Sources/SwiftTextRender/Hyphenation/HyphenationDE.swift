@@ -742,6 +742,5 @@ lit4zu li4vea live4n 2livg livi3e 2lixi li4z3ae li4z3an li2z3ä lizei5t li2zo 2l
 l3kle lklore5 l2knu lko2f lk3ofe lkraf4 l4k3rob lk3roc lks1 lk2sa lk3sän lk2se lk3s4ke lk2su lkue3b lk2ü lkü3b 2l1l ll3abb lla4ben l4labk ll3abl l4l5abri l4l3abt ll3aff ll3aft lla3ga
 """# + "\n" + HyphenationPatterns.germanPatternsContinued,
 		exceptions: #"""
-Not Found
 """#)
 }

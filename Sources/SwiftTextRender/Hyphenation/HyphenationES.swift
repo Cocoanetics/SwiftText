@@ -233,6 +233,5 @@ zoo1ó2 zoo1ú2 wa3s4h 3grafo. 3grafa. 3grafos. 3grafas. 3grafía. 3grafías. o4
 3e4lectr 3e4léctr di4e5lec di4e5léc 5i4ndustr 5islámi 5islami 5ingenier 5técnic 5biología 5céntrico 5e4cuatorial 7u4niversid 5u4niversit
 """#,
 		exceptions: #"""
-Not Found
 """#)
 }
