@@ -20,11 +20,12 @@ struct PageSizeRuleTests {
 		#expect(pages[0].margins.map(\.name) == ["margin-left"])
 	}
 
-	@Test("page assignments list the selectors that declare page: <name>")
+	@Test("page assignments keep auto and importance, and only print-applicable groups")
 	func assignments() {
-		let found = PageSizeRule.pageAssignments(in: ".wide, .big { page: wide; color: red } p { page: auto } @media print { .a { page: a } }")
-		#expect(found.map(\.selector) == [".wide, .big", ".a"])
-		#expect(found.map(\.name) == ["wide", "a"])
+		let found = PageSizeRule.pageAssignments(in: ".wide, .big { page: wide; color: red } p { page: auto } @media print { .a { page: a !important } } @media screen { .s { page: s } }")
+		#expect(found.map(\.selector) == [".wide, .big", "p", ".a"])
+		#expect(found.map(\.name) == ["wide", "auto", "a"])
+		#expect(found.map(\.important) == [false, false, true])
 	}
 
 	@Test("side margins: recto and verso differ by the inside/outside margin")

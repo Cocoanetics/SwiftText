@@ -485,12 +485,13 @@ public enum HTMLRenderer {
 
 	private static func applyPageSize(_ value: [ComponentValue], to options: inout RenderOptions) {
 		var landscape = false
+		var sawOrientation = false
 		var named: (width: Double, height: Double)?
 		var lengths: [Double] = []
 		for token in value where !token.isWhitespaceOrComment {
 			if case .ident(let ident) = token.token {
 				let lower = ident.lowercased()
-				if lower == "landscape" { landscape = true } else if lower == "portrait" { continue } else if let size = pageSizesPx[lower] { named = size }
+				if lower == "landscape" { landscape = true; sawOrientation = true } else if lower == "portrait" { sawOrientation = true } else if let size = pageSizesPx[lower] { named = size }
 			} else if let length = parseLength([token], fontSize: 16, rootFontSize: 16), case .px(let pixels) = length {
 				lengths.append(pixels)
 			}
@@ -505,6 +506,10 @@ public enum HTMLRenderer {
 		} else if lengths.count == 1 {
 			options.pageWidthPx = lengths[0]
 			options.pageHeightPx = lengths[0]
+		} else if sawOrientation, let height = options.pageHeightPx {
+			// A lone orientation turns the paper it is applied to.
+			let width = options.pageWidthPx
+			if landscape == (width < height) { options.pageWidthPx = height; options.pageHeightPx = width }
 		}
 	}
 

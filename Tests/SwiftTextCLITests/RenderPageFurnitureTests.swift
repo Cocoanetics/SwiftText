@@ -322,6 +322,27 @@ struct RenderPageFurnitureTests {
 		#expect(document.page(at: sizes.count - 1)?.string?.contains("Text vier") == true)
 	}
 
+	@Test("webkit: a long table that is itself the named block still forms a landscape run", .timeLimit(.minutes(2)))
+	func webkitNamedTableRun() async throws {
+		let rows = (1...90).map { "| r\($0) | x | y |" }.joined(separator: "\n")
+		let markdown = "# Eins\n\nText eins.\n\n# Zwei\n\n| A | B | C |\n|---|---|---|\n\(rows)\n\n# Drei\n\nText drei.\n"
+		let document = try await render(markdown, css: "@page wide { size: A4 landscape; }\ntable { page: wide; }\n")
+		let sizes = (0..<document.pageCount).compactMap { document.page(at: $0)?.bounds(for: .mediaBox) }
+		#expect(sizes.contains { $0.width > $0.height }, "the table run is missing: \(sizes)")
+		#expect(document.page(at: sizes.count - 1)?.string?.contains("Text drei") == true)
+		#expect(sizes.last.map { $0.width < $0.height } == true)
+	}
+
+	@Test("webkit: the more specific page assignment wins, whatever its source order", .timeLimit(.minutes(2)))
+	func webkitPageSpecificity() async throws {
+		let markdown = "# Eins\n\n<div class=\"wide\">\n\nBreit.\n\n</div>\n\n# Zwei\n\nText.\n"
+		let css = "@page wide { size: A4 landscape; }\n@page narrow { size: A5; }\n.wide { page: wide; }\ndiv { page: narrow; }\n@media screen { h1 { page: narrow; } }\n"
+		let document = try await render(markdown, css: css)
+		let sizes = (0..<document.pageCount).compactMap { document.page(at: $0)?.bounds(for: .mediaBox) }
+		#expect(sizes.filter { $0.width > $0.height }.count == 1, "got \(sizes)")
+		#expect(!sizes.contains { Int($0.width.rounded()) == 420 }, "the less specific rule must not apply: \(sizes)")
+	}
+
 	@Test("webkit: a named or pseudo @page size never applies to the whole document", .timeLimit(.minutes(2)))
 	func webkitPseudoSizeIsNotGlobal() async throws {
 		let document = try await render("# Eins\n\nText.\n", css: "@page wide { size: A5; }\n@page :first { size: A3; }\n")

@@ -109,8 +109,10 @@ package enum PageSizeRule {
 	}
 
 	/// The selectors of the style rules in `css` that declare `page: <name>`, with the name.
-	package static func pageAssignments(in css: String) -> [(selector: String, name: String)] {
-		var result: [(selector: String, name: String)] = []
+	/// `page: auto` is kept (it resets an inherited name); the cascade is left to the
+	/// browser. Only rule groups that apply when printing are searched.
+	package static func pageAssignments(in css: String) -> [(selector: String, name: String, important: Bool)] {
+		var result: [(selector: String, name: String, important: Bool)] = []
 		let source = stripComments(css)
 		var index = source.startIndex
 		while let open = source[index...].firstIndex(of: "{") {
@@ -127,22 +129,36 @@ package enum PageSizeRule {
 			let body = String(source[source.index(after: open)..<close])
 			if prelude.hasPrefix("@") {
 				// A grouping rule (`@media print { … }`) holds style rules of its own.
-				if !prelude.lowercased().hasPrefix("@page"), !prelude.lowercased().hasPrefix("@font-face") {
-					result += pageAssignments(in: body)
-				}
+				if appliesWhenPrinting(prelude) { result += pageAssignments(in: body) }
 			} else if !prelude.isEmpty {
 				for declaration in body.split(separator: ";") {
 					let parts = declaration.split(separator: ":", maxSplits: 1)
 					guard parts.count == 2, parts[0].trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "page" else { continue }
-					let value = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
-					if !value.isEmpty, value.lowercased() != "auto", !value.contains(where: \.isWhitespace) {
-						result.append((prelude, value))
+					var words = parts[1].split(whereSeparator: \.isWhitespace).map(String.init)
+					let important = words.last?.lowercased() == "!important"
+					if important { words.removeLast() }
+					if words.count == 1, let name = words.first, name.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }) {
+						result.append((prelude, name.lowercased() == "auto" ? "auto" : name, important))
 					}
 				}
 			}
 			index = source.index(after: close)
 		}
 		return result
+	}
+
+	/// Whether the rules inside an at-rule group are in force when printing: `@media`
+	/// for print or all media, and `@supports`; other at-rules hold no style rules.
+	private static func appliesWhenPrinting(_ prelude: String) -> Bool {
+		let lower = prelude.lowercased()
+		if lower.hasPrefix("@supports") { return true }
+		guard lower.hasPrefix("@media") else { return false }
+		let queries = lower.dropFirst("@media".count).split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+		return queries.contains { query in
+			guard !query.hasPrefix("not ") else { return false }
+			let type = query.split(whereSeparator: { $0 == " " || $0 == "(" }).first.map(String.init) ?? ""
+			return type == "print" || type == "all" || query.hasPrefix("(")
+		}
 	}
 
 	/// The left and right page margins of the unnamed `@page` rules, with their

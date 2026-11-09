@@ -58,6 +58,13 @@ struct NamedPageTests {
 		#expect(sizes.map(\.height) == [595, 792, 792])
 	}
 
+	@Test("a lone orientation in @page :first turns the first page")
+	func firstPageOrientation() async throws {
+		let sizes = try await render(css: "@page :first { size: landscape; }")
+		#expect(sizes.map(\.width) == [792, 612, 612])
+		#expect(sizes.map(\.height) == [612, 792, 792])
+	}
+
 	@Test("@page :left / :right { size } resize the pages of that side only")
 	func sideSizes() async throws {
 		let sizes = try await render(css: "@page :left { size: A5; }")

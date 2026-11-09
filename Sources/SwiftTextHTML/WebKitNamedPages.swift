@@ -30,22 +30,24 @@ extension WebKitBrowser {
 	/// runs out of the DOM while it prints. Returns nil when no element asks for a named page.
 	@MainActor
 	func exportRuns(in webView: WKWebView, paperSize: CGSize, namedPages: WebKitNamedPages) async throws -> (data: Data, anchorPages: [String: Int], blankPages: Set<Int>)? {
-		let selectors = namedPages.assignments.map { [$0.selector, $0.name] }
-		guard !selectors.isEmpty, let selectorJSON = try? JSONSerialization.data(withJSONObject: selectors),
-		      let selectorText = String(data: selectorJSON, encoding: .utf8) else { return nil }
-		// Mark the outermost elements of each name, merging directly adjacent siblings of one name.
+		// The browser resolves the cascade (specificity, importance, `page: auto`): each
+		// assignment becomes a custom property rule, in source order, and is read back.
+		let rules = namedPages.assignments.map { "\($0.selector) { --st-page: \($0.name)\($0.important ? " !important" : ""); }" }
+		guard !rules.isEmpty, let rulesJSON = try? JSONSerialization.data(withJSONObject: rules),
+		      let rulesText = String(data: rulesJSON, encoding: .utf8) else { return nil }
+		// Wrap the outermost elements of each name in a container of their own, merging directly
+		// adjacent siblings of one name. The container is the run's boundary, so it survives
+		// the print preparation replacing a table with fragments.
 		let planScript = """
 		(function() {
-			const assignments = \(selectorText);
-			const matched = new Map();
-			for (const [selector, name] of assignments) {
-				let found = [];
-				try { found = Array.from(document.body.querySelectorAll(selector)); } catch (e) {}
-				for (const element of found) matched.set(element, name);
-			}
-			const outermost = Array.from(matched.keys()).filter(e => { for (let p = e.parentElement; p; p = p.parentElement) if (matched.has(p)) return false; return true; });
-			outermost.sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1);
+			const style = document.createElement('style');
+			style.textContent = \(rulesText).join('\\n');
+			document.head.appendChild(style);
 			const runs = [];
+			function nameOf(element) {
+				const value = getComputedStyle(element).getPropertyValue('--st-page').trim();
+				return value && value !== 'auto' ? value : null;
+			}
 			function onlyBlankBetween(a, b) {
 				for (let n = a.nextSibling; n && n !== b; n = n.nextSibling) {
 					if (n.nodeType === Node.ELEMENT_NODE) return false;
@@ -53,12 +55,24 @@ extension WebKitBrowser {
 				}
 				return true;
 			}
-			for (const element of outermost) {
-				const name = matched.get(element);
-				const last = runs[runs.length - 1];
-				if (last && last.name === name && last.last.parentNode === element.parentNode && onlyBlankBetween(last.last, element)) last.last = element;
-				else runs.push({ name: name, first: element, last: element });
+			function walk(parent) {
+				for (const child of Array.from(parent.children)) {
+					const name = nameOf(child);
+					if (!name) { walk(child); continue; }
+					const last = runs[runs.length - 1];
+					if (last && last.name === name && last.last.parentNode === parent && onlyBlankBetween(last.last, child)) {
+						last.last.appendChild(child);
+					} else {
+						const wrapper = document.createElement('div');
+						wrapper.setAttribute('data-st-run', name);
+						parent.insertBefore(wrapper, child);
+						wrapper.appendChild(child);
+						runs.push({ name: name, first: wrapper, last: wrapper });
+					}
+				}
 			}
+			walk(document.body);
+			style.remove();
 			window.__stRuns = runs;
 			return runs.length;
 		})();
@@ -169,7 +183,7 @@ import Foundation
 /// pages of its own size.
 package struct WebKitNamedPages {
 	package var pages: [PageSizeRule.NamedPage]
-	package var assignments: [(selector: String, name: String)]
+	package var assignments: [(selector: String, name: String, important: Bool)]
 	/// The least top and bottom page margin in points, which the running head and
 	/// foot need; a named page's own margins never go below it.
 	package var minimumVerticalMargin: Double
