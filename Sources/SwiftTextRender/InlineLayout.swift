@@ -25,6 +25,7 @@ extension LayoutEngine {
 	}
 
 	/// Lay out the inline content of `box` into lines. Returns the content height.
+	// swiftlint:disable:next function_body_length
 	func layoutInline(_ box: BlockBox, contentWidth: Double, contentX: Double, contentTop: Double) -> Double {
 		var tokens: [InlineToken] = []
 		let source = ObjectIdentifier(box)
@@ -208,7 +209,10 @@ extension LayoutEngine {
 				let metrics = replacedBoxMetrics(of: image, style: style, containingWidth: contentWidth)
 				// `finishLine` decides the vertical position.
 				placeAtomic(.image(image, metrics, top: 0), width: metrics.width, style: style, href: href, tokenIndex: tokenIndex)
-			case .word(let rawWord, let style, let href, let decorations):
+			case .word(let sourceWord, let style, let href, let decorations):
+				// Soft hyphens are break opportunities, not glyphs: they leave the
+				// text and reappear as a visible hyphen where a line breaks at one.
+				let (rawWord, softHyphenBreaks) = removingSoftHyphens(from: sourceWord, style: style)
 				// Split the word into runs that share one font (font fallback), then
 				// shape each Arabic run into presentation forms. Shaping stays in
 				// logical order (one glyph per scalar) so the later bidi pass can
@@ -268,6 +272,7 @@ extension LayoutEngine {
 						}
 					}
 					var preferredBreaks = Set<Int>()
+					var hyphenBreaks = Set<Int>()
 					if preferringSoftBreaks {
 						let word = pieces.map(\.text).joined()
 						let utf16BreakOffsets = preferredLineBreakOffsets(in: word)
@@ -278,6 +283,15 @@ extension LayoutEngine {
 								preferredBreaks.insert(offset + 1)
 							}
 						}
+						// Where a line may end with a hyphen added: soft hyphens, plus
+						// the language's pattern break points under `hyphens: auto`.
+						hyphenBreaks = softHyphenBreaks
+						if style.hyphens == .auto, let hyphenator = Hyphenator.forLanguage(style.language) {
+							hyphenBreaks.formUnion(hyphenator.breakOffsets(in: word))
+						}
+						hyphenBreaks.subtract(preferredBreaks)
+						hyphenBreaks = hyphenBreaks.filter { $0 > 0 && $0 < units.count }
+						preferredBreaks.formUnion(hyphenBreaks)
 					}
 					var chunkText = ""
 					var chunkWidth = 0.0
@@ -306,24 +320,52 @@ extension LayoutEngine {
 						}
 						flushChunk()
 					}
-					var segmentStart = 0
-					for segmentEnd in preferredBreaks.sorted() + [units.count] {
-						let segment = units[segmentStart ..< segmentEnd]
-						let segmentWidth = segment.reduce(0) { $0 + $1.width }
-						if segmentStart == 0, !fragments.isEmpty, let space = pendingSpace {
+					let boundaries = preferredBreaks.sorted() + [units.count]
+					let segmentStarts = [0] + boundaries.dropLast()
+					let segmentWidths = zip(segmentStarts, boundaries).map { start, end in
+						units[start ..< end].reduce(0) { $0 + $1.width }
+					}
+					// Width of the hyphen a line needs when it ends after segment `index`.
+					func hyphenWidth(after index: Int) -> Double {
+						guard hyphenBreaks.contains(boundaries[index]) else { return 0 }
+						let font = units[boundaries[index] - 1].font
+						return font.width(of: "-", size: style.fontSize) + style.letterSpacing
+					}
+					var next = 0
+					while next < boundaries.count {
+						if next == 0, !fragments.isEmpty, let space = pendingSpace {
 							let width = gap(space)
-							if penX + width + segmentWidth > contentWidth {
+							let first = segmentWidths[0] + (boundaries.count > 1 ? hyphenWidth(after: 0) : 0)
+							if penX + width + first > contentWidth {
 								finishLine(isLast: false)
 							} else {
 								penX += width
 								pendingSpace = nil
 							}
 						}
-						if penX + segmentWidth > contentWidth, !fragments.isEmpty {
-							finishLine(isLast: false)
+						// Take as many segments as fit on this line, leaving room for the
+						// hyphen when the line then ends inside the word.
+						var taken = next
+						var width = 0.0
+						while taken < boundaries.count {
+							width += segmentWidths[taken]
+							let tail = taken == boundaries.count - 1 ? 0 : hyphenWidth(after: taken)
+							if penX + width + tail > contentWidth { break }
+							taken += 1
 						}
-						appendUnits(segment, breakingAnywhere: breakingAnywhere)
-						segmentStart = segmentEnd
+						if taken == next {
+							if !fragments.isEmpty {
+								if next > 0, hyphenBreaks.contains(boundaries[next - 1]) {
+									let font = units[boundaries[next - 1] - 1].font
+									append([Piece(text: "-", font: font, width: hyphenWidth(after: next - 1))])
+								}
+								finishLine(isLast: false)
+								continue
+							}
+							taken = next + 1 // too wide for a line of its own: let it overflow
+						}
+						appendUnits(units[segmentStarts[next] ..< boundaries[taken - 1]], breakingAnywhere: breakingAnywhere)
+						next = taken
 					}
 				}
 				let spaceWidth = pendingSpace.map(gap) ?? 0
@@ -364,7 +406,26 @@ extension LayoutEngine {
 		return lineTop - contentTop
 	}
 
-	func collectInline(_ box: Box, into tokens: inout [InlineToken], href: String?, decorations: TextDecorationRuns) {
+	/// Strips U+00AD from a word and reports the character offsets it marked.
+/// Under `hyphens: none` the soft hyphens are dropped without marking
+/// anything, since they must not break the word.
+private func removingSoftHyphens(from word: String, style: ComputedStyle) -> (word: String, breaks: Set<Int>) {
+	guard word.unicodeScalars.contains("\u{00AD}") else { return (word, []) }
+	var cleaned = ""
+	var breaks = Set<Int>()
+	var count = 0
+	for character in word {
+		if character == "\u{00AD}" {
+			if style.hyphens != .none, count > 0 { breaks.insert(count) }
+		} else {
+			cleaned.append(character)
+			count += 1
+		}
+	}
+	return (cleaned, breaks)
+}
+
+func collectInline(_ box: Box, into tokens: inout [InlineToken], href: String?, decorations: TextDecorationRuns) {
 		if let text = box as? TextBox {
 			let style = text.style
 			if style.whiteSpace == .pre || style.whiteSpace == .preWrap {
