@@ -81,6 +81,14 @@ struct Render: AsyncParsableCommand {
 	@Flag(name: .long, help: "For PDF output, draw the document title and current chapter in the header. Chapters use --page-break-before, or h1 by default.")
 	var runningHeads: Bool = false
 
+	@Flag(name: .long, help: ArgumentHelp("For PDF output, classic book furniture: the book title on left (even) pages and the chapter on right (odd) pages, "
+	                        + "page numbers on the outside edge, no running head on a page that opens a chapter."))
+	var mirroredHeads: Bool = false
+
+	@Flag(name: .long, help: ArgumentHelp("For PDF output, start page numbering at the first chapter heading (see --running-heads for the level): "
+	                        + "the title page, imprint and contents carry no number, the first chapter page is 1, and the contents list those numbers."))
+	var numberFromChapter: Bool = false
+
 	@Option(name: .long, help: "For PDF, HTML, and Pages output, force a page break before every heading of this level (h1–h6). Use h2 to start each chapter on its own page. Omit to disable.")
 	var pageBreakBefore: HeadingBreakLevel?
 
@@ -200,15 +208,26 @@ struct Render: AsyncParsableCommand {
 			// landed, then render again with the numbers (same layout, so the pages
 			// don't move; margin boxes sit outside the body).
 			let swiftHeads = engine == .swift && runningHeads
-			let needsSecondPass = toc || swiftHeads
+			let bookLayout = mirroredHeads || numberFromChapter
+			let needsSecondPass = toc || swiftHeads || (engine == .swift && bookLayout)
 			var rendered = try await renderPDF(html: printHTML(markdownText, userCSS: userCSS, title: resolvedTitle, pageNumbers: toc ? .placeholder : .none),
 			                                   baseURL: baseURL, title: resolvedTitle, authors: author, userCSS: userCSS)
 			if needsSecondPass {
-				let pages = rendered.anchorPages.mapValues { $0 + 1 }
+				let level = runningHeadLevel
+				let html0 = printHTML(markdownText, userCSS: userCSS, title: resolvedTitle, pageNumbers: .none)
+				let headings = FrontMatterHTML.headings(in: html0)
+				let chapterPage = SwiftPageFurniture.firstChapterPage(headings, level: level, anchorPages: rendered.anchorPages) ?? 0
+				// The logical page counter is separate from the physical page: numbering
+				// can start at the first chapter, and the contents list those numbers.
+				let numberFrom = numberFromChapter ? chapterPage : 0
+				let pages = SwiftPageFurniture.printedPages(rendered.anchorPages, offset: numberFrom)
 				let html = printHTML(markdownText, userCSS: userCSS, title: resolvedTitle, pageNumbers: toc ? .resolved(pages) : .none)
 				var strings: [String: [String]] = [:]
-				if swiftHeads {
-					let level = runningHeadLevel
+				if engine == .swift && bookLayout {
+					strings = SwiftPageFurniture.bookStrings(headings, level: level, anchorPages: rendered.anchorPages, pageCount: rendered.pageCount,
+					                                         title: resolvedTitle, mirrored: mirroredHeads, numberFrom: numberFrom,
+					                                         firstHeadPage: mirroredHeads || numberFromChapter ? chapterPage : (titlePage ? 1 : 0))
+				} else if swiftHeads {
 					strings["chapter"] = SwiftPageFurniture.chapterTitles(FrontMatterHTML.headings(in: html), level: level, anchorPages: rendered.anchorPages)
 				}
 				rendered = try await renderPDF(html: html, baseURL: baseURL, title: resolvedTitle, authors: author, userCSS: userCSS, pageStrings: strings)
@@ -399,7 +418,7 @@ struct Render: AsyncParsableCommand {
 	#endif
 
 	/// A rendered PDF and the zero-based page each in-document anchor landed on.
-	private typealias PDFOutput = (data: Data, anchorPages: [String: Int])
+	private typealias PDFOutput = (data: Data, anchorPages: [String: Int], pageCount: Int)
 
 	@MainActor
 	@available(macOS 12.0, *)
@@ -437,15 +456,17 @@ struct Render: AsyncParsableCommand {
 	private func decoratedPDF(from browser: WebKitBrowser, title: String, authors: [String], userCSS: String?) async throws -> PDFOutput {
 		let size = pageSize(userCSS: userCSS)
 		let preparation = try await browser.preparePageFurniture(paperSize: size, footer: pageNumbers,
-		                                                        header: runningHeads, headingLevel: runningHeadLevel)
+		                                                        header: runningHeads, headingLevel: runningHeadLevel,
+		                                                        collectChapters: numberFromChapter)
 		let headings = try await browser.outlineHeadings()
 		let exported = try await browser.exportPaginatedPDFDataWithBlankPages(paperSize: size)
 		let titleSection = preparation.titleStart.map { ($0, preparation.titleEnd) }
 		let data = try PDFPageFurniture.add(to: exported.data, pageNumbers: pageNumbers, title: runningHeads ? title : nil,
+		                                    mirrored: mirroredHeads, numberFromChapter: numberFromChapter,
 		                                    headings: preparation.headings, titleSection: titleSection,
 		                                    outline: PDFOutlineBuilder.entries(for: headings, in: exported.data), blankPages: exported.blankPages)
 			.settingPDFMetadata(title: title, authors: authors)
-		return (data, exported.anchorPages)
+		return (data, exported.anchorPages, 0)
 	}
 	#endif
 
@@ -471,10 +492,12 @@ struct Render: AsyncParsableCommand {
 				throw ValidationError("Cannot use --font \(font): \(error.localizedDescription)")
 			}
 		}
-		let furniture = SwiftPageFurniture.css(pageNumbers: pageNumbers, title: runningHeads ? title : nil, hasTitlePage: titlePage)
+		let furniture = mirroredHeads || numberFromChapter
+			? SwiftPageFurniture.bookCSS(mirrored: mirroredHeads, numbers: pageNumbers, heads: runningHeads)
+			: SwiftPageFurniture.css(pageNumbers: pageNumbers, title: runningHeads ? title : nil, hasTitlePage: titlePage)
 		let rendered = try await HTMLRenderer.renderPDFWithAnchors(html: html, css: furniture.map { [$0] } ?? [], fonts: fonts, baseURL: baseURL,
 		                                                           options: options, title: title, authors: authors)
-		return (rendered.data, rendered.anchorPages)
+		return (rendered.data, rendered.anchorPages, rendered.pageCount)
 	}
 
 	private func writeData(_ data: Data, to url: URL) throws {

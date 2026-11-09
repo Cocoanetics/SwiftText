@@ -133,6 +133,62 @@ struct RenderPageFurnitureTests {
 		#expect(contents.contains("Kapitel 2 \(chapterPage + 1)"))
 	}
 
+	private func half(on page: PDFPage, from bottom: CGFloat, to top: CGFloat, left: Bool) -> String {
+		let bounds = page.bounds(for: .mediaBox)
+		let band = CGRect(x: left ? bounds.minX : bounds.midX, y: bounds.minY + bottom * bounds.height, width: bounds.width / 2, height: (top - bottom) * bounds.height)
+		return (page.selection(for: band)?.string ?? "").split(whereSeparator: \.isWhitespace).joined(separator: " ")
+	}
+
+	@Test("mirrored heads and numbers from the first chapter give the classic book page furniture", .timeLimit(.minutes(3)), arguments: ["swift", "webkit"])
+	func classicBookFurniture(engine: String) async throws {
+		let prose = "Langer Absatz mit vielen Wörtern für den Seitenumbruch und die Fortsetzung des Kapitels. "
+		let long = (1...14).map { _ in String(repeating: prose, count: 8) }.joined(separator: "\n\n")
+		let document = try await render("# Eins\n\n\(long)\n\n# Zwei\n\nText.\n", arguments: ["--running-heads", "--mirrored-heads", "--number-from-chapter",
+		                                                                                         "--title-page", "--toc", "--author", "A. Autor"], engine: engine)
+		try #require(document.pageCount > 4, "the first chapter must continue over several pages")
+		let first = try #require(document.page(at: 0))
+		let contents = try #require(document.page(at: 1))
+		for page in [first, contents] {
+			#expect(text(on: page, from: 0, to: 0.08).isEmpty && text(on: page, from: 0.92, to: 1).isEmpty, "front matter carries no furniture")
+		}
+		var sawRightHead = false, sawLeftHead = false
+		var zweiPage = 0
+		for index in 2..<document.pageCount {
+			let page = try #require(document.page(at: index))
+			let isLeft = !index.isMultiple(of: 2)
+			let body = text(on: page, from: 0.08, to: 0.92)
+			let opensChapter = body.hasPrefix("Eins Langer") || body.hasPrefix("Zwei Text")
+			if body.hasPrefix("Zwei") { zweiPage = index }
+			let number = String(index - 1)
+			#expect(half(on: page, from: 0, to: 0.08, left: isLeft) == number, "page \(index + 1) has its number \(number) on the outside edge")
+			#expect(half(on: page, from: 0, to: 0.08, left: !isLeft).isEmpty, "page \(index + 1) has nothing on the inside edge")
+			let outer = half(on: page, from: 0.95, to: 1, left: isLeft)
+			let inner = half(on: page, from: 0.95, to: 1, left: !isLeft)
+			#expect(inner.isEmpty, "page \(index + 1) has a head on the inside half")
+			if opensChapter {
+				#expect(outer.isEmpty, "page \(index + 1) opens a chapter and has no head")
+			} else if isLeft {
+				#expect(outer.contains("Ein Buch")); sawLeftHead = true
+			} else {
+				#expect(outer.contains("Eins")); sawRightHead = true
+			}
+		}
+		#expect(sawLeftHead && sawRightHead)
+		try #require(zweiPage > 2)
+		let listed = text(on: contents, from: 0.08, to: 0.92)
+		#expect(listed.contains("Eins 1"), "contents: \(listed)")
+		#expect(listed.contains("Zwei \(zweiPage - 1)"), "contents lists the printed number: \(listed)")
+	}
+
+	@Test("numbering from the chapter works without running heads", .timeLimit(.minutes(3)), arguments: ["swift", "webkit"])
+	func numberFromChapterWithoutHeads(engine: String) async throws {
+		let document = try await render("# Eins\n\nText.\n\n# Zwei\n\nText.\n", arguments: ["--number-from-chapter", "--title-page", "--toc"], engine: engine)
+		try #require(document.pageCount == 4)
+		for index in 0..<2 { #expect(text(on: try #require(document.page(at: index)), from: 0, to: 0.08).isEmpty, "front matter page \(index + 1) is unnumbered") }
+		#expect(text(on: try #require(document.page(at: 2)), from: 0, to: 0.08) == "1")
+		#expect(text(on: try #require(document.page(at: 3)), from: 0, to: 0.08) == "2")
+	}
+
 	@Test("the swift engine keeps furniture inside the page and apart: zero margins, long heads", .timeLimit(.minutes(1)))
 	func swiftEngineMarginsAndLongHeads() async throws {
 		let long = String(repeating: "Ein sehr langer Kapitelname ", count: 6)

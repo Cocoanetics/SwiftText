@@ -85,6 +85,8 @@ public struct RenderedPDF: Sendable {
 	public let data: Data
 	/// Zero-based page index for every element `id` (and `<a name>`).
 	public let anchorPages: [String: Int]
+	/// The number of pages written, blank pages included.
+	public let pageCount: Int
 }
 
 /// Renders HTML (with optional CSS) to a PDF, cross-platform.
@@ -340,7 +342,7 @@ public enum HTMLRenderer {
 			guard let array = destinations[link.id] else { continue }
 			link.annotation["A"] = PDFDictionary([("S", "/GoTo"), ("D", array)])
 		}
-		return RenderedPDF(data: pdf.write(), anchorPages: anchorPages)
+		return RenderedPDF(data: pdf.write(), anchorPages: anchorPages, pageCount: pageObjects.count)
 	}
 
 	/// The column y of every element carrying an `id` (and of `<a name>`).

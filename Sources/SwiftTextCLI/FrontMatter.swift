@@ -85,6 +85,69 @@ enum SwiftPageFurniture {
 		}
 	}
 
+	/// The classic book layout, for `--mirrored-heads` and `--number-from-chapter`, as margin boxes
+	/// reading per-page strings: the book title on left (even) pages, the chapter on right (odd)
+	/// ones, numbers on the outside edge, or centred when `mirrored` is off. The strings come from
+	/// `bookStrings`, so a page with nothing to show (a chapter opener, the front matter) draws no box.
+	static func bookCSS(mirrored: Bool, numbers: Bool, heads: Bool) -> String? {
+		guard numbers || heads else { return nil }
+		let style = "font-size: 9pt; color: #555;"
+		func box(_ area: String, _ content: String) -> String { "@\(area) { content: \(content); \(style) }" }
+		if !mirrored {
+			var boxes: [String] = []
+			if numbers { boxes.append(box("bottom-center", "string(pnum)")) }
+			if heads {
+				boxes.append(box("top-left", "string(head-title)"))
+				boxes.append(box("top-right", "string(head-chapter)"))
+			}
+			return "@page { " + boxes.joined(separator: " ") + " }\n"
+		}
+		var left: [String] = [], right: [String] = []
+		if numbers {
+			left.append(box("bottom-left", "string(pnum)"))
+			right.append(box("bottom-right", "string(pnum)"))
+		}
+		if heads {
+			left.append(box("top-left", "string(head-title)"))
+			right.append(box("top-right", "string(head-chapter)"))
+		}
+		return "@page :left { " + left.joined(separator: " ") + " }\n@page :right { " + right.joined(separator: " ") + " }\n"
+	}
+
+	/// The zero-based page of the first heading of `level`: where the body starts.
+	static func firstChapterPage(_ headings: [HeadingEntry], level: Int, anchorPages: [String: Int]) -> Int? {
+		headings.first { $0.level == level && anchorPages[$0.id] != nil }.flatMap { anchorPages[$0.id] }
+	}
+
+	/// The printed number of every heading id: its physical page (1-based) less the `offset`
+	/// pages before the first numbered one. Headings in front of that page show none.
+	static func printedPages(_ anchorPages: [String: Int], offset: Int) -> [String: Int] {
+		anchorPages.compactMapValues { $0 >= offset ? $0 - offset + 1 : nil }
+	}
+
+	/// The per-page strings `bookCSS` reads, one entry per physical page (`pageCount`), so that a
+	/// page's furniture is decided once its number and the chapters starting on it are known.
+	/// - `numberFrom`: the first page that is numbered (its number is 1); earlier pages carry none.
+	/// - `firstHeadPage`: heads start here; the pages before are front matter.
+	/// - With `mirrored`, a page where a heading of `level` starts has no head, and the title
+	///   sits on left pages only, the chapter on right ones. Page 1 (index 0) is a right
+	///   page, so left pages are the even physical pages, as in the engine's `:left` selector.
+	static func bookStrings(_ headings: [HeadingEntry], level: Int, anchorPages: [String: Int], pageCount: Int, title: String,
+	                        mirrored: Bool, numberFrom: Int, firstHeadPage: Int) -> [String: [String]] {
+		let openers = Set(headings.filter { $0.level == level }.compactMap { anchorPages[$0.id] })
+		let chapters = chapterTitles(headings, level: level, anchorPages: anchorPages)
+		var numbers: [String] = [], titles: [String] = [], chapterHeads: [String] = []
+		for page in 0..<max(pageCount, 1) {
+			numbers.append(page >= numberFrom ? String(page - numberFrom + 1) : "")
+			let headed = page >= firstHeadPage && !(mirrored && openers.contains(page))
+			let isLeft = !page.isMultiple(of: 2)
+			let chapter = chapters.isEmpty ? "" : chapters[min(page, chapters.count - 1)]
+			titles.append(headed && (isLeft || !mirrored) ? title : "")
+			chapterHeads.append(headed && (!isLeft || !mirrored) ? chapter : "")
+		}
+		return ["pnum": numbers, "head-title": titles, "head-chapter": chapterHeads]
+	}
+
 	private static func cssString(_ value: String) -> String {
 		"\"" + value.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
 			.replacingOccurrences(of: "\n", with: " ") + "\""
