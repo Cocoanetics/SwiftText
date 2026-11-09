@@ -112,5 +112,39 @@ struct PageFootnoteTests {
 			#expect(numbers(text, prefix: "Ref").isSubset(of: numbers(text, prefix: "Note")))
 		}
 	}
+
+	@Test("a note referenced only from another note is set with it")
+	func nestedNoteIsKept() async throws {
+		let html = """
+		<p>Text.<sup><a href="#fn-1">Ref01</a></sup></p>
+		<div class="footnote-definition" id="fn-1"><strong>Note01</strong> see<sup><a href="#fn-2">Ref02</a></sup></div>
+		<div class="footnote-definition" id="fn-2"><strong>Note02</strong> inner</div>
+		"""
+		let pages = try await pages(html)
+		#expect(pages.count == 1)
+		#expect(pages[0].contains("Note01"))
+		#expect(pages[0].contains("Note02"))
+	}
+
+	@Test("an @page size turns the page footnotes on")
+	func atPageSizeCounts() async throws {
+		var options = options(footnotes: true)
+		options.pageHeightPx = nil
+		let html = "<style>@page { size: 600px 360px; margin: 32px }</style>" + document(count: 14)
+		let data = try await HTMLRenderer.renderPDF(html: html, options: options)
+		let pdf = try #require(PDFDocument(data: data))
+		let first = try #require(pdf.page(at: 0)?.string)
+		#expect(numbers(first, prefix: "Ref") == numbers(first, prefix: "Note"))
+		#expect(pdf.pageCount > 1)
+	}
+
+	@Test("a page too small for any note still finishes", .timeLimit(.minutes(1)))
+	func tinyPageTerminates() async throws {
+		var options = options(footnotes: true)
+		options.pageHeightPx = 80
+		options.pageMargins = PageMargins(32)
+		let data = try await HTMLRenderer.renderPDF(html: document(count: 2, noteWords: 30), options: options)
+		#expect(PDFDocument(data: data) != nil)
+	}
 }
 #endif

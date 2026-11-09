@@ -20,6 +20,8 @@ struct PageFootnote {
 	var height = 0.0
 	/// The y offsets inside the note where it may be split: line and block edges.
 	var breaks: [Double] = []
+	/// The notes this note's text refers to; they stand on the page of its reference.
+	var nested: [String] = []
 }
 
 /// The part of a note set on one page: the rows `from ..< to` of the note.
@@ -62,19 +64,23 @@ struct FootnoteSet {
 	/// Remove the definitions that something references from the box tree. A
 	/// definition nothing references stays where it is.
 	static func extract(from root: BlockBox, baseURL: URL?) -> FootnoteSet {
-		var referenced = Set<String>()
-		func scan(_ box: Box) {
-			if let inline = box as? InlineBox {
-				if inline.element?.localName == "a", let href = inline.element?.attributeValue("href"),
-				   let id = noteID(inHref: href, baseURL: baseURL) {
-					referenced.insert(id)
+		func noteIDs(in box: Box) -> [String] {
+			var ids: [String] = []
+			func scan(_ box: Box) {
+				if let inline = box as? InlineBox {
+					if inline.element?.localName == "a", let href = inline.element?.attributeValue("href"),
+					   let id = noteID(inHref: href, baseURL: baseURL) {
+						ids.append(id)
+					}
+					inline.children.forEach(scan)
+				} else if let block = box as? BlockBox {
+					block.children.forEach(scan)
 				}
-				inline.children.forEach(scan)
-			} else if let block = box as? BlockBox {
-				block.children.forEach(scan)
 			}
+			scan(box)
+			return ids
 		}
-		scan(root)
+		let referenced = Set(noteIDs(in: root))
 		var notes: [PageFootnote] = []
 		func lift(_ block: BlockBox) {
 			var kept: [Box] = []
@@ -92,6 +98,7 @@ struct FootnoteSet {
 			block.children = kept
 		}
 		lift(root)
+		for index in notes.indices { notes[index].nested = noteIDs(in: notes[index].box) }
 		return FootnoteSet(notes: notes, baseURL: baseURL)
 	}
 
@@ -145,7 +152,19 @@ struct FootnoteSet {
 			for case let child as BlockBox in block.children { walk(child) }
 		}
 		walk(root)
-		references = found.sorted { $0.y < $1.y }
+		// A note referred to from another note's text goes where that note goes; a
+		// note nothing in the text reaches follows the last reference rather than vanishing.
+		var ordered: [FootnoteReference] = []
+		var placed = Set<Int>()
+		func place(_ note: Int, at y: Double) {
+			guard placed.insert(note).inserted else { return }
+			ordered.append(FootnoteReference(y: y, note: note))
+			for id in notes[note].nested { indexByID[id].map { place($0, at: y) } }
+		}
+		for reference in found.sorted(by: { $0.y < $1.y }) { place(reference.note, at: reference.y) }
+		let lastY = ordered.last?.y ?? 0
+		for index in notes.indices { place(index, at: lastY) }
+		references = ordered
 	}
 
 	// MARK: - Distribution
@@ -181,7 +200,12 @@ struct FootnoteSet {
 			var rest = Array(entries[(index + 1)...])
 			let limit = entry.from + remaining
 			var cut = notes[entry.note].breaks.last { $0 > entry.from + epsilon && $0 <= limit + epsilon && $0 < entry.to - epsilon }
-			if cut == nil, force, placed.isEmpty, remaining > 1 { cut = limit }
+			// A page of nothing but notes has to take something, even through a line.
+			if cut == nil, force, placed.isEmpty { cut = min(max(limit, entry.from + 1), entry.to) }
+			if let cut, cut >= entry.to - epsilon {
+				placed.append(entry)
+				return (placed, rest)
+			}
 			if let cut {
 				placed.append(FootnoteChunk(note: entry.note, from: entry.from, to: cut))
 				rest.insert(FootnoteChunk(note: entry.note, from: cut, to: entry.to), at: 0)

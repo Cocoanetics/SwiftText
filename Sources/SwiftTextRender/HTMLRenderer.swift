@@ -137,8 +137,6 @@ public enum HTMLRenderer {
 		authors: [String] = [],
 		warningHandler: ((String) -> Void)? = nil
 	) async throws -> RenderedPDF {
-		let notesAtFoot = options.pageFootnotes && options.pageHeightPx != nil
-		let css = notesAtFoot ? css + [FootnoteSet.css] : css
 		let builder = try await DomBuilder(html: Data(html.utf8), baseURL: baseURL)
 		guard let root = builder.root else { throw RenderError.noDocument }
 		let reportWarning = warningHandler ?? { warning in
@@ -148,11 +146,14 @@ public enum HTMLRenderer {
 		// Author stylesheets: the document's own <style> elements first, then any
 		// sheets supplied by the caller (which therefore win on equal specificity).
 		let documentSheets = root.styleSheets()
-		let resolver = StyleResolver(authorStyleSheets: documentSheets + css)
 
 		// @page rules in the document override the page geometry.
 		var options = options
 		applyAtPageRules(documentSheets + css, to: &options)
+		// Notes at the foot need a fixed page height, which an `@page` size can supply.
+		let notesAtFoot = options.pageFootnotes && options.pageHeightPx != nil
+		let css = notesAtFoot ? css + [FootnoteSet.css] : css
+		let resolver = StyleResolver(authorStyleSheets: documentSheets + css)
 		options.pageMargins = options.pageMargins.floored(at: options.minimumPageMarginPx)
 		let pageRules = parsePageRules(documentSheets + css)
 		registerFontFaces(documentSheets + css, baseURL: baseURL, in: fonts, warn: reportWarning)
