@@ -271,6 +271,8 @@ public struct ComputedStyle: Equatable, Sendable {
 	public var breakAfter: Break
 	/// Whether this box may be split across pages (`break-inside`).
 	public var breakInside: Break
+	/// The named page this box asks to be laid out on (`page`); `nil` is `auto`.
+	public var page: String?
 
 	/// Pixel line height for this style's font size.
 	public func resolvedLineHeight() -> Double {
