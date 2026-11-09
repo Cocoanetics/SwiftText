@@ -387,6 +387,55 @@ struct WebKitIntegrationTests {
 		}
 	}
 
+	/// #242: WebKit's print shrink made text 16/15 too large; a CSS size must print at that size.
+	@Test("CSS font sizes print at their CSS size", .timeLimit(.minutes(3)), arguments: [("10pt", 10.0), ("12.5pt", 12.5), ("16px", 12.0), ("1.25em", 15.0)])
+	func fontSizeMatchesCSS(size: String, points: Double) async throws {
+		let html = """
+		<!DOCTYPE html><html><head><meta charset="utf-8">
+		<style>@page { size: A4; margin: 72pt }
+		body { margin: 0; font-family: Helvetica; font-size: \(size); }
+		html { font-size: 12pt; }</style></head>
+		<body><p>Absatz</p></body></html>
+		"""
+		let document = try await paginate(html)
+		let match = try #require(document.findString("Absatz", withOptions: []).first)
+		let page = try #require(match.pages.first)
+		let bounds = match.bounds(for: page)
+		let font = CTFontCreateWithName("Helvetica" as CFString, points, nil)
+		let line = CTLineCreateWithAttributedString(NSAttributedString(string: "Absatz", attributes: [.font: font]))
+		let expected = CTLineGetTypographicBounds(line, nil, nil, nil)
+		#expect(abs(bounds.width - expected) / expected < 0.02, "width \(bounds.width) vs \(expected) for \(size)")
+		#expect(abs(bounds.minX - 72) < 3, "left margin moved: \(bounds.minX)")
+	}
+
+	/// Review of #243: an authored `@media print` root zoom survives the compensation, and
+	/// exporting twice from one browser does not compensate twice.
+	@Test("A print root zoom is kept and repeated exports stay stable", .timeLimit(.minutes(3)))
+	func printZoomAndRepeatedExport() async throws {
+		let html = """
+		<!DOCTYPE html><html><head><meta charset="utf-8">
+		<style>@page { size: A4; margin: 72pt }
+		body { margin: 0; font-family: Helvetica; font-size: 10pt; }
+		@media screen { html { zoom: 1.5; } }
+		@media print { html { zoom: 2; } }</style></head>
+		<body><p>Absatz</p></body></html>
+		"""
+		let browser = WebKitBrowser(htmlString: html)
+		browser.timeout = 30
+		browser.frameSize = a4
+		browser.preserveFrameHeight = true
+		let font = CTFontCreateWithName("Helvetica" as CFString, 20, nil)
+		let line = CTLineCreateWithAttributedString(NSAttributedString(string: "Absatz", attributes: [.font: font]))
+		let expected = CTLineGetTypographicBounds(line, nil, nil, nil)
+		for _ in 0 ..< 2 {
+			let data = try await browser.exportPaginatedPDFData(paperSize: a4)
+			let document = try #require(PDFDocument(data: data))
+			let match = try #require(document.findString("Absatz", withOptions: []).first)
+			let width = match.bounds(for: try #require(match.pages.first)).width
+			#expect(abs(width - expected) / expected < 0.02, "width \(width) vs \(expected)")
+		}
+	}
+
 	/// #140: an over-wide table must not make WebKit's horizontal fit scale the
 	/// whole document down; only the table is constrained to the page.
 	@Test("A wide table does not shrink the surrounding text", .timeLimit(.minutes(3)))

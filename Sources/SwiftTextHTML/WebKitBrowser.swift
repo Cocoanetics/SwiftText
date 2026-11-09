@@ -233,6 +233,7 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 	@available(macOS 11.0, *)
 	package func exportPaginatedPDFDataWithBlankPages(paperSize: CGSize, namedPages: WebKitNamedPages? = nil) async throws -> (data: Data, anchorPages: [String: Int], blankPages: Set<Int>) {
 		let webView = try await loadedWebView()
+		try await compensatePrintShrink(in: webView)
 		#if os(macOS)
 		try await layOutAtRectoMargins(in: webView)
 		if let namedPages, let runs = try await exportRuns(in: webView, paperSize: paperSize, namedPages: namedPages) { return runs }
@@ -451,9 +452,9 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 				// A fixed-height multicolumn body uses WebKit's fragmentation layout.
 				// The marker's column reveals the table's position after pagination
 				// without letting the table's own fragmentation move the measurement.
-				body.style.setProperty('height', pageHeight + 'px', 'important');
-				body.style.setProperty('width', pageWidth + 'px', 'important');
-				body.style.setProperty('column-width', pageWidth + 'px', 'important');
+				body.style.setProperty('height', pageHeight / rectZoomFactor() + 'px', 'important');
+				body.style.setProperty('width', pageWidth / rectZoomFactor() + 'px', 'important');
+				body.style.setProperty('column-width', pageWidth / rectZoomFactor() + 'px', 'important');
 				body.style.setProperty('column-gap', '0', 'important');
 				body.style.setProperty('column-fill', 'auto', 'important');
 				const bodyTop = body.getBoundingClientRect().top;
@@ -488,7 +489,7 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 					const fragment = table.cloneNode(false);
 					fragment.dataset.swiftTextPaginated = 'true';
 					if (index > 0) fragment.removeAttribute('id');
-					fragment.style.width = width + 'px';
+					fragment.style.width = width / rectZoomFactor() + 'px';
 					fragment.style.boxSizing = 'border-box';
 					fragment.style.marginTop = index === 0 ? style.marginTop : '0';
 					fragment.style.marginBottom = '0';
@@ -596,7 +597,7 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 				const margins = pageMargins();
 				const printableWidth = paperWidth - margins.left - margins.right;
 				const printableHeight = paperHeight - margins.top - margins.bottom;
-				const layoutWidth = document.documentElement.clientWidth;
+				const layoutWidth = document.documentElement.clientWidth * rectZoomFactor(); // zoomed px, like the rects
 				if (printableWidth <= 0 || printableHeight <= 0 || layoutWidth <= 0) return;
 				const pageHeight = printableHeight * layoutWidth / printableWidth;
 				for (const table of Array.from(document.querySelectorAll('table'))) {

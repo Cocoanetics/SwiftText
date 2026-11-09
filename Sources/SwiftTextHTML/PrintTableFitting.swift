@@ -14,6 +14,8 @@ package enum PrintTableFitting {
 	// WebKit then scales the whole document down. Like the swift engine,
 	// keep the narrower columns at that width and cap only the widest ones
 	// to an equal share of what is left; words break only in those.
+	// Bounding rects are in zoomed px; lengths and clientWidth are not.
+	function rectZoomFactor() { return parseFloat(getComputedStyle(document.documentElement).zoom) || 1; }
 	function fitTable(table) {
 		const parent = table.parentElement;
 		if (!parent) return;
@@ -21,7 +23,7 @@ package enum PrintTableFitting {
 		const contentWidth = parent.clientWidth - parseFloat(parentStyle.paddingLeft)
 			- parseFloat(parentStyle.paddingRight);
 		// Collapsed outer borders overhang by half their width, hence the slack.
-		if (contentWidth <= 2 || table.getBoundingClientRect().width <= contentWidth + 1) return;
+		if (contentWidth <= 2 || table.getBoundingClientRect().width / rectZoomFactor() <= contentWidth + 1) return;
 		const available = contentWidth - 2;
 
 		const rows = Array.from(table.rows);
@@ -36,7 +38,7 @@ package enum PrintTableFitting {
 		let widths;
 		const capped = new Set();
 		if (plainRow) {
-			const minimum = Array.from(plainRow.cells).map(cell => cell.getBoundingClientRect().width);
+			const minimum = Array.from(plainRow.cells).map(cell => cell.getBoundingClientRect().width / rectZoomFactor());
 			widths = minimum.slice();
 			const columns = minimum.map((_, index) => index).sort((a, b) => minimum[a] - minimum[b]);
 			let remaining = available;
