@@ -195,11 +195,16 @@ public enum HTMLRenderer {
 			                            contentOffsetPx: slice.repeatedHeader?.reservedHeight ?? 0)
 			let painter = Painter(geometry: geometry, fonts: fonts, builder: fontBuilder, compress: options.compressStreams,
 			                      internalAnchors: anchorNames)
-			painter.paint(rootBox)
+			// A blank page inserted to put the next block on the right side of the
+			// spread is counted but carries nothing: no content, no running head,
+			// no page number.
+			if !slice.isBlank {
+				painter.paint(rootBox)
+			}
 			if let header = slice.repeatedHeader {
 				painter.paintRepeatedTableHeader(header.box)
 			}
-			if !pageRules.isEmpty {
+			if !pageRules.isEmpty, !slice.isBlank {
 				let marginBoxes = resolveMarginBoxes(pageRules, pageIndex: pageIndex, totalPages: totalPages,
 				                                     rootStyle: rootBox.style, rootFontSize: rootBox.style.fontSize,
 				                                     strings: options.pageStrings)
@@ -489,8 +494,10 @@ public enum HTMLRenderer {
 	/// Page-break information gathered from the laid-out box tree, in column
 	/// coordinates.
 	private struct BreakPoints {
-		/// Where a break is mandatory (`break-before` / `break-after: page`).
-		var forced: Set<Double> = []
+		/// Where a break is mandatory (`break-before` / `break-after: page`),
+		/// with the page it asks for: `.page` for any, `.left` / `.right` for a
+		/// specific side.
+		var forced: [Double: Break] = [:]
 		/// Where a break is possible without splitting a line: block and line edges.
 		var candidates: Set<Double> = []
 		/// Candidates the author asked us to steer clear of
@@ -508,6 +515,12 @@ public enum HTMLRenderer {
 		/// Complete painted fragments that pagination must not clip. Repeated table
 		/// headers are used only when the next such fragment still fits below them.
 		var contentFragments: [(top: Double, bottom: Double)] = []
+
+		/// Record a mandatory break; a side request outranks a plain page break
+		/// at the same position.
+		mutating func addForced(_ y: Double, _ kind: Break) {
+			if forced[y] == nil || kind != .page { forced[y] = kind }
+		}
 
 		mutating func noteContent(top: Double, bottom: Double) {
 			firstContentY = min(firstContentY, top)
@@ -529,6 +542,13 @@ public enum HTMLRenderer {
 		let top: Double
 		let bottom: Double
 		let repeatedHeader: RepeatedTableHeader?
+		/// An empty page inserted so that a `break-before: left|right` block
+		/// starts on the requested side. It spans no column height.
+		var isBlank = false
+
+		static func blank(at y: Double) -> PageSlice {
+			PageSlice(top: y, bottom: y, repeatedHeader: nil, isBlank: true)
+		}
 	}
 
 	/// Tolerance for comparing column coordinates, in CSS pixels. Also the floor
@@ -561,21 +581,33 @@ public enum HTMLRenderer {
 		// (`.toc { break-after: page }` followed by `h1 { break-before: page }`):
 		// WeasyPrint merges adjacent forced breaks, so only the later one is kept,
 		// which starts the next page at the heading's border box.
-		let inRange = points.forced
+		//
+		// A break that asks for a side (`left` / `right`) is the exception for
+		// the leading case: the first page is a right-hand page, so a `left`
+		// break at the very top is satisfied by one blank page.
+		let inRange = points.forced.keys
 			.filter { $0 > points.firstContentY + epsilon && $0 < points.lastContentY - epsilon }
 			.sorted()
 		var forced: [Double] = []
+		var kinds: [Double: Break] = [:]
 		for y in inRange {
+			var kind = points.forced[y] ?? .page
 			if let previous = forced.last,
 			   !contentFragments.contains(where: { $0.bottom > previous + epsilon && $0.top < y - epsilon }) {
+				// Adjacent breaks merge; the side one of them asked for survives.
+				if kind == .page, let earlier = kinds[previous] { kind = earlier }
+				kinds[previous] = nil
 				forced[forced.count - 1] = y
 			} else {
 				forced.append(y)
 			}
+			kinds[y] = kind
 		}
+		let leadingKinds = points.forced.filter { $0.key <= points.firstContentY + epsilon }.map(\.value)
+		let leadingBlank = points.firstContentY.isFinite && leadingKinds.contains(.left) && !leadingKinds.contains(.right)
 
 		// Short documents still need pagination if they carry a forced break.
-		guard columnHeight > contentHeight + epsilon || !forced.isEmpty else {
+		guard columnHeight > contentHeight + epsilon || !forced.isEmpty || leadingBlank else {
 			return [PageSlice(top: 0, bottom: columnHeight, repeatedHeader: nil)]
 		}
 
@@ -590,7 +622,16 @@ public enum HTMLRenderer {
 
 		var slices: [PageSlice] = []
 		var top = 0.0
+		if leadingBlank { slices.append(.blank(at: 0)) }
 		while top < columnHeight - epsilon {
+			// A block that asked for a side starts on that side: one blank page
+			// when the page about to open is on the other. Page 1 is a right page.
+			if top > epsilon, let kind = kinds.first(where: { abs($0.key - top) <= epsilon })?.value {
+				let opensRightPage = slices.count.isMultiple(of: 2)
+				if (kind == .right && !opensRightPage) || (kind == .left && opensRightPage) {
+					slices.append(.blank(at: top))
+				}
+			}
 			let repeatedHeader = tableHeaders
 				.filter { header in
 					guard top >= header.box.y + header.box.height - epsilon,
@@ -696,12 +737,12 @@ public enum HTMLRenderer {
 		points.candidates.insert(bottom)
 
 		switch block.style.breakBefore {
-		case .page: points.forced.insert(top)
+		case .page, .left, .right: points.addForced(top, block.style.breakBefore)
 		case .avoid: points.discouraged.insert(top)
 		case .auto: break
 		}
 		switch block.style.breakAfter {
-		case .page: points.forced.insert(bottom)
+		case .page, .left, .right: points.addForced(bottom, block.style.breakAfter)
 		case .avoid: points.discouraged.insert(bottom)
 		case .auto: break
 		}

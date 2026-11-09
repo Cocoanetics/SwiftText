@@ -539,10 +539,13 @@ private func parseBreak(_ value: [ComponentValue], inside: Bool) -> Break? {
 	case "auto": return .auto
 	case "avoid", "avoid-page", "avoid-column", "avoid-region": return .avoid
 	// Forced-break keywords are meaningless on break-inside.
-	// `left`/`right`/`recto`/`verso` request a *specific* next page; with no
-	// left/right page model they degrade to a plain page break.
-	case "page", "always", "all", "left", "right", "recto", "verso", "column":
+	case "page", "always", "all", "column":
 		return inside ? nil : .page
+	// `left`/`right` (and `verso`/`recto`, their left-to-right equivalents)
+	// request a *specific* next page; the paginator inserts a blank page when
+	// the parity is wrong.
+	case "left", "verso": return inside ? nil : .left
+	case "right", "recto": return inside ? nil : .right
 	default: return nil
 	}
 }

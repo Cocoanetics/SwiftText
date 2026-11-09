@@ -34,6 +34,12 @@ enum HeadingBreakLevel: String, ExpressibleByArgument, CaseIterable {
 	var numericLevel: Int { Int(rawValue.dropFirst()) ?? 1 }
 }
 
+/// The side of the spread each chapter heading starts on in PDF output; a blank
+/// page is inserted when the previous chapter ended on the same side.
+enum ChapterStart: String, ExpressibleByArgument, CaseIterable {
+	case right, left
+}
+
 /// Where footnote definitions go in HTML and PDF output.
 enum FootnotePlacement: String, ExpressibleByArgument, CaseIterable {
 	/// One block at the end of the document, numbered continuously.
@@ -77,6 +83,10 @@ struct Render: AsyncParsableCommand {
 
 	@Option(name: .long, help: "For PDF, HTML, and Pages output, force a page break before every heading of this level (h1–h6). Use h2 to start each chapter on its own page. Omit to disable.")
 	var pageBreakBefore: HeadingBreakLevel?
+
+	@Option(name: .long, help: ArgumentHelp("For PDF output, start each chapter on a right (odd) or left (even) page, adding a blank page when needed "
+	                        + "(counted, no running head or number). Level: --page-break-before, else --chapter-level."))
+	var chapterStart: ChapterStart?
 
 	@Flag(name: .long, help: "For Pages output, write a directory-package bundle instead of a single file.")
 	var package: Bool = false
@@ -201,7 +211,7 @@ struct Render: AsyncParsableCommand {
 				let html = printHTML(markdownText, userCSS: userCSS, title: resolvedTitle, pageNumbers: toc ? .resolved(pages) : .none)
 				var strings: [String: [String]] = [:]
 				if swiftHeads {
-					let level = pageBreakBefore?.numericLevel ?? 1
+					let level = runningHeadLevel
 					strings["chapter"] = SwiftPageFurniture.chapterTitles(FrontMatterHTML.headings(in: html), level: level, anchorPages: rendered.anchorPages)
 				}
 				rendered = try await renderPDF(html: html, baseURL: baseURL, title: resolvedTitle, authors: author, pageStrings: strings)
@@ -225,6 +235,12 @@ struct Render: AsyncParsableCommand {
 
 	// MARK: - HTML / PDF
 
+	/// The heading level that starts a chapter: where the running head changes. With
+	/// `--chapter-start` it is the level that heading break uses, `--chapter-level` by default.
+	private var runningHeadLevel: Int {
+		(chapterStart == nil ? pageBreakBefore?.numericLevel : (pageBreakBefore ?? chapterLevel).numericLevel) ?? 1
+	}
+
 	/// The print HTML, with the title page and contents when asked for.
 	private func printHTML(_ markdown: String, userCSS: String?, title: String, pageNumbers: FrontMatter.PageNumbers) -> String {
 		var frontMatter = FrontMatter()
@@ -236,6 +252,7 @@ struct Render: AsyncParsableCommand {
 			                                            heading: FrontMatter.contentsHeading(forLanguage: language), pageNumbers: pageNumbers)
 		}
 		return markdownToHTML(markdown, paper: paper, landscape: landscape, passThroughRawHTML: true, pageBreakBefore: pageBreakBefore,
+		                      chapterStart: chapterStart, chapterLevel: chapterLevel,
 		                      extraCSS: userCSS, title: title, authors: author, linkCitations: linkCitations, footnotes: footnotes,
 		                      language: language, frontMatter: titlePage || toc ? frontMatter : nil)
 	}
@@ -419,13 +436,13 @@ struct Render: AsyncParsableCommand {
 	@MainActor
 	private func decoratedPDF(from browser: WebKitBrowser, title: String, authors: [String]) async throws -> PDFOutput {
 		let preparation = try await browser.preparePageFurniture(paperSize: pageSize(), footer: pageNumbers,
-		                                                        header: runningHeads, headingLevel: pageBreakBefore?.numericLevel ?? 1)
+		                                                        header: runningHeads, headingLevel: runningHeadLevel)
 		let headings = try await browser.outlineHeadings()
-		let exported = try await browser.exportPaginatedPDFDataWithAnchors(paperSize: pageSize())
+		let exported = try await browser.exportPaginatedPDFDataWithBlankPages(paperSize: pageSize())
 		let titleSection = preparation.titleStart.map { ($0, preparation.titleEnd) }
 		let data = try PDFPageFurniture.add(to: exported.data, pageNumbers: pageNumbers, title: runningHeads ? title : nil,
 		                                    headings: preparation.headings, titleSection: titleSection,
-		                                    outline: PDFOutlineBuilder.entries(for: headings, in: exported.data))
+		                                    outline: PDFOutlineBuilder.entries(for: headings, in: exported.data), blankPages: exported.blankPages)
 			.settingPDFMetadata(title: title, authors: authors)
 		return (data, exported.anchorPages)
 	}

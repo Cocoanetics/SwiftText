@@ -193,6 +193,11 @@ public enum Break: Equatable, Sendable {
 	case auto
 	/// A break is mandatory at this edge.
 	case page
+	/// A mandatory break after which the next page must be a left-hand (even)
+	/// page (`break-before: left` / `verso`); a blank page is inserted if needed.
+	case left
+	/// Like ``left``, for a right-hand (odd) page (`right` / `recto`).
+	case right
 	/// A break here (or, for `break-inside`, anywhere within) is undesirable.
 	/// Honoured only when an alternative exists — a block taller than the page
 	/// must still be split.

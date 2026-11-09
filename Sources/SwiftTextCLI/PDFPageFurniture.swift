@@ -7,7 +7,7 @@ import SwiftTextHTML
 /// count. Links are rebuilt because drawing a CGPDFPage copies content, not annotations.
 enum PDFPageFurniture {
 	static func add(to data: Data, pageNumbers: Bool, title: String?, headings: [PDFChapterHeading], titleSection: (start: PDFChapterHeading, end: PDFChapterHeading?)? = nil,
-	                outline: [PDFOutlineBuilder.Entry] = []) throws -> Data {
+	                outline: [PDFOutlineBuilder.Entry] = [], blankPages: Set<Int> = []) throws -> Data {
 		guard pageNumbers || title != nil || !outline.isEmpty else { return data }
 		guard let source = PDFDocument(data: data) else { throw WebKitBrowserError.printFailed }
 		var chapters: [Int: String] = [:]
@@ -54,7 +54,8 @@ enum PDFPageFurniture {
 			chapter = chapters[index] ?? chapter
 			NSGraphicsContext.saveGraphicsState()
 			NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
-			let furnished = !bare.contains(index)
+			// Blank pages inserted for a left/right chapter start are counted but carry no furniture.
+			let furnished = !bare.contains(index) && !blankPages.contains(index)
 			if pageNumbers, furnished {
 				draw(String(index + 1), in: CGRect(x: bounds.minX + 24, y: bounds.minY + 24, width: bounds.width - 48, height: 14), alignment: .center)
 			}

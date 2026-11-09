@@ -372,6 +372,8 @@ func markdownToHTML(
 	landscape: Bool,
 	passThroughRawHTML: Bool = false,
 	pageBreakBefore: HeadingBreakLevel? = nil,
+	chapterStart: ChapterStart? = nil,
+	chapterLevel: HeadingBreakLevel = .h1,
 	extraCSS: String? = nil,
 	title: String? = nil,
 	authors: [String] = [],
@@ -396,9 +398,12 @@ func markdownToHTML(
 	// chapter starts on a new page). Placed after the base heading rules so it
 	// wins on source order. The first block of the document is exempt: WebKit
 	// honours a leading break and would emit a blank first page.
-	let headingBreakCSS = pageBreakBefore.map { level in
+	// `--chapter-start` makes the chapter heading's break one that asks for a side.
+	let breakLevel = chapterStart == nil ? pageBreakBefore : (pageBreakBefore ?? chapterLevel)
+	let breakKeyword = chapterStart?.rawValue ?? "page"
+	let headingBreakCSS = breakLevel.map { level in
 		"""
-		\(level.rawValue) { page-break-before: always; break-before: page; }
+		\(level.rawValue) { page-break-before: always; break-before: \(breakKeyword); }
 		body > \(level.rawValue):first-child { page-break-before: auto; break-before: auto; }
 		"""
 	} ?? ""
@@ -408,7 +413,7 @@ func markdownToHTML(
 	// block drops its own, so a user stylesheet that changes the block's break
 	// cannot remove both.
 	var frontMatterBreakCSS = ""
-	if let frontMatter, let level = pageBreakBefore,
+	if let frontMatter, let level = breakLevel,
 	   body.hasPrefix("<\(level.rawValue)>") || body.hasPrefix("<\(level.rawValue) ") {
 		let last = frontMatter.contents != nil ? "nav.toc" : (frontMatter.titlePage != nil ? ".titlepage" : "")
 		if !last.isEmpty { frontMatterBreakCSS = "\(last) { page-break-after: auto; break-after: auto; }" }

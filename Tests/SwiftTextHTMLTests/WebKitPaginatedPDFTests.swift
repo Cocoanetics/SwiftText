@@ -39,6 +39,47 @@ struct WebKitIntegrationTests {
 		return try await browser.exportPaginatedPDFData(paperSize: a4)
 	}
 
+	private func pageHeads(_ document: PDFDocument) -> [String] {
+		(0..<document.pageCount).map { index in
+			document.page(at: index)?.string?.split(whereSeparator: \.isWhitespace).first.map(String.init) ?? "<blank>"
+		}
+	}
+
+	private func chapters(_ rule: String) -> String {
+		"""
+		<html><head><style>h1 { \(rule) }</style></head><body>
+		<h1>Eins</h1><p>Text eins.</p><h1>Zwei</h1><p>Text zwei.</p><h1>Drei</h1><p>Text drei.</p>
+		</body></html>
+		"""
+	}
+
+	@available(iOS 16.0, *)
+	@Test("break-before: right starts each chapter on an odd page with blank pages between", .timeLimit(.minutes(1)))
+	func breakBeforeRight() async throws {
+		let document = try await paginate(chapters("break-before: right;"))
+		#expect(pageHeads(document) == ["Eins", "<blank>", "Zwei", "<blank>", "Drei"])
+	}
+
+	@available(iOS 16.0, *)
+	@Test("break-before: left puts the first chapter on page 2", .timeLimit(.minutes(1)))
+	func breakBeforeLeft() async throws {
+		let document = try await paginate(chapters("break-before: left;"))
+		#expect(pageHeads(document) == ["<blank>", "Eins", "<blank>", "Zwei", "<blank>", "Drei"])
+	}
+
+	@available(iOS 16.0, *)
+	@Test("recto and verso are the same as right and left", .timeLimit(.minutes(1)))
+	func rectoAndVerso() async throws {
+		#expect(pageHeads(try await paginate(chapters("break-before: recto;"))) == ["Eins", "<blank>", "Zwei", "<blank>", "Drei"])
+		#expect(pageHeads(try await paginate(chapters("break-before: verso;"))) == ["<blank>", "Eins", "<blank>", "Zwei", "<blank>", "Drei"])
+	}
+
+	@available(iOS 16.0, *)
+	@Test("break-before: page on the first block opens no blank page", .timeLimit(.minutes(1)))
+	func leadingBreakAddsNoBlankPage() async throws {
+		#expect(pageHeads(try await paginate(chapters("break-before: page;"))) == ["Eins", "Zwei", "Drei"])
+	}
+
 	/// Forced breaks are the reason this path exists at all: `exportPDFData`
 	/// would emit one continuous page regardless of the CSS.
 	@available(iOS 16.0, *)
@@ -52,10 +93,8 @@ struct WebKitIntegrationTests {
 		<h1>Gamma</h1><p>Third.</p>
 		</body></html>
 		"""
-		// Four, not three: the rule fires on the first `h1` too, so the break
-		// before it opens a page of its own. Both platforms agree on that — which
-		// is the parity claim, since this same number is asserted on each.
-		#expect(try await paginate(html).pageCount == 4)
+		// Three: a break with nothing above it does not open a blank first page.
+		#expect(try await paginate(html).pageCount == 3)
 	}
 
 	/// The same document without the rule stays on one page, so the count above
