@@ -124,6 +124,65 @@ enum FrontMatterHTML {
 		}
 	}
 
+	/// The opening fence of a code block: its character and length.
+	private static func fenceOpening(_ line: Substring) -> (mark: Character, length: Int)? {
+		let trimmed = line.drop { $0 == " " }
+		// Any indent: a fence can sit inside a list item.
+		guard let mark = trimmed.first, mark == "`" || mark == "~" else { return nil }
+		let length = trimmed.prefix { $0 == mark }.count
+		guard length >= 3 else { return nil }
+		// A backtick fence's info string cannot contain a backtick.
+		if mark == "`", trimmed.dropFirst(length).contains("`") { return nil }
+		return (mark, length)
+	}
+
+	/// Whether a line closes a fence: at least as long, same character, nothing else.
+	private static func closesFence(_ line: Substring, _ fence: (mark: Character, length: Int)) -> Bool {
+		guard let opening = fenceOpening(line), opening.mark == fence.mark, opening.length >= fence.length else { return false }
+		return line.drop { $0 == " " }.dropFirst(opening.length).allSatisfy { $0 == " " || $0 == "\t" }
+	}
+
+	/// Whether a line is a contents marker: `<!-- toc -->` or `[TOC]` alone on it.
+	private static func isContentsMarker(_ line: Substring) -> Bool {
+		// Four spaces or a tab of indent make an indented code block, not a marker.
+		guard !line.hasPrefix("    "), !line.hasPrefix("\t") else { return false }
+		let trimmed = line.trimmingCharacters(in: .whitespaces)
+		if trimmed.caseInsensitiveCompare("[TOC]") == .orderedSame { return true }
+		guard trimmed.hasPrefix("<!--"), trimmed.hasSuffix("-->"), trimmed.count >= 7 else { return false }
+		return trimmed.dropFirst(4).dropLast(3).trimmingCharacters(in: .whitespaces).lowercased() == "toc"
+	}
+
+	/// Replaces the first contents marker line (outside code fences) with a placeholder
+	/// paragraph and drops any later ones, so none of them reaches the output as text.
+	/// The placeholder is a word the Markdown does not contain, so authored text cannot
+	/// be mistaken for it; `placeholder` is the paragraph it converts to, nil if no marker.
+	/// With `keepFirst` false (EPUB, which has no printed contents page) all are dropped.
+	static func placeContentsMarker(in markdown: String, keepFirst: Bool = true) -> (markdown: String, placeholder: String?) {
+		var found = false
+		var fence: (mark: Character, length: Int)?
+		var token = "SWIFTTEXTCONTENTSMARKER"
+		while markdown.contains(token) { token += "X" }
+		var lines: [String] = []
+		// "\r\n" is a single Character in Swift, so normalise before splitting on "\n".
+		let markdown = markdown.replacingOccurrences(of: "\r\n", with: "\n")
+		for line in markdown.split(separator: "\n", omittingEmptySubsequences: false) {
+			if let open = fence {
+				if closesFence(line, open) { fence = nil }
+			} else if let open = fenceOpening(line) {
+				fence = open
+			} else if isContentsMarker(line) {
+				if !found {
+					found = true
+					if keepFirst { lines.append(contentsOf: ["", token, ""]) }
+				}
+				continue
+			}
+			lines.append(String(line))
+		}
+		guard found else { return (markdown, nil) }
+		return (lines.joined(separator: "\n"), keepFirst ? "<p>\(token)</p>" : nil)
+	}
+
 	static func titlePage(_ page: FrontMatter.TitlePage) -> String {
 		var html = "<section class=\"titlepage\">\n<h1 class=\"title\">\(escape(page.title))</h1>\n"
 		if let subtitle = page.subtitle, !subtitle.isEmpty {

@@ -116,4 +116,73 @@ struct FrontMatterTests {
 		let image = FrontMatterHTML.headings(in: "<h1 id=\"c\"><img src=\"cover.png\" alt=\"Chapter &amp; One\"></h1>")
 		#expect(image == [HeadingEntry(level: 1, id: "c", text: "Chapter & One")])
 	}
+
+	private func place(_ markdown: String, toc: Bool = true) -> String {
+		var frontMatter = FrontMatter()
+		frontMatter.titlePage = .init(title: "Buch", subtitle: nil, authors: [])
+		if toc { frontMatter.contents = .init(chapterLevel: 1, depth: 0, heading: "Inhalt", pageNumbers: .none) }
+		return markdownToHTML(markdown, paper: .a4, landscape: false, passThroughRawHTML: true, pageBreakBefore: .h1, frontMatter: frontMatter)
+	}
+
+	@Test("a toc marker puts the contents after the imprint, not after the title page")
+	func markerPlacesContents() throws {
+		let source = "<div class=\"imprint\">\n\nImpressum 2026\n\n</div>\n\n<!-- toc -->\n\n# Vorwort\n\nText\n\n[TOC]\n"
+		let output = place(source)
+		let title = try #require(output.range(of: "<section class=\"titlepage\">"))
+		let imprint = try #require(output.range(of: "Impressum 2026"))
+		let nav = try #require(output.range(of: "<nav class=\"toc\""))
+		let chapter = try #require(output.range(of: "<h1 id=\"vorwort\">"))
+		#expect(title.lowerBound < imprint.lowerBound && imprint.lowerBound < nav.lowerBound && nav.lowerBound < chapter.lowerBound)
+		#expect(output.components(separatedBy: "<nav class=\"toc\"").count == 2)
+		#expect(!output.contains("SWIFTTEXTCONTENTSMARKER") && !output.contains("[TOC]"))
+	}
+
+	@Test("without a marker the contents follow the title page")
+	func noMarker() throws {
+		let output = place("<p>Impressum</p>\n\n# Vorwort\n\nText\n")
+		let nav = try #require(output.range(of: "<nav class=\"toc\""))
+		let imprint = try #require(output.range(of: "Impressum"))
+		#expect(nav.lowerBound < imprint.lowerBound)
+	}
+
+	@Test("a marker without --toc leaves nothing behind, and one in a code fence is kept")
+	func markerWithoutContents() {
+		let output = place("<!-- toc -->\n\n# A\n\n```\n[TOC]\n```\n", toc: false)
+		#expect(!output.contains("SWIFTTEXTCONTENTSMARKER") && !output.contains("<nav class=\"toc\""))
+		#expect(output.contains("[TOC]"))
+	}
+
+	@Test("the EPUB path drops every marker")
+	func epubDropsMarker() {
+		let result = FrontMatterHTML.placeContentsMarker(in: "a\n\n<!-- toc -->\n\n[TOC]\n\nb", keepFirst: false)
+		#expect(result.placeholder == nil && !result.markdown.contains("toc") && !result.markdown.contains("TOC"))
+	}
+
+	@Test("a contents marker right before a breaking heading drops the contents' own break")
+	func markerBeforeHeading() {
+		let output = place("Impressum\n\n<!-- toc -->\n\n# Vorwort\n\nText\n")
+		#expect(output.contains("nav.toc { page-break-after: auto; break-after: auto; }"))
+		#expect(!place("<!-- toc -->\n\nImpressum\n\n# Vorwort\n").contains("nav.toc { page-break-after: auto"))
+	}
+
+	@Test("a longer fence is not closed by a shorter one")
+	func nestedFence() {
+		let source = "````\n```\n[TOC]\n```\n````\n\n# A\n"
+		#expect(FrontMatterHTML.placeContentsMarker(in: source).placeholder == nil)
+	}
+
+	@Test("authored text equal to the placeholder word is kept")
+	func authoredSentinel() {
+		let output = place("SWIFTTEXTCONTENTSMARKER\n\n<!-- toc -->\n\n# A\n", toc: true)
+		#expect(output.contains("<p>SWIFTTEXTCONTENTSMARKER</p>"))
+		#expect(output.components(separatedBy: "<nav class=\"toc\"").count == 2)
+		#expect(place("SWIFTTEXTCONTENTSMARKER\n\n# A\n").contains("<p>SWIFTTEXTCONTENTSMARKER</p>"))
+	}
+
+	@Test("CRLF line endings and indented examples")
+	func crlfAndIndent() {
+		#expect(FrontMatterHTML.placeContentsMarker(in: "a\r\n\r\n[TOC]\r\n\r\nb\r\n").placeholder != nil)
+		#expect(FrontMatterHTML.placeContentsMarker(in: "Example:\n\n    <!-- toc -->\n").placeholder == nil)
+		#expect(FrontMatterHTML.placeContentsMarker(in: "- Example:\n\n  ```\n  [TOC]\n  ```\n").placeholder == nil)
+	}
 }

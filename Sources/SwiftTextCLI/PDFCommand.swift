@@ -393,7 +393,8 @@ func markdownToHTML(
 	if passThroughRawHTML { options.insert(.passThroughRawHTML) }
 	if linkCitations { options.insert(.linkCitations) }
 	if footnotes == .end { options.insert(.footnotesAtEnd) }
-	let body = MarkdownToHTML.convert(markdown, options: options)
+	let (markedMarkdown, contentsPlaceholder) = FrontMatterHTML.placeContentsMarker(in: markdown)
+	var body = MarkdownToHTML.convert(markedMarkdown, options: options)
 	// Optional forced page break before a given heading level (e.g. h2 so each
 	// chapter starts on a new page). Placed after the base heading rules so it
 	// wins on source order. The first block of the document is exempt: WebKit
@@ -413,15 +414,27 @@ func markdownToHTML(
 	// block drops its own, so a user stylesheet that changes the block's break
 	// cannot remove both.
 	var frontMatterBreakCSS = ""
-	if let frontMatter, let level = breakLevel,
-	   body.hasPrefix("<\(level.rawValue)>") || body.hasPrefix("<\(level.rawValue) ") {
-		let last = frontMatter.contents != nil ? "nav.toc" : (frontMatter.titlePage != nil ? ".titlepage" : "")
-		if !last.isEmpty { frontMatterBreakCSS = "\(last) { page-break-after: auto; break-after: auto; }" }
+	let breaksBefore = { (text: String) in
+		breakLevel.map { text.hasPrefix("<\($0.rawValue)>") || text.hasPrefix("<\($0.rawValue) ") } ?? false
 	}
 	var frontMatterHTML = ""
 	if let titlePage = frontMatter?.titlePage { frontMatterHTML += FrontMatterHTML.titlePage(titlePage) + "\n" }
-	if let contents = frontMatter?.contents {
+	if let placeholder = contentsPlaceholder, let range = body.range(of: placeholder + "\n") ?? body.range(of: placeholder) {
+		// The contents go where the marker was, or nowhere when there is no `--toc`.
+		var replacement = ""
+		if let contents = frontMatter?.contents {
+			replacement = FrontMatterHTML.contents(contents, headings: FrontMatterHTML.headings(in: body)) + "\n"
+			if breaksBefore(String(body[range.upperBound...])) { frontMatterBreakCSS = "nav.toc { page-break-after: auto; break-after: auto; }" }
+		}
+		body.replaceSubrange(range, with: replacement)
+	} else if let contents = frontMatter?.contents {
 		frontMatterHTML += FrontMatterHTML.contents(contents, headings: FrontMatterHTML.headings(in: body)) + "\n"
+	}
+	if frontMatterBreakCSS.isEmpty, let frontMatter, breaksBefore(body) {
+		let last = frontMatter.contents != nil && contentsPlaceholder == nil ? "nav.toc" : (frontMatter.titlePage != nil ? ".titlepage" : "")
+		if !last.isEmpty {
+			frontMatterBreakCSS = "\(last) { page-break-after: auto; break-after: auto; }"
+		}
 	}
 	var metadata = title.map { "<title>\(escapeHTMLMetadata($0))</title>\n" } ?? ""
 	for author in authors where !author.isEmpty {
