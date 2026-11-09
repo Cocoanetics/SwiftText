@@ -69,6 +69,14 @@ struct WebKitIntegrationTests {
 		let last = PageSizeRule.pointSize(in: "@page { size: A5 } @page { margin: 1cm; size: 5in 8in }")
 		#expect(last?.width == 360 && last?.height == 576)
 		#expect(PageSizeRule.pointSize(in: "@page { size: bogus }") == nil)
+		let nested = PageSizeRule.pointSize(in: "@page { @top-center { content: \"T\"; } size: 5in 8in }")
+		#expect(nested?.width == 360 && nested?.height == 576)
+		let fallback = (width: 595.0, height: 842.0)
+		let landscape = PageSizeRule.pointSize(in: "@page { size: landscape }", fallback: fallback)
+		#expect(landscape?.width == 842 && landscape?.height == 595)
+		let portrait = PageSizeRule.pointSize(in: "@page { size: portrait }", fallback: fallback)
+		#expect(portrait?.width == 595 && portrait?.height == 842)
+		#expect(PageSizeRule.pointSize(in: "@page { size: landscape }") == nil)
 	}
 
 	private func pageHeads(_ document: PDFDocument) -> [String] {

@@ -390,10 +390,10 @@ struct Render: AsyncParsableCommand {
 
 	#if os(macOS)
 	private func pageSize(userCSS: String?) -> CGSize {
-		if let userCSS, let size = PageSizeRule.pointSize(in: userCSS) {
-			return CGSize(width: size.width, height: size.height)
-		}
 		let size = paper.pointSize
+		if let userCSS, let sized = PageSizeRule.pointSize(in: userCSS, fallback: (size.width, size.height)) {
+			return CGSize(width: sized.width, height: sized.height)
+		}
 		if landscape {
 			return CGSize(width: size.height, height: size.width)
 		}
