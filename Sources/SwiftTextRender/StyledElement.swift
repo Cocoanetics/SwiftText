@@ -65,10 +65,10 @@ public final class StyledElement: SelectorElement {
 		return parent.elementChildren[elementIndex + 1]
 	}
 
-	/// The element's own `lang` (or `xml:lang`) attribute, if non-empty.
+	/// The element's own `lang` (or `xml:lang`) attribute, trimmed. Present but
+	/// empty means "language unknown" and is kept distinct from absent (`nil`).
 	var languageAttribute: String? {
-		let value = (attributes["lang"] ?? attributes["xml:lang"])?.trimmingCharacters(in: .whitespaces)
-		return value?.isEmpty == false ? value : nil
+		(attributes["lang"] ?? attributes["xml:lang"])?.trimmingCharacters(in: .whitespaces)
 	}
 
 	// MARK: - Building

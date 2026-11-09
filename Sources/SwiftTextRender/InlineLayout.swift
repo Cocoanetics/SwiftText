@@ -325,11 +325,12 @@ extension LayoutEngine {
 					let segmentWidths = zip(segmentStarts, boundaries).map { start, end in
 						units[start ..< end].reduce(0) { $0 + $1.width }
 					}
+					// The inserted hyphen goes through font fallback like any other character.
+					let hyphenFont = fonts.resolveRuns("-", style: style).first?.font ?? fonts.font(for: style)
 					// Width of the hyphen a line needs when it ends after segment `index`.
 					func hyphenWidth(after index: Int) -> Double {
 						guard hyphenBreaks.contains(boundaries[index]) else { return 0 }
-						let font = units[boundaries[index] - 1].font
-						return font.width(of: "-", size: style.fontSize) + style.letterSpacing
+						return hyphenFont.width(of: "-", size: style.fontSize) + style.letterSpacing
 					}
 					var next = 0
 					while next < boundaries.count {
@@ -356,8 +357,7 @@ extension LayoutEngine {
 						if taken == next {
 							if !fragments.isEmpty {
 								if next > 0, hyphenBreaks.contains(boundaries[next - 1]) {
-									let font = units[boundaries[next - 1] - 1].font
-									append([Piece(text: "-", font: font, width: hyphenWidth(after: next - 1))])
+									append([Piece(text: "-", font: hyphenFont, width: hyphenWidth(after: next - 1))])
 								}
 								finishLine(isLast: false)
 								continue

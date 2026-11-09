@@ -266,6 +266,9 @@ private func expand(_ declaration: Declaration) -> [(name: String, value: [Compo
 		// declaration overwrite a higher-priority one at random. This is a pure
 		// rename — `parseBreak` accepts the legacy `always` keyword too.
 		return [(String(name.dropFirst("page-".count)), value)]
+	case "-webkit-hyphens":
+		// Share the cascade slot of the unprefixed `hyphens`.
+		return [("hyphens", value)]
 	case "word-wrap":
 		// `word-wrap` is the legacy alias of `overflow-wrap`; fold both spellings
 		// into one cascade slot so specificity and source order decide normally.
@@ -394,7 +397,7 @@ private func applyLonghand(_ name: String, _ value: [ComponentValue], to style: 
 		if let whiteSpace = parseWhiteSpace(value) { style.whiteSpace = whiteSpace }
 	case "overflow-wrap":
 		if let wrap = parseOverflowWrap(value) { style.overflowWrap = wrap }
-	case "hyphens", "-webkit-hyphens":
+	case "hyphens":
 		if let token = significant(value).first, case .ident(let ident) = token.token,
 		   let hyphens = Hyphens(rawValue: ident.asciiLowercased) { style.hyphens = hyphens }
 	case "word-break":

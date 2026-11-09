@@ -69,6 +69,22 @@ struct HyphenationTests {
 		}
 	}
 
+	@Test("An empty lang clears the inherited language")
+	func emptyLanguageOverride() async throws {
+		let html = "<html lang=\"de\"><body><p lang=\"\" style=\"hyphens: auto\">Medikamentensicherheit</p></body></html>"
+		let builder = try await DomBuilder(html: Data(html.utf8), baseURL: nil)
+		let styled = StyledElement.build(domElement: try #require(builder.root), resolver: StyleResolver())
+		let rootBox = try #require(BoxTreeBuilder.build(from: styled) as? BlockBox)
+		let paragraph = try #require(firstParagraph(in: rootBox))
+		#expect(paragraph.style.language == "")
+	}
+
+	@Test("-webkit-hyphens shares the hyphens cascade slot")
+	func prefixedHyphens() async throws {
+		let lines = try await layout(hyphens: "none; -webkit-hyphens: auto; hyphens: none", lang: "de")
+		#expect(lines.contains { $0 == "Medikamentensicherheit," })
+	}
+
 	@Test("auto without a known language does nothing")
 	func noLanguage() async throws {
 		let lines = try await layout(hyphens: "auto", lang: nil)
