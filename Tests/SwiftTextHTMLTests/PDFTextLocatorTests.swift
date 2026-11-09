@@ -9,12 +9,12 @@ import Testing
 @Suite("PDF text locator")
 struct PDFTextLocatorTests {
 	/// One page per string, each laid out in a rect narrow enough that the text wraps.
-	private func makeDocument(_ pages: [String]) throws -> PDFDocument {
+	private func makeDocument(_ pages: [String], fontName: String = "Helvetica") throws -> PDFDocument {
 		let data = NSMutableData()
 		let consumer = try #require(CGDataConsumer(data: data))
 		var box = CGRect(x: 0, y: 0, width: 200, height: 300)
 		let context = try #require(CGContext(consumer: consumer, mediaBox: &box, nil))
-		let font = CTFontCreateWithName("Helvetica" as CFString, 18, nil)
+		let font = CTFontCreateWithName(fontName as CFString, 18, nil)
 		for text in pages {
 			context.beginPDFPage(nil)
 			let attributed = NSAttributedString(string: text, attributes: [.font: font])
@@ -60,6 +60,33 @@ struct PDFTextLocatorTests {
 		#expect(PDFTextLocator.compact("Park-\nInson\u{00AD} Er kr") == "parkinsonerkr")
 		// Case is folded per character, as the DOM side does, so a capital sigma never becomes a final one.
 		#expect(PDFTextLocator.compact("ΟΣ") == "οσ")
+	}
+
+	@Test("compact folds ligatures to their letters")
+	func compactLigatures() {
+		#expect(PDFTextLocator.compact("Sto\u{FB00}wechsel Be\u{FB01}nde Au\u{FB02}age E\u{FB03}zienz \u{FB04}") == "stoffwechselbefindeauflageeffizienzffl")
+		#expect(PDFTextLocator.compact("Stoffwechsel Befinde Auflage Effizienz ffl") == "stoffwechselbefindeauflageeffizienzffl")
+	}
+
+	@Test("a plain needle is found on a page that draws ligatures")
+	func ligaturePage() throws {
+		let document = try makeDocument(["Sto\u{FB00}wechsel und Befunde"], fontName: "Iowan Old Style")
+		try #require(document.page(at: 0)?.string?.contains("\u{FB00}") == true, "the fixture must keep the ligature")
+		let locator = PDFTextLocator(document: document)
+		let found = try #require(locator.locate("Stoffwechsel und Befunde", occurrence: 0))
+		#expect(found.pageIndex == 0)
+		#expect(found.bounds.height > 0)
+		#expect((locator.locate("fwech", occurrence: 0)?.bounds.height ?? 0) > 0)
+	}
+
+	@Test("occurrences count a ligature and a plain spelling alike")
+	func ligatureOccurrences() throws {
+		let document = try makeDocument(["Sto\u{FB00}", "Stoff"], fontName: "Iowan Old Style")
+		try #require(document.page(at: 0)?.string?.contains("\u{FB00}") == true, "the fixture must keep the ligature")
+		let locator = PDFTextLocator(document: document)
+		#expect(locator.locate("Stoff", occurrence: 0)?.pageIndex == 0)
+		#expect(locator.locate("Stoff", occurrence: 1)?.pageIndex == 1)
+		#expect(locator.locate("Stoff", occurrence: 2) == nil)
 	}
 }
 #endif

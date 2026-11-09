@@ -7,7 +7,8 @@ import PDFKit
 /// A heading that wraps has a line break in the PDF where the DOM text has a space,
 /// and one that hyphenates gains a hyphen there, so PDFKit's `findString` does not
 /// match it. The locator compares *compacted* text instead: every whitespace and
-/// hyphen character removed and the rest lowercased (CSS `text-transform` prints a
+/// hyphen character removed and the rest lowercased (fonts draw `ff`/`fi`/`fl` as one glyph
+/// that PDFKit reports as a ligature code point, so compatibility forms are folded first; CSS `text-transform` prints a
 /// case the DOM text doesn't have). Occurrences are counted on the same compacted
 /// text on the DOM side, see ``occurrenceScript``.
 package struct PDFTextLocator {
@@ -33,12 +34,10 @@ package struct PDFTextLocator {
 			var offset = 0
 			for scalar in text.unicodeScalars {
 				let width = scalar.utf16.count
-				if !Self.isIgnored(scalar) {
-					for unit in Character(scalar).lowercased().utf16 {
-						units.append(unit)
-						pages.append(Int32(pageIndex))
-						offsets.append(Int32(offset))
-					}
+				for unit in Self.fold(scalar).utf16 {
+					units.append(unit)
+					pages.append(Int32(pageIndex))
+					offsets.append(Int32(offset))
 				}
 				offset += width
 			}
@@ -52,10 +51,21 @@ package struct PDFTextLocator {
 		}
 	}
 
-	/// `text` without whitespace and hyphens, lowercased: the form both sides are compared in.
+	/// One scalar in compared form: NFKC (per scalar, so it only ever expands and never merges
+	/// neighbours), then whitespace and hyphens dropped, then lowercased.
+	private static func fold(_ scalar: Unicode.Scalar) -> String {
+		if scalar.isASCII { return isIgnored(scalar) ? "" : Character(scalar).lowercased() }
+		var result = ""
+		for part in String(scalar).precomposedStringWithCompatibilityMapping.unicodeScalars where !isIgnored(part) {
+			result += Character(part).lowercased()
+		}
+		return result
+	}
+
+	/// `text` with compatibility forms (ligatures) folded, without whitespace and hyphens, lowercased: the form both sides are compared in.
 	package static func compact(_ text: String) -> String {
 		var result = ""
-		for scalar in text.unicodeScalars where !isIgnored(scalar) { result += Character(scalar).lowercased() }
+		for scalar in text.unicodeScalars { result += fold(scalar) }
 		return result
 	}
 
@@ -63,8 +73,8 @@ package struct PDFTextLocator {
 	/// ``compact(_:)`` (case folded per character) and `occurrencesBefore(element, searchText)`, the number of earlier
 	/// matches of `searchText` in the compacted text that precedes `element`.
 	package static let occurrenceScript = """
-	// Lowercased one character at a time: a whole-string toLowerCase() picks a final sigma by context, which the Swift side does not.
-	const compact = s => Array.from(s.replace(/[\\s\\-\\u00AD\\u2010\\u2011]+/g, ''), c => c.toLowerCase()).join('');
+	// NFKC and lowercased one character at a time: a whole-string toLowerCase() picks a final sigma by context, which the Swift side does not.
+	const compact = s => Array.from(Array.from(s, c => c.normalize('NFKC')).join('').replace(/[\\s\\-\\u00AD\\u2010\\u2011]+/g, ''), c => c.toLowerCase()).join('');
 	function occurrencesBefore(element, searchText) {
 		const needle = compact(searchText);
 		if (!needle) return 0;

@@ -116,6 +116,21 @@ struct RenderPageFurnitureTests {
 		#expect(entry?.destination.flatMap { $0.page.map(document.index(for:)) } == longPage)
 	}
 
+	@Test("the webkit engine follows a heading that is drawn with a ligature", .timeLimit(.minutes(2)))
+	func webkitLigatureHeading() async throws {
+		let document = try await render("# Eins\n\nText eins.\n\n# Stoffwechsel und Befunde\n\nText zwei.\n\n# Drei\n\nText drei.\n",
+		                                arguments: ["--running-heads", "--chapter-start", "right", "--page-break-before", "h1", "--toc"],
+		                                css: "body, h1 { font-family: \"Iowan Old Style\"; }")
+		let all = (0..<document.pageCount).compactMap { document.page(at: $0)?.string }.joined()
+		try #require(all.contains("\u{FB00}"), "the fixture must draw the ligature")
+		let outline = try #require(document.outlineRoot)
+		let entry = (0..<outline.numberOfChildren).compactMap { outline.child(at: $0) }.first { $0.label == "Stoffwechsel und Befunde" }
+		let index = try #require(entry?.destination.flatMap { $0.page.map(document.index(for:)) })
+		#expect(index % 2 == 0, "the chapter opens on a right-hand page")
+		let head = text(on: try #require(document.page(at: index)), from: 0.92, to: 1)
+		#expect(head.contains("Stoffwechsel") || head.contains("Sto\u{FB00}wechsel"), "the head names the chapter, got: \(head)")
+	}
+
 	@Test("the webkit engine leaves every page of a multi-page title section bare", .timeLimit(.minutes(2)))
 	func webkitLongTitleSectionBare() async throws {
 		let authors = (1...40).flatMap { ["--author", "Autorin Nummer \($0)"] }
