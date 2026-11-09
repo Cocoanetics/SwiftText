@@ -56,6 +56,12 @@ public struct RenderOptions {
 	/// A floor for the page margin, in CSS pixels, applied after `@page` rules,
 	/// so margin-box content has a strip to sit in.
 	public var minimumPageMarginPx: Double = 0
+	/// Set the footnote definitions (`<div class="footnote-definition" id="fn-…">`
+	/// that an `<a href="#fn-…">` references) at the foot of the page that holds
+	/// the reference, below a short rule, instead of where they stand in the
+	/// document. A note too long for what is left of the page continues on the next.
+	/// Has no effect without a fixed page height.
+	public var pageFootnotes = false
 
 	public init(pageWidthPx: Double = 816, pageHeightPx: Double? = 1056, pageMarginPx: Double = 32, baseDirection: BaseDirection = .auto, compressStreams: Bool = true,
 	            imageLoader: ImageLoader? = HTMLRenderer.urlSessionImageLoader) {
@@ -140,11 +146,14 @@ public enum HTMLRenderer {
 		// Author stylesheets: the document's own <style> elements first, then any
 		// sheets supplied by the caller (which therefore win on equal specificity).
 		let documentSheets = root.styleSheets()
-		let resolver = StyleResolver(authorStyleSheets: documentSheets + css)
 
 		// @page rules in the document override the page geometry.
 		var options = options
 		applyAtPageRules(documentSheets + css, to: &options)
+		// Notes at the foot need a fixed page height, which an `@page` size can supply.
+		let notesAtFoot = options.pageFootnotes && options.pageHeightPx != nil
+		let css = notesAtFoot ? css + [FootnoteSet.css] : css
+		let resolver = StyleResolver(authorStyleSheets: documentSheets + css)
 		options.pageMargins = options.pageMargins.floored(at: options.minimumPageMarginPx)
 		let pageRules = parsePageRules(documentSheets + css)
 		registerFontFaces(documentSheets + css, baseURL: baseURL, in: fonts, warn: reportWarning)
@@ -165,12 +174,20 @@ public enum HTMLRenderer {
 		guard let rootBox = BoxTreeBuilder.build(from: styled, baseURL: baseURL, loadedImages: loadedImages,
 		                                         warningHandler: reportWarning) as? BlockBox else { throw RenderError.noRootBox }
 
+		var footnotes = notesAtFoot ? FootnoteSet.extract(from: rootBox, baseURL: baseURL) : FootnoteSet(notes: [])
 		let engine = LayoutEngine(fonts: fonts)
 		let margin = options.pageMargins.left
 		let contentWidth = max(0, options.pageWidthPx - options.pageMargins.horizontal)
 		// Lay the document out as a single tall column (origin at column y = 0).
 		let columnHeight = engine.layout(root: rootBox, contentWidth: contentWidth, originX: margin, originY: 0)
 		var laidOut = ColumnKey(contentWidth: contentWidth, margin: margin)
+		// The notes sit in their own columns, laid out at the width of the run being worked on.
+		var notesLaidOut: ColumnKey?
+		func ensureNotes(_ key: ColumnKey) {
+			guard !footnotes.isEmpty, notesLaidOut != key else { return }
+			footnotes.layoutNotes(engine: engine, contentWidth: key.contentWidth, originX: key.margin)
+			notesLaidOut = key
+		}
 
 		// Split the document into runs of pages that share a page box. Without a
 		// fixed page height there is a single auto-height page, so no runs.
@@ -183,6 +200,7 @@ public enum HTMLRenderer {
 			guard key != laidOut else { return }
 			_ = engine.layout(root: rootBox, contentWidth: key.contentWidth, originX: key.margin, originY: 0)
 			laidOut = key
+			footnotes.locateReferences(in: rootBox)
 		}
 		func range(of run: PageRun) -> (from: Double, to: Double) {
 			switch run.kind {
@@ -196,13 +214,15 @@ public enum HTMLRenderer {
 			var pageCount = 0
 			for index in runs.indices {
 				ensureLayout(for: runs[index])
+				ensureNotes(ColumnKey(contentWidth: max(0, runs[index].options.pageWidthPx - runs[index].margins.horizontal),
+				                      margin: runs[index].margins.left))
 				let (from, to) = range(of: runs[index])
 				// With no fixed height there is no page boundary for a break to land
 				// on, so fragmentation is skipped: a single auto-height page.
 				let slices: [PageSlice]
 				if let pageHeight = runs[index].options.pageHeightPx {
 					slices = paginate(rootBox, from: from, to: to, pageHeightPx: pageHeight, margins: runs[index].margins,
-					                  pageOffset: pageCount, skippingEmpty: skippingEmpty)
+					                  pageOffset: pageCount, skippingEmpty: skippingEmpty, footnotes: footnotes)
 				} else {
 					slices = [PageSlice(top: 0, bottom: columnHeight, repeatedHeader: nil)]
 				}
@@ -213,12 +233,18 @@ public enum HTMLRenderer {
 				let isLast = index == runs.count - 1
 				func inRun(_ y: Double) -> Bool { y >= from - breakEpsilon && (y < to - breakEpsilon || isLast) }
 				runs[index].anchors = collectAnchors(rootBox).filter { inRun($0.value) }
+				// A note's link lands on the page of its reference, where the note is.
+				for reference in footnotes.references where inRun(reference.y) {
+					runs[index].anchors[footnotes.notes[reference.note].id] = reference.y
+				}
 				var headings: [(level: Int, title: String, y: Double)] = []
 				collectHeadings(rootBox, into: &headings)
 				runs[index].headings = headings.filter { inRun($0.y) }
 			}
 			return pageCount
 		}
+		// The first layout of the column was done above; the references come from it.
+		footnotes.locateReferences(in: rootBox)
 		var totalPages = paginateRuns(skippingEmpty: runs.count > 1)
 		if totalPages == 0 {
 			runs = [PageRun(kind: .gap(after: nil, before: nil), name: nil, options: options)]
@@ -241,6 +267,7 @@ public enum HTMLRenderer {
 		var pageObjects: [PDFDictionary] = []
 		for run in runs {
 			ensureLayout(for: run)
+			ensureNotes(ColumnKey(contentWidth: max(0, run.options.pageWidthPx - run.margins.horizontal), margin: run.margins.left))
 			let pageHeightPx = run.pageHeightPx(columnHeight: columnHeight)
 			for (offset, slice) in run.slices.enumerated() {
 				let pageIndex = run.firstPage + offset
@@ -253,12 +280,14 @@ public enum HTMLRenderer {
 				// A blank page inserted to put the next block on the right side of the
 				// spread is counted but carries nothing: no content, no running head,
 				// no page number.
-				if !slice.isBlank {
+				if !slice.isBlank && !slice.isNotesOnly {
 					painter.paint(rootBox)
 				}
 				if let header = slice.repeatedHeader {
 					painter.paintRepeatedTableHeader(header.box)
 				}
+				painter.paintFootnotes(slice.footnotes.map { (footnotes.notes[$0.note].box, $0.from, $0.to) },
+				                       ruleColor: RGBA(0.4, 0.4, 0.4, 1))
 				if !pageRules.isEmpty, !slice.isBlank {
 					let marginBoxes = resolveMarginBoxes(pageRules, pageIndex: pageIndex, totalPages: totalPages,
 					                                     rootStyle: rootBox.style, rootFontSize: rootBox.style.fontSize,
@@ -785,6 +814,10 @@ public enum HTMLRenderer {
 		/// An empty page inserted so that a `break-before: left|right` block
 		/// starts on the requested side. It spans no column height.
 		var isBlank = false
+		/// The notes set at the foot of the page, in order.
+		var footnotes: [FootnoteChunk] = []
+		/// A page of notes that spilled over from the last page of text.
+		var isNotesOnly = false
 
 		static func blank(at y: Double) -> PageSlice {
 			PageSlice(top: y, bottom: y, repeatedHeader: nil, isBlank: true)
@@ -802,7 +835,7 @@ public enum HTMLRenderer {
 	/// `pageOffset` is the number of pages before it, which fixes the side the
 	/// first page falls on. An empty range yields no slices when `skippingEmpty`.
 	private static func paginate(_ root: BlockBox, from: Double, to columnHeight: Double, pageHeightPx: Double, margins: PageMargins,
-	                             pageOffset: Int, skippingEmpty: Bool) -> [PageSlice] {
+	                             pageOffset: Int, skippingEmpty: Bool, footnotes: FootnoteSet) -> [PageSlice] {
 		let contentHeight = max(1, pageHeightPx - margins.vertical)
 		let epsilon = breakEpsilon
 
@@ -857,7 +890,8 @@ public enum HTMLRenderer {
 				|| (!opensRightFirst && leadingKinds.contains(.right) && !leadingKinds.contains(.left)))
 
 		// Short documents still need pagination if they carry a forced break.
-		guard columnHeight > contentHeight + epsilon || !forced.isEmpty || leadingBlank else {
+		let hasNotes = footnotes.references.contains { $0.y >= from - epsilon && $0.y < columnHeight - epsilon }
+		guard columnHeight > contentHeight + epsilon || !forced.isEmpty || leadingBlank || hasNotes else {
 			return [PageSlice(top: from, bottom: columnHeight, repeatedHeader: nil)]
 		}
 
@@ -872,6 +906,8 @@ public enum HTMLRenderer {
 
 		var slices: [PageSlice] = []
 		var top = from
+		// What spilled over from the page before: the rest of a note too long to finish there.
+		var carry: [FootnoteChunk] = []
 		if leadingBlank { slices.append(.blank(at: from)) }
 		while top < columnHeight - epsilon {
 			// A block that asked for a side starts on that side: one blank page
@@ -899,18 +935,37 @@ public enum HTMLRenderer {
 				}
 				.min { ($0.lastRowBottom - $0.tableTop) < ($1.lastRowBottom - $1.tableTop) }
 			let reservedHeight = repeatedHeader?.reservedHeight ?? 0
-			let target = top + max(epsilon, contentHeight - reservedHeight)
+			let room = max(epsilon, contentHeight - reservedHeight)
+			let target = top + room
+
+			// The notes a page ending at `bottom` has to carry, and whether the text
+			// above `bottom` fits together with them.
+			func entries(upTo bottom: Double) -> [FootnoteChunk] {
+				footnotes.entries(carry: carry, top: top, bottom: bottom, epsilon: epsilon)
+			}
+			func fits(_ bottom: Double) -> Bool {
+				bottom - top + FootnoteSet.areaHeight(of: entries(upTo: bottom)) <= room + epsilon
+			}
+			func slice(to bottom: Double, entries: [FootnoteChunk]) -> PageSlice {
+				var slice = PageSlice(top: top, bottom: bottom, repeatedHeader: repeatedHeader)
+				slice.footnotes = entries
+				return slice
+			}
 
 			// A mandatory break outranks everything, even when it leaves most of
-			// the page empty. The *earliest* one wins: we cannot page past it.
-			if let forcedBreak = forced.first(where: { $0 > top + epsilon && $0 <= target + epsilon }) {
-				slices.append(PageSlice(top: top, bottom: forcedBreak, repeatedHeader: repeatedHeader))
+			// the page empty. The *earliest* one wins: we cannot page past it. It
+			// can only be refused when the notes of the lines above it do not fit.
+			let forcedBreak = forced.first { $0 > top + epsilon && $0 <= target + epsilon }
+			if let forcedBreak, fits(forcedBreak) {
+				slices.append(slice(to: forcedBreak, entries: entries(upTo: forcedBreak)))
+				carry = []
 				top = forcedBreak
 				continue
 			}
 
-			if target >= columnHeight {
-				slices.append(PageSlice(top: top, bottom: columnHeight, repeatedHeader: repeatedHeader))
+			if forcedBreak == nil, target >= columnHeight, fits(columnHeight) {
+				slices.append(slice(to: columnHeight, entries: entries(upTo: columnHeight)))
+				carry = []
 				break
 			}
 
@@ -918,14 +973,37 @@ public enum HTMLRenderer {
 			// author's preferences one at a time rather than giving up on them
 			// together. The final fallback slices mid-line, which is what has to
 			// happen when a single line is taller than the page.
-			let reachable = candidates.filter { $0 > top + epsilon && $0 <= target + epsilon }
-			let bottom = reachable.last { !splitsAtomicBlock($0) && !points.discouraged.contains($0) }
-				?? reachable.last { !splitsAtomicBlock($0) }
-				?? reachable.last
+			let ceiling = forcedBreak.map { $0 - epsilon } ?? .infinity
+			let reachable = candidates.filter { $0 > top + epsilon && $0 <= target + epsilon && $0 < ceiling }
+			// A line moves to the next page, with its notes, when they do not fit together.
+			let fitting = reachable.filter(fits)
+			let bottom = fitting.last { !splitsAtomicBlock($0) && !points.discouraged.contains($0) }
+				?? fitting.last { !splitsAtomicBlock($0) }
+				?? fitting.last
+				// Not even the first line fits with its notes: it stays, and a note
+				// too long for what is left continues on the next page.
+				?? reachable.first
 				?? target
-
-			slices.append(PageSlice(top: top, bottom: bottom, repeatedHeader: repeatedHeader))
+			let pageNotes = entries(upTo: bottom)
+			if fitting.contains(bottom) || pageNotes.isEmpty {
+				slices.append(slice(to: bottom, entries: pageNotes))
+				carry = []
+			} else {
+				let noteRoom = room - (bottom - top) - FootnoteSet.separatorHeight
+				let (placed, rest) = footnotes.fill(pageNotes, room: noteRoom, force: false, epsilon: epsilon)
+				slices.append(slice(to: bottom, entries: placed))
+				carry = rest
+			}
 			top = bottom
+		}
+		// Notes still spilling after the last line get pages of their own.
+		while !carry.isEmpty {
+			let (placed, rest) = footnotes.fill(carry, room: contentHeight - FootnoteSet.separatorHeight, force: true, epsilon: epsilon)
+			var slice = PageSlice(top: columnHeight, bottom: columnHeight, repeatedHeader: nil)
+			slice.footnotes = placed
+			slice.isNotesOnly = true
+			slices.append(slice)
+			carry = rest
 		}
 		return slices.isEmpty ? [PageSlice(top: from, bottom: columnHeight, repeatedHeader: nil)] : slices
 	}

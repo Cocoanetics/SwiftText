@@ -80,7 +80,7 @@ public struct PageGeometry {
 
 public final class Painter {
 	public let stream = PDFStream()
-	private let geometry: PageGeometry
+	private var geometry: PageGeometry
 	private let fonts: FontBook
 
 	private let builder: FontResourceBuilder
@@ -333,6 +333,39 @@ public final class Painter {
 			stream.fill()
 		}
 		stream.popState()
+	}
+
+	// MARK: - Footnotes
+
+	/// Paint the notes at the foot of the page, below a short rule: each chunk is the
+	/// part `from ..< to` of a note laid out in its own column. Call before the
+	/// margin boxes, which restore the state saved in `init`.
+	func paintFootnotes(_ chunks: [(box: BlockBox, from: Double, to: Double)], ruleColor: RGBA) {
+		guard !chunks.isEmpty else { return }
+		let own = geometry
+		defer { geometry = own }
+		let height = FootnoteSet.separatorHeight + chunks.reduce(0) { $0 + ($1.to - $1.from) }
+		let areaTop = own.pageHeightPx - own.margins.bottom - height
+		// The body's clip does not apply down here: give the notes their own.
+		stream.popState()
+		stream.pushState()
+		stream.rectangle(own.margins.left, own.margins.bottom, own.pageWidthPx - own.margins.horizontal, height)
+		stream.clip()
+		stream.endPath()
+		func place(columnTop: Double, sliceHeight: Double, pageTop: Double) {
+			geometry = PageGeometry(pageWidthPx: own.pageWidthPx, pageHeightPx: own.pageHeightPx, margins: own.margins,
+			                        columnTop: columnTop, sliceHeightPx: sliceHeight,
+			                        contentOffsetPx: pageTop - own.margins.top, offsetXPx: own.offsetXPx)
+		}
+		let contentWidth = own.pageWidthPx - own.margins.horizontal
+		place(columnTop: 0, sliceHeight: height, pageTop: areaTop)
+		paintBackground(ruleColor, x: own.margins.left, top: FootnoteSet.ruleOffset, width: contentWidth / 3, height: 1)
+		var pageTop = areaTop + FootnoteSet.separatorHeight
+		for chunk in chunks {
+			place(columnTop: chunk.from, sliceHeight: chunk.to - chunk.from, pageTop: pageTop)
+			paint(chunk.box)
+			pageTop += chunk.to - chunk.from
+		}
 	}
 
 	// MARK: - @page margin boxes
