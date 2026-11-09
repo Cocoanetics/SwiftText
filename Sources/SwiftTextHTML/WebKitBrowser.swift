@@ -270,17 +270,12 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 		let webView = try await loadedWebView()
 		let script = """
 		(function() {
+			\(PDFTextLocator.occurrenceScript)
 			const normalize = s => s.replace(/\\s+/g, ' ').trim();
 			function locate(element) {
 				const title = normalize(element.textContent || '');
 				const searchText = title.slice(0, 40).trim();
-				const range = document.createRange();
-				range.setStart(document.body, 0);
-				range.setEndBefore(element);
-				const before = normalize(range.toString());
-				let occurrence = 0, from = 0, hit;
-				while (searchText && (hit = before.indexOf(searchText, from)) !== -1) { occurrence++; from = hit + 1; }
-				return { title, searchText, occurrence };
+				return { title, searchText, occurrence: occurrencesBefore(element, searchText) };
 			}
 			const headings = \(header || collectChapters ? "true" : "false") ? Array.from(document.querySelectorAll('h\(headingLevel)')).map(heading => {
 				return locate(heading);

@@ -18,22 +18,14 @@ extension WebKitBrowser {
 		let webView = try await loadedWebView()
 		let script = """
 		(function() {
+			\(PDFTextLocator.occurrenceScript)
 			const normalize = s => s.replace(/\\s+/g, ' ').trim();
 			const result = [];
 			for (const heading of Array.from(document.querySelectorAll('h1,h2,h3,h4,h5,h6'))) {
 				const title = normalize(heading.textContent || '');
 				const searchText = title.slice(0, 40).trim();
 				if (!searchText) continue;
-				const range = document.createRange();
-				range.setStart(document.body, 0);
-				range.setEndBefore(heading);
-				// Counted without case, as the PDF is searched: CSS text-transform changes
-				// the printed case but not the DOM text.
-				const before = normalize(range.toString()).toLowerCase();
-				const needle = searchText.toLowerCase();
-				let occurrence = 0, from = 0, hit;
-				while ((hit = before.indexOf(needle, from)) !== -1) { occurrence++; from = hit + 1; }
-				result.push({ level: Number(heading.tagName.slice(1)), title, searchText, occurrence });
+				result.push({ level: Number(heading.tagName.slice(1)), title, searchText, occurrence: occurrencesBefore(heading, searchText) });
 			}
 			return JSON.stringify(result);
 		})();

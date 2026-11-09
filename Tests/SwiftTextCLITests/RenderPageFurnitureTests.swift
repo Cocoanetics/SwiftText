@@ -88,6 +88,34 @@ struct RenderPageFurnitureTests {
 		#expect(text(on: contents, from: 0.92, to: 1).isEmpty, "no running head before the first chapter")
 	}
 
+	@Test("the webkit engine leaves a title page bare when the title wraps", .timeLimit(.minutes(2)))
+	func webkitWrappingTitleBare() async throws {
+		let title = "Wie Sie Ihre Parkinson-Erkrankung bremsen können"
+		let document = try await render("# Eins\n\nText.\n\n# Zwei\n\nText.\n",
+		                                arguments: ["--running-heads", "--title-page", "--toc", "--title", title, "--subtitle", "Untertitel", "--author", "Autor"],
+		                                css: ".titlepage h1.title { font-size: 40pt; }")
+		let first = try #require(document.page(at: 0))
+		let lines = (first.string ?? "").split(separator: "\n").filter { $0.contains("Parkinson") || $0.contains("bremsen") }
+		try #require(lines.count > 1, "the fixture must wrap the title")
+		#expect(text(on: first, from: 0, to: 0.08).isEmpty && text(on: first, from: 0.92, to: 1).isEmpty, "the title page carries no furniture")
+	}
+
+	@Test("the webkit engine follows a chapter heading that wraps: head, outline and link", .timeLimit(.minutes(2)))
+	func webkitWrappingChapterHeading() async throws {
+		let long = "Ein ziemlich langer Kapiteltitel der sicher über mehrere Zeilen umbricht"
+		let document = try await render("# Kurz\n\nText.\n\n# \(long)\n\nText.\n\n# Nochmal kurz\n\nText.\n",
+		                                arguments: ["--running-heads", "--toc"], css: "h1 { font-size: 28pt; }")
+		let page = try #require(document.findString("Kapiteltitel", withOptions: []).last?.pages.first)
+		let longPage = document.index(for: page)
+		let head = text(on: page, from: 0.92, to: 1)
+		#expect(head.contains("Ein ziemlich langer"), "the head follows the wrapping chapter, got: \(head)")
+		let outline = try #require(document.outlineRoot)
+		let titles = (0..<outline.numberOfChildren).compactMap { outline.child(at: $0)?.label }
+		#expect(titles.contains(long), "the outline lists the wrapping chapter")
+		let entry = (0..<outline.numberOfChildren).compactMap { outline.child(at: $0) }.first { $0.label == long }
+		#expect(entry?.destination.flatMap { $0.page.map(document.index(for:)) } == longPage)
+	}
+
 	@Test("the webkit engine leaves every page of a multi-page title section bare", .timeLimit(.minutes(2)))
 	func webkitLongTitleSectionBare() async throws {
 		let authors = (1...40).flatMap { ["--author", "Autorin Nummer \($0)"] }
