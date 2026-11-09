@@ -84,6 +84,7 @@ extension WebKitBrowser {
 
 		var documents: [PDFDocument] = []
 		var blank: [Set<Int>] = []
+		var named: [Bool] = []
 		let sequence = (0 ... count * 2).map { $0 } // gap, run, gap, run, ..., gap
 		for step in sequence {
 			let isRun = !step.isMultiple(of: 2)
@@ -121,11 +122,11 @@ extension WebKitBrowser {
 				continue
 			}
 
-			let named = namedPages.pages.first { $0.name == plan.name }
-			let size = named?.size.map { CGSize(width: $0.width, height: $0.height) } ?? paperSize
-			if let named, !named.margins.isEmpty {
+			let namedPage = namedPages.pages.first { $0.name == plan.name }
+			let size = namedPage?.size.map { CGSize(width: $0.width, height: $0.height) } ?? paperSize
+			if let namedPage, !namedPage.margins.isEmpty {
 				let minimum = namedPages.minimumVerticalMargin
-				let declarations = named.margins.map { declaration -> String in
+				let declarations = namedPage.margins.map { declaration -> String in
 					if minimum > 0, declaration.name == "margin-top" || declaration.name == "margin-bottom" {
 						return "\(declaration.name): max(\(minimum)pt, \(declaration.value)) !important;"
 					}
@@ -152,15 +153,20 @@ extension WebKitBrowser {
 			if let document = PDFDocument(data: data) {
 				documents.append(document)
 				blank.append(blankPages)
+				named.append(isRun)
 			}
 			_ = try await webView.evaluateJavaScript("window.__stRestore();")
 		}
 
+		// Every run was empty: print the document as it is.
+		if documents.isEmpty { return nil }
 		// Join the runs' pages; the blank pages keep their place among them.
 		let joined = PDFDocument()
 		var blankPages: Set<Int> = []
+		var namedPageIndices: Set<Int> = []
 		for (offset, document) in documents.enumerated() {
 			let before = joined.pageCount
+			if named[offset] { namedPageIndices.formUnion(before ..< before + document.pageCount) }
 			blankPages.formUnion(blank[offset].map { $0 + before })
 			for pageIndex in 0 ..< document.pageCount {
 				guard let page = document.page(at: pageIndex)?.copy() as? PDFPage else { continue }
@@ -168,7 +174,7 @@ extension WebKitBrowser {
 			}
 		}
 		guard var data = joined.dataRepresentation() else { throw WebKitBrowserError.printFailed }
-		data = shiftedForSideMargins(data)
+		data = shiftedForSideMargins(data, skipping: namedPageIndices)
 		let resolved = PDFInternalLinks.resolve(pdfData: data, pageURL: webView.url, targets: linkTargets)
 		return (resolved.data, resolved.anchorPages, blankPages)
 	}
@@ -199,10 +205,11 @@ package struct WebKitNamedPages {
 
 extension WebKitBrowser {
 	/// Moves the pages of a PDF to their `:left`/`:right` margins (macOS only).
-	func shiftedForSideMargins(_ data: Data) -> Data {
+	/// Pages in `skipping` (those of named runs, which carry their own margins) stay put.
+	func shiftedForSideMargins(_ data: Data, skipping: Set<Int> = []) -> Data {
 		#if os(macOS)
 		guard let margins = pageSideMargins else { return data }
-		return PDFPageShift.apply(to: data) { margins.shift(pageIndex: $0) }
+		return PDFPageShift.apply(to: data) { skipping.contains($0) ? 0 : margins.shift(pageIndex: $0) }
 		#else
 		return data
 		#endif

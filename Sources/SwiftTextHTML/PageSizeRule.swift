@@ -124,7 +124,9 @@ package enum PageSizeRule {
 					if depth == 0 { close = position; break }
 				}
 			}
-			let prelude = source[index..<open].trimmingCharacters(in: .whitespacesAndNewlines)
+			// Statement at-rules (`@import …;`, `@charset …;`) have no block and end at their `;`.
+			let head = source[index..<open]
+			let prelude = (head.lastIndex(of: ";").map { head[head.index(after: $0)...] } ?? head).trimmingCharacters(in: .whitespacesAndNewlines)
 			if close == source.endIndex { break }
 			let body = String(source[source.index(after: open)..<close])
 			if prelude.hasPrefix("@") {

@@ -28,6 +28,12 @@ struct PageSizeRuleTests {
 		#expect(found.map(\.important) == [false, false, true])
 	}
 
+	@Test("statement at-rules before a rule do not hide its page assignment")
+	func assignmentsAfterImport() {
+		let found = PageSizeRule.pageAssignments(in: "@charset \"utf-8\";\n@import url(x.css);\n.wide { page: wide }")
+		#expect(found.map(\.selector) == [".wide"])
+	}
+
 	@Test("side margins: recto and verso differ by the inside/outside margin")
 	func sideMargins() throws {
 		let css = "@page :right { margin-left: 22mm; margin-right: 17mm } @page :left { margin-left: 17mm; margin-right: 22mm }"

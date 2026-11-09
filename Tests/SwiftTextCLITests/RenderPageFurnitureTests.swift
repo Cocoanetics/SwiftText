@@ -343,6 +343,25 @@ struct RenderPageFurnitureTests {
 		#expect(!sizes.contains { Int($0.width.rounded()) == 420 }, "the less specific rule must not apply: \(sizes)")
 	}
 
+	@Test("webkit: a named page that matches only an empty block falls back to the plain export", .timeLimit(.minutes(2)))
+	func webkitEmptyNamedRun() async throws {
+		let document = try await render("# Eins\n\nText.\n\n<div class=\"wide\"></div>\n", css: "@page wide { size: A4 landscape; }\n.wide { page: wide; }\n")
+		#expect(document.pageCount >= 1)
+		#expect(document.page(at: 0)?.string?.contains("Eins") == true)
+	}
+
+	@Test("webkit: side margins do not move the pages of a named run", .timeLimit(.minutes(2)))
+	func webkitNamedRunKeepsItsMargins() async throws {
+		let markdown = "# Eins\n\nText.\n\n# Zwei\n\n<div class=\"wide\">\n\nBreit.\n\n</div>\n\n# Drei\n\nText.\n"
+		let css = "@page :right { margin-left: 22mm; margin-right: 17mm; }\n@page :left { margin-left: 17mm; margin-right: 22mm; }\n"
+			+ "@page wide { size: A4 landscape; margin: 10mm; }\n.wide { page: wide; }\n"
+		let document = try await render(markdown, css: css)
+		let index = try #require((0..<document.pageCount).first { document.page(at: $0)?.string?.contains("Breit") == true })
+		let page = try #require(document.page(at: index))
+		let edge = try #require(page.selection(for: page.bounds(for: .mediaBox))?.bounds(for: page).minX)
+		#expect(abs(edge / 72 * 25.4 - 10) < 2, "named page content moved off its 10 mm margin: \(edge) pt")
+	}
+
 	@Test("webkit: a named or pseudo @page size never applies to the whole document", .timeLimit(.minutes(2)))
 	func webkitPseudoSizeIsNotGlobal() async throws {
 		let document = try await render("# Eins\n\nText.\n", css: "@page wide { size: A5; }\n@page :first { size: A3; }\n")
