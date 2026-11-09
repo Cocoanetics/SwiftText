@@ -14,11 +14,38 @@ import SwiftTextPDFWriter
 /// CSS pixels to PDF points: 1px = 1/96in, 1pt = 1/72in.
 let pxToPt = 0.75
 
+/// The four page margins, in CSS pixels.
+public struct PageMargins: Equatable {
+	public var top: Double
+	public var right: Double
+	public var bottom: Double
+	public var left: Double
+
+	public init(top: Double, right: Double, bottom: Double, left: Double) {
+		self.top = top
+		self.right = right
+		self.bottom = bottom
+		self.left = left
+	}
+
+	public init(_ all: Double) {
+		self.init(top: all, right: all, bottom: all, left: all)
+	}
+
+	var horizontal: Double { left + right }
+	var vertical: Double { top + bottom }
+
+	/// Each side raised to at least `floor`.
+	func floored(at floor: Double) -> PageMargins {
+		PageMargins(top: max(top, floor), right: max(right, floor), bottom: max(bottom, floor), left: max(left, floor))
+	}
+}
+
 /// Where a page sits within the laid-out column.
 public struct PageGeometry {
 	public let pageWidthPx: Double
 	public let pageHeightPx: Double
-	public let marginPx: Double
+	public let margins: PageMargins
 	/// The column y-coordinate shown at the top of this page's content area.
 	public let columnTop: Double
 	/// The height of the column slice shown on this page.
@@ -26,15 +53,15 @@ public struct PageGeometry {
 	/// Space reserved above the column slice for repeated table headers.
 	public let contentOffsetPx: Double
 	/// Horizontal shift of everything on the page, for mirrored binding margins:
-	/// the column is laid out against `marginPx`, a left or right page moves it.
+	/// the column is laid out against the left margin, a left or right page moves it.
 	public let offsetXPx: Double
 
-	public init(pageWidthPx: Double, pageHeightPx: Double, marginPx: Double,
+	public init(pageWidthPx: Double, pageHeightPx: Double, margins: PageMargins,
 	            columnTop: Double, sliceHeightPx: Double, contentOffsetPx: Double = 0, offsetXPx: Double = 0) {
 		self.offsetXPx = offsetXPx
 		self.pageWidthPx = pageWidthPx
 		self.pageHeightPx = pageHeightPx
-		self.marginPx = marginPx
+		self.margins = margins
 		self.columnTop = columnTop
 		self.sliceHeightPx = sliceHeightPx
 		self.contentOffsetPx = contentOffsetPx
@@ -72,11 +99,11 @@ public final class Painter {
 		// outside the content slice, in the page's margin area.
 		stream.pushState()
 		// Clip to this page's content slice so other pages don't bleed in.
-		let contentWidth = geometry.pageWidthPx - 2 * geometry.marginPx
-		let paintedHeight = min(geometry.pageHeightPx - 2 * geometry.marginPx,
+		let contentWidth = geometry.pageWidthPx - geometry.margins.horizontal
+		let paintedHeight = min(geometry.pageHeightPx - geometry.margins.vertical,
 		                        geometry.contentOffsetPx + geometry.sliceHeightPx)
-		stream.rectangle(geometry.marginPx,
-		                 geometry.pageHeightPx - geometry.marginPx - paintedHeight,
+		stream.rectangle(geometry.margins.left,
+		                 geometry.pageHeightPx - geometry.margins.top - paintedHeight,
 		                 contentWidth, paintedHeight)
 		stream.clip()
 		stream.endPath()
@@ -108,7 +135,7 @@ public final class Painter {
 
 	/// Page y (from page top) for a column y-coordinate.
 	private func pageY(_ columnY: Double) -> Double {
-		geometry.marginPx + geometry.contentOffsetPx + (columnY - geometry.columnTop) + paintOffsetY
+		geometry.margins.top + geometry.contentOffsetPx + (columnY - geometry.columnTop) + paintOffsetY
 	}
 
 	/// Lower-left y (PDF y-up) for a box whose column top and height are given.
@@ -308,7 +335,7 @@ public final class Painter {
 		guard !boxes.isEmpty else { return }
 		// Restore the state saved in `init`, before the content-slice clip.
 		stream.popState()
-		let contentWidth = geometry.pageWidthPx - 2 * geometry.marginPx
+		let contentWidth = geometry.pageWidthPx - geometry.margins.horizontal
 		for box in boxes {
 			let font = fonts.font(for: box.style)
 			let resource = builder.resourceName(for: font)
@@ -333,18 +360,19 @@ public final class Painter {
 			let rtl = box.style.direction == .rtl
 			let x: Double
 			switch box.style.textAlign {
-			case .center, .webkitCenter: x = geometry.marginPx + extra / 2
-			case .right, .webkitRight: x = geometry.marginPx + extra
-			case .left, .webkitLeft: x = geometry.marginPx
-			case .end: x = geometry.marginPx + (rtl ? 0 : extra)
-			case .start: x = geometry.marginPx + (rtl ? extra : 0)
-			case .justify: x = geometry.marginPx
+			case .center, .webkitCenter: x = geometry.margins.left + extra / 2
+			case .right, .webkitRight: x = geometry.margins.left + extra
+			case .left, .webkitLeft: x = geometry.margins.left
+			case .end: x = geometry.margins.left + (rtl ? 0 : extra)
+			case .start: x = geometry.margins.left + (rtl ? extra : 0)
+			case .justify: x = geometry.margins.left
 			}
 
 			// Center the text vertically within its margin strip (top strip is
-			// [0, marginPx]; bottom strip is [pageHeightPx - marginPx, pageHeightPx]).
-			let stripTop = box.area.isTop ? 0 : geometry.pageHeightPx - geometry.marginPx
-			let baselineY = stripTop + (geometry.marginPx + ascent - descent) / 2
+			// [0, top margin]; bottom strip is [pageHeightPx - bottom margin, pageHeightPx]).
+			let stripHeight = box.area.isTop ? geometry.margins.top : geometry.margins.bottom
+			let stripTop = box.area.isTop ? 0 : geometry.pageHeightPx - stripHeight
+			let baselineY = stripTop + (stripHeight + ascent - descent) / 2
 
 			stream.beginText()
 			stream.setColorRGB(box.style.color.red, box.style.color.green, box.style.color.blue)
