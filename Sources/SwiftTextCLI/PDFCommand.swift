@@ -669,7 +669,7 @@ private func footnotePageScript(printableWidth: Double, printableHeight: Double)
 	    var holder = document.createElement('div');
 	    blocks.forEach(function (b) { holder.appendChild(b); });
 	    var placed = {}, carry = [], stack = [];
-	    var body, area, parent, count = 0, last = null, lastNotes = [];
+	    var body, area, parent, count = 0, last = null, lastNotes = [], lastPage = null;
 	    function fits() { return body.offsetHeight + area.offsetHeight <= pageHeight; }
 	    function notesFor(block) {
 	        var found = [];
@@ -712,7 +712,12 @@ private func footnotePageScript(printableWidth: Double, printableHeight: Double)
 	        page.className = 'fn-page';
 	        page.style.minHeight = pageHeight + 'px';
 	        page.innerHTML = '<div class="fn-body"></div><div class="fn-notes"></div>';
-	        document.body.insertBefore(page, document.body.lastElementChild);
+	        // After the previous page. The document's script may be gone (a named-page run
+	        // prints without it), and "before the last element" would then put every page
+	        // before the first one.
+	        if (lastPage) document.body.insertBefore(page, lastPage.nextSibling);
+	        else document.body.insertBefore(page, document.body.lastElementChild);
+	        lastPage = page;
 	        body = page.querySelector('.fn-body'); area = page.querySelector('.fn-notes');
 	        carry.forEach(function (n) { area.appendChild(n); });
 	        carry = [];
