@@ -11,6 +11,7 @@
 import Foundation
 import SwiftTextHTML
 import SwiftTextCSS
+import SwiftTextOpenType
 import SwiftTextPDFWriter
 
 /// How the document's base writing direction is chosen.
@@ -409,8 +410,8 @@ public enum HTMLRenderer {
 				guard case .atRule(let rule) = node, rule.lowerAtKeyword == "font-face", let content = rule.content else { continue }
 				var family: String?
 				var sources: [String] = []
-				var bold = false
-				var italic = false
+				var bold: Bool?
+				var italic: Bool?
 				for declaration in parseDeclarations(content) {
 					let tokens = declaration.value.filter { !$0.isWhitespaceOrComment }
 					switch declaration.lowerName {
@@ -453,7 +454,13 @@ public enum HTMLRenderer {
 						url = URL(fileURLWithPath: source)
 					}
 					guard url.isFileURL, let data = try? Data(contentsOf: url) else { continue }
-					if (try? fonts.register(data: data, family: family, bold: bold, italic: italic)) != nil {
+					// A collection registers every face (narrowed by a declared weight or style).
+					if OpenTypeFont.faceCount(in: data) > 1 {
+						if let faces = try? fonts.registerCollection(data: data, family: family, bold: bold, italic: italic), !faces.isEmpty {
+							registeredFace = true
+							break
+						}
+					} else if (try? fonts.register(data: data, family: family, bold: bold ?? false, italic: italic ?? false)) != nil {
 						registeredFace = true
 						break
 					}

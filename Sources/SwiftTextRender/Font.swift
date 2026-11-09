@@ -146,17 +146,100 @@ public final class FontBook {
 	public var embedsStandardFaces = false
 	/// A font that replaces every generic family but monospace (a single file has
 	/// no bold or italic, so those render in its one face).
-	public var overrideFont: EmbeddedFont?
+	public var overrideFont: EmbeddedFont? {
+		didSet { overrideFaces = [] }
+	}
 	private var standardFaceCache: [String: EmbeddedFont?] = [:]
+	/// Every face of a font collection given to ``setOverrideFont(data:fontIndex:)``,
+	/// so bold and italic text uses the matching face.
+	private var overrideFaces: [(bold: Bool, italic: Bool, font: EmbeddedFont)] = []
+	/// Installed families resolved through the system, by lower-cased name.
+	private var installedFamilyCache: [String: [(bold: Bool, italic: Bool, font: EmbeddedFont)]] = [:]
 
 	public init() {}
 
-	/// Load a TrueType/OpenType file as an ``overrideFont``.
+	/// Load a TrueType/OpenType file as an ``overrideFont``. A collection
+	/// (`.ttc`/`.otc`) loaded without an explicit `fontIndex` contributes every
+	/// face, so bold and italic text is set in the matching one; a single font
+	/// has no bold or italic and renders everything in its one face.
 	@discardableResult
-	public func setOverrideFont(data: Data, fontIndex: Int = 0) throws -> EmbeddedFont {
-		let font = EmbeddedFont(otf: try OpenTypeFont(data: data, fontIndex: fontIndex), postScriptName: "CustomFont")
+	public func setOverrideFont(data: Data, fontIndex: Int? = nil) throws -> EmbeddedFont {
+		if fontIndex == nil, OpenTypeFont.faceCount(in: data) > 1 {
+			let faces = try Self.collectionFaces(data: data, namePrefix: "CustomFont")
+			if let regular = Self.pickFace(faces, bold: false, italic: false) {
+				overrideFont = regular
+				overrideFaces = faces
+				return regular
+			}
+		}
+		let font = EmbeddedFont(otf: try OpenTypeFont(data: data, fontIndex: fontIndex ?? 0), postScriptName: "CustomFont")
 		overrideFont = font
 		return font
+	}
+
+	/// Register every face of a font collection under `family`, with weight and
+	/// style read from each font. `bold` and `italic` narrow which faces apply
+	/// (an `@font-face` that declares `font-weight` or `font-style`); `nil`
+	/// accepts any. Returns the faces registered, empty when none matched.
+	@discardableResult
+	public func registerCollection(data: Data, family: String, bold: Bool? = nil, italic: Bool? = nil) throws -> [EmbeddedFont] {
+		let faces = try Self.collectionFaces(data: data, namePrefix: Self.postScriptName(from: family))
+			.filter { (bold == nil || $0.bold == bold) && (italic == nil || $0.italic == italic) }
+		for face in faces {
+			registered[family.lowercased(), default: []].removeAll { $0.bold == face.bold && $0.italic == face.italic }
+			registered[family.lowercased(), default: []].append(face)
+			registrationOrder.append(face.font)
+		}
+		return faces.map(\.font)
+	}
+
+	/// The faces of a font file or collection, one per bold/italic combination
+	/// (the weight nearest regular or bold wins where a family has several).
+	/// With `family`, faces of other families in the file are left out (unless
+	/// none matches by name, e.g. a localized family name).
+	static func collectionFaces(data: Data, namePrefix: String, family: String? = nil) throws -> [(bold: Bool, italic: Bool, font: EmbeddedFont)] {
+		var fonts: [OpenTypeFont] = []
+		for index in 0 ..< max(OpenTypeFont.faceCount(in: data), 1) {
+			fonts.append(try OpenTypeFont(data: data, fontIndex: index))
+		}
+		if let family {
+			let named = fonts.filter { $0.familyName?.lowercased() == family.lowercased() }
+			if !named.isEmpty { fonts = named }
+		}
+		var best: [Int: (weight: Int, face: (bold: Bool, italic: Bool, font: EmbeddedFont))] = [:]
+		var names = Set<String>()
+		for (index, otf) in fonts.enumerated() {
+			let (bold, italic) = faceStyle(of: otf)
+			// The font's own PostScript name keeps its hyphen (`IowanOldStyle-Bold`).
+			var name = String(String.UnicodeScalarView((otf.postScriptName ?? "").unicodeScalars.filter {
+				CharacterSet.alphanumerics.contains($0) || $0 == "-"
+			}))
+			if name.isEmpty { name = namePrefix + (bold ? "Bold" : "") + (italic ? "Italic" : "") }
+			if !names.insert(name).inserted { name += "\(index)"; names.insert(name) }
+			let distance = abs(otf.weightClass - (bold ? 700 : 400))
+			let slot = (bold ? 1 : 0) + (italic ? 2 : 0)
+			if let existing = best[slot], existing.weight <= distance { continue }
+			best[slot] = (distance, (bold, italic, EmbeddedFont(otf: otf, postScriptName: name)))
+		}
+		return best.keys.sorted().compactMap { best[$0]?.face }
+	}
+
+	/// Bold and italic as the font declares them: `OS/2` `usWeightClass` and
+	/// `fsSelection` (via ``OpenTypeFont``), else the `name` table's subfamily.
+	private static func faceStyle(of otf: OpenTypeFont) -> (bold: Bool, italic: Bool) {
+		let subfamily = otf.subfamilyName?.lowercased() ?? ""
+		let bold = otf.weightClass >= 600 || otf.isBold
+			|| (otf.weightClass == 400 && otf.fsSelection == 0 && subfamily.contains("bold"))
+		let italic = otf.isItalic || subfamily.contains("italic") || subfamily.contains("oblique")
+		return (bold, italic)
+	}
+
+	/// The face closest to the requested weight and slant.
+	private static func pickFace(_ faces: [(bold: Bool, italic: Bool, font: EmbeddedFont)], bold: Bool, italic: Bool) -> EmbeddedFont? {
+		let face = faces.first { $0.bold == bold && $0.italic == italic }
+			?? faces.first { $0.italic == italic } ?? faces.first { $0.bold == bold }
+			?? faces.first { !$0.bold && !$0.italic } ?? faces.first
+		return face?.font
 	}
 
 	/// Register a TrueType/OpenType font to be used (and embedded) whenever a
@@ -177,15 +260,21 @@ public final class FontBook {
 		let bold = style.fontWeight >= 600
 		let italic = style.fontStyle != .normal
 		for family in style.fontFamily {
-			if let faces = registered[family.lowercased()] {
-				let face = faces.first { $0.bold == bold && $0.italic == italic }
-					?? faces.first { $0.italic == italic } ?? faces.first { $0.bold == bold }
-					?? faces.first { !$0.bold && !$0.italic } ?? faces[0]
-				return .embedded(face.font)
+			if let faces = registered[family.lowercased()], let face = Self.pickFace(faces, bold: bold, italic: italic) {
+				return .embedded(face)
+			}
+		}
+		if systemFallbackEnabled, overrideFont == nil {
+			for family in style.fontFamily {
+				if let faces = installedFaces(family: family), let face = Self.pickFace(faces, bold: bold, italic: italic) {
+					return .embedded(face)
+				}
 			}
 		}
 		let generic = Self.genericFamily(style.fontFamily)
-		if let overrideFont, generic != .monospace { return .embedded(overrideFont) }
+		if let overrideFont, generic != .monospace {
+			return .embedded(Self.pickFace(overrideFaces, bold: bold, italic: italic) ?? overrideFont)
+		}
 		if embedsStandardFaces, let face = standardFace(generic, bold: bold, italic: italic) {
 			return .embedded(face)
 		}
@@ -193,6 +282,32 @@ public final class FontBook {
 		case .monospace: return .standard(.courier(bold: bold, italic: italic))
 		case .serif: return .standard(.times(bold: bold, italic: italic))
 		case .sansSerif: return .standard(.helvetica(bold: bold, italic: italic))
+		}
+	}
+
+	/// The faces of an installed font family, resolved through the system and
+	/// cached. Only on platforms with a system font service (CoreText); generic
+	/// keywords and the aliases the bundled faces stand in for are never looked up.
+	private func installedFaces(family: String) -> [(bold: Bool, italic: Bool, font: EmbeddedFont)]? {
+		let key = family.lowercased()
+		if let cached = installedFamilyCache[key] { return cached.isEmpty ? nil : cached }
+		var faces: [(bold: Bool, italic: Bool, font: EmbeddedFont)] = []
+		if !Self.isGenericName(key) {
+			faces = Self.systemFaces(family: family, prefix: Self.postScriptName(from: family))
+		}
+		installedFamilyCache[key] = faces
+		return faces.isEmpty ? nil : faces
+	}
+
+	private static func isGenericName(_ name: String) -> Bool {
+		switch name {
+		case "serif", "sans-serif", "monospace", "cursive", "fantasy", "system-ui", "ui-serif", "ui-sans-serif",
+		     "ui-monospace", "ui-rounded", "-apple-system", "blinkmacsystemfont", "emoji", "math", "fangsong",
+		     "courier", "courier new", "menlo", "monaco", "consolas", "times", "times new roman", "georgia",
+		     "helvetica", "arial", "verdana":
+			return true
+		default:
+			return false
 		}
 	}
 
