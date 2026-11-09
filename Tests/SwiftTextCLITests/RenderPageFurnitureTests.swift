@@ -289,5 +289,59 @@ struct RenderPageFurnitureTests {
 		#expect(stylesheet.contains("@page named:right {margin-top:max(48pt, var(--page-margin)) !important;"))
 		#expect(!stylesheet.contains("@page  {margin-top:max(48pt, 4cm)"), "qualified margins must not become document-wide")
 	}
+
+	@Test("webkit: a block with page: wide forms one landscape run, the rest stay portrait", .timeLimit(.minutes(2)))
+	func webkitNamedPageRun() async throws {
+		let cells = (1...10).map { "\($0)" }
+		let markdown = """
+		# Eins
+
+		Text eins.
+
+		# Drei
+
+		<div class="wide">
+
+		| A | B | C | D | E | F | G | H | I | J |
+		|---|---|---|---|---|---|---|---|---|---|
+		| \(cells.joined(separator: " | ")) |
+		|   |   |   |   |   |   |   |   |   |   |
+
+		</div>
+
+		# Vier
+
+		Text vier.
+		"""
+		let document = try await render(markdown, css: "@page wide { size: A4 landscape; }\n.wide { page: wide; }\n")
+		let sizes = (0..<document.pageCount).compactMap { document.page(at: $0)?.bounds(for: .mediaBox) }
+		#expect(sizes.filter { $0.width > $0.height }.count == 1, "expected exactly one landscape page, got \(sizes)")
+		#expect(sizes.filter { $0.width < $0.height }.count == sizes.count - 1)
+		let landscape = try #require(sizes.firstIndex { $0.width > $0.height })
+		#expect(document.page(at: landscape)?.string?.contains("10") == true)
+		#expect(document.page(at: sizes.count - 1)?.string?.contains("Text vier") == true)
+	}
+
+	@Test("webkit: a named or pseudo @page size never applies to the whole document", .timeLimit(.minutes(2)))
+	func webkitPseudoSizeIsNotGlobal() async throws {
+		let document = try await render("# Eins\n\nText.\n", css: "@page wide { size: A5; }\n@page :first { size: A3; }\n")
+		let box = try #require(document.page(at: 0)?.bounds(for: .mediaBox))
+		#expect(Int(box.width.rounded()) == 595 || Int(box.width.rounded()) == 612)
+	}
+
+	@Test("webkit: @page :left and :right carry their own side margins", .timeLimit(.minutes(2)))
+	func webkitSideMargins() async throws {
+		let prose = String(repeating: "Wort ", count: 400)
+		let markdown = "# Eins\n\n\(prose)\n\n\(prose)\n\n\(prose)\n\n\(prose)\n"
+		let css = "@page { margin: 20mm; }\n@page :right { margin-left: 22mm; margin-right: 17mm; }\n@page :left { margin-left: 17mm; margin-right: 22mm; }\n"
+		let document = try await render(markdown, css: css)
+		try #require(document.pageCount >= 2)
+		func leftEdge(_ index: Int) throws -> CGFloat {
+			let page = try #require(document.page(at: index))
+			return try #require(page.selection(for: page.bounds(for: .mediaBox))?.bounds(for: page).minX)
+		}
+		let right = try leftEdge(0), left = try leftEdge(1)
+		#expect(abs((right - left) / 72 * 25.4 - 5) < 1.5, "inside margin should be 5 mm wider on the recto, got \(right) vs \(left)")
+	}
 }
 #endif

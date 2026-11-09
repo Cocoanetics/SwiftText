@@ -274,7 +274,9 @@ public enum HTMLRenderer {
 			for (offset, slice) in run.slices.enumerated() {
 				let pageIndex = run.firstPage + offset
 				let shift = pageShift(rules: pageStyleRules, pageIndex: pageIndex, name: run.name, baseMargin: run.margins.left)
-				let geometry = PageGeometry(pageWidthPx: run.options.pageWidthPx, pageHeightPx: pageHeightPx,
+				let pageSize = pseudoPageSize(rules: pageStyleRules, pageIndex: pageIndex, name: run.name,
+				                              base: (run.options.pageWidthPx, pageHeightPx))
+				let geometry = PageGeometry(pageWidthPx: pageSize.width, pageHeightPx: pageSize.height,
 				                            margins: run.margins, columnTop: slice.top, sliceHeightPx: slice.bottom - slice.top,
 				                            contentOffsetPx: slice.repeatedHeader?.reservedHeight ?? 0, offsetXPx: shift)
 				let painter = Painter(geometry: geometry, fonts: fonts, builder: fontBuilder, compress: options.compressStreams,
@@ -300,7 +302,7 @@ public enum HTMLRenderer {
 				let page = PDFDictionary([
 					("Type", "/Page"),
 					("Parent", pdf.pages.reference),
-					("MediaBox", PDFArray([0, 0, run.options.pageWidthPx * pxToPt, pageHeightPx * pxToPt])),
+					("MediaBox", PDFArray([0, 0, pageSize.width * pxToPt, pageSize.height * pxToPt])),
 					("Contents", painter.stream.reference),
 					("Resources", fontBuilder.resourcesReference)
 				])
@@ -774,6 +776,26 @@ public enum HTMLRenderer {
 			}
 		}
 		return rules
+	}
+
+	/// The paper size of one page: the run's, unless a matching `:first`, `:left` or
+	/// `:right` rule sets its own `size`. The content stays laid out against the run's
+	/// column, so such a page changes its sheet (anchored at the top left), not its flow.
+	private static func pseudoPageSize(rules: [PageStyleRule], pageIndex: Int, name: String?,
+	                                   base: (width: Double, height: Double)) -> (width: Double, height: Double) {
+		var options = RenderOptions()
+		options.pageWidthPx = base.width
+		options.pageHeightPx = base.height
+		let ordered = rules.enumerated()
+			.sorted { ($0.element.selector.specificity, $0.offset) < ($1.element.selector.specificity, $1.offset) }
+			.map(\.element)
+		for rule in ordered where (rule.selector.first || rule.selector.side != nil)
+			&& rule.selector.matches(pageIndex: pageIndex, pageName: name) {
+			for declaration in rule.declarations where declaration.lowerName == "size" {
+				applyPageSize(declaration.value, to: &options)
+			}
+		}
+		return (options.pageWidthPx, options.pageHeightPx ?? base.height)
 	}
 
 	/// How far a page's content moves sideways because a `:first`, `:left` or

@@ -50,11 +50,22 @@ struct NamedPageTests {
 		#expect(sizes.allSatisfy { $0.width == 612 && $0.height == 792 })
 	}
 
-	@Test("@page :first { size } does not resize every page")
-	func firstPageSizeIsNotGlobal() async throws {
+	@Test("@page :first { size } resizes the first page only")
+	func firstPageSize() async throws {
 		let sizes = try await render(css: "@page :first { size: A5; }")
 		#expect(sizes.count == 3)
-		#expect(sizes.allSatisfy { $0.width == 612 && $0.height == 792 })
+		#expect(sizes.map(\.width) == [420, 612, 612])
+		#expect(sizes.map(\.height) == [595, 792, 792])
+	}
+
+	@Test("@page :left / :right { size } resize the pages of that side only")
+	func sideSizes() async throws {
+		let sizes = try await render(css: "@page :left { size: A5; }")
+		#expect(sizes.count == 3)
+		#expect(sizes.map(\.width) == [612, 420, 612])
+		let right = try await render(css: "@page :right { size: A5 landscape; }")
+		#expect(right.map(\.width) == [595, 612, 595])
+		#expect(right.map(\.height) == [420, 792, 420])
 	}
 
 	@Test("A named page without a size falls back to the document size")
