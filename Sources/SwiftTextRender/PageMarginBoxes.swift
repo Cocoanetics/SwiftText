@@ -38,16 +38,23 @@ enum MarginBoxArea: String, CaseIterable {
 	}
 }
 
-/// A `@page` pseudo-class selector: `:first`, `:left`, `:right`. Anything else
-/// (`:blank`, named pages) is recognized but never matches — safer than
-/// silently applying an unsupported rule to every page.
+/// A `@page` selector: an optional page name plus the pseudo-classes `:first`,
+/// `:left`, `:right`. Anything else (`:blank`) is recognized but never matches —
+/// safer than silently applying an unsupported rule to every page.
 struct PageSelector {
+	var name: String?
 	var first = false
 	var side: String? // "left" or "right"
 	var unsupported = false
 
-	func matches(pageIndex: Int) -> Bool {
+	/// A bare `@page` rule, the only kind that sets the document's page box.
+	var isBare: Bool { name == nil && !first && side == nil && !unsupported }
+
+	/// Whether the rule applies to page `pageIndex`, which sits on the named
+	/// page `pageName` (`nil` for the default page).
+	func matches(pageIndex: Int, pageName: String? = nil) -> Bool {
 		if unsupported { return false }
+		if let name, name != pageName { return false }
 		if first, pageIndex != 0 { return false }
 		if let side {
 			let isRightPage = pageIndex.isMultiple(of: 2) // page 1 (index 0) is recto/right
@@ -96,7 +103,7 @@ func parsePageRules(_ sheets: [String]) -> [PageRule] {
 	return rules
 }
 
-private func parsePageSelector(_ prelude: [ComponentValue]) -> PageSelector {
+func parsePageSelector(_ prelude: [ComponentValue]) -> PageSelector {
 	var selector = PageSelector()
 	let tokens = prelude.filter { !$0.isWhitespaceOrComment }
 	var index = 0
@@ -108,8 +115,11 @@ private func parsePageSelector(_ prelude: [ComponentValue]) -> PageSelector {
 			default: selector.unsupported = true // e.g. :blank
 			}
 			index += 2
+		} else if index == 0, case .ident(let ident) = tokens[index].token {
+			selector.name = ident
+			index += 1
 		} else {
-			selector.unsupported = true // e.g. a named page
+			selector.unsupported = true
 			index += 1
 		}
 	}
@@ -182,8 +192,9 @@ private func renderedText(_ parts: [ContentPart], pageIndex: Int, totalPages: In
 /// box, in source order, so an unqualified base rule and a later `:first`
 /// override can each set only the properties they care about (e.g. `:first`
 /// clearing `content` while the base rule's `font-size` still applies).
-func resolveMarginBoxes(_ rules: [PageRule], pageIndex: Int, totalPages: Int, rootStyle: ComputedStyle, rootFontSize: Double, strings: [String: [String]] = [:]) -> [ResolvedMarginBox] {
-	let matching = rules.filter { $0.selector.matches(pageIndex: pageIndex) }
+func resolveMarginBoxes(_ rules: [PageRule], pageIndex: Int, totalPages: Int, rootStyle: ComputedStyle, rootFontSize: Double,
+                        pageName: String? = nil, strings: [String: [String]] = [:]) -> [ResolvedMarginBox] {
+	let matching = rules.filter { $0.selector.matches(pageIndex: pageIndex, pageName: pageName) }
 	guard !matching.isEmpty else { return [] }
 
 	var result: [ResolvedMarginBox] = []

@@ -165,18 +165,64 @@ public enum HTMLRenderer {
 		let contentWidth = max(0, options.pageWidthPx - 2 * margin)
 		// Lay the document out as a single tall column (origin at column y = 0).
 		let columnHeight = engine.layout(root: rootBox, contentWidth: contentWidth, originX: margin, originY: 0)
+		var laidOut = ColumnKey(contentWidth: contentWidth, margin: margin)
 
-		// Page height: fixed (paginated) or just enough for the whole column.
-		// With no fixed height there is no page boundary for a break to land on,
-		// so fragmentation is skipped entirely — the contract for `pageHeightPx:
-		// nil` is a single auto-height page.
-		let pageHeightPx = options.pageHeightPx ?? (columnHeight + 2 * margin)
-		let slices = options.pageHeightPx == nil
-			? [PageSlice(top: 0, bottom: columnHeight, repeatedHeader: nil)]
-			: paginate(rootBox, columnHeight: columnHeight, pageHeightPx: pageHeightPx, margin: margin)
+		// Split the document into runs of pages that share a page box. Without a
+		// fixed page height there is a single auto-height page, so no runs.
+		let pageStyleRules = parsePageStyleRules(documentSheets + css)
+		var runs = options.pageHeightPx == nil
+			? [PageRun(kind: .gap(after: nil, before: nil), name: nil, options: options)]
+			: pageRuns(in: rootBox, options: options, rules: pageStyleRules)
+		func ensureLayout(for run: PageRun) {
+			let key = ColumnKey(contentWidth: max(0, run.options.pageWidthPx - 2 * run.margin), margin: run.margin)
+			guard key != laidOut else { return }
+			_ = engine.layout(root: rootBox, contentWidth: key.contentWidth, originX: key.margin, originY: 0)
+			laidOut = key
+		}
+		func range(of run: PageRun) -> (from: Double, to: Double) {
+			switch run.kind {
+			case .named(let block): return (block.y, block.y + block.height)
+			case .gap(let previous, let next): return (previous.map { $0.y + $0.height } ?? 0, next?.y ?? columnHeight)
+			}
+		}
 
-		let anchorYs = collectAnchors(rootBox)
-		let anchorNames = Set(anchorYs.keys)
+		// Paginate each run against its own page box, in document order.
+		func paginateRuns(skippingEmpty: Bool) -> Int {
+			var pageCount = 0
+			for index in runs.indices {
+				ensureLayout(for: runs[index])
+				let (from, to) = range(of: runs[index])
+				// With no fixed height there is no page boundary for a break to land
+				// on, so fragmentation is skipped: a single auto-height page.
+				let slices: [PageSlice]
+				if let pageHeight = runs[index].options.pageHeightPx {
+					slices = paginate(rootBox, from: from, to: to, pageHeightPx: pageHeight, margin: runs[index].margin,
+					                  pageOffset: pageCount, skippingEmpty: skippingEmpty)
+				} else {
+					slices = [PageSlice(top: 0, bottom: columnHeight, repeatedHeader: nil)]
+				}
+				guard !slices.isEmpty else { runs[index].isEmpty = true; continue }
+				runs[index].slices = slices
+				runs[index].firstPage = pageCount
+				pageCount += slices.count
+				let isLast = index == runs.count - 1
+				func inRun(_ y: Double) -> Bool { y >= from - breakEpsilon && (y < to - breakEpsilon || isLast) }
+				runs[index].anchors = collectAnchors(rootBox).filter { inRun($0.value) }
+				var headings: [(level: Int, title: String, y: Double)] = []
+				collectHeadings(rootBox, into: &headings)
+				runs[index].headings = headings.filter { inRun($0.y) }
+			}
+			return pageCount
+		}
+		var totalPages = paginateRuns(skippingEmpty: runs.count > 1)
+		if totalPages == 0 {
+			runs = [PageRun(kind: .gap(after: nil, before: nil), name: nil, options: options)]
+			totalPages = paginateRuns(skippingEmpty: false)
+		}
+		runs = runs.filter { !$0.isEmpty }
+
+		var anchorNames = Set<String>()
+		for run in runs { anchorNames.formUnion(run.anchors.keys) }
 		var internalLinks: [(annotation: PDFDictionary, id: String)] = []
 
 		let pdf = PDF()
@@ -188,61 +234,74 @@ public enum HTMLRenderer {
 		}
 		let fontBuilder = FontResourceBuilder(pdf: pdf, compress: options.compressStreams)
 		var pageObjects: [PDFDictionary] = []
-		let totalPages = slices.count
-		for (pageIndex, slice) in slices.enumerated() {
-			let geometry = PageGeometry(pageWidthPx: options.pageWidthPx, pageHeightPx: pageHeightPx,
-			                            marginPx: margin, columnTop: slice.top, sliceHeightPx: slice.bottom - slice.top,
-			                            contentOffsetPx: slice.repeatedHeader?.reservedHeight ?? 0)
-			let painter = Painter(geometry: geometry, fonts: fonts, builder: fontBuilder, compress: options.compressStreams,
-			                      internalAnchors: anchorNames)
-			// A blank page inserted to put the next block on the right side of the
-			// spread is counted but carries nothing: no content, no running head,
-			// no page number.
-			if !slice.isBlank {
-				painter.paint(rootBox)
-			}
-			if let header = slice.repeatedHeader {
-				painter.paintRepeatedTableHeader(header.box)
-			}
-			if !pageRules.isEmpty, !slice.isBlank {
-				let marginBoxes = resolveMarginBoxes(pageRules, pageIndex: pageIndex, totalPages: totalPages,
-				                                     rootStyle: rootBox.style, rootFontSize: rootBox.style.fontSize,
-				                                     strings: options.pageStrings)
-				painter.paintMarginBoxes(marginBoxes)
-			}
-			pdf.addObject(painter.stream)
-			let page = PDFDictionary([
-				("Type", "/Page"),
-				("Parent", pdf.pages.reference),
-				("MediaBox", PDFArray([0, 0, options.pageWidthPx * pxToPt, pageHeightPx * pxToPt])),
-				("Contents", painter.stream.reference),
-				("Resources", fontBuilder.resourcesReference)
-			])
-			internalLinks += painter.internalLinks
-			let annotations = painter.annotations()
-			if !annotations.isEmpty {
-				var references: [PDFValue] = []
-				for annotation in annotations {
-					pdf.addObject(annotation)
-					references.append(annotation.reference)
+		for run in runs {
+			ensureLayout(for: run)
+			let pageHeightPx = run.pageHeightPx(columnHeight: columnHeight)
+			for (offset, slice) in run.slices.enumerated() {
+				let pageIndex = run.firstPage + offset
+				let shift = pageShift(rules: pageStyleRules, pageIndex: pageIndex, name: run.name, baseMargin: run.margin)
+				let geometry = PageGeometry(pageWidthPx: run.options.pageWidthPx, pageHeightPx: pageHeightPx,
+				                            marginPx: run.margin, columnTop: slice.top, sliceHeightPx: slice.bottom - slice.top,
+				                            contentOffsetPx: slice.repeatedHeader?.reservedHeight ?? 0, offsetXPx: shift)
+				let painter = Painter(geometry: geometry, fonts: fonts, builder: fontBuilder, compress: options.compressStreams,
+				                      internalAnchors: anchorNames)
+				// A blank page inserted to put the next block on the right side of the
+				// spread is counted but carries nothing: no content, no running head,
+				// no page number.
+				if !slice.isBlank {
+					painter.paint(rootBox)
 				}
-				page["Annots"] = PDFArray(references)
+				if let header = slice.repeatedHeader {
+					painter.paintRepeatedTableHeader(header.box)
+				}
+				if !pageRules.isEmpty, !slice.isBlank {
+					let marginBoxes = resolveMarginBoxes(pageRules, pageIndex: pageIndex, totalPages: totalPages,
+					                                     rootStyle: rootBox.style, rootFontSize: rootBox.style.fontSize,
+					                                     pageName: run.name, strings: options.pageStrings)
+					painter.paintMarginBoxes(marginBoxes)
+				}
+				pdf.addObject(painter.stream)
+				let page = PDFDictionary([
+					("Type", "/Page"),
+					("Parent", pdf.pages.reference),
+					("MediaBox", PDFArray([0, 0, run.options.pageWidthPx * pxToPt, pageHeightPx * pxToPt])),
+					("Contents", painter.stream.reference),
+					("Resources", fontBuilder.resourcesReference)
+				])
+				internalLinks += painter.internalLinks
+				let annotations = painter.annotations()
+				if !annotations.isEmpty {
+					var references: [PDFValue] = []
+					for annotation in annotations {
+						pdf.addObject(annotation)
+						references.append(annotation.reference)
+					}
+					page["Annots"] = PDFArray(references)
+				}
+				pdf.addPage(page)
+				pageObjects.append(page)
 			}
-			pdf.addPage(page)
-			pageObjects.append(page)
 		}
 		// Build the shared font objects now that every page's glyph use is known.
 		fontBuilder.finalize()
-		addOutline(to: pdf, root: rootBox, slices: slices, pages: pageObjects, pageHeightPx: pageHeightPx, margin: margin)
 
 		var anchorPages: [String: Int] = [:]
 		var destinations: [String: PDFArray] = [:]
-		for (id, y) in anchorYs where !pageObjects.isEmpty {
-			let target = destination(forColumnY: y, slices: slices, pages: pageObjects,
-			                         pageHeightPx: pageHeightPx, margin: margin)
-			anchorPages[id] = target.pageIndex
-			destinations[id] = target.array
+		var outline: [(level: Int, title: String, destination: PDFArray)] = []
+		for run in runs {
+			let runPages = Array(pageObjects[run.firstPage ..< run.firstPage + run.slices.count])
+			let pageHeightPx = run.pageHeightPx(columnHeight: columnHeight)
+			func target(_ y: Double) -> (pageIndex: Int, array: PDFArray) {
+				destination(forColumnY: y, slices: run.slices, pages: runPages, pageHeightPx: pageHeightPx, margin: run.margin)
+			}
+			for (id, y) in run.anchors where anchorPages[id] == nil {
+				let resolved = target(y)
+				anchorPages[id] = run.firstPage + resolved.pageIndex
+				destinations[id] = resolved.array
+			}
+			for heading in run.headings { outline.append((heading.level, heading.title, target(heading.y).array)) }
 		}
+		addOutline(to: pdf, headings: outline)
 		for link in internalLinks {
 			guard let array = destinations[link.id] else { continue }
 			link.annotation["A"] = PDFDictionary([("S", "/GoTo"), ("D", array)])
@@ -304,7 +363,6 @@ public enum HTMLRenderer {
 		]
 	}()
 
-	/// Apply `@page { size; margin }` declarations to the render options.
 	/// Register every `@font-face` whose `src` is a readable local font file, so a
 	/// matching `font-family` is drawn with (and embeds) that face.
 	private static func registerFontFaces(_ sheets: [String], baseURL: URL?, in fonts: FontBook, warn: (String) -> Void) {
@@ -367,10 +425,15 @@ public enum HTMLRenderer {
 		}
 	}
 
+	/// Apply the bare `@page { size; margin }` declarations to the render options.
+	/// Named and pseudo-class rules never set the document default.
+	/// Apply the bare `@page { size; margin }` declarations to the render options.
+	/// Named and pseudo-class rules never set the document default.
 	private static func applyAtPageRules(_ sheets: [String], to options: inout RenderOptions) {
 		for sheet in sheets {
 			for node in parseStylesheet(sheet, skipComments: true, skipWhitespace: true) {
-				guard case .atRule(let rule) = node, rule.lowerAtKeyword == "page", let content = rule.content else { continue }
+				guard case .atRule(let rule) = node, rule.lowerAtKeyword == "page", let content = rule.content,
+				      parsePageSelector(rule.prelude).isBare else { continue }
 				for declaration in parseDeclarations(content) {
 					switch declaration.lowerName {
 					case "size": applyPageSize(declaration.value, to: &options)
@@ -417,21 +480,18 @@ public enum HTMLRenderer {
 	// MARK: - Bookmarks / outline
 
 	/// Build a PDF outline (bookmarks) from the document's heading hierarchy.
-	private static func addOutline(to pdf: PDF, root: BlockBox, slices: [PageSlice],
-	                               pages: [PDFDictionary], pageHeightPx: Double, margin: Double) {
-		var headings: [(level: Int, title: String, y: Double)] = []
-		collectHeadings(root, into: &headings)
-		guard !headings.isEmpty, !pages.isEmpty else { return }
+	private static func addOutline(to pdf: PDF, headings: [(level: Int, title: String, destination: PDFArray)]) {
+		guard !headings.isEmpty else { return }
 
 		// Nest headings by level using a stack of open ancestors.
 		// Local PDF-outline node record; its fields travel together.
 			// swiftlint:disable:next large_tuple
-			var nodes: [(level: Int, title: String, y: Double, parent: Int?, children: [Int], dict: PDFDictionary)] = []
+			var nodes: [(level: Int, title: String, destination: PDFArray, parent: Int?, children: [Int], dict: PDFDictionary)] = []
 		var stack: [Int] = []
 		for heading in headings {
 			while let top = stack.last, nodes[top].level >= heading.level { stack.removeLast() }
 			let index = nodes.count
-			nodes.append((heading.level, heading.title, heading.y, stack.last, [], PDFDictionary()))
+			nodes.append((heading.level, heading.title, heading.destination, stack.last, [], PDFDictionary()))
 			if let parent = stack.last { nodes[parent].children.append(index) }
 			stack.append(index)
 		}
@@ -446,8 +506,7 @@ public enum HTMLRenderer {
 				let dict = node.dict
 				dict["Title"] = PDFString(node.title)
 				dict["Parent"] = parentReference
-				dict["Dest"] = destination(forColumnY: node.y, slices: slices, pages: pages,
-				                           pageHeightPx: pageHeightPx, margin: margin).array
+				dict["Dest"] = node.destination
 				if position > 0 { dict["Prev"] = nodes[siblings[position - 1]].dict.reference }
 				if position < siblings.count - 1 { dict["Next"] = nodes[siblings[position + 1]].dict.reference }
 				if !node.children.isEmpty {
@@ -522,6 +581,21 @@ public enum HTMLRenderer {
 			if forced[y] == nil || kind != .page { forced[y] = kind }
 		}
 
+		/// Keep only what lies within the column range `from ... to`, so one page
+		/// run is paginated on its own.
+		mutating func restrict(from: Double, to: Double, epsilon: Double) {
+			func inside(_ y: Double) -> Bool { y >= from - epsilon && y <= to + epsilon }
+			forced = forced.filter { inside($0.key) }
+			candidates = candidates.filter(inside)
+			candidates.insert(from)
+			candidates.insert(to)
+			discouraged = discouraged.filter(inside)
+			atomic = atomic.filter { inside($0.top) && inside($0.bottom) }
+			contentFragments = contentFragments.filter { inside($0.top) && inside($0.bottom) }
+			firstContentY = contentFragments.map(\.top).min() ?? .infinity
+			lastContentY = contentFragments.map(\.bottom).max() ?? -.infinity
+		}
+
 		mutating func noteContent(top: Double, bottom: Double) {
 			firstContentY = min(firstContentY, top)
 			lastContentY = max(lastContentY, bottom)
@@ -536,6 +610,132 @@ public enum HTMLRenderer {
 		/// farther because of padding, border spacing, or an explicit height.
 		let lastRowBottom: Double
 		let reservedHeight: Double
+	}
+
+	/// The horizontal extent a column was laid out at.
+	private struct ColumnKey: Equatable {
+		let contentWidth: Double
+		let margin: Double
+	}
+
+	/// A run of consecutive pages that share a page box: either one block that
+	/// asked for a named page, or the document flow between two such blocks.
+	private struct PageRun {
+		enum Kind {
+			case named(BlockBox)
+			case gap(after: BlockBox?, before: BlockBox?)
+		}
+
+		let kind: Kind
+		let name: String?
+		/// The page box of the run: size and margin from `@page <name>`, or the document's.
+		let options: RenderOptions
+		var slices: [PageSlice] = []
+		var firstPage = 0
+		var isEmpty = false
+		var anchors: [String: Double] = [:]
+		var headings: [(level: Int, title: String, y: Double)] = []
+
+		init(kind: Kind, name: String?, options: RenderOptions) {
+			self.kind = kind
+			self.name = name
+			self.options = options
+		}
+
+		var margin: Double { options.pageMarginPx }
+
+		func pageHeightPx(columnHeight: Double) -> Double {
+			options.pageHeightPx ?? (columnHeight + 2 * margin)
+		}
+	}
+
+	/// The outermost blocks asking for a named page (`page: <name>`), in document order.
+	private static func namedPageBlocks(in root: BlockBox) -> [(block: BlockBox, name: String)] {
+		var result: [(block: BlockBox, name: String)] = []
+		func visit(_ box: BlockBox) {
+			if let name = box.style.page {
+				result.append((box, name))
+				return
+			}
+			guard !box.establishesInlineContext else { return }
+			for case let child as BlockBox in box.children { visit(child) }
+		}
+		visit(root)
+		return result
+	}
+
+	/// Split the document into page runs: each `page: <name>` block is a run on
+	/// its own pages, and the flow around them is a run with the document's page
+	/// box. A name without a size falls back to the document's size.
+	private static func pageRuns(in root: BlockBox, options: RenderOptions, rules: [PageStyleRule]) -> [PageRun] {
+		var runs: [PageRun] = []
+		var previous: BlockBox?
+		for (block, name) in namedPageBlocks(in: root) {
+			runs.append(PageRun(kind: .gap(after: previous, before: block), name: nil, options: options))
+			var namedOptions = options
+			for rule in rules where rule.selector.name == name && !rule.selector.first
+				&& rule.selector.side == nil && !rule.selector.unsupported {
+				for declaration in rule.declarations {
+					switch declaration.lowerName {
+					case "size": applyPageSize(declaration.value, to: &namedOptions)
+					case "margin": applyPageMargin(declaration.value, to: &namedOptions)
+					default: break
+					}
+				}
+			}
+			namedOptions.pageMarginPx = max(namedOptions.pageMarginPx, namedOptions.minimumPageMarginPx)
+			runs.append(PageRun(kind: .named(block), name: name, options: namedOptions))
+			previous = block
+		}
+		runs.append(PageRun(kind: .gap(after: previous, before: nil), name: nil, options: options))
+		return runs
+	}
+
+	/// A `@page` rule's geometry declarations (`size`, `margin`, ...) and selector.
+	private struct PageStyleRule {
+		let selector: PageSelector
+		let declarations: [Declaration]
+	}
+
+	private static func parsePageStyleRules(_ sheets: [String]) -> [PageStyleRule] {
+		var rules: [PageStyleRule] = []
+		for sheet in sheets {
+			for node in parseStylesheet(sheet, skipComments: true, skipWhitespace: true) {
+				guard case .atRule(let rule) = node, rule.lowerAtKeyword == "page", let content = rule.content else { continue }
+				rules.append(PageStyleRule(selector: parsePageSelector(rule.prelude), declarations: parseDeclarations(content)))
+			}
+		}
+		return rules
+	}
+
+	/// How far a page's content moves sideways because a `:first`, `:left` or
+	/// `:right` rule gives it a different left margin than the page box it was
+	/// laid out against — mirrored binding margins. The content width stays the
+	/// layout's, so a pair of rules should keep left + right equal.
+	private static func pageShift(rules: [PageStyleRule], pageIndex: Int, name: String?, baseMargin: Double) -> Double {
+		var left: Double?
+		for rule in rules where (rule.selector.first || rule.selector.side != nil)
+			&& rule.selector.matches(pageIndex: pageIndex, pageName: name) {
+			for declaration in rule.declarations {
+				let lengths = declaration.value.filter { !$0.isWhitespaceOrComment }.compactMap { token -> Double? in
+					guard let length = parseLength([token], fontSize: 16, rootFontSize: 16), case .px(let pixels) = length else { return nil }
+					return pixels
+				}
+				switch declaration.lowerName {
+				case "margin-left": if let first = lengths.first { left = first }
+				case "margin":
+					// One value: all sides; two or three: the second is left and right; four: the fourth is left.
+					switch lengths.count {
+					case 1: left = lengths[0]
+					case 2, 3: left = lengths[1]
+					case 4: left = lengths[3]
+					default: break
+					}
+				default: break
+				}
+			}
+		}
+		return (left ?? baseMargin) - baseMargin
 	}
 
 	private struct PageSlice {
@@ -557,14 +757,21 @@ public enum HTMLRenderer {
 
 	/// Split the laid-out column into page slices, honouring CSS fragmentation
 	/// properties and otherwise breaking at line and block boundaries.
-	private static func paginate(_ root: BlockBox, columnHeight: Double, pageHeightPx: Double, margin: Double) -> [PageSlice] {
+	///
+	/// Only the column range `from ..< to` is paginated — one page run — and
+	/// `pageOffset` is the number of pages before it, which fixes the side the
+	/// first page falls on. An empty range yields no slices when `skippingEmpty`.
+	private static func paginate(_ root: BlockBox, from: Double, to columnHeight: Double, pageHeightPx: Double, margin: Double,
+	                             pageOffset: Int, skippingEmpty: Bool) -> [PageSlice] {
 		let contentHeight = max(1, pageHeightPx - 2 * margin)
 		let epsilon = breakEpsilon
 
 		var points = BreakPoints()
 		collectBreaks(root, into: &points)
+		points.restrict(from: from, to: columnHeight, epsilon: epsilon)
+		if skippingEmpty, !points.firstContentY.isFinite { return [] }
 		let contentFragments = points.contentFragments.sorted { ($0.top, $0.bottom) < ($1.top, $1.bottom) }
-		let tableHeaders = repeatedTableHeaders(in: root)
+		let tableHeaders = repeatedTableHeaders(in: root).filter { $0.tableTop >= from - epsilon && $0.lastRowBottom <= columnHeight + epsilon }
 
 		// Drop breaks that would only produce a blank page — one with nothing
 		// painted above it (the common `h1 { break-before: page }` on a document
@@ -604,11 +811,14 @@ public enum HTMLRenderer {
 			kinds[y] = kind
 		}
 		let leadingKinds = points.forced.filter { $0.key <= points.firstContentY + epsilon }.map(\.value)
-		let leadingBlank = points.firstContentY.isFinite && leadingKinds.contains(.left) && !leadingKinds.contains(.right)
+		let opensRightFirst = pageOffset.isMultiple(of: 2)
+		let leadingBlank = points.firstContentY.isFinite
+			&& ((opensRightFirst && leadingKinds.contains(.left) && !leadingKinds.contains(.right))
+				|| (!opensRightFirst && leadingKinds.contains(.right) && !leadingKinds.contains(.left)))
 
 		// Short documents still need pagination if they carry a forced break.
 		guard columnHeight > contentHeight + epsilon || !forced.isEmpty || leadingBlank else {
-			return [PageSlice(top: 0, bottom: columnHeight, repeatedHeader: nil)]
+			return [PageSlice(top: from, bottom: columnHeight, repeatedHeader: nil)]
 		}
 
 		// `break-inside: avoid` can only be honoured for blocks that would fit on
@@ -621,13 +831,13 @@ public enum HTMLRenderer {
 		}
 
 		var slices: [PageSlice] = []
-		var top = 0.0
-		if leadingBlank { slices.append(.blank(at: 0)) }
+		var top = from
+		if leadingBlank { slices.append(.blank(at: from)) }
 		while top < columnHeight - epsilon {
 			// A block that asked for a side starts on that side: one blank page
 			// when the page about to open is on the other. Page 1 is a right page.
-			if top > epsilon, let kind = kinds.first(where: { abs($0.key - top) <= epsilon })?.value {
-				let opensRightPage = slices.count.isMultiple(of: 2)
+			if top > from + epsilon, let kind = kinds.first(where: { abs($0.key - top) <= epsilon })?.value {
+				let opensRightPage = (pageOffset + slices.count).isMultiple(of: 2)
 				if (kind == .right && !opensRightPage) || (kind == .left && opensRightPage) {
 					slices.append(.blank(at: top))
 				}
@@ -677,7 +887,7 @@ public enum HTMLRenderer {
 			slices.append(PageSlice(top: top, bottom: bottom, repeatedHeader: repeatedHeader))
 			top = bottom
 		}
-		return slices.isEmpty ? [PageSlice(top: 0, bottom: columnHeight, repeatedHeader: nil)] : slices
+		return slices.isEmpty ? [PageSlice(top: from, bottom: columnHeight, repeatedHeader: nil)] : slices
 	}
 
 	/// Find header groups that can be reused when their table crosses a page

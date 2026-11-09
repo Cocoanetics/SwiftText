@@ -433,6 +433,10 @@ private func applyLonghand(_ name: String, _ value: [ComponentValue], to style: 
 		if let value = parseBreak(value, inside: false) { style.breakAfter = value }
 	case "break-inside":
 		if let value = parseBreak(value, inside: true) { style.breakInside = value }
+	case "page":
+		if let token = significant(value).first, case .ident(let ident) = token.token {
+			style.page = ident.asciiLowercased == "auto" ? nil : ident
+		}
 	case "list-style-type":
 		if let token = significant(value).first, case .ident(let ident) = token.token,
 		   let type = parseListStyleType(ident.asciiLowercased) {
@@ -602,6 +606,7 @@ private func copyLonghand(_ name: String, from source: ComputedStyle, into style
 	case "break-before": style.breakBefore = source.breakBefore
 	case "break-after": style.breakAfter = source.breakAfter
 	case "break-inside": style.breakInside = source.breakInside
+	case "page": style.page = source.page
 	case "margin-top", "margin-right", "margin-bottom", "margin-left": setEdge(&style.margin, name, edgeValue(source.margin, name))
 	case "padding-top", "padding-right", "padding-bottom", "padding-left": setEdge(&style.padding, name, edgeValue(source.padding, name))
 	case "border-top-width", "border-right-width", "border-bottom-width", "border-left-width": setEdge(&style.borderWidth, name, edgeValue(source.borderWidth, name))

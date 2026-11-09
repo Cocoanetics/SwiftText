@@ -25,9 +25,13 @@ public struct PageGeometry {
 	public let sliceHeightPx: Double
 	/// Space reserved above the column slice for repeated table headers.
 	public let contentOffsetPx: Double
+	/// Horizontal shift of everything on the page, for mirrored binding margins:
+	/// the column is laid out against `marginPx`, a left or right page moves it.
+	public let offsetXPx: Double
 
 	public init(pageWidthPx: Double, pageHeightPx: Double, marginPx: Double,
-	            columnTop: Double, sliceHeightPx: Double, contentOffsetPx: Double = 0) {
+	            columnTop: Double, sliceHeightPx: Double, contentOffsetPx: Double = 0, offsetXPx: Double = 0) {
+		self.offsetXPx = offsetXPx
 		self.pageWidthPx = pageWidthPx
 		self.pageHeightPx = pageHeightPx
 		self.marginPx = marginPx
@@ -62,7 +66,7 @@ public final class Painter {
 		// and several times larger uncompressed. Deflate them (/FlateDecode).
 		stream.compressed = compress
 		// Map CSS px (y-down) to PDF pt (y-up) for the whole page.
-		stream.setMatrix(pxToPt, 0, 0, pxToPt, 0, 0)
+		stream.setMatrix(pxToPt, 0, 0, pxToPt, geometry.offsetXPx * pxToPt, 0)
 		// Save this (unclipped) state so margin-box painting can later restore
 		// it: the clip below must not apply there, since margin boxes live
 		// outside the content slice, in the page's margin area.
@@ -483,8 +487,8 @@ public final class Painter {
 		let topPageY = pageY(top)
 		let bottomPageY = pageY(bottom)
 		// Annotation rectangles are in default (unscaled, y-up) user space.
-		let x0 = x * pxToPt
-		let x1 = (x + width) * pxToPt
+		let x0 = (x + geometry.offsetXPx) * pxToPt
+		let x1 = (x + width + geometry.offsetXPx) * pxToPt
 		let yTop = (geometry.pageHeightPx - topPageY) * pxToPt
 		let yBottom = (geometry.pageHeightPx - bottomPageY) * pxToPt
 		let annotation = PDFDictionary([
