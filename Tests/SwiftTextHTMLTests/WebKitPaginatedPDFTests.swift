@@ -416,6 +416,7 @@ struct WebKitIntegrationTests {
 		<!DOCTYPE html><html><head><meta charset="utf-8">
 		<style>@page { size: A4; margin: 72pt }
 		body { margin: 0; font-family: Helvetica; font-size: 10pt; }
+		@media screen { html { zoom: 1.5; } }
 		@media print { html { zoom: 2; } }</style></head>
 		<body><p>Absatz</p></body></html>
 		"""

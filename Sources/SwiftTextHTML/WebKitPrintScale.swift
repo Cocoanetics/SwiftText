@@ -16,20 +16,22 @@ extension WebKitBrowser {
 			// The authored zoom is read once (a repeated export must not compensate twice) and
 			// from the print cascade: an inline value would outrank an `@media print` rule.
 			if (!root.dataset.swiftTextAuthoredZoom) {
-				let authored = parseFloat(getComputedStyle(root).zoom) || 1;
-				function scan(rules, printing) {
+				// Screen-only rules are skipped, so the computed (screen) value is not used.
+				let authored = 1;
+				function scan(rules) {
 					for (const rule of Array.from(rules)) {
 						if (rule.type === CSSRule.MEDIA_RULE) {
 							const media = rule.media.mediaText;
-							if (!/\\bscreen\\b/.test(media)) scan(rule.cssRules, printing || /\\bprint\\b/.test(media));
-						} else if (rule.type === CSSRule.STYLE_RULE && printing && rule.style.zoom && root.matches(rule.selectorText)) {
+							if (!media || /\\b(print|all)\\b/.test(media) || !/\\bscreen\\b/.test(media)) scan(rule.cssRules);
+						} else if (rule.type === CSSRule.STYLE_RULE && rule.style.zoom && root.matches(rule.selectorText)) {
 							authored = parseFloat(rule.style.zoom) || authored;
 						}
 					}
 				}
 				for (const sheet of Array.from(document.styleSheets)) {
-					try { scan(sheet.cssRules, false); } catch (_) { /* cross-origin stylesheet */ }
+					try { scan(sheet.cssRules); } catch (_) { /* cross-origin stylesheet */ }
 				}
+				authored = parseFloat(root.style.zoom) || authored; // inline outranks the rules
 				root.dataset.swiftTextAuthoredZoom = String(authored);
 			}
 			root.style.zoom = String(parseFloat(root.dataset.swiftTextAuthoredZoom) * \(Self.printShrinkCompensation));
