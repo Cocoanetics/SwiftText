@@ -60,10 +60,11 @@ package struct PDFTextLocator {
 	}
 
 	/// JavaScript for the DOM side. It defines `compact(string)` with the same rules as
-	/// ``compact(_:)`` and `occurrencesBefore(element, searchText)`, the number of earlier
+	/// ``compact(_:)`` (case folded per character) and `occurrencesBefore(element, searchText)`, the number of earlier
 	/// matches of `searchText` in the compacted text that precedes `element`.
 	package static let occurrenceScript = """
-	const compact = s => s.replace(/[\\s\\-\\u00AD\\u2010\\u2011]+/g, '').toLowerCase();
+	// Lowercased one character at a time: a whole-string toLowerCase() picks a final sigma by context, which the Swift side does not.
+	const compact = s => Array.from(s.replace(/[\\s\\-\\u00AD\\u2010\\u2011]+/g, ''), c => c.toLowerCase()).join('');
 	function occurrencesBefore(element, searchText) {
 		const needle = compact(searchText);
 		if (!needle) return 0;

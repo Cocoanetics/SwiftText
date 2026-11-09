@@ -58,6 +58,8 @@ struct PDFTextLocatorTests {
 	@Test("compact removes whitespace and hyphens and lowercases")
 	func compact() {
 		#expect(PDFTextLocator.compact("Park-\nInson\u{00AD} Er kr") == "parkinsonerkr")
+		// Case is folded per character, as the DOM side does, so a capital sigma never becomes a final one.
+		#expect(PDFTextLocator.compact("ΟΣ") == "οσ")
 	}
 }
 #endif
