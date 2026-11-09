@@ -125,7 +125,11 @@ struct RenderPageFurnitureTests {
 		try #require(chapterIndex > 1, "the fixture must spill the title section onto a second page")
 		for index in 0..<chapterIndex {
 			let page = try #require(document.page(at: index))
-			#expect(text(on: page, from: 0, to: 0.08).isEmpty && text(on: page, from: 0.92, to: 1).isEmpty, "title page \(index + 1) carries furniture")
+			// Author lines are title-section content that may reach the band; furniture is a number or head.
+			func furniture(_ from: Double, _ to: Double) -> String {
+				text(on: page, from: from, to: to).split(separator: "\n").filter { !$0.contains("Autorin") }.joined()
+			}
+			#expect(furniture(0, 0.08).isEmpty && furniture(0.92, 1).isEmpty, "title page \(index + 1) carries furniture")
 		}
 		#expect(text(on: try #require(document.page(at: chapterIndex)), from: 0, to: 0.08) == String(chapterIndex + 1))
 	}
