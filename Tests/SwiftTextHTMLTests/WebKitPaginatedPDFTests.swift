@@ -39,6 +39,46 @@ struct WebKitIntegrationTests {
 		return try await browser.exportPaginatedPDFData(paperSize: a4)
 	}
 
+	/// The first page's media box in millimetres, for a page of `@page { size }` taken from `css`.
+	private func firstPageMillimetres(css: String) async throws -> (width: Int, height: Int) {
+		let size = try #require(PageSizeRule.pointSize(in: css), "no @page size found in \(css)")
+		let browser = WebKitBrowser(htmlString: "<html><head><style>\(css)</style></head><body><h1>Eins</h1><p>Text.</p></body></html>")
+		browser.timeout = 30
+		browser.frameSize = CGSize(width: size.width, height: size.height)
+		browser.preserveFrameHeight = true
+		let data = try await browser.exportPaginatedPDFData(paperSize: CGSize(width: size.width, height: size.height))
+		let box = try #require(PDFDocument(data: data)?.page(at: 0)?.bounds(for: .mediaBox))
+		return (Int((box.width / 72 * 25.4).rounded()), Int((box.height / 72 * 25.4).rounded()))
+	}
+
+	@Test("@page size sets the paper size: named, two lengths, landscape", .timeLimit(.minutes(1)))
+	func pageSizeFromCSS() async throws {
+		let a5 = try await firstPageMillimetres(css: "@page { size: A5; }")
+		#expect(a5 == (148, 210))
+		let trim = try await firstPageMillimetres(css: "@page { size: 170mm 240mm; }")
+		#expect(trim == (170, 240))
+		let landscape = try await firstPageMillimetres(css: "@page { size: A4 landscape; }")
+		#expect(landscape == (297, 210))
+	}
+
+	@Test("PageSizeRule reads the last size, ignores comments, and returns nil without one")
+	func pageSizeParsing() {
+		let letter = PageSizeRule.pointSize(in: "@page { size: letter; }")
+		#expect(letter?.width == 612 || abs((letter?.width ?? 0) - 612.2) < 0.5)
+		#expect(PageSizeRule.pointSize(in: "/* @page { size: A5 } */ body { margin: 0 }") == nil)
+		let last = PageSizeRule.pointSize(in: "@page { size: A5 } @page { margin: 1cm; size: 5in 8in }")
+		#expect(last?.width == 360 && last?.height == 576)
+		#expect(PageSizeRule.pointSize(in: "@page { size: bogus }") == nil)
+		let nested = PageSizeRule.pointSize(in: "@page { @top-center { content: \"T\"; } size: 5in 8in }")
+		#expect(nested?.width == 360 && nested?.height == 576)
+		let fallback = (width: 595.0, height: 842.0)
+		let landscape = PageSizeRule.pointSize(in: "@page { size: landscape }", fallback: fallback)
+		#expect(landscape?.width == 842 && landscape?.height == 595)
+		let portrait = PageSizeRule.pointSize(in: "@page { size: portrait }", fallback: fallback)
+		#expect(portrait?.width == 595 && portrait?.height == 842)
+		#expect(PageSizeRule.pointSize(in: "@page { size: landscape }") == nil)
+	}
+
 	private func pageHeads(_ document: PDFDocument) -> [String] {
 		(0..<document.pageCount).map { index in
 			document.page(at: index)?.string?.split(whereSeparator: \.isWhitespace).first.map(String.init) ?? "<blank>"

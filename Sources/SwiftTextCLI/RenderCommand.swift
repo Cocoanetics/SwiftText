@@ -205,7 +205,7 @@ struct Render: AsyncParsableCommand {
 			let swiftHeads = engine == .swift && runningHeads
 			let needsSecondPass = toc || swiftHeads
 			var rendered = try await renderPDF(html: printHTML(markdownText, userCSS: userCSS, title: resolvedTitle, pageNumbers: toc ? .placeholder : .none),
-			                                   baseURL: baseURL, title: resolvedTitle, authors: author)
+			                                   baseURL: baseURL, title: resolvedTitle, authors: author, userCSS: userCSS)
 			if needsSecondPass {
 				let pages = rendered.anchorPages.mapValues { $0 + 1 }
 				let html = printHTML(markdownText, userCSS: userCSS, title: resolvedTitle, pageNumbers: toc ? .resolved(pages) : .none)
@@ -214,7 +214,7 @@ struct Render: AsyncParsableCommand {
 					let level = runningHeadLevel
 					strings["chapter"] = SwiftPageFurniture.chapterTitles(FrontMatterHTML.headings(in: html), level: level, anchorPages: rendered.anchorPages)
 				}
-				rendered = try await renderPDF(html: html, baseURL: baseURL, title: resolvedTitle, authors: author, pageStrings: strings)
+				rendered = try await renderPDF(html: html, baseURL: baseURL, title: resolvedTitle, authors: author, userCSS: userCSS, pageStrings: strings)
 			}
 			try writeData(rendered.data, to: outputURL)
 			print(outputURL.path)
@@ -389,8 +389,11 @@ struct Render: AsyncParsableCommand {
 	}
 
 	#if os(macOS)
-	private func pageSize() -> CGSize {
+	private func pageSize(userCSS: String?) -> CGSize {
 		let size = paper.pointSize
+		if let userCSS, let sized = PageSizeRule.pointSize(in: userCSS, fallback: (size.width, size.height)) {
+			return CGSize(width: sized.width, height: sized.height)
+		}
 		if landscape {
 			return CGSize(width: size.height, height: size.width)
 		}
@@ -403,7 +406,7 @@ struct Render: AsyncParsableCommand {
 
 	@MainActor
 	@available(macOS 12.0, *)
-	private func renderPDF(html: String, baseURL: URL?, title: String, authors: [String], pageStrings: [String: [String]] = [:]) async throws -> PDFOutput {
+	private func renderPDF(html: String, baseURL: URL?, title: String, authors: [String], userCSS: String?, pageStrings: [String: [String]] = [:]) async throws -> PDFOutput {
 		if engine == .swift {
 			return try await renderPDFSwift(html: html, baseURL: baseURL, title: title, authors: authors, pageStrings: pageStrings)
 		}
@@ -416,16 +419,16 @@ struct Render: AsyncParsableCommand {
 			defer { try? FileManager.default.removeItem(at: tempHTML) }
 
 			let browser = WebKitBrowser(fileURL: tempHTML, readAccessRoot: baseURL)
-			browser.frameSize = pageSize()
+			browser.frameSize = pageSize(userCSS: userCSS)
 			browser.preserveFrameHeight = true
 			await browser.waitForLoadCompletion()
-			return try await decoratedPDF(from: browser, title: title, authors: authors)
+			return try await decoratedPDF(from: browser, title: title, authors: authors, userCSS: userCSS)
 		} else {
 			let browser = WebKitBrowser(htmlString: html, baseURL: nil)
-			browser.frameSize = pageSize()
+			browser.frameSize = pageSize(userCSS: userCSS)
 			browser.preserveFrameHeight = true
 			await browser.waitForLoadCompletion()
-			return try await decoratedPDF(from: browser, title: title, authors: authors)
+			return try await decoratedPDF(from: browser, title: title, authors: authors, userCSS: userCSS)
 		}
 		#else
 		throw ValidationError("The webkit engine is only available on macOS; use --engine swift.")
@@ -434,11 +437,12 @@ struct Render: AsyncParsableCommand {
 
 	#if os(macOS)
 	@MainActor
-	private func decoratedPDF(from browser: WebKitBrowser, title: String, authors: [String]) async throws -> PDFOutput {
-		let preparation = try await browser.preparePageFurniture(paperSize: pageSize(), footer: pageNumbers,
+	private func decoratedPDF(from browser: WebKitBrowser, title: String, authors: [String], userCSS: String?) async throws -> PDFOutput {
+		let size = pageSize(userCSS: userCSS)
+		let preparation = try await browser.preparePageFurniture(paperSize: size, footer: pageNumbers,
 		                                                        header: runningHeads, headingLevel: runningHeadLevel)
 		let headings = try await browser.outlineHeadings()
-		let exported = try await browser.exportPaginatedPDFDataWithBlankPages(paperSize: pageSize())
+		let exported = try await browser.exportPaginatedPDFDataWithBlankPages(paperSize: size)
 		let titleSection = preparation.titleStart.map { ($0, preparation.titleEnd) }
 		let data = try PDFPageFurniture.add(to: exported.data, pageNumbers: pageNumbers, title: runningHeads ? title : nil,
 		                                    headings: preparation.headings, titleSection: titleSection,
