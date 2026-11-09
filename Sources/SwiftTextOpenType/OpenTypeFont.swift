@@ -36,6 +36,14 @@ public struct OpenTypeFont {
 	public let isBold: Bool
 	/// Whether the font is styled italic/oblique.
 	public let isItalic: Bool
+	/// The raw `OS/2` `fsSelection` flags (0 without an `OS/2` table).
+	public let fsSelection: Int
+	/// The subfamily name from the `name` table (nameID 17, else 2), e.g. "Bold Italic".
+	public let subfamilyName: String?
+	/// The family name from the `name` table (nameID 16, else 1).
+	public let familyName: String?
+	/// The PostScript name from the `name` table (nameID 6).
+	public let postScriptName: String?
 	/// Italic angle in degrees, counter-clockwise from vertical (from `post`).
 	public let italicAngle: Double
 	/// Whether the font is monospaced (from `post`).
@@ -129,13 +137,19 @@ public struct OpenTypeFont {
 		if let os2 = tables["OS/2"]?.offset {
 			weightClass = (try? fonts.u16(os2 + 4)) ?? 400
 			let fsSelection = (try? fonts.u16(os2 + 62)) ?? 0
-			isItalic = (macStyle & 0x0001) != 0 || (fsSelection & 0x0001) != 0
-			isBold = (macStyle & 0x0002) != 0 || (fsSelection & 0x0020) != 0
+			self.fsSelection = fsSelection
+			isItalic = (macStyle & 0x0002) != 0 || (fsSelection & 0x0001) != 0
+			isBold = (macStyle & 0x0001) != 0 || (fsSelection & 0x0020) != 0
 		} else {
 			weightClass = 400
-			isItalic = (macStyle & 0x0001) != 0
-			isBold = (macStyle & 0x0002) != 0
+			fsSelection = 0
+			isItalic = (macStyle & 0x0002) != 0
+			isBold = (macStyle & 0x0001) != 0
 		}
+
+		familyName = Self.nameString(fonts: fonts, name: tables["name"], ids: [16, 1])
+		postScriptName = Self.nameString(fonts: fonts, name: tables["name"], ids: [6])
+		subfamilyName = Self.nameString(fonts: fonts, name: tables["name"], ids: [17, 2])
 
 		// post (optional): italic angle and fixed pitch.
 		if let post = tables["post"]?.offset {
@@ -154,6 +168,42 @@ public struct OpenTypeFont {
 		} else {
 			cmap = nil
 		}
+	}
+
+	// MARK: - Collections and names
+
+	/// The number of faces in `data`: the `ttcf` header's count for a collection,
+	/// 1 for a single sfnt, 0 when it is neither.
+	public static func faceCount(in data: Data) -> Int {
+		let fonts = FontBytes(data)
+		guard let tag = try? fonts.tag(0) else { return 0 }
+		if tag == "ttcf" { return (try? fonts.u32(8)) ?? 0 }
+		return (try? OpenTypeFont(data: data)) == nil ? 0 : 1
+	}
+
+	/// The first `name` record with one of `ids` (in order of preference),
+	/// preferring a Windows Unicode (UTF-16BE) string over a Mac Roman one.
+	private static func nameString(fonts: FontBytes, name: (offset: Int, length: Int)?, ids: [Int]) -> String? {
+		guard let name, let count = try? fonts.u16(name.offset + 2),
+		      let storage = try? fonts.u16(name.offset + 4) else { return nil }
+		for id in ids {
+			var macRoman: String?
+			for index in 0 ..< count {
+				let record = name.offset + 6 + index * 12
+				guard let platform = try? fonts.u16(record), let nameID = try? fonts.u16(record + 6), nameID == id,
+				      let length = try? fonts.u16(record + 8), let offset = try? fonts.u16(record + 10) else { continue }
+				let start = name.offset + storage + offset
+				guard start >= 0, start + length <= fonts.count else { continue }
+				let bytes = Array(fonts.bytes[start ..< start + length])
+				switch platform {
+				case 0, 3: return String(data: Data(bytes), encoding: .utf16BigEndian)
+				case 1 where macRoman == nil: macRoman = String(bytes: bytes, encoding: .macOSRoman)
+				default: break
+				}
+			}
+			if let macRoman { return macRoman }
+		}
+		return nil
 	}
 
 	// MARK: - Glyphs and advances
