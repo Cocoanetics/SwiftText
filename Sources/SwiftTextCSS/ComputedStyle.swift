@@ -115,6 +115,13 @@ public enum OverflowWrap: String, Equatable, Sendable {
 	case anywhere
 }
 
+/// Whether words may be hyphenated at a line break (`hyphens`).
+public enum Hyphens: String, Equatable, Sendable {
+	case none
+	case manual
+	case auto
+}
+
 /// Additional soft wrap opportunities permitted within words.
 public enum WordBreak: String, Equatable, Sendable {
 	case normal
@@ -233,6 +240,10 @@ public struct ComputedStyle: Equatable, Sendable {
 	public var textIndent: Double
 	/// Base writing direction (`direction`; also set by the `dir` attribute).
 	public var direction: Direction
+	/// Whether words may be hyphenated at a line break (`hyphens`).
+	public var hyphens: Hyphens = .manual
+	/// The content language (BCP 47), from the nearest `lang` attribute.
+	public var language: String?
 
 	// Non-inherited properties.
 	public var display: Display
@@ -322,6 +333,8 @@ public struct ComputedStyle: Equatable, Sendable {
 		style.whiteSpace = parent.whiteSpace
 		style.overflowWrap = parent.overflowWrap
 		style.wordBreak = parent.wordBreak
+		style.hyphens = parent.hyphens
+		style.language = parent.language
 		// text-decoration is not formally inherited, but an ancestor's decoration
 		// visually spans descendants; propagating it approximates that.
 		style.underline = parent.underline

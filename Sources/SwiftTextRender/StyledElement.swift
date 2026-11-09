@@ -65,6 +65,12 @@ public final class StyledElement: SelectorElement {
 		return parent.elementChildren[elementIndex + 1]
 	}
 
+	/// The element's own `lang` (or `xml:lang`) attribute, trimmed. Present but
+	/// empty means "language unknown" and is kept distinct from absent (`nil`).
+	var languageAttribute: String? {
+		(attributes["lang"] ?? attributes["xml:lang"])?.trimmingCharacters(in: .whitespaces)
+	}
+
 	// MARK: - Building
 
 	/// Build a styled tree from a DOM root, resolving styles top-down.
@@ -78,6 +84,7 @@ public final class StyledElement: SelectorElement {
 		// a block container. (SwiftTextHTML wraps documents in a synthetic
 		// "document" element with no UA rule, which would otherwise be inline.)
 		root.computedStyle.display = .block
+		root.computedStyle.language = root.languageAttribute
 		let rootFontSize = root.computedStyle.fontSize
 		root.buildChildren(resolver: resolver, rootFontSize: rootFontSize)
 		return root
@@ -102,6 +109,7 @@ public final class StyledElement: SelectorElement {
 		// correctly. Resolve children, then recurse.
 		for child in elementChildren {
 			child.computedStyle = resolver.style(for: child, inheriting: computedStyle, rootFontSize: rootFontSize)
+			child.computedStyle.language = child.languageAttribute ?? computedStyle.language
 			child.buildChildren(resolver: resolver, rootFontSize: rootFontSize)
 		}
 	}

@@ -266,6 +266,9 @@ private func expand(_ declaration: Declaration) -> [(name: String, value: [Compo
 		// declaration overwrite a higher-priority one at random. This is a pure
 		// rename — `parseBreak` accepts the legacy `always` keyword too.
 		return [(String(name.dropFirst("page-".count)), value)]
+	case "-webkit-hyphens":
+		// Share the cascade slot of the unprefixed `hyphens`.
+		return [("hyphens", value)]
 	case "word-wrap":
 		// `word-wrap` is the legacy alias of `overflow-wrap`; fold both spellings
 		// into one cascade slot so specificity and source order decide normally.
@@ -394,6 +397,9 @@ private func applyLonghand(_ name: String, _ value: [ComponentValue], to style: 
 		if let whiteSpace = parseWhiteSpace(value) { style.whiteSpace = whiteSpace }
 	case "overflow-wrap":
 		if let wrap = parseOverflowWrap(value) { style.overflowWrap = wrap }
+	case "hyphens":
+		if let token = significant(value).first, case .ident(let ident) = token.token,
+		   let hyphens = Hyphens(rawValue: ident.asciiLowercased) { style.hyphens = hyphens }
 	case "word-break":
 		if let wordBreak = parseWordBreak(value) { style.wordBreak = wordBreak }
 	case "text-decoration", "text-decoration-line":
@@ -518,7 +524,7 @@ private func globalKeyword(_ value: [ComponentValue]) -> String? {
 
 private let inheritedProperties: Set<String> = [
 	"color", "font-family", "font-size", "font-style", "font-weight",
-	"line-height", "text-align", "white-space", "overflow-wrap", "word-break",
+	"line-height", "text-align", "white-space", "overflow-wrap", "word-break", "hyphens",
 	"text-decoration", "text-decoration-line",
 	"letter-spacing", "word-spacing",
 	"list-style-type", "list-style",
@@ -584,6 +590,7 @@ private func copyLonghand(_ name: String, from source: ComputedStyle, into style
 	case "white-space": style.whiteSpace = source.whiteSpace
 	case "overflow-wrap": style.overflowWrap = source.overflowWrap
 	case "word-break": style.wordBreak = source.wordBreak
+	case "hyphens": style.hyphens = source.hyphens
 	case "text-decoration", "text-decoration-line":
 		style.underline = source.underline
 		style.lineThrough = source.lineThrough
