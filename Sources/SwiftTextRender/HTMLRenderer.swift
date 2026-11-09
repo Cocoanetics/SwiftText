@@ -609,16 +609,22 @@ public enum HTMLRenderer {
 		}
 	}
 
+	/// The heading's source text, whitespace-collapsed. Taken from the DOM rather
+	/// than the laid-out lines, so a wrap never alters it.
 	private static func headingTitle(_ box: BlockBox) -> String {
-		var words: [String] = []
-		func gather(_ box: Box) {
-			guard let block = box as? BlockBox else { return }
-			// Inline images contribute fragments without text.
-			for line in block.lines { for fragment in line.fragments where !fragment.text.isEmpty { words.append(fragment.text) } }
-			for child in block.children { gather(child) }
+		guard let element = box.element else { return "" }
+		func gather(_ element: StyledElement) -> String {
+			var text = ""
+			for child in element.children {
+				switch child {
+				case .text(let string): text += string
+				case .element(let nested):
+					if nested.computedStyle.display != .none { text += gather(nested) }
+				}
+			}
+			return text
 		}
-		gather(box)
-		return words.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+		return gather(element).split(whereSeparator: \.isWhitespace).joined(separator: " ")
 	}
 
 	/// Page-break information gathered from the laid-out box tree, in column
