@@ -180,6 +180,15 @@ struct RenderPageFurnitureTests {
 		#expect(listed.contains("Zwei \(zweiPage - 1)"), "contents lists the printed number: \(listed)")
 	}
 
+	@Test("numbering from the chapter works without running heads", .timeLimit(.minutes(3)), arguments: ["swift", "webkit"])
+	func numberFromChapterWithoutHeads(engine: String) async throws {
+		let document = try await render("# Eins\n\nText.\n\n# Zwei\n\nText.\n", arguments: ["--number-from-chapter", "--title-page", "--toc"], engine: engine)
+		try #require(document.pageCount == 4)
+		for index in 0..<2 { #expect(text(on: try #require(document.page(at: index)), from: 0, to: 0.08).isEmpty, "front matter page \(index + 1) is unnumbered") }
+		#expect(text(on: try #require(document.page(at: 2)), from: 0, to: 0.08) == "1")
+		#expect(text(on: try #require(document.page(at: 3)), from: 0, to: 0.08) == "2")
+	}
+
 	@Test("the swift engine keeps furniture inside the page and apart: zero margins, long heads", .timeLimit(.minutes(1)))
 	func swiftEngineMarginsAndLongHeads() async throws {
 		let long = String(repeating: "Ein sehr langer Kapitelname ", count: 6)

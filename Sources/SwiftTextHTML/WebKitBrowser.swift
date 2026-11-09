@@ -259,8 +259,8 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 	/// Reserves the furniture bands before any print-time paginator runs and
 	/// collects chapter headings while the original DOM is still intact.
 	@MainActor
-	package func preparePageFurniture(paperSize: CGSize, footer: Bool, header: Bool, headingLevel: Int) async throws -> PDFPageFurniturePreparation {
-		guard footer || header else { return PDFPageFurniturePreparation(headings: [], stylesheet: "", titleStart: nil, titleEnd: nil) }
+	package func preparePageFurniture(paperSize: CGSize, footer: Bool, header: Bool, headingLevel: Int, collectChapters: Bool = false) async throws -> PDFPageFurniturePreparation {
+		guard footer || header || collectChapters else { return PDFPageFurniturePreparation(headings: [], stylesheet: "", titleStart: nil, titleEnd: nil) }
 		let webView = try await loadedWebView()
 		let script = """
 		(function() {
@@ -276,7 +276,7 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 				while (searchText && (hit = before.indexOf(searchText, from)) !== -1) { occurrence++; from = hit + 1; }
 				return { title, searchText, occurrence };
 			}
-			const headings = \(header ? "true" : "false") ? Array.from(document.querySelectorAll('h\(headingLevel)')).map(heading => {
+			const headings = \(header || collectChapters ? "true" : "false") ? Array.from(document.querySelectorAll('h\(headingLevel)')).map(heading => {
 				return locate(heading);
 			}).filter(h => h.searchText) : [];
 			let titleStart = null, titleEnd = null;

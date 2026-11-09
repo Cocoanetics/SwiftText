@@ -216,16 +216,17 @@ struct Render: AsyncParsableCommand {
 				let level = runningHeadLevel
 				let html0 = printHTML(markdownText, userCSS: userCSS, title: resolvedTitle, pageNumbers: .none)
 				let headings = FrontMatterHTML.headings(in: html0)
+				let chapterPage = SwiftPageFurniture.firstChapterPage(headings, level: level, anchorPages: rendered.anchorPages) ?? 0
 				// The logical page counter is separate from the physical page: numbering
 				// can start at the first chapter, and the contents list those numbers.
-				let numberFrom = numberFromChapter ? SwiftPageFurniture.firstChapterPage(headings, level: level, anchorPages: rendered.anchorPages) ?? 0 : 0
+				let numberFrom = numberFromChapter ? chapterPage : 0
 				let pages = SwiftPageFurniture.printedPages(rendered.anchorPages, offset: numberFrom)
 				let html = printHTML(markdownText, userCSS: userCSS, title: resolvedTitle, pageNumbers: toc ? .resolved(pages) : .none)
 				var strings: [String: [String]] = [:]
 				if engine == .swift && bookLayout {
 					strings = SwiftPageFurniture.bookStrings(headings, level: level, anchorPages: rendered.anchorPages, pageCount: rendered.pageCount,
 					                                         title: resolvedTitle, mirrored: mirroredHeads, numberFrom: numberFrom,
-					                                         firstHeadPage: mirroredHeads ? numberFrom : (titlePage ? 1 : 0))
+					                                         firstHeadPage: mirroredHeads ? chapterPage : (titlePage ? 1 : 0))
 				} else if swiftHeads {
 					strings["chapter"] = SwiftPageFurniture.chapterTitles(FrontMatterHTML.headings(in: html), level: level, anchorPages: rendered.anchorPages)
 				}
@@ -455,7 +456,8 @@ struct Render: AsyncParsableCommand {
 	private func decoratedPDF(from browser: WebKitBrowser, title: String, authors: [String], userCSS: String?) async throws -> PDFOutput {
 		let size = pageSize(userCSS: userCSS)
 		let preparation = try await browser.preparePageFurniture(paperSize: size, footer: pageNumbers,
-		                                                        header: runningHeads, headingLevel: runningHeadLevel)
+		                                                        header: runningHeads, headingLevel: runningHeadLevel,
+		                                                        collectChapters: numberFromChapter)
 		let headings = try await browser.outlineHeadings()
 		let exported = try await browser.exportPaginatedPDFDataWithBlankPages(paperSize: size)
 		let titleSection = preparation.titleStart.map { ($0, preparation.titleEnd) }
