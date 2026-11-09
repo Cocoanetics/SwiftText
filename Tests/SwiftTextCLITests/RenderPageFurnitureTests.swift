@@ -289,5 +289,99 @@ struct RenderPageFurnitureTests {
 		#expect(stylesheet.contains("@page named:right {margin-top:max(48pt, var(--page-margin)) !important;"))
 		#expect(!stylesheet.contains("@page  {margin-top:max(48pt, 4cm)"), "qualified margins must not become document-wide")
 	}
+
+	@Test("webkit: a block with page: wide forms one landscape run, the rest stay portrait", .timeLimit(.minutes(2)))
+	func webkitNamedPageRun() async throws {
+		let cells = (1...10).map { "\($0)" }
+		let markdown = """
+		# Eins
+
+		Text eins.
+
+		# Drei
+
+		<div class="wide">
+
+		| A | B | C | D | E | F | G | H | I | J |
+		|---|---|---|---|---|---|---|---|---|---|
+		| \(cells.joined(separator: " | ")) |
+		|   |   |   |   |   |   |   |   |   |   |
+
+		</div>
+
+		# Vier
+
+		Text vier.
+		"""
+		let document = try await render(markdown, css: "@page wide { size: A4 landscape; }\n.wide { page: wide; }\n")
+		let sizes = (0..<document.pageCount).compactMap { document.page(at: $0)?.bounds(for: .mediaBox) }
+		#expect(sizes.filter { $0.width > $0.height }.count == 1, "expected exactly one landscape page, got \(sizes)")
+		#expect(sizes.filter { $0.width < $0.height }.count == sizes.count - 1)
+		let landscape = try #require(sizes.firstIndex { $0.width > $0.height })
+		#expect(document.page(at: landscape)?.string?.contains("10") == true)
+		#expect(document.page(at: sizes.count - 1)?.string?.contains("Text vier") == true)
+	}
+
+	@Test("webkit: a long table that is itself the named block still forms a landscape run", .timeLimit(.minutes(2)))
+	func webkitNamedTableRun() async throws {
+		let rows = (1...90).map { "| r\($0) | x | y |" }.joined(separator: "\n")
+		let markdown = "# Eins\n\nText eins.\n\n# Zwei\n\n| A | B | C |\n|---|---|---|\n\(rows)\n\n# Drei\n\nText drei.\n"
+		let document = try await render(markdown, css: "@page wide { size: A4 landscape; }\ntable { page: wide; }\n")
+		let sizes = (0..<document.pageCount).compactMap { document.page(at: $0)?.bounds(for: .mediaBox) }
+		#expect(sizes.contains { $0.width > $0.height }, "the table run is missing: \(sizes)")
+		#expect(document.page(at: sizes.count - 1)?.string?.contains("Text drei") == true)
+		#expect(sizes.last.map { $0.width < $0.height } == true)
+	}
+
+	@Test("webkit: the more specific page assignment wins, whatever its source order", .timeLimit(.minutes(2)))
+	func webkitPageSpecificity() async throws {
+		let markdown = "# Eins\n\n<div class=\"wide\">\n\nBreit.\n\n</div>\n\n# Zwei\n\nText.\n"
+		let css = "@page wide { size: A4 landscape; }\n@page narrow { size: A5; }\n.wide { page: wide; }\ndiv { page: narrow; }\n@media screen { h1 { page: narrow; } }\n"
+		let document = try await render(markdown, css: css)
+		let sizes = (0..<document.pageCount).compactMap { document.page(at: $0)?.bounds(for: .mediaBox) }
+		#expect(sizes.filter { $0.width > $0.height }.count == 1, "got \(sizes)")
+		#expect(!sizes.contains { Int($0.width.rounded()) == 420 }, "the less specific rule must not apply: \(sizes)")
+	}
+
+	@Test("webkit: a named page that matches only an empty block falls back to the plain export", .timeLimit(.minutes(2)))
+	func webkitEmptyNamedRun() async throws {
+		let document = try await render("# Eins\n\nText.\n\n<div class=\"wide\"></div>\n", css: "@page wide { size: A4 landscape; }\n.wide { page: wide; }\n")
+		#expect(document.pageCount >= 1)
+		#expect(document.page(at: 0)?.string?.contains("Eins") == true)
+	}
+
+	@Test("webkit: side margins do not move the pages of a named run", .timeLimit(.minutes(2)))
+	func webkitNamedRunKeepsItsMargins() async throws {
+		let markdown = "# Eins\n\nText.\n\n# Zwei\n\n<div class=\"wide\">\n\nBreit.\n\n</div>\n\n# Drei\n\nText.\n"
+		let css = "@page :right { margin-left: 22mm; margin-right: 17mm; }\n@page :left { margin-left: 17mm; margin-right: 22mm; }\n"
+			+ "@page wide { size: A4 landscape; margin: 10mm; }\n.wide { page: wide; }\n"
+		let document = try await render(markdown, css: css)
+		let index = try #require((0..<document.pageCount).first { document.page(at: $0)?.string?.contains("Breit") == true })
+		let page = try #require(document.page(at: index))
+		let edge = try #require(page.selection(for: page.bounds(for: .mediaBox))?.bounds(for: page).minX)
+		#expect(abs(edge / 72 * 25.4 - 10) < 2, "named page content moved off its 10 mm margin: \(edge) pt")
+	}
+
+	@Test("webkit: a named or pseudo @page size never applies to the whole document", .timeLimit(.minutes(2)))
+	func webkitPseudoSizeIsNotGlobal() async throws {
+		let document = try await render("# Eins\n\nText.\n", css: "@page wide { size: A5; }\n@page :first { size: A3; }\n")
+		let box = try #require(document.page(at: 0)?.bounds(for: .mediaBox))
+		#expect(Int(box.width.rounded()) == 595 || Int(box.width.rounded()) == 612)
+	}
+
+	@Test("webkit: @page :left and :right carry their own side margins", .timeLimit(.minutes(2)))
+	func webkitSideMargins() async throws {
+		let prose = String(repeating: "Wort ", count: 400)
+		let markdown = "# Eins\n\n\(prose)\n\n\(prose)\n\n\(prose)\n\n\(prose)\n"
+		let css = "@page { margin: 20mm; }\n@page :right { margin-left: 22mm; margin-right: 17mm; }\n@page :left { margin-left: 17mm; margin-right: 22mm; }\n"
+		let document = try await render(markdown, css: css)
+		try #require(document.pageCount >= 2)
+		func leftEdge(_ index: Int) throws -> CGFloat {
+			let page = try #require(document.page(at: index))
+			return try #require(page.selection(for: page.bounds(for: .mediaBox))?.bounds(for: page).minX)
+		}
+		let right = try leftEdge(0), left = try leftEdge(1)
+		#expect(abs((right - left) / 72 * 25.4 - 5) < 1.5, "inside margin should be 5 mm wider on the recto, got \(right) vs \(left)")
+	}
 }
 #endif

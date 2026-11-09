@@ -104,6 +104,8 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 	/// When `true`, the webview frame is NOT resized to the scroll height
 	/// after loading. This lets WebKit paginate content for PDF export.
 	package var preserveFrameHeight = false
+	/// The `:left`/`:right` page margins to apply when printing; see ``PageSizeRule/sideMargins(in:)``.
+	package var pageSideMargins: PageSizeRule.PageSideMargins?
 
 	// MARK: - Package Interface
 
@@ -229,8 +231,12 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 	/// `break-before: left|right|recto|verso` starts on the requested side.
 	@MainActor
 	@available(macOS 11.0, *)
-	package func exportPaginatedPDFDataWithBlankPages(paperSize: CGSize) async throws -> (data: Data, anchorPages: [String: Int], blankPages: Set<Int>) {
+	package func exportPaginatedPDFDataWithBlankPages(paperSize: CGSize, namedPages: WebKitNamedPages? = nil) async throws -> (data: Data, anchorPages: [String: Int], blankPages: Set<Int>) {
 		let webView = try await loadedWebView()
+		#if os(macOS)
+		try await layOutAtRectoMargins(in: webView)
+		if let namedPages, let runs = try await exportRuns(in: webView, paperSize: paperSize, namedPages: namedPages) { return runs }
+		#endif
 		try await prepareTablesForPrinting(in: webView, paperSize: paperSize)
 		let sideBreaks = await PDFParityPages.prepareBreaks(in: webView)
 		#if canImport(PDFKit)
@@ -243,12 +249,12 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 		#endif
 		var blankPages: Set<Int> = []
 		#if canImport(PDFKit)
-		// Blank pages go in before links are resolved, so every page index below is final.
+		// Blank pages go in before links are resolved, so page indices are final.
 		(data, blankPages) = PDFParityPages.insertingBlankPages(into: data, requests: sideBreaks)
 		#endif
-		// WebKit writes `#fragment` links as `/URI` actions on the temporary page URL;
-		// turn them into internal destinations.
+		// WebKit writes `#fragment` links as `/URI` actions on the page URL; make them internal.
 		#if canImport(PDFKit)
+		data = shiftedForSideMargins(data)
 		let resolved = PDFInternalLinks.resolve(pdfData: data, pageURL: webView.url, targets: linkTargets)
 		return (resolved.data, resolved.anchorPages, blankPages)
 		#else
@@ -358,7 +364,7 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 	/// Each continuation is a real table with its own cloned `thead`, so the result
 	/// does not depend on WebKit implementing table fragmentation correctly.
 	@MainActor
-	private func prepareTablesForPrinting(in webView: WKWebView, paperSize: CGSize) async throws {
+	func prepareTablesForPrinting(in webView: WKWebView, paperSize: CGSize) async throws {
 		let script = """
 		(function() {
 			const paperWidth = \(paperSize.width);
@@ -617,7 +623,7 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 	/// async, and no temp file, so there is no iOS counterpart to
 	/// `PrintOperationHelper`.
 	@MainActor
-	private static func paginatedPDFData(from webView: WKWebView, paperSize: CGSize) throws -> Data {
+	static func paginatedPDFData(from webView: WKWebView, paperSize: CGSize) throws -> Data {
 		let pageRenderer = UIPrintPageRenderer()
 		pageRenderer.addPrintFormatter(webView.viewPrintFormatter(), startingAtPageAt: 0)
 
@@ -649,7 +655,7 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 	#else
 	/// Renders the loaded page through AppKit's print pipeline.
 	@MainActor
-	private static func paginatedPDFData(from webView: WKWebView, paperSize: CGSize) async throws -> Data {
+	static func paginatedPDFData(from webView: WKWebView, paperSize: CGSize) async throws -> Data {
 		let tempURL = FileManager.default.temporaryDirectory
 			.appendingPathComponent(UUID().uuidString)
 			.appendingPathExtension("pdf")

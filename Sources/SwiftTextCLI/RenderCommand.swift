@@ -459,7 +459,15 @@ struct Render: AsyncParsableCommand {
 		                                                        header: runningHeads, headingLevel: runningHeadLevel,
 		                                                        collectChapters: numberFromChapter)
 		let headings = try await browser.outlineHeadings()
-		let exported = try await browser.exportPaginatedPDFDataWithBlankPages(paperSize: size)
+		var namedPages: WebKitNamedPages?
+		if let userCSS {
+			let paper = paper.pointSize
+			let found = WebKitNamedPages(css: userCSS, fallback: (paper.width, paper.height),
+			                             minimumVerticalMargin: pageNumbers || runningHeads ? 48 : 0)
+			if !found.isEmpty { namedPages = found }
+		}
+		browser.pageSideMargins = userCSS.flatMap { PageSizeRule.sideMargins(in: $0) }
+		let exported = try await browser.exportPaginatedPDFDataWithBlankPages(paperSize: size, namedPages: namedPages)
 		let titleSection = preparation.titleStart.map { ($0, preparation.titleEnd) }
 		let data = try PDFPageFurniture.add(to: exported.data, pageNumbers: pageNumbers, title: runningHeads ? title : nil,
 		                                    mirrored: mirroredHeads, numberFromChapter: numberFromChapter,
