@@ -426,7 +426,8 @@ struct RenderPageFurnitureTests {
 		let symmetric = try await render(markdown, arguments: ["--footnotes", "page"], css: "@page { margin: 20mm 20mm 22mm 20mm; }")
 		let sided = try await render(markdown, arguments: ["--footnotes", "page"],
 		                             css: "@page :left { margin: 20mm 17mm 22mm 22mm; }\n@page :right { margin: 20mm 22mm 22mm 17mm; }")
-		#expect(sided.pageCount == symmetric.pageCount, "\(sided.pageCount) pages with side margins, \(symmetric.pageCount) with one margin")
+		// The side margins differ by 1 mm in total, so a tightly packed run may tip over by one page on another font stack.
+		#expect(abs(sided.pageCount - symmetric.pageCount) <= 1, "\(sided.pageCount) pages with side margins, \(symmetric.pageCount) with one margin")
 		for index in 0..<sided.pageCount {
 			let words = (sided.page(at: index)?.string ?? "").split(whereSeparator: \.isWhitespace).count
 			#expect(words > 20, "page \(index + 1) holds only \(words) words")
