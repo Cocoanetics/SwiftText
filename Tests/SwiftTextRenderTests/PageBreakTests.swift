@@ -48,6 +48,56 @@ struct PageBreakTests {
 		#expect(pageCount(data) == 3)
 	}
 
+	private func chapters(_ rule: String) -> String {
+		"<style>h1 { \(rule) }</style><h1>Eins</h1><p>Text eins.</p><h1>Zwei</h1><p>Text zwei.</p><h1>Drei</h1><p>Text drei.</p>"
+	}
+
+	/// The first word of each page's text, `<blank>` for an empty page.
+	private func pageHeads(_ data: Data) -> [String] {
+		#if canImport(PDFKit)
+		guard let document = PDFDocument(data: data) else { return [] }
+		return (0..<document.pageCount).map { index in
+			let text = document.page(at: index)?.string?.split(whereSeparator: \.isWhitespace).first
+			return text.map(String.init) ?? "<blank>"
+		}
+		#else
+		return []
+		#endif
+	}
+
+	@Test("break-before: right starts every chapter on an odd page, inserting blank pages")
+	func breakBeforeRightInsertsBlankPages() async throws {
+		let data = try await HTMLRenderer.renderPDF(html: chapters("break-before: right;"))
+		#expect(pageCount(data) == 5)
+		#if canImport(PDFKit)
+		#expect(pageHeads(data) == ["Eins", "<blank>", "Zwei", "<blank>", "Drei"])
+		#endif
+	}
+
+	@Test("break-before: left starts on an even page, with a blank first page")
+	func breakBeforeLeftInsertsLeadingBlank() async throws {
+		let data = try await HTMLRenderer.renderPDF(html: chapters("break-before: verso;"))
+		// Eins on page 2, Zwei on 4, Drei on 6.
+		#expect(pageCount(data) == 6)
+		#if canImport(PDFKit)
+		#expect(pageHeads(data) == ["<blank>", "Eins", "<blank>", "Zwei", "<blank>", "Drei"])
+		#endif
+	}
+
+	@Test("A plain page break adds no blank page")
+	func plainBreakAddsNoBlankPage() async throws {
+		let data = try await HTMLRenderer.renderPDF(html: chapters("break-before: page;"))
+		#expect(pageCount(data) == 3)
+	}
+
+	@Test("A side break after a chapter that already filled an odd page adds nothing")
+	func rightBreakOnCorrectParityAddsNothing() async throws {
+		// Eins, Zwei on pages 1-2 via plain break; Drei wants a right page: page 3.
+		let html = "<style>h1.c { break-before: right; }</style><h1>Eins</h1><p>a</p><h1 style=\"break-before: page\">Zwei</h1><p>b</p><h1 class=\"c\">Drei</h1><p>c</p>"
+		let data = try await HTMLRenderer.renderPDF(html: html)
+		#expect(pageCount(data) == 3)
+	}
+
 	@Test("The same content without the rule stays on one page")
 	func withoutRuleStaysSinglePage() async throws {
 		let html = threeSections.replacingOccurrences(of: "break-before: page;", with: "")
@@ -223,7 +273,11 @@ struct PageBreakTests {
 		#expect(style("break-inside: avoid").breakInside == .avoid)
 		// Column/region variants collapse onto their page equivalents.
 		#expect(style("break-inside: avoid-column").breakInside == .avoid)
-		#expect(style("break-before: left").breakBefore == .page)
+		#expect(style("break-before: left").breakBefore == .left)
+		#expect(style("break-before: verso").breakBefore == .left)
+		#expect(style("break-before: right").breakBefore == .right)
+		#expect(style("break-before: recto").breakBefore == .right)
+		#expect(style("break-inside: right").breakInside == .auto)
 		#expect(style("break-before: avoid").breakBefore == .avoid)
 		#expect(style("break-before: nonsense").breakBefore == .auto)
 	}
