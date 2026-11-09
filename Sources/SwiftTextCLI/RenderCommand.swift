@@ -211,7 +211,7 @@ struct Render: AsyncParsableCommand {
 				let html = printHTML(markdownText, userCSS: userCSS, title: resolvedTitle, pageNumbers: toc ? .resolved(pages) : .none)
 				var strings: [String: [String]] = [:]
 				if swiftHeads {
-					let level = pageBreakBefore?.numericLevel ?? 1
+					let level = runningHeadLevel
 					strings["chapter"] = SwiftPageFurniture.chapterTitles(FrontMatterHTML.headings(in: html), level: level, anchorPages: rendered.anchorPages)
 				}
 				rendered = try await renderPDF(html: html, baseURL: baseURL, title: resolvedTitle, authors: author, pageStrings: strings)
@@ -234,6 +234,12 @@ struct Render: AsyncParsableCommand {
 	}
 
 	// MARK: - HTML / PDF
+
+	/// The heading level that starts a chapter: where the running head changes. With
+	/// `--chapter-start` it is the level that heading break uses, `--chapter-level` by default.
+	private var runningHeadLevel: Int {
+		(chapterStart == nil ? pageBreakBefore?.numericLevel : (pageBreakBefore ?? chapterLevel).numericLevel) ?? 1
+	}
 
 	/// The print HTML, with the title page and contents when asked for.
 	private func printHTML(_ markdown: String, userCSS: String?, title: String, pageNumbers: FrontMatter.PageNumbers) -> String {
@@ -430,7 +436,7 @@ struct Render: AsyncParsableCommand {
 	@MainActor
 	private func decoratedPDF(from browser: WebKitBrowser, title: String, authors: [String]) async throws -> PDFOutput {
 		let preparation = try await browser.preparePageFurniture(paperSize: pageSize(), footer: pageNumbers,
-		                                                        header: runningHeads, headingLevel: pageBreakBefore?.numericLevel ?? 1)
+		                                                        header: runningHeads, headingLevel: runningHeadLevel)
 		let headings = try await browser.outlineHeadings()
 		let exported = try await browser.exportPaginatedPDFDataWithBlankPages(paperSize: pageSize())
 		let titleSection = preparation.titleStart.map { ($0, preparation.titleEnd) }
