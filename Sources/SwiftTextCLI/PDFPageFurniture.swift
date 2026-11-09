@@ -6,7 +6,8 @@ import SwiftTextHTML
 /// Stamps searchable text and writes the outline after WebKit has settled the page
 /// count. Links are rebuilt because drawing a CGPDFPage copies content, not annotations.
 enum PDFPageFurniture {
-	static func add(to data: Data, pageNumbers: Bool, title: String?, headings: [PDFChapterHeading], titleSection: (start: PDFChapterHeading, end: PDFChapterHeading?)? = nil,
+	static func add(to data: Data, pageNumbers: Bool, title: String?, mirrored: Bool = false, numberFromChapter: Bool = false,
+	                headings: [PDFChapterHeading], titleSection: (start: PDFChapterHeading, end: PDFChapterHeading?)? = nil,
 	                outline: [PDFOutlineBuilder.Entry] = [], blankPages: Set<Int> = []) throws -> Data {
 		guard pageNumbers || title != nil || !outline.isEmpty else { return data }
 		guard let source = PDFDocument(data: data) else { throw WebKitBrowserError.printFailed }
@@ -59,13 +60,21 @@ enum PDFPageFurniture {
 			NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
 			// Blank pages inserted for a left/right chapter start are counted but carry no furniture.
 			let furnished = !bare.contains(index) && !blankPages.contains(index)
-			if pageNumbers, furnished {
-				draw(String(index + 1), in: CGRect(x: bounds.minX + 24, y: bounds.minY + 24, width: bounds.width - 48, height: 14), alignment: .center)
+			// Pages are counted from one, so even indices are the right (odd) pages.
+			let isLeft = !index.isMultiple(of: 2)
+			if pageNumbers, furnished, !numberFromChapter || index >= firstChapter {
+				let number = String(index + 1 - (numberFromChapter ? firstChapter : 0))
+				let alignment: NSTextAlignment = mirrored ? (isLeft ? .left : .right) : .center
+				draw(number, in: CGRect(x: bounds.minX + 24, y: bounds.minY + 24, width: bounds.width - 48, height: 14), alignment: alignment)
 			}
-			if let title, furnished, index >= firstChapter {
+			if let title, furnished, index >= firstChapter, !(mirrored && chapters[index] != nil) {
 				let width = (bounds.width - 72) / 2
-				draw(title, in: CGRect(x: bounds.minX + 24, y: bounds.maxY - 36, width: width, height: 14), alignment: .left)
-				draw(chapter, in: CGRect(x: bounds.midX + 12, y: bounds.maxY - 36, width: width, height: 14), alignment: .right)
+				if !mirrored || isLeft {
+					draw(title, in: CGRect(x: bounds.minX + 24, y: bounds.maxY - 36, width: width, height: 14), alignment: .left)
+				}
+				if !mirrored || !isLeft {
+					draw(chapter, in: CGRect(x: bounds.midX + 12, y: bounds.maxY - 36, width: width, height: 14), alignment: .right)
+				}
 			}
 			NSGraphicsContext.restoreGraphicsState()
 			context.endPage()
