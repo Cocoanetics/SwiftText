@@ -50,6 +50,9 @@ struct PageSelector {
 	/// A bare `@page` rule, the only kind that sets the document's page box.
 	var isBare: Bool { name == nil && !first && side == nil && !unsupported }
 
+	/// Page-selector specificity: a name outranks `:first`, which outranks `:left` / `:right`.
+	var specificity: Int { (name == nil ? 0 : 100) + (first ? 10 : 0) + (side == nil ? 0 : 1) }
+
 	/// Whether the rule applies to page `pageIndex`, which sits on the named
 	/// page `pageName` (`nil` for the default page).
 	func matches(pageIndex: Int, pageName: String? = nil) -> Bool {
@@ -194,7 +197,10 @@ private func renderedText(_ parts: [ContentPart], pageIndex: Int, totalPages: In
 /// clearing `content` while the base rule's `font-size` still applies).
 func resolveMarginBoxes(_ rules: [PageRule], pageIndex: Int, totalPages: Int, rootStyle: ComputedStyle, rootFontSize: Double,
                         pageName: String? = nil, strings: [String: [String]] = [:]) -> [ResolvedMarginBox] {
+	// Stable sort: ascending specificity, source order within equal specificity, so later wins.
 	let matching = rules.filter { $0.selector.matches(pageIndex: pageIndex, pageName: pageName) }
+		.enumerated().sorted { ($0.element.selector.specificity, $0.offset) < ($1.element.selector.specificity, $1.offset) }
+		.map(\.element)
 	guard !matching.isEmpty else { return [] }
 
 	var result: [ResolvedMarginBox] = []

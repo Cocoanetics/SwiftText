@@ -75,4 +75,20 @@ struct NamedPageTests {
 		#expect(text.contains("0.75 0 0 0.75 7.5 0 cm"))
 		#expect(text.contains("0.75 0 0 0.75 -7.5 0 cm"))
 	}
+
+	@Test("Adjacent blocks with the same page name share one run")
+	func adjacentSameName() async throws {
+		let html = "<div style=\"page: wide\"><p>A</p></div><div style=\"page: wide\"><p>B</p></div>"
+		let data = try await HTMLRenderer.renderPDF(html: html, css: ["@page wide { size: A4 landscape; }"],
+		                                            options: RenderOptions(imageLoader: nil))
+		#expect(try pageSizes(data).count == 1)
+	}
+
+	@Test(":first outranks :right on the first page regardless of source order")
+	func pseudoSpecificity() async throws {
+		let css = "@page { margin: 20px; } @page :first { margin-left: 30px; } @page :right { margin-left: 10px; }"
+		let data = try await HTMLRenderer.renderPDF(html: "<p>A</p>", css: [css],
+		                                            options: RenderOptions(compressStreams: false, imageLoader: nil))
+		#expect(String(decoding: data, as: UTF8.self).contains("0.75 0 0 0.75 7.5 0 cm"))
+	}
 }

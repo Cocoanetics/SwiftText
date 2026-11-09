@@ -181,7 +181,7 @@ public enum HTMLRenderer {
 		}
 		func range(of run: PageRun) -> (from: Double, to: Double) {
 			switch run.kind {
-			case .named(let block): return (block.y, block.y + block.height)
+			case .named(let first, let last): return (first.y, last.y + last.height)
 			case .gap(let previous, let next): return (previous.map { $0.y + $0.height } ?? 0, next?.y ?? columnHeight)
 			}
 		}
@@ -622,7 +622,7 @@ public enum HTMLRenderer {
 	/// asked for a named page, or the document flow between two such blocks.
 	private struct PageRun {
 		enum Kind {
-			case named(BlockBox)
+			case named(first: BlockBox, last: BlockBox)
 			case gap(after: BlockBox?, before: BlockBox?)
 		}
 
@@ -649,18 +649,29 @@ public enum HTMLRenderer {
 		}
 	}
 
-	/// The outermost blocks asking for a named page (`page: <name>`), in document order.
-	private static func namedPageBlocks(in root: BlockBox) -> [(block: BlockBox, name: String)] {
-		var result: [(block: BlockBox, name: String)] = []
-		func visit(_ box: BlockBox) {
+	/// The outermost blocks asking for a named page (`page: <name>`), in document
+	/// order. Directly adjacent siblings with the same name form one group, since
+	/// a page break is only due where the page name changes.
+	private static func namedPageBlocks(in root: BlockBox) -> [(first: BlockBox, last: BlockBox, name: String)] {
+		var result: [(first: BlockBox, last: BlockBox, name: String)] = []
+		var lastSibling: (parent: ObjectIdentifier, index: Int)?
+		func visit(_ box: BlockBox, parent: BlockBox?, index: Int) {
 			if let name = box.style.page {
-				result.append((box, name))
+				if let parent, let lastSibling, lastSibling.parent == ObjectIdentifier(parent),
+				   lastSibling.index == index - 1, let previous = result.last, previous.name == name {
+					result[result.count - 1].last = box
+				} else {
+					result.append((box, box, name))
+				}
+				lastSibling = parent.map { (ObjectIdentifier($0), index) }
 				return
 			}
 			guard !box.establishesInlineContext else { return }
-			for case let child as BlockBox in box.children { visit(child) }
+			for (childIndex, child) in box.children.enumerated() {
+				if let child = child as? BlockBox { visit(child, parent: box, index: childIndex) }
+			}
 		}
-		visit(root)
+		visit(root, parent: nil, index: 0)
 		return result
 	}
 
@@ -670,7 +681,7 @@ public enum HTMLRenderer {
 	private static func pageRuns(in root: BlockBox, options: RenderOptions, rules: [PageStyleRule]) -> [PageRun] {
 		var runs: [PageRun] = []
 		var previous: BlockBox?
-		for (block, name) in namedPageBlocks(in: root) {
+		for (block, last, name) in namedPageBlocks(in: root) {
 			runs.append(PageRun(kind: .gap(after: previous, before: block), name: nil, options: options))
 			var namedOptions = options
 			for rule in rules where rule.selector.name == name && !rule.selector.first
@@ -684,8 +695,8 @@ public enum HTMLRenderer {
 				}
 			}
 			namedOptions.pageMarginPx = max(namedOptions.pageMarginPx, namedOptions.minimumPageMarginPx)
-			runs.append(PageRun(kind: .named(block), name: name, options: namedOptions))
-			previous = block
+			runs.append(PageRun(kind: .named(first: block, last: last), name: name, options: namedOptions))
+			previous = last
 		}
 		runs.append(PageRun(kind: .gap(after: previous, before: nil), name: nil, options: options))
 		return runs
@@ -714,7 +725,10 @@ public enum HTMLRenderer {
 	/// layout's, so a pair of rules should keep left + right equal.
 	private static func pageShift(rules: [PageStyleRule], pageIndex: Int, name: String?, baseMargin: Double) -> Double {
 		var left: Double?
-		for rule in rules where (rule.selector.first || rule.selector.side != nil)
+		let ordered = rules.enumerated()
+			.sorted { ($0.element.selector.specificity, $0.offset) < ($1.element.selector.specificity, $1.offset) }
+			.map(\.element)
+		for rule in ordered where (rule.selector.first || rule.selector.side != nil)
 			&& rule.selector.matches(pageIndex: pageIndex, pageName: name) {
 			for declaration in rule.declarations {
 				let lengths = declaration.value.filter { !$0.isWhitespaceOrComment }.compactMap { token -> Double? in
