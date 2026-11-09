@@ -63,3 +63,18 @@ struct PageMarginTests {
 		expect(try await margins(css: css), top: 10, right: 50, bottom: 70, left: 90)
 	}
 }
+
+extension PageMarginTests {
+	@Test("A shorthand with an unsupported component is ignored, not reinterpreted")
+	func unsupportedComponent() async throws {
+		let sides = try await margins(css: "@page { margin: 40px; } @page { margin: 10% 20px; }")
+		expect(sides, top: 40, right: 40, bottom: 40, left: 40)
+	}
+
+	@Test("PageGeometry keeps its uniform-margin initializer")
+	func geometryCompatibility() {
+		let geometry = PageGeometry(pageWidthPx: 100, pageHeightPx: 100, marginPx: 8, columnTop: 0, sliceHeightPx: 10)
+		#expect(geometry.margins == PageMargins(8))
+		#expect(geometry.marginPx == 8)
+	}
+}

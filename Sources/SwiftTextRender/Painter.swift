@@ -56,6 +56,16 @@ public struct PageGeometry {
 	/// the column is laid out against the left margin, a left or right page moves it.
 	public let offsetXPx: Double
 
+	/// The top margin; equal to every side when the margins are uniform.
+	public var marginPx: Double { margins.top }
+
+	/// A page with the same margin on all four sides.
+	public init(pageWidthPx: Double, pageHeightPx: Double, marginPx: Double,
+	            columnTop: Double, sliceHeightPx: Double, contentOffsetPx: Double = 0, offsetXPx: Double = 0) {
+		self.init(pageWidthPx: pageWidthPx, pageHeightPx: pageHeightPx, margins: PageMargins(marginPx),
+		          columnTop: columnTop, sliceHeightPx: sliceHeightPx, contentOffsetPx: contentOffsetPx, offsetXPx: offsetXPx)
+	}
+
 	public init(pageWidthPx: Double, pageHeightPx: Double, margins: PageMargins,
 	            columnTop: Double, sliceHeightPx: Double, contentOffsetPx: Double = 0, offsetXPx: Double = 0) {
 		self.offsetXPx = offsetXPx

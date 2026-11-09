@@ -478,10 +478,14 @@ public enum HTMLRenderer {
 	/// Apply a `margin` shorthand (one to four values: top, right, bottom, left)
 	/// or a `margin-top` ... `margin-left` longhand to the page margins.
 	private static func applyPageMargin(_ declaration: Declaration, to options: inout RenderOptions) {
-		let lengths = declaration.value.filter { !$0.isWhitespaceOrComment }.compactMap { token -> Double? in
-			guard let length = parseLength([token], fontSize: 16, rootFontSize: 16), case .px(let pixels) = length else { return nil }
-			return pixels
+		// An unsupported component (a percentage, `auto`) would shift the others
+		// into the wrong positions, so the whole declaration is ignored.
+		var lengths: [Double] = []
+		for token in declaration.value where !token.isWhitespaceOrComment {
+			guard let length = parseLength([token], fontSize: 16, rootFontSize: 16), case .px(let pixels) = length else { return }
+			lengths.append(pixels)
 		}
+		if declaration.lowerName != "margin", lengths.count != 1 { return }
 		switch declaration.lowerName {
 		case "margin-top": if let first = lengths.first { options.pageMargins.top = first }
 		case "margin-right": if let first = lengths.first { options.pageMargins.right = first }
