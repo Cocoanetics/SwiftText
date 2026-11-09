@@ -36,6 +36,8 @@ enum PDFPageFurniture {
 			throw WebKitBrowserError.printFailed
 		}
 		let links = internalLinks(in: source)
+		// Pages before the first located chapter get no running head; if no chapter could be located, the title alone is drawn.
+		let firstChapter = chapters.keys.filter { !bare.contains($0) }.min() ?? 0
 		var chapter = ""
 		for index in 0..<source.pageCount {
 			guard let page = source.page(at: index), let reference = page.pageRef else { throw WebKitBrowserError.printFailed }
@@ -51,7 +53,8 @@ enum PDFPageFurniture {
 				if link.targetPage == index { context.addDestination(link.name as CFString, at: link.point) }
 				if link.sourcePage == index { context.setDestination(link.name as CFString, for: link.bounds) }
 			}
-			chapter = chapters[index] ?? chapter
+			// The title section's own heading is not a chapter: pages before the first real one get no running head.
+			if !bare.contains(index) { chapter = chapters[index] ?? chapter }
 			NSGraphicsContext.saveGraphicsState()
 			NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
 			// Blank pages inserted for a left/right chapter start are counted but carry no furniture.
@@ -59,7 +62,7 @@ enum PDFPageFurniture {
 			if pageNumbers, furnished {
 				draw(String(index + 1), in: CGRect(x: bounds.minX + 24, y: bounds.minY + 24, width: bounds.width - 48, height: 14), alignment: .center)
 			}
-			if let title, furnished {
+			if let title, furnished, index >= firstChapter {
 				let width = (bounds.width - 72) / 2
 				draw(title, in: CGRect(x: bounds.minX + 24, y: bounds.maxY - 36, width: width, height: 14), alignment: .left)
 				draw(chapter, in: CGRect(x: bounds.midX + 12, y: bounds.maxY - 36, width: width, height: 14), alignment: .right)
