@@ -432,5 +432,41 @@ struct RenderPageFurnitureTests {
 			#expect(words > 20, "page \(index + 1) holds only \(words) words")
 		}
 	}
+
+	@Test("webkit: page-foot notes with a named page keep the title page and contents first", .timeLimit(.minutes(3)), arguments: [[], ["--toc"]])
+	func pageFootnotesKeepFrontMatterFirst(extra: [String]) async throws {
+		let markdown = """
+		# Eins
+
+		Text eins mit Note[^1].
+
+		[^1]: Die Note.
+
+		# Drei
+
+		<div class="wide">
+
+		| A | B | C | D | E | F | G | H | I | J |
+		|---|---|---|---|---|---|---|---|---|---|
+		| 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
+
+		</div>
+
+		# Vier
+
+		Text vier.
+		"""
+		let document = try await render(markdown, arguments: ["--title-page", "--author", "Autor", "--footnotes", "page"] + extra,
+		                                css: "@page wide { size: A4 landscape; }\n.wide { page: wide; }\n")
+		let texts = (0..<document.pageCount).map { document.page(at: $0)?.string ?? "" }
+		let first = { (needle: String) in texts.firstIndex { $0.contains(needle) } }
+		#expect(texts.filter { $0.contains("Autor") }.count == 1, "the title page must appear once")
+		let title = try #require(first("Autor")), eins = try #require(first("Text eins"))
+		let drei = try #require(texts.indices.first { texts[$0].contains("Drei") && $0 > eins })
+		let wide = try #require(first("10")), vier = try #require(first("Text vier"))
+		#expect(title == 0, "title page at \(title) in \(texts)")
+		if !extra.isEmpty { #expect(try #require(first("Eins")) < eins && title < (first("Eins") ?? 0)) }
+		#expect(title < eins && eins < drei && drei < wide && wide < vier, "page order \(texts)")
+	}
 }
 #endif
