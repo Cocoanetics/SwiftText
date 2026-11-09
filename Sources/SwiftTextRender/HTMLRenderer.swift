@@ -619,7 +619,11 @@ public enum HTMLRenderer {
 				switch child {
 				case .text(let string): text += string
 				case .element(let nested):
-					if nested.computedStyle.display != .none { text += gather(nested) }
+					if nested.localName == "br" {
+						text += " "
+					} else if nested.computedStyle.display != .none {
+						text += gather(nested)
+					}
 				}
 			}
 			return text
