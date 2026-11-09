@@ -120,7 +120,7 @@ struct Render: AsyncParsableCommand {
 	@Flag(name: .long, help: "For HTML and PDF output, start with a title page built from --title, --subtitle and --author (like the EPUB title page).")
 	var titlePage: Bool = false
 
-	@Flag(name: .long, help: "For HTML and PDF output, add a contents page after the title page (or where a `<!-- toc -->` or `[TOC]` line of its own sits in the Markdown; EPUB ignores it): the --chapter-level headings and --toc-depth levels below them, as links (PDF: with page numbers).")
+	@Flag(name: .long, help: "For HTML and PDF output, add a contents page (after the title page, or at a `<!-- toc -->` line): the --chapter-level headings and --toc-depth levels below, as links.")
 	var toc: Bool = false
 
 	@Option(name: .long, help: "A subtitle shown under the title on the title page (EPUB, or HTML/PDF with --title-page) and added to the EPUB package metadata.")
