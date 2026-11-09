@@ -124,6 +124,41 @@ enum FrontMatterHTML {
 		}
 	}
 
+	/// The paragraph a contents marker line becomes while the Markdown is converted.
+	static let contentsMarkerParagraph = "<p>SWIFTTEXTCONTENTSMARKER</p>"
+
+	/// Whether a line is a contents marker: `<!-- toc -->` or `[TOC]` alone on it.
+	private static func isContentsMarker(_ line: Substring) -> Bool {
+		let trimmed = line.trimmingCharacters(in: .whitespaces)
+		if trimmed.caseInsensitiveCompare("[TOC]") == .orderedSame { return true }
+		guard trimmed.hasPrefix("<!--"), trimmed.hasSuffix("-->"), trimmed.count >= 7 else { return false }
+		return trimmed.dropFirst(4).dropLast(3).trimmingCharacters(in: .whitespaces).lowercased() == "toc"
+	}
+
+	/// Replaces the first contents marker line (outside code fences) with a placeholder
+	/// paragraph and drops any later ones, so none of them reaches the output as text.
+	/// With `keepFirst` false (EPUB, which has no printed contents page) all of them are dropped.
+	static func placeContentsMarker(in markdown: String, keepFirst: Bool = true) -> (markdown: String, found: Bool) {
+		var found = false
+		var fence: Character?
+		var lines: [String] = []
+		for line in markdown.split(separator: "\n", omittingEmptySubsequences: false) {
+			let trimmed = line.drop { $0 == " " }
+			if let mark = trimmed.first, mark == "`" || mark == "~", trimmed.prefix(3).allSatisfy({ $0 == mark }) {
+				if fence == nil { fence = mark } else if fence == mark { fence = nil }
+			} else if fence == nil, isContentsMarker(line) {
+				if !found {
+					found = true
+					if !keepFirst { continue }
+					lines.append(contentsOf: ["", "SWIFTTEXTCONTENTSMARKER", ""])
+				}
+				continue
+			}
+			lines.append(String(line))
+		}
+		return found ? (lines.joined(separator: "\n"), keepFirst) : (markdown, false)
+	}
+
 	static func titlePage(_ page: FrontMatter.TitlePage) -> String {
 		var html = "<section class=\"titlepage\">\n<h1 class=\"title\">\(escape(page.title))</h1>\n"
 		if let subtitle = page.subtitle, !subtitle.isEmpty {

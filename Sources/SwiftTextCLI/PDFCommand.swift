@@ -393,7 +393,8 @@ func markdownToHTML(
 	if passThroughRawHTML { options.insert(.passThroughRawHTML) }
 	if linkCitations { options.insert(.linkCitations) }
 	if footnotes == .end { options.insert(.footnotesAtEnd) }
-	let body = MarkdownToHTML.convert(markdown, options: options)
+	let (markedMarkdown, hasContentsMarker) = FrontMatterHTML.placeContentsMarker(in: markdown)
+	var body = MarkdownToHTML.convert(markedMarkdown, options: options)
 	// Optional forced page break before a given heading level (e.g. h2 so each
 	// chapter starts on a new page). Placed after the base heading rules so it
 	// wins on source order. The first block of the document is exempt: WebKit
@@ -413,7 +414,8 @@ func markdownToHTML(
 	// block drops its own, so a user stylesheet that changes the block's break
 	// cannot remove both.
 	var frontMatterBreakCSS = ""
-	if let frontMatter, let level = breakLevel,
+	let contentsPlacedInBody = hasContentsMarker && frontMatter?.contents != nil
+	if let frontMatter, let level = breakLevel, !contentsPlacedInBody,
 	   body.hasPrefix("<\(level.rawValue)>") || body.hasPrefix("<\(level.rawValue) ") {
 		let last = frontMatter.contents != nil ? "nav.toc" : (frontMatter.titlePage != nil ? ".titlepage" : "")
 		if !last.isEmpty { frontMatterBreakCSS = "\(last) { page-break-after: auto; break-after: auto; }" }
@@ -421,8 +423,15 @@ func markdownToHTML(
 	var frontMatterHTML = ""
 	if let titlePage = frontMatter?.titlePage { frontMatterHTML += FrontMatterHTML.titlePage(titlePage) + "\n" }
 	if let contents = frontMatter?.contents {
-		frontMatterHTML += FrontMatterHTML.contents(contents, headings: FrontMatterHTML.headings(in: body)) + "\n"
+		let navHTML = FrontMatterHTML.contents(contents, headings: FrontMatterHTML.headings(in: body))
+		if contentsPlacedInBody {
+			body = body.replacingOccurrences(of: FrontMatterHTML.contentsMarkerParagraph, with: navHTML)
+		} else {
+			frontMatterHTML += navHTML + "\n"
+		}
 	}
+	body = body.replacingOccurrences(of: FrontMatterHTML.contentsMarkerParagraph + "\n", with: "")
+		.replacingOccurrences(of: FrontMatterHTML.contentsMarkerParagraph, with: "")
 	var metadata = title.map { "<title>\(escapeHTMLMetadata($0))</title>\n" } ?? ""
 	for author in authors where !author.isEmpty {
 		metadata += "<meta name=\"author\" content=\"\(escapeHTMLMetadata(author, attribute: true))\">\n"
