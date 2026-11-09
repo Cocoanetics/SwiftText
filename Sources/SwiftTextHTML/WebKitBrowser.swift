@@ -265,8 +265,9 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 	/// Reserves the furniture bands before any print-time paginator runs and
 	/// collects chapter headings while the original DOM is still intact.
 	@MainActor
-	package func preparePageFurniture(paperSize: CGSize, footer: Bool, header: Bool, headingLevel: Int, collectChapters: Bool = false) async throws -> PDFPageFurniturePreparation {
-		guard footer || header || collectChapters else { return PDFPageFurniturePreparation(headings: [], stylesheet: "", titleStart: nil, titleEnd: nil) }
+	package func preparePageFurniture(paperSize: CGSize, footer: Bool, header: Bool, headingLevel: Int,
+	                                  collectChapters: Bool = false, measurePrintableArea: Bool = false) async throws -> PDFPageFurniturePreparation {
+		guard footer || header || collectChapters || measurePrintableArea else { return PDFPageFurniturePreparation(headings: [], stylesheet: "", titleStart: nil, titleEnd: nil) }
 		let webView = try await loadedWebView()
 		let script = """
 		(function() {
@@ -342,6 +343,9 @@ package class WebKitBrowser: NSObject, WKNavigationDelegate {
 				probe.style.removeProperty(property);
 			});
 			probe.remove();
+			// With :left/:right margins every page is laid out at the recto's side margins.
+			const layoutSides = \(pageSideMargins.map { "[\($0.layoutMargins.right), \($0.layoutMargins.left)]" } ?? "null")
+			if (layoutSides) { maximum[1] = layoutSides[0]; maximum[3] = layoutSides[1]; }
 			window.__swiftTextPrintableSize = [(\(paperSize.width) - maximum[1] - maximum[3]) / 0.75,
 				(\(paperSize.height) - maximum[0] - maximum[2]) / 0.75];
 			return JSON.stringify({ headings: headings, stylesheet: style.textContent, titleStart: titleStart, titleEnd: titleEnd });

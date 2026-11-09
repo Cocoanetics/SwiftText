@@ -455,9 +455,11 @@ struct Render: AsyncParsableCommand {
 	@MainActor
 	private func decoratedPDF(from browser: WebKitBrowser, title: String, authors: [String], userCSS: String?) async throws -> PDFOutput {
 		let size = pageSize(userCSS: userCSS)
+		browser.pageSideMargins = userCSS.flatMap { PageSizeRule.sideMargins(in: $0) }
 		let preparation = try await browser.preparePageFurniture(paperSize: size, footer: pageNumbers,
 		                                                        header: runningHeads, headingLevel: runningHeadLevel,
-		                                                        collectChapters: numberFromChapter)
+		                                                        collectChapters: numberFromChapter,
+		                                                        measurePrintableArea: footnotes == .page && browser.pageSideMargins != nil)
 		let headings = try await browser.outlineHeadings()
 		var namedPages: WebKitNamedPages?
 		if let userCSS {
@@ -466,7 +468,6 @@ struct Render: AsyncParsableCommand {
 			                             minimumVerticalMargin: pageNumbers || runningHeads ? 48 : 0)
 			if !found.isEmpty { namedPages = found }
 		}
-		browser.pageSideMargins = userCSS.flatMap { PageSizeRule.sideMargins(in: $0) }
 		let exported = try await browser.exportPaginatedPDFDataWithBlankPages(paperSize: size, namedPages: namedPages)
 		let titleSection = preparation.titleStart.map { ($0, preparation.titleEnd) }
 		let data = try PDFPageFurniture.add(to: exported.data, pageNumbers: pageNumbers, title: runningHeads ? title : nil,
