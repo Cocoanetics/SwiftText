@@ -226,7 +226,7 @@ struct Render: AsyncParsableCommand {
 				if engine == .swift && bookLayout {
 					strings = SwiftPageFurniture.bookStrings(headings, level: level, anchorPages: rendered.anchorPages, pageCount: rendered.pageCount,
 					                                         title: resolvedTitle, mirrored: mirroredHeads, numberFrom: numberFrom,
-					                                         firstHeadPage: mirroredHeads ? chapterPage : (titlePage ? 1 : 0))
+					                                         firstHeadPage: mirroredHeads || numberFromChapter ? chapterPage : (titlePage ? 1 : 0))
 				} else if swiftHeads {
 					strings["chapter"] = SwiftPageFurniture.chapterTitles(FrontMatterHTML.headings(in: html), level: level, anchorPages: rendered.anchorPages)
 				}

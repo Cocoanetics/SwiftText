@@ -130,8 +130,8 @@ enum SwiftPageFurniture {
 	/// - `numberFrom`: the first page that is numbered (its number is 1); earlier pages carry none.
 	/// - `firstHeadPage`: heads start here; the pages before are front matter.
 	/// - With `mirrored`, a page where a heading of `level` starts has no head, and the title
-	///   sits on left pages only, the chapter on right ones. Left pages are the odd physical
-	///   pages counting from one, as in the engine's `:left` selector.
+	///   sits on left pages only, the chapter on right ones. Page 1 (index 0) is a right
+	///   page, so left pages are the even physical pages, as in the engine's `:left` selector.
 	static func bookStrings(_ headings: [HeadingEntry], level: Int, anchorPages: [String: Int], pageCount: Int, title: String,
 	                        mirrored: Bool, numberFrom: Int, firstHeadPage: Int) -> [String: [String]] {
 		let openers = Set(headings.filter { $0.level == level }.compactMap { anchorPages[$0.id] })
