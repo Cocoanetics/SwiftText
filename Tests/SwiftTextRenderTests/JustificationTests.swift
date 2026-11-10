@@ -67,4 +67,14 @@ struct JustificationTests {
 			}
 		}
 	}
+
+	@Test func negativeWordSpacingStillStretchesToWidth() async throws {
+		let body = (0..<40).map { _ in "abc" }.joined(separator: " ")
+		let result = try await lines(body, style: "text-align: justify; word-spacing: -6px", width: 100)
+		#expect(result.count > 1)
+		for line in result.dropLast() {
+			let last = try #require(line.fragments.last)
+			#expect(abs(last.x + last.width - (line.x + line.width)) < 0.01)
+		}
+	}
 }

@@ -61,6 +61,9 @@ extension LayoutEngine {
 		var fragments: [TextFragment] = []
 		var penX = box.style.textIndent // first line indentation (reset to 0 after)
 		var pendingSpace: ComputedStyle?
+		/// Indices of fragments that follow a collapsed space: the line's justification
+		/// opportunities, independent of how wide word-spacing left the gap.
+		var spaceBoundaries = Set<Int>()
 		var lineTop = contentTop
 
 		func spaceWidth(_ style: ComputedStyle) -> Double {
@@ -147,7 +150,8 @@ extension LayoutEngine {
 				var opportunities = Set<Int>()
 				for index in fragments.indices.dropFirst() {
 					let previous = fragments[index - 1]
-					if fragments[index].x - (previous.x + previous.width) > 0.001
+					if spaceBoundaries.contains(index)
+						|| fragments[index].x - (previous.x + previous.width) > 0.001
 						|| isSpaceRun(previous) || isSpaceRun(fragments[index]) {
 						opportunities.insert(index)
 					}
@@ -176,6 +180,7 @@ extension LayoutEngine {
 
 			lineTop += lineHeight
 			fragments = []
+			spaceBoundaries = []
 			penX = 0
 			pendingSpace = nil
 		}
@@ -188,6 +193,7 @@ extension LayoutEngine {
 				finishLine(isLast: false)
 			} else {
 				penX += precedingSpaceWidth
+				spaceBoundaries.insert(fragments.count)
 				pendingSpace = nil
 			}
 			var fragment = TextFragment(text: "", style: style, x: penX, y: 0, width: width, baseline: 0, href: href,
@@ -254,6 +260,7 @@ extension LayoutEngine {
 						if let last = fragments.indices.last,
 						   fragments[last].inlineControl == nil,
 						   !fragments[last].carriesPreservedWhitespace,
+						   !spaceBoundaries.contains(fragments.count),
 						   !piece.text.allSatisfy({ $0 == " " || $0 == "\t" }),
 						   fragments[last].font?.key == piece.font.key,
 						   fragments[last].style == style,
@@ -357,6 +364,7 @@ extension LayoutEngine {
 								finishLine(isLast: false)
 							} else {
 								penX += width
+								spaceBoundaries.insert(fragments.count)
 								pendingSpace = nil
 							}
 						}
@@ -395,6 +403,7 @@ extension LayoutEngine {
 							finishLine(isLast: false)
 						} else {
 							penX += width
+							spaceBoundaries.insert(fragments.count)
 							pendingSpace = nil
 						}
 					}
@@ -407,6 +416,7 @@ extension LayoutEngine {
 					if !wraps || penX + spaceWidth + wordWidth <= contentWidth + 0.001 {
 						if !fragments.isEmpty, let space = pendingSpace {
 							penX += gap(space)
+							spaceBoundaries.insert(fragments.count)
 							pendingSpace = nil
 						}
 						append(pieces)
