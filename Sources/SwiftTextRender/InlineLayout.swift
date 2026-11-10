@@ -193,7 +193,7 @@ extension LayoutEngine {
 				finishLine(isLast: false)
 			} else {
 				penX += precedingSpaceWidth
-				spaceBoundaries.insert(fragments.count)
+				if pendingSpace != nil { spaceBoundaries.insert(fragments.count) }
 				pendingSpace = nil
 			}
 			var fragment = TextFragment(text: "", style: style, x: penX, y: 0, width: width, baseline: 0, href: href,
