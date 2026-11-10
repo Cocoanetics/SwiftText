@@ -138,7 +138,21 @@ extension LayoutEngine {
 			} else {
 				// LTR fast path (unchanged): align and place in logical order.
 				let extra = max(0, contentWidth - penX)
-				let gaps = fragments.count - 1
+				// Justification opportunities: boundaries where the line builder opened a gap
+				// (a collapsed space), or next to preserved spaces. Fragments that touch
+				// (a style change mid-word, before punctuation) stay touching.
+				func isSpaceRun(_ fragment: TextFragment) -> Bool {
+					!fragment.text.isEmpty && fragment.text.allSatisfy { $0 == " " || $0 == "\t" }
+				}
+				var opportunities = Set<Int>()
+				for index in fragments.indices.dropFirst() {
+					let previous = fragments[index - 1]
+					if fragments[index].x - (previous.x + previous.width) > 0.001
+						|| isSpaceRun(previous) || isSpaceRun(fragments[index]) {
+						opportunities.insert(index)
+					}
+				}
+				let gaps = opportunities.count
 				var offset = 0.0
 				var perGap = 0.0
 				switch box.style.textAlign {
@@ -148,9 +162,11 @@ extension LayoutEngine {
 				default: break // start / left
 				}
 				line.width = penX + perGap * Double(gaps)
+				var shift = 0.0
 				line.fragments = fragments.enumerated().map { index, fragment in
+					if opportunities.contains(index) { shift += perGap }
 					var positioned = fragment
-					positioned.x += contentX + offset + perGap * Double(index)
+					positioned.x += contentX + offset + shift
 					positioned.y = lineTop
 					positioned.baseline = lineTop + baselineFromTop
 					return positioned
