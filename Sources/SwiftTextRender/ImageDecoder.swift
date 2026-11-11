@@ -1,7 +1,7 @@
 //  ImageDecoder.swift
 //  SwiftTextRender
 //
-//  Turns raster image bytes into a PDF Image XObject, decoding pixels only
+//  Turns image bytes into a PDF Image XObject (SVG: a vector Form XObject), decoding pixels only
 //  where PDF cannot take the file's own encoding — which keeps the engine
 //  dependency-free (no zlib/libjpeg):
 //   • JPEG embeds verbatim with the DCTDecode filter.
@@ -25,7 +25,15 @@ public struct DecodedImage {
 	/// is drawn through — or `nil` when the image is opaque.
 	public let softMask: PDFStream?
 
-	init(width: Int, height: Int, pdfStream: PDFStream?, softMask: PDFStream? = nil) {
+	/// Further objects `pdfStream` refers to (an SVG's transparency groups).
+	let dependencies: [PDFStream]
+	/// Called once `dependencies` have object numbers, to fill in references to them.
+	let link: (() -> Void)?
+
+	init(width: Int, height: Int, pdfStream: PDFStream?, softMask: PDFStream? = nil,
+	     dependencies: [PDFStream] = [], link: (() -> Void)? = nil) {
+		self.dependencies = dependencies
+		self.link = link
 		self.width = width
 		self.height = height
 		self.pdfStream = pdfStream
@@ -51,7 +59,7 @@ public enum ImageDecoder {
 		return decode(bytes)
 	}
 
-	/// Decode an image from raw file bytes (JPEG or PNG).
+	/// Decode an image from raw file bytes (JPEG, PNG or SVG).
 	public static func decode(_ data: Data) -> DecodedImage? {
 		let header = [UInt8](data.prefix(8))
 		if header.count >= 3, header[0] == 0xFF, header[1] == 0xD8, header[2] == 0xFF {
@@ -60,7 +68,7 @@ public enum ImageDecoder {
 		if header.count >= 8, header[0] == 0x89, header[1] == 0x50, header[2] == 0x4E, header[3] == 0x47 {
 			return decodePNG(data)
 		}
-		return nil
+		return SVGImage.decode(data)
 	}
 
 	// MARK: - JPEG
