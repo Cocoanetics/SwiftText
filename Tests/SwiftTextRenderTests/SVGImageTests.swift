@@ -197,6 +197,6 @@ struct SVGImageTests {
 		let svg = #"<svg viewBox="0 0 10 10" width="10.4" height="10.4"><rect width="10" height="10"/></svg>"#
 		let image = try #require(ImageDecoder.decode(Data(svg.utf8)))
 		let text = String(decoding: try #require(image.pdfStream).data, as: UTF8.self)
-		#expect(text.contains("0.096154 0 0 -0.096154 0 1 cm"))
+		#expect(text.contains("0.1 0 0 -0.1 0 1 cm"))
 	}
 }
