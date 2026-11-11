@@ -287,7 +287,8 @@ public final class FontBook {
 
 	/// The faces of an installed font family, resolved through the system and
 	/// cached. Only on platforms with a system font service (CoreText); generic
-	/// keywords and the aliases the bundled faces stand in for are never looked up.
+	/// keywords are never looked up. A named family such as `Menlo` or `Georgia`
+	/// is, and only falls back to its generic class's stand-in when not installed.
 	private func installedFaces(family: String) -> [(bold: Bool, italic: Bool, font: EmbeddedFont)]? {
 		let key = family.lowercased()
 		if let cached = installedFamilyCache[key] { return cached.isEmpty ? nil : cached }
@@ -302,9 +303,7 @@ public final class FontBook {
 	private static func isGenericName(_ name: String) -> Bool {
 		switch name {
 		case "serif", "sans-serif", "monospace", "cursive", "fantasy", "system-ui", "ui-serif", "ui-sans-serif",
-		     "ui-monospace", "ui-rounded", "-apple-system", "blinkmacsystemfont", "emoji", "math", "fangsong",
-		     "courier", "courier new", "menlo", "monaco", "consolas", "times", "times new roman", "georgia",
-		     "helvetica", "arial", "verdana":
+		     "ui-monospace", "ui-rounded", "-apple-system", "blinkmacsystemfont", "emoji", "math", "fangsong":
 			return true
 		default:
 			return false

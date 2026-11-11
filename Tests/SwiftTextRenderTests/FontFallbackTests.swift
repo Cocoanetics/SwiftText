@@ -194,6 +194,35 @@ struct EmbeddedStandardFaceTests {
 	}
 }
 
+@Suite("Installed named families")
+struct InstalledNamedFamilyTests {
+	private func render(_ fonts: FontBook) async throws -> String {
+		let pdf = try await HTMLRenderer.renderPDF(
+			html: "<p><a href=\"https://example.com/\" style=\"font-family: Menlo\">link 0O1l</a></p>", fonts: fonts)
+		return String(decoding: pdf, as: UTF8.self)
+	}
+
+	@Test("an installed Menlo is used, not the monospace stand-in")
+	func installedMenlo() async throws {
+		guard FileManager.default.fileExists(atPath: "/System/Library/Fonts/Menlo.ttc") else { return }
+		let fonts = FontBook()
+		fonts.embedsStandardFaces = true
+		let text = try await render(fonts)
+		#expect(text.contains("Menlo"))
+		#expect(!text.contains("CourierNew"))
+	}
+
+	@Test("a named family that is not available falls back to its generic class")
+	func missingAliasFallsBackToMonospace() {
+		let fonts = FontBook()
+		fonts.systemFallbackEnabled = false // nothing installed is looked up
+		var style = ComputedStyle.initial
+		style.fontFamily = ["Menlo"]
+		guard case .standard(let standard) = fonts.font(for: style) else { Issue.record("not a stand-in"); return }
+		#expect(standard.baseFontName == "Courier")
+	}
+}
+
 @Suite("Registered face selection")
 struct RegisteredFaceSelectionTests {
 	@Test("an italic request prefers an italic face over a same-weight upright one")
