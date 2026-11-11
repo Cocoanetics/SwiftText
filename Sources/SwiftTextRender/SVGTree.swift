@@ -424,14 +424,20 @@ enum SVGValues {
 		}
 	}
 
-	/// A paint: `.none` for `none`; `nil` for values this renderer cannot draw
-	/// (gradients, patterns) or does not understand.
+	/// A paint: `.none` for `none` and for paint servers without a fallback colour;
+	/// `nil` for values that are not a paint at all (the inherited value stays).
 	enum Paint { case none, color(SVGColor) }
 
 	static func paint(_ text: String, currentColor: SVGColor) -> Paint? {
 		let value = text.trimmingCharacters(in: .whitespaces).lowercased()
 		if value == "none" || value == "transparent" { return Paint.none }
 		if value == "currentcolor" { return .color(currentColor) }
+		if value.hasPrefix("url("), let close = value.firstIndex(of: ")") {
+			// A paint server (gradient, pattern) is not drawn: use the fallback
+			// colour if there is one, otherwise paint nothing.
+			let fallback = value[value.index(after: close)...].trimmingCharacters(in: .whitespaces)
+			return fallback.isEmpty ? Paint.none : paint(fallback, currentColor: currentColor) ?? Paint.none
+		}
 		return color(value).map(Paint.color)
 	}
 

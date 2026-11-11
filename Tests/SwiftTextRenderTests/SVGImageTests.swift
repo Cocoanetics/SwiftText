@@ -199,4 +199,13 @@ struct SVGImageTests {
 		let text = String(decoding: try #require(image.pdfStream).data, as: UTF8.self)
 		#expect(text.contains("0.1 0 0 -0.1 0 1 cm"))
 	}
+
+	@Test("A gradient paint is not drawn, or falls back to its colour, rather than inheriting")
+	func paintServers() throws {
+		let svg = ##"<svg viewBox="0 0 10 10" stroke="blue"><rect width="5" height="5" fill="url(#g)" stroke="url(#g)"/><rect width="5" height="5" fill="url(#g) #0f0"/></svg>"##
+		let tree = try #require(SVGTree(data: Data(svg.utf8)))
+		#expect(tree.children.count == 1) // the first rect paints nothing
+		guard case .path(let rect) = tree.children[0] else { Issue.record("unexpected tree"); return }
+		#expect(rect.fill?.color == SVGColor(red: 0, green: 1, blue: 0))
+	}
 }
