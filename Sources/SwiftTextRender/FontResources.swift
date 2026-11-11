@@ -34,7 +34,8 @@ public final class FontResourceBuilder {
 
 	/// The resource name for an image XObject, embedding it — and the soft mask
 	/// carrying its alpha channel, if any — on first use.
-	func imageResourceName(for stream: PDFStream, softMask: PDFStream? = nil) -> String {
+	func imageResourceName(for stream: PDFStream, softMask: PDFStream? = nil,
+	                       dependencies: [PDFStream] = [], link: (() -> Void)? = nil) -> String {
 		let identity = ObjectIdentifier(stream)
 		if let name = imageNames[identity] { return name }
 		let name = "Im\(imageNames.count + 1)"
@@ -43,6 +44,8 @@ public final class FontResourceBuilder {
 			if softMask.number == nil { pdf.addObject(softMask) }
 			stream.setExtra("SMask", softMask.reference)
 		}
+		for dependency in dependencies where dependency.number == nil { pdf.addObject(dependency) }
+		link?()
 		if stream.number == nil { pdf.addObject(stream) }
 		xobjectSubdictionary[name] = stream.reference
 		return name

@@ -102,11 +102,11 @@ struct SVGImageTests {
 		let svg = """
 			<?xml version="1.0"?><!DOCTYPE svg><!-- c --><svg viewBox="0 0 10 10">
 			<g fill="red" stroke="#00f" stroke-width="2">
-			<rect width="5" height="5" style="fill: rgb(0,255,0); opacity:.5"/>
+			<rect width="5" height="5" style="fill: rgb(0,255,0); fill-opacity:.5"/>
 			<circle r="2" fill="none"/></g></svg>
 			"""
 		let tree = try #require(SVGTree(data: Data(svg.utf8)))
-		guard case .group(_, let nodes) = tree.children[0], case .path(let rect) = nodes[0], case .path(let circle) = nodes[1] else {
+		guard case .group(_, _, let nodes) = tree.children[0], case .path(let rect) = nodes[0], case .path(let circle) = nodes[1] else {
 			Issue.record("unexpected tree"); return
 		}
 		#expect(rect.fill?.color == SVGColor(red: 0, green: 1, blue: 0))
@@ -166,5 +166,37 @@ struct SVGImageTests {
 		#expect(text.contains("/ExtGState"))
 		#expect(text.contains("/ca 0.5"))
 		#expect(text.contains("gs"))
+	}
+
+	@Test("Presentation attributes on the root <svg> are inherited")
+	func rootStyleInherits() throws {
+		let tree = try #require(SVGTree(data: Data(##"<svg viewBox="0 0 4 4" fill="#f00"><rect width="2" height="2"/></svg>"##.utf8)))
+		guard case .path(let rect) = tree.children[0] else { Issue.record("unexpected tree"); return }
+		#expect(rect.fill?.color == SVGColor(red: 1, green: 0, blue: 0))
+	}
+
+	@Test("Group opacity composites the children as a transparency group")
+	func groupOpacity() throws {
+		let svg = #"<svg viewBox="0 0 10 10"><g opacity=".5"><rect width="6" height="6"/><rect x="3" y="3" width="6" height="6"/></g></svg>"#
+		let image = try #require(ImageDecoder.decode(Data(svg.utf8)))
+		#expect(image.dependencies.count == 1)
+		let pdf = PDF()
+		let builder = FontResourceBuilder(pdf: pdf, compress: false)
+		_ = builder.imageResourceName(for: try #require(image.pdfStream), dependencies: image.dependencies, link: image.link)
+		let text = String(decoding: try #require(image.pdfStream).data, as: UTF8.self)
+		#expect(text.contains("/Fm1 Do"))
+		#expect(text.contains("/XObject"))
+		#expect(text.contains("/ca 0.5"))
+		let group = String(decoding: image.dependencies[0].data, as: UTF8.self)
+		#expect(group.contains("/S /Transparency"))
+		#expect(!group.contains("/ca"))
+	}
+
+	@Test("Fractional intrinsic sizes fill the unit square exactly")
+	func fractionalSize() throws {
+		let svg = #"<svg viewBox="0 0 10 10" width="10.4" height="10.4"><rect width="10" height="10"/></svg>"#
+		let image = try #require(ImageDecoder.decode(Data(svg.utf8)))
+		let text = String(decoding: try #require(image.pdfStream).data, as: UTF8.self)
+		#expect(text.contains("0.096154 0 0 -0.096154 0 1 cm"))
 	}
 }

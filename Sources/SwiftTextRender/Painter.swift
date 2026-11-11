@@ -323,7 +323,8 @@ public final class Painter {
 		stream.pushState()
 		if let imageStream = image.pdfStream {
 			// The image is mapped onto the unit square by the CTM.
-			let name = builder.imageResourceName(for: imageStream, softMask: image.softMask)
+			let name = builder.imageResourceName(for: imageStream, softMask: image.softMask,
+			                                 dependencies: image.dependencies, link: image.link)
 			stream.setMatrix(width, 0, 0, height, x, yUpBottom)
 			stream.drawXObject(name)
 		} else {

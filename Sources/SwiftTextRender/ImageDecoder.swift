@@ -25,7 +25,15 @@ public struct DecodedImage {
 	/// is drawn through — or `nil` when the image is opaque.
 	public let softMask: PDFStream?
 
-	init(width: Int, height: Int, pdfStream: PDFStream?, softMask: PDFStream? = nil) {
+	/// Further objects `pdfStream` refers to (an SVG's transparency groups).
+	let dependencies: [PDFStream]
+	/// Called once `dependencies` have object numbers, to fill in references to them.
+	let link: (() -> Void)?
+
+	init(width: Int, height: Int, pdfStream: PDFStream?, softMask: PDFStream? = nil,
+	     dependencies: [PDFStream] = [], link: (() -> Void)? = nil) {
+		self.dependencies = dependencies
+		self.link = link
 		self.width = width
 		self.height = height
 		self.pdfStream = pdfStream

@@ -58,7 +58,8 @@ struct SVGPath {
 }
 
 indirect enum SVGNode {
-	case group(SVGMatrix, [SVGNode])
+	/// A group: its transform, and the opacity it is composited with as a whole.
+	case group(SVGMatrix, Double, [SVGNode])
 	case path(SVGPath)
 }
 
@@ -501,7 +502,6 @@ extension SVGTree {
 		var color = SVGColor.black
 		var fillOpacity = 1.0
 		var strokeOpacity = 1.0
-		var opacity = 1.0
 		var evenOdd = false
 		var strokeWidth = 1.0
 		var cap = 0
@@ -549,7 +549,11 @@ extension SVGTree {
 
 		children = []
 		var budget = 100_000
-		children = Self.nodes(in: root, parent: Style(), budget: &budget, depth: 0)
+		let rootProperties = Self.properties(of: root)
+		let rootStyle = Self.resolved(rootProperties, parent: Style())
+		let inner = Self.nodes(in: root, parent: rootStyle, budget: &budget, depth: 0)
+		let rootOpacity = Self.opacity(rootProperties)
+		children = rootOpacity < 1 && !inner.isEmpty ? [.group(.identity, rootOpacity, inner)] : inner
 	}
 
 	private static func nodes(in element: SVGXMLElement, parent: Style, budget: inout Int, depth: Int) -> [SVGNode] {
@@ -558,51 +562,77 @@ extension SVGTree {
 		for child in element.children {
 			budget -= 1
 			guard budget > 0 else { break }
-			var properties = child.attributes
-			for declaration in (child.attributes["style"] ?? "").split(separator: ";") {
-				guard let colon = declaration.firstIndex(of: ":") else { continue }
-				properties[declaration[..<colon].trimmingCharacters(in: .whitespaces)] =
-					declaration[declaration.index(after: colon)...].trimmingCharacters(in: .whitespaces)
-			}
+			let properties = Self.properties(of: child)
 			if properties["display"] == "none" || properties["visibility"] == "hidden" { continue }
 
 			let style = resolved(properties, parent: parent)
 			let transform = properties["transform"].flatMap(SVGValues.transform) ?? .identity
+			var alpha = opacity(properties)
 			var node: SVGNode?
 			switch child.name {
 			case "g", "svg", "a", "switch":
 				let inner = nodes(in: child, parent: style, budget: &budget, depth: depth + 1)
-				if !inner.isEmpty { node = .group(.identity, inner) }
+				if !inner.isEmpty { node = .group(.identity, 1, inner) }
 			case "rect", "circle", "ellipse", "line", "polyline", "polygon", "path":
 				let segments = shape(child.name, properties)
-				if !segments.isEmpty { node = path(segments, style) }
+				if !segments.isEmpty, var drawn = path(segments, style) {
+					// Opacity on a shape with a single paint folds into that paint;
+					// with both, fill and stroke must composite together as a group.
+					if alpha < 1, (drawn.fill == nil) != (drawn.stroke == nil) {
+						drawn.fill?.opacity *= alpha
+						drawn.stroke?.opacity *= alpha
+						alpha = 1
+					}
+					node = .path(drawn)
+				}
 			default:
 				break // text, gradients, filters, use, image, defs … are not drawn
 			}
 			guard let node else { continue }
-			result.append(transform == .identity ? node : .group(transform, [node]))
+			if transform == .identity, alpha >= 1 {
+				result.append(node)
+			} else {
+				result.append(.group(transform, alpha, [node]))
+			}
 		}
 		return result
 	}
 
-	private static func path(_ segments: [SVGPathSegment], _ style: Style) -> SVGNode? {
+	private static func path(_ segments: [SVGPathSegment], _ style: Style) -> SVGPath? {
 		var fill: SVGFill?
 		var stroke: SVGStroke?
 		if case .color(let color) = style.fill {
-			fill = SVGFill(color: color, opacity: style.fillOpacity * style.opacity, evenOdd: style.evenOdd)
+			fill = SVGFill(color: color, opacity: style.fillOpacity, evenOdd: style.evenOdd)
 		}
 		if case .color(let color) = style.stroke, style.strokeWidth > 0 {
-			stroke = SVGStroke(color: color, opacity: style.strokeOpacity * style.opacity, width: style.strokeWidth,
+			stroke = SVGStroke(color: color, opacity: style.strokeOpacity, width: style.strokeWidth,
 			                   cap: style.cap, join: style.join, miterLimit: style.miterLimit,
 			                   dashes: style.dashes, dashOffset: style.dashOffset)
 		}
 		guard fill != nil || stroke != nil else { return nil }
-		return .path(SVGPath(segments: segments, fill: fill, stroke: stroke))
+		return SVGPath(segments: segments, fill: fill, stroke: stroke)
+	}
+
+	/// The presentation attributes of an element, overridden by its `style`.
+	private static func properties(of element: SVGXMLElement) -> [String: String] {
+		var properties = element.attributes
+		for declaration in (element.attributes["style"] ?? "").split(separator: ";") {
+			guard let colon = declaration.firstIndex(of: ":") else { continue }
+			properties[declaration[..<colon].trimmingCharacters(in: .whitespaces)] =
+				declaration[declaration.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+		}
+		return properties
+	}
+
+	/// An element's own `opacity` (not inherited), clamped to 0…1.
+	private static func opacity(_ properties: [String: String]) -> Double {
+		guard let text = properties["opacity"] else { return 1 }
+		let value = text.hasSuffix("%") ? Double(text.dropLast()).map { $0 / 100 } : Double(text)
+		return value.map { min(max($0, 0), 1) } ?? 1
 	}
 
 	private static func resolved(_ properties: [String: String], parent: Style) -> Style {
 		var style = parent
-		style.opacity = parent.opacity // `opacity` does not inherit, but a group's applies to all below
 		if let value = properties["color"], let color = SVGValues.color(value.trimmingCharacters(in: .whitespaces).lowercased()) {
 			style.color = color
 		}
@@ -615,7 +645,6 @@ extension SVGTree {
 		}
 		if let value = unit("fill-opacity") { style.fillOpacity = value }
 		if let value = unit("stroke-opacity") { style.strokeOpacity = value }
-		if let value = unit("opacity") { style.opacity *= value }
 		if let value = properties["fill-rule"] { style.evenOdd = value == "evenodd" }
 		if let value = SVGValues.length(properties["stroke-width"]) { style.strokeWidth = value }
 		if let value = properties["stroke-linecap"] { style.cap = value == "round" ? 1 : value == "square" ? 2 : 0 }
