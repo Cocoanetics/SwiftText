@@ -116,6 +116,33 @@ struct FontCollectionTests {
 		}
 	}
 
+	/// Mail HTML could otherwise name `/dev/zero` or a private file in `@font-face`.
+	@Test("With local files off, the document's @font-face is not read; the caller's CSS still is")
+	func documentFontFaceNeedsLocalFiles() async throws {
+		let directory = FileManager.default.temporaryDirectory.appendingPathComponent("collection-\(UUID().uuidString)")
+		try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+		defer { try? FileManager.default.removeItem(at: directory) }
+		let url = directory.appendingPathComponent("Test Serif.ttc")
+		try Self.makeCollection().write(to: url)
+		let face = "@font-face { font-family: 'Test Serif'; src: url('\(url.absoluteString)'); }"
+		let html = "<style>\(face) body { font-family: 'Test Serif'; }</style><p>AB</p>"
+		func embedsTestSerif(_ pdf: Data) -> Bool { String(decoding: pdf, as: UTF8.self).contains("TestSerif-Regular") }
+
+		var options = RenderOptions()
+		options.compressStreams = false
+		#expect(embedsTestSerif(try await HTMLRenderer.renderPDF(html: html, options: options)))
+
+		options.allowsLocalFiles = false
+		var warnings: [String] = []
+		let refused = try await HTMLRenderer.renderPDF(html: html, options: options) { warnings.append($0) }
+		#expect(!embedsTestSerif(refused))
+		#expect(warnings.contains { $0.contains("Test Serif") && $0.contains("may not read local files") })
+
+		let trusted = try await HTMLRenderer.renderPDF(
+			html: "<p>AB</p>", css: [face + " body { font-family: 'Test Serif'; }"], options: options)
+		#expect(embedsTestSerif(trusted))
+	}
+
 	@Test("A declared font-weight narrows the faces a collection registers")
 	func declaredWeightNarrows() throws {
 		let book = FontBook()

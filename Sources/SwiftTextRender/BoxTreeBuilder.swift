@@ -262,7 +262,8 @@ public enum BoxTreeBuilder {
 	/// Resolves relative paths against the document directory and accepts absolute
 	/// paths and file URLs. Other URL schemes are deliberately not fetched during
 	/// synchronous layout.
-	private static func resolvedImageURL(_ source: String, baseURL: URL?) -> URL? {
+	/// The file an image source is read from, or `nil` when it is not a local file.
+	static func resolvedImageURL(_ source: String, baseURL: URL?) -> URL? {
 		#if os(Windows)
 		if source.count >= 3 {
 			let characters = Array(source)

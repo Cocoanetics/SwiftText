@@ -138,6 +138,12 @@ browser does:
   draws as a placeholder, and the warning handler says why), or supply your own
   loader to resolve other schemes, such as an email's `cid:` parts. Loading an
   email's images tells its sender it was opened, as any mail client does.
+- **Untrusted HTML** reads no local files when `RenderOptions.allowsLocalFiles`
+  is `false`: `<img>` paths and `file:` URLs draw as placeholders, and the
+  `@font-face` sources in the document's own `<style>` are not read. Otherwise
+  a sender could name `/dev/zero`, which never finishes reading, or a private
+  file to embed in the PDF. Fonts in the caller's CSS and installed system
+  fonts are still used. `swifttext pdf` turns it off for `.eml` input.
 - **Blocks where a table or a line does not expect them** are kept, as CSS 2.1
   keeps them: a `<td style="display: block">` (how templates centre a column of
   fixed width) is wrapped in an anonymous table cell, and an inline box holding
