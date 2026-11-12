@@ -41,6 +41,10 @@ jobs:
         run: swift build --build-tests -v
       - name: Test (macOS)
         run: swift test -v --skip-build
+      # The renderer's concurrent image loading once lost every result only in
+      # optimized builds — what Homebrew installs — while debug tests passed.
+      - name: Test the renderer optimized (macOS)
+        run: swift test -c release -Xswiftc -enable-testing --filter SwiftTextRenderTests
       - name: Build & smoke-test the CLI (macOS)
         run: |
           swift build -c release --product swifttext

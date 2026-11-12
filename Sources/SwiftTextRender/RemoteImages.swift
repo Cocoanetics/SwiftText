@@ -89,23 +89,30 @@ extension HTMLRenderer {
 		collect(root)
 		guard !requests.isEmpty else { return [:] }
 
+		@Sendable func load(_ request: (source: String, url: URL)) async -> (String, Result<Data, any Error>) {
+			do {
+				return (request.source, .success(try await loader(request.url)))
+			} catch {
+				return (request.source, .failure(error))
+			}
+		}
+
+		// Tasks are added straight to `group` and results taken with `next()`:
+		// adding them from a nested function that captured the group while a
+		// `for await` loop iterated it lost every result in optimized builds,
+		// so release binaries drew each remote image as a placeholder.
 		return await withTaskGroup(of: (String, Result<Data, any Error>).self) { group in
 			var pending = requests[...]
-			func startNext() {
-				guard let request = pending.popFirst() else { return }
-				group.addTask {
-					do {
-						return (request.source, .success(try await loader(request.url)))
-					} catch {
-						return (request.source, .failure(error))
-					}
-				}
+			for _ in 0 ..< maximumConcurrentImageLoads {
+				guard let request = pending.popFirst() else { break }
+				group.addTask { await load(request) }
 			}
-			for _ in 0 ..< maximumConcurrentImageLoads { startNext() }
 			var results: LoadedImages = [:]
-			for await (source, result) in group {
+			while let (source, result) = await group.next() {
 				results[source] = result
-				startNext()
+				if let request = pending.popFirst() {
+					group.addTask { await load(request) }
+				}
 			}
 			return results
 		}
