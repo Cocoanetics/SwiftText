@@ -153,6 +153,28 @@ struct HTMLEmailLayoutTests {
 	}
 	#endif
 
+	@Test("With local files off, an image path or file: URL draws a placeholder instead of being read")
+	func localImageNeedsLocalFiles() async throws {
+		let directory = FileManager.default.temporaryDirectory.appendingPathComponent("local-image-\(UUID().uuidString)")
+		try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+		defer { try? FileManager.default.removeItem(at: directory) }
+		let file = directory.appendingPathComponent("icon.png")
+		try #require(Data(base64Encoded: Self.iconPNG)).write(to: file)
+
+		for source in [file.path, file.absoluteString] {
+			let html = "<img src=\"\(source)\" width=\"10\" height=\"10\">"
+			let read = try await render(html)
+			#expect(read.contains("/Subtype /Image"), "\(source) is read by default")
+
+			var options = RenderOptions(compressStreams: false)
+			options.allowsLocalFiles = false
+			var warnings: [String] = []
+			let pdf = try await HTMLRenderer.renderPDF(html: html, options: options) { warnings.append($0) }
+			#expect(!String(decoding: pdf, as: UTF8.self).contains("/Subtype /Image"), "\(source) is not read")
+			#expect(warnings == ["image source '\(source)' could not be loaded: the document may not read local files; rendering a placeholder"])
+		}
+	}
+
 	@Test("Image sources resolve to the URL a browser would fetch")
 	func remoteImageURLs() throws {
 		let page = try #require(URL(string: "https://example.com/mail/view.html"))

@@ -118,6 +118,24 @@ extension HTMLRenderer {
 		}
 	}
 
+	/// The `<img>` sources layout would read from disk: paths and `file:` URLs,
+	/// by the same resolution layout uses. With `RenderOptions.allowsLocalFiles`
+	/// off they are refused before layout gets to them.
+	static func localImageSources(referencedBy root: StyledElement, baseURL: URL?) -> Set<String> {
+		var sources = Set<String>()
+		func collect(_ element: StyledElement) {
+			if element.localName == "img",
+			   let source = element.attributeValue("src")?.trimmingCharacters(in: .whitespacesAndNewlines),
+			   !source.isEmpty, !source.hasPrefix("data:"),
+			   BoxTreeBuilder.resolvedImageURL(source, baseURL: baseURL) != nil {
+				sources.insert(source)
+			}
+			for child in element.elementChildren { collect(child) }
+		}
+		collect(root)
+		return sources
+	}
+
 	/// The URL an image source has to be fetched from, or `nil` when layout
 	/// reads it directly: a `data:` URI, or a local path resolved against a
 	/// local (or missing) base URL.
@@ -133,6 +151,11 @@ extension HTMLRenderer {
 		      let resolved = URL(string: source, relativeTo: baseURL)?.absoluteURL else { return nil }
 		return resolved
 	}
+}
+
+/// Why an image naming a local file was not read: `RenderOptions.allowsLocalFiles` is off.
+struct LocalFileRefused: Error, CustomStringConvertible {
+	var description: String { "the document may not read local files" }
 }
 
 /// One image download that is cut off the moment its body outgrows the limit.

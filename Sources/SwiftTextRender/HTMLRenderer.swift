@@ -51,6 +51,14 @@ public struct RenderOptions {
 	/// then draw as placeholders. Inline `data:` URIs and local files are read
 	/// either way.
 	public var imageLoader: ImageLoader?
+	/// Whether the document may have the renderer read files it names: `<img>`
+	/// sources that are paths or `file:` URLs, and `@font-face` sources in its
+	/// own `<style>`. Turn it off for HTML from an untrusted sender, such as an
+	/// email, which could otherwise name `/dev/zero` (the read never ends) or a
+	/// private file to embed in the PDF. Refused images draw as placeholders and
+	/// refused faces fall back to other fonts, each with a warning. Fonts in the
+	/// caller's `css` and installed system fonts are still used.
+	public var allowsLocalFiles = true
 	/// Running strings for margin boxes: `content: string(name)` shows the
 	/// entry at the page's index (the last entry past the end), e.g. the current chapter.
 	public var pageStrings: [String: [String]] = [:]
@@ -159,7 +167,8 @@ public enum HTMLRenderer {
 		let resolver = StyleResolver(authorStyleSheets: documentSheets + css)
 		options.pageMargins = options.pageMargins.floored(at: options.minimumPageMarginPx)
 		let pageRules = parsePageRules(documentSheets + css)
-		registerFontFaces(documentSheets + css, baseURL: baseURL, in: fonts, warn: reportWarning)
+		registerFontFaces(documentSheets, baseURL: baseURL, readsFiles: options.allowsLocalFiles, in: fonts, warn: reportWarning)
+		registerFontFaces(css, baseURL: baseURL, readsFiles: true, in: fonts, warn: reportWarning)
 
 		// Resolve the base direction (auto-detect from content for Markdown etc.).
 		let baseDirection: Direction
@@ -173,6 +182,12 @@ public enum HTMLRenderer {
 		var loadedImages: LoadedImages = [:]
 		if let imageLoader = options.imageLoader {
 			loadedImages = await loadImages(referencedBy: styled, baseURL: baseURL, using: imageLoader)
+		}
+		if !options.allowsLocalFiles {
+			// Layout reads an image it finds no result for from disk, so a refusal is recorded instead.
+			for source in localImageSources(referencedBy: styled, baseURL: baseURL) where loadedImages[source] == nil {
+				loadedImages[source] = .failure(LocalFileRefused())
+			}
 		}
 		guard let rootBox = BoxTreeBuilder.build(from: styled, baseURL: baseURL, loadedImages: loadedImages,
 		                                         warningHandler: reportWarning) as? BlockBox else { throw RenderError.noRootBox }
@@ -404,7 +419,8 @@ public enum HTMLRenderer {
 
 	/// Register every `@font-face` whose `src` is a readable local font file, so a
 	/// matching `font-family` is drawn with (and embeds) that face.
-	private static func registerFontFaces(_ sheets: [String], baseURL: URL?, in fonts: FontBook, warn: (String) -> Void) {
+	private static func registerFontFaces(_ sheets: [String], baseURL: URL?, readsFiles: Bool,
+	                                      in fonts: FontBook, warn: (String) -> Void) {
 		for sheet in sheets {
 			for node in parseStylesheet(sheet, skipComments: true, skipWhitespace: true) {
 				guard case .atRule(let rule) = node, rule.lowerAtKeyword == "font-face", let content = rule.content else { continue }
@@ -442,6 +458,10 @@ public enum HTMLRenderer {
 					}
 				}
 				guard let family, !family.isEmpty else { continue }
+				guard readsFiles else {
+					if !sources.isEmpty { warn("@font-face \(family): not read, the document may not read local files") }
+					continue
+				}
 				var registeredFace = false
 				for source in sources {
 					// A scheme-less source is a path: relative to the document, or to the working directory without one.

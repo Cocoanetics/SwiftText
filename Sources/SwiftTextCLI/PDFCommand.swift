@@ -278,8 +278,16 @@ struct PDF: AsyncParsableCommand {
 		var options = RenderOptions()
 		options.pageWidthPx = widthPoints / 0.75 // points → CSS pixels
 		options.pageHeightPx = heightPoints / 0.75
+		// A mail's HTML comes from its sender: it may not make the renderer read local files.
+		options.allowsLocalFiles = !rendersMail
 		let data = try await HTMLRenderer.renderPDF(html: html, baseURL: baseURL, options: options)
 		try writeData(data, to: outputURL)
+	}
+
+	/// Whether the input is an `.eml` message.
+	private var rendersMail: Bool {
+		guard !stdin, let input, parseHTTPURL(input) == nil else { return false }
+		return URL(fileURLWithPath: input).pathExtension.lowercased() == "eml"
 	}
 
 	private func htmlString(from source: HTMLSource) throws -> (html: String, baseURL: URL?) {
