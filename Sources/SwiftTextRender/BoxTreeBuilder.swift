@@ -50,11 +50,27 @@ public enum BoxTreeBuilder {
 
 		let box: Box
 		switch style.display {
-		case .inline, .inlineBlock:
+		case .inline:
+			box = InlineBox(style: style, children: childBoxes)
+		case .inlineBlock where !childBoxes.contains(where: { $0 is BlockBox }):
 			box = InlineBox(style: style, children: childBoxes)
 		default:
-			let block = BlockBox(style: style)
-			block.children = normalizeBlockChildren(childBoxes, parentStyle: style)
+			// An inline-block that holds block-level boxes — `<span
+			// style="display: inline-block"><p>…</p></span>`, a column `<div>` —
+			// lays out as a block: there is no atomic inline-block layout yet,
+			// and inline layout would drop the blocks with all they contain.
+			var blockStyle = style
+			if blockStyle.display == .inlineBlock { blockStyle.display = .block }
+			let block = BlockBox(style: blockStyle)
+			block.children = normalizeBlockChildren(childBoxes, parentStyle: blockStyle)
+			if blockStyle.display == .tableRow {
+				block.children = wrappingNonCells(block.children, rowStyle: blockStyle)
+			}
+			// A block-level link (`<a style="display: block">`, an email button)
+			// links its content the way an inline one does.
+			if element.localName == "a", let href = element.attributeValue("href") {
+				inheritLink(href, into: block)
+			}
 			if style.display == .listItem {
 				let marker = markerText(for: element)
 				if !marker.isEmpty { block.marker = marker }
@@ -168,7 +184,12 @@ public enum BoxTreeBuilder {
 		for child in element.children {
 			switch child {
 			case .element(let childElement):
-				if let box = build(from: childElement, baseURL: baseURL, loadedImages: loadedImages, warningHandler: warningHandler) {
+				guard let box = build(from: childElement, baseURL: baseURL, loadedImages: loadedImages, warningHandler: warningHandler) else {
+					continue
+				}
+				if let inline = box as? InlineBox, inline.children.contains(where: { $0 is BlockBox }) {
+					result.append(contentsOf: splittingAroundBlocks(inline))
+				} else {
 					result.append(box)
 				}
 			case .text(let text):
@@ -296,6 +317,99 @@ public enum BoxTreeBuilder {
 		}
 		flushInlineRun()
 		return result
+	}
+
+	/// CSS 2.1 §9.2.1.1: an inline box that holds a block-level box — `<a
+	/// href="…"><img style="display: block"></a>`, as HTML email wraps its
+	/// images — is broken around it, and the block becomes a sibling of the
+	/// inline pieces either side, which the enclosing block container wraps in
+	/// anonymous blocks. Inline layout cannot place a block, so without this
+	/// the block and everything in it went missing. Nested inline boxes have
+	/// been split already, so a block can only be a direct child here.
+	private static func splittingAroundBlocks(_ inline: InlineBox) -> [Box] {
+		let isAnchor = inline.element.map { element in
+			!(element.attributeValue("id") ?? "").isEmpty
+				|| (element.localName == "a" && !(element.attributeValue("name") ?? "").isEmpty)
+		} ?? false
+		// A block split out of a link stays part of it: its text and image link there.
+		let href = inline.element?.localName == "a" ? inline.element?.attributeValue("href") : nil
+		var pieces: [Box] = []
+		var run: [Box] = []
+		func flushRun() {
+			defer { run = [] }
+			// A piece of nothing but collapsible whitespace generates no line box
+			// in a browser, so it is left out — all but the first piece of an
+			// element with an id, which keeps the target of internal links.
+			if run.allSatisfy(isCollapsibleWhitespace) {
+				guard isAnchor, pieces.isEmpty else { return }
+			}
+			let piece = InlineBox(style: inline.style, children: run)
+			piece.element = inline.element
+			pieces.append(piece)
+		}
+		for child in inline.children {
+			if child is BlockBox {
+				flushRun()
+				if let href { inheritLink(href, into: child) }
+				pieces.append(child)
+			} else {
+				run.append(child)
+			}
+		}
+		flushRun()
+		return pieces
+	}
+
+	/// Give `box` and every block inside it a link's `href`, stopping at blocks
+	/// a nearer link has claimed already — the tree is built from the inside out.
+	private static func inheritLink(_ href: String, into box: Box) {
+		guard let block = box as? BlockBox, block.linkHref == nil else { return }
+		block.linkHref = href
+		for child in block.children {
+			inheritLink(href, into: child)
+		}
+	}
+
+	/// CSS 2.1 §17.2.1: the children of a table row that are not cells — a
+	/// `<td style="display: block">`, which email templates use to centre a
+	/// column of fixed width — are wrapped, together with their non-cell
+	/// neighbours, in an anonymous cell. Table layout places only cells, so
+	/// without this their content went missing.
+	private static func wrappingNonCells(_ children: [Box], rowStyle: ComputedStyle) -> [Box] {
+		func isCell(_ box: Box) -> Bool { (box as? BlockBox)?.style.display == .tableCell }
+		guard !children.allSatisfy(isCell) else { return children }
+
+		var result: [Box] = []
+		var run: [Box] = []
+		func flushRun() {
+			defer { run = [] }
+			guard !run.isEmpty else { return }
+			var cellStyle = ComputedStyle.anonymousBlock(from: rowStyle)
+			cellStyle.display = .tableCell
+			let cell = BlockBox(style: cellStyle, isAnonymous: true)
+			cell.children = run
+			result.append(cell)
+		}
+		for child in children {
+			if isCell(child) {
+				flushRun()
+				result.append(child)
+			} else {
+				run.append(child)
+			}
+		}
+		flushRun()
+		return result
+	}
+
+	/// Whether `box` holds nothing but collapsible whitespace: a text box of
+	/// spaces, or an inline box (not an image, `<br>` or checkbox) made only
+	/// of such boxes.
+	private static func isCollapsibleWhitespace(_ box: Box) -> Bool {
+		if box is TextBox { return isWhitespaceOnly(box) }
+		guard let inline = box as? InlineBox, inline.image == nil,
+		      inline.element?.localName != "br", inline.element?.localName != "input" else { return false }
+		return inline.children.allSatisfy(isCollapsibleWhitespace)
 	}
 
 	private static func isWhitespaceOnly(_ box: Box) -> Bool {

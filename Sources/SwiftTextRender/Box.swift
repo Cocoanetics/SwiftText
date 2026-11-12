@@ -68,6 +68,10 @@ public final class BlockBox: Box {
 	public var marker: String?
 	/// For replaced `<img>` boxes, the decoded image to draw.
 	public var image: DecodedImage?
+	/// The `href` of the link this block belongs to: a block-level `<a href>`,
+	/// or the inline one it was split out of. Its text links there, and so
+	/// does its image. A nearer link inside it wins, as in inline layout.
+	public var linkHref: String?
 
 	init(style: ComputedStyle, isAnonymous: Bool = false) {
 		self.isAnonymous = isAnonymous

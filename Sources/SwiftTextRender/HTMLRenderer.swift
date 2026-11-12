@@ -643,7 +643,7 @@ public enum HTMLRenderer {
 		/// Candidates the author asked us to steer clear of
 		/// (`break-before` / `break-after: avoid`).
 		var discouraged: Set<Double> = []
-		/// Ranges that should not be split (`break-inside: avoid`).
+		/// Ranges that should not be split (`break-inside: avoid`, block images).
 		var atomic: [(top: Double, bottom: Double)] = []
 		/// Top of the first thing that actually paints — a non-empty line box or a
 		/// replaced image. Used to recognise a forced break that has nothing above
@@ -1126,6 +1126,10 @@ public enum HTMLRenderer {
 
 		if block.image != nil {
 			points.noteContent(top: top, bottom: bottom)
+			// A replaced image is monolithic: it moves to the next page whole
+			// rather than being cut where a box beside it — another cell of the
+			// row — offers a break.
+			if block.height > 0 { points.atomic.append((top, bottom)) }
 		} else if block.children.isEmpty, block.lines.isEmpty, block.height > 0, paintsDecoration(block) {
 			// A box with nothing in it but a background or border still fills its
 			// page, so a break after it is not a blank-page break. The emptiness
