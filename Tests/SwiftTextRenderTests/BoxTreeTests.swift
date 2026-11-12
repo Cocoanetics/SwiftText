@@ -131,6 +131,27 @@ struct BoxTreeTests {
 		#expect((section.children[1] as? BlockBox)?.element?.localName == "div")
 	}
 
+	@Test("A block split out of a link keeps the link, down to the blocks inside it")
+	func blockInLinkKeepsHref() async throws {
+		let tree = try await boxTree("<section><a href=\"https://example.com/book\"><div><p>Title</p></div></a></section>")
+		let div = try #require(find(tree, tag: "div") as? BlockBox)
+		#expect(div.linkHref == "https://example.com/book")
+		let p = try #require(find(div, tag: "p") as? BlockBox)
+		#expect(p.linkHref == "https://example.com/book")
+	}
+
+	@Test("A block-level link hands its href to its blocks; other blocks have none")
+	func blockLevelLinkHref() async throws {
+		let tree = try await boxTree("<a href=\"https://example.com/\" style=\"display: block\"><p>Go</p></a><p>Plain</p>")
+		let link = try #require(find(tree, tag: "a") as? BlockBox)
+		#expect(link.linkHref == "https://example.com/")
+		#expect((link.children.first as? BlockBox)?.linkHref == "https://example.com/")
+		let body = try #require(find(tree, tag: "body") as? BlockBox)
+		let plain = try #require(body.children.last as? BlockBox)
+		#expect(plain.element?.localName == "p")
+		#expect(plain.linkHref == nil)
+	}
+
 	@Test("An inline-block that holds blocks lays out as a block")
 	func inlineBlockWithBlocks() async throws {
 		let tree = try await boxTree("<div><span style=\"display: inline-block\"><p>Bibliothek</p></span></div>")

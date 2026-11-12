@@ -66,6 +66,11 @@ public enum BoxTreeBuilder {
 			if blockStyle.display == .tableRow {
 				block.children = wrappingNonCells(block.children, rowStyle: blockStyle)
 			}
+			// A block-level link (`<a style="display: block">`, an email button)
+			// links its content the way an inline one does.
+			if element.localName == "a", let href = element.attributeValue("href") {
+				inheritLink(href, into: block)
+			}
 			if style.display == .listItem {
 				let marker = markerText(for: element)
 				if !marker.isEmpty { block.marker = marker }
@@ -326,6 +331,8 @@ public enum BoxTreeBuilder {
 			!(element.attributeValue("id") ?? "").isEmpty
 				|| (element.localName == "a" && !(element.attributeValue("name") ?? "").isEmpty)
 		} ?? false
+		// A block split out of a link stays part of it: its text and image link there.
+		let href = inline.element?.localName == "a" ? inline.element?.attributeValue("href") : nil
 		var pieces: [Box] = []
 		var run: [Box] = []
 		func flushRun() {
@@ -343,6 +350,7 @@ public enum BoxTreeBuilder {
 		for child in inline.children {
 			if child is BlockBox {
 				flushRun()
+				if let href { inheritLink(href, into: child) }
 				pieces.append(child)
 			} else {
 				run.append(child)
@@ -350,6 +358,16 @@ public enum BoxTreeBuilder {
 		}
 		flushRun()
 		return pieces
+	}
+
+	/// Give `box` and every block inside it a link's `href`, stopping at blocks
+	/// a nearer link has claimed already — the tree is built from the inside out.
+	private static func inheritLink(_ href: String, into box: Box) {
+		guard let block = box as? BlockBox, block.linkHref == nil else { return }
+		block.linkHref = href
+		for child in block.children {
+			inheritLink(href, into: child)
+		}
 	}
 
 	/// CSS 2.1 §17.2.1: the children of a table row that are not cells — a

@@ -322,6 +322,11 @@ public final class Painter {
 		          top: box.y + border.top + paddingTop,
 		          width: box.width - border.left - border.right - paddingLeft - paddingRight,
 		          height: box.height - border.top - border.bottom - paddingTop - paddingBottom)
+		// `<a href="…"><img style="display: block"></a>`: the image is the link.
+		if let href = box.linkHref {
+			addLinkAnnotation(x: box.x, width: box.width, top: box.y, bottom: box.y + box.height,
+			                  anchor: box.y, href: href)
+		}
 	}
 
 	/// Draw an image (or its placeholder) into a content box given in column

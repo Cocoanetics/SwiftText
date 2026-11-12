@@ -33,7 +33,7 @@ extension LayoutEngine {
 			underline: box.style.underline ? TextDecorationRun(source: source, style: box.style) : nil,
 			lineThrough: box.style.lineThrough ? TextDecorationRun(source: source, style: box.style) : nil)
 		for child in box.children {
-			collectInline(child, into: &tokens, href: nil, decorations: decorations)
+			collectInline(child, into: &tokens, href: box.linkHref, decorations: decorations)
 		}
 
 		// Resolve bidi levels over the whole inline content (per paragraph) so each

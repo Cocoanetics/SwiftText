@@ -294,7 +294,7 @@ struct HTMLEmailLayoutTests {
 	}
 
 	/// Audible's covers: `<a href="…"><img style="display: block"></a>`.
-	@Test("A block image inside a link is drawn")
+	@Test("A block image inside a link is drawn and stays a link")
 	func blockImageInLink() async throws {
 		let html = """
 			<table><tr><td><a href="https://example.com/book">
@@ -304,6 +304,23 @@ struct HTMLEmailLayoutTests {
 		let pdf = try await render(html)
 		#expect(pdf.contains("/Subtype /Image"))
 		#expect(occurrences(of: " Do", in: pdf) == 1)
+		#expect(occurrences(of: "/URI (https://example.com/book)", in: pdf) == 1)
+	}
+
+	@Test("Text in a block inside a link, or in a block-level link, links there")
+	func blockTextInLink() async throws {
+		let html = """
+			<a href="https://example.com/inline"><div>Inside a link</div></a>
+			<a href="https://example.com/block" style="display: block">A block link</a>
+			<p>Not a link</p>
+			"""
+		let pdf = try await render(html)
+		let inline = occurrences(of: "/URI (https://example.com/inline)", in: pdf)
+		let block = occurrences(of: "/URI (https://example.com/block)", in: pdf)
+		#expect(inline > 0)
+		#expect(block > 0)
+		// One annotation per word; none for the paragraph after the links.
+		#expect(occurrences(of: "/URI (", in: pdf) == inline + block)
 	}
 
 	@Test("A block image moves to the next page whole, not cut where the cell beside it breaks")
