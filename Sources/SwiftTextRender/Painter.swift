@@ -133,6 +133,15 @@ public final class Painter {
 		return top + height >= sliceTop - 0.5 && top <= sliceBottom + 0.5
 	}
 
+	/// Whether a box overlaps this page by more than rounding slack, rather than
+	/// merely touching its top or bottom edge. Pagination moves a block image to
+	/// the next page whole, so one that only touches the edge belongs to the
+	/// neighbouring page: painting it here, clipped, would leave a sliver.
+	private func boxOverlapsSlice(top: Double, height: Double) -> Bool {
+		if paintingRepeatedHeader { return true }
+		return top + height > sliceTop + 0.5 && top < sliceBottom - 0.5
+	}
+
 	/// Whether a line whose top sits at column `top` belongs to this page.
 	/// Pagination breaks at line boundaries, so each line has exactly one home
 	/// page: the slice whose half-open `[top, bottom)` range contains its top.
@@ -160,6 +169,7 @@ public final class Painter {
 			// normal flow a child's extent is contained by its parent's, so pruning
 			// a non-intersecting block can't drop visible descendants.
 			guard blockIntersectsSlice(top: block.y, height: block.height) else { return }
+			if block.image != nil, !boxOverlapsSlice(top: block.y, height: block.height) { return }
 			paintBackground(block)
 			paintBorders(block)
 			if let image = block.image {

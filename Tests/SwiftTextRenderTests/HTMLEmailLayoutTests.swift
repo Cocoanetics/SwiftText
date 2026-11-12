@@ -271,6 +271,61 @@ struct HTMLEmailLayoutTests {
 		#expect(abs((line.y + line.height / 2) - (cells[1].y + cells[1].height / 2)) < 0.5)
 	}
 
+	// MARK: - Blocks where tables and inline boxes do not expect them
+
+	/// Billings Pro's mail centres its column in `<td style="display: block">`,
+	/// which rendered as an empty page.
+	@Test("A cell restyled display: block keeps its content, centred at its max-width")
+	func blockStyledCell() async throws {
+		let html = """
+			<table width="100%" cellspacing="0" cellpadding="0"><tr>
+			<td></td>
+			<td style="display: block; max-width: 300px; margin: 0 auto; padding: 0">Payment Declined</td>
+			<td></td>
+			</tr></table>
+			"""
+		let root = try await layout(html, width: 600)
+		let cells = blocks(root, "td")
+		try #require(cells.count == 3)
+		let content = cells[1]
+		#expect(content.lines.first?.fragments.map(\.text) == ["Payment", "Declined"])
+		#expect(content.width == 300)
+		#expect(content.x == 150)
+	}
+
+	/// Audible's covers: `<a href="…"><img style="display: block"></a>`.
+	@Test("A block image inside a link is drawn")
+	func blockImageInLink() async throws {
+		let html = """
+			<table><tr><td><a href="https://example.com/book">
+			<img src="\(Self.icon)" width="24" height="24" style="display: block">
+			</a></td></tr></table>
+			"""
+		let pdf = try await render(html)
+		#expect(pdf.contains("/Subtype /Image"))
+		#expect(occurrences(of: " Do", in: pdf) == 1)
+	}
+
+	@Test("A block image moves to the next page whole, not cut where the cell beside it breaks")
+	func blockImageIsNotSplitAcrossPages() async throws {
+		let lines = (1...20).map { "line \($0)" }.joined(separator: "<br>")
+		let html = """
+			<table cellspacing="0" cellpadding="0"><tr>
+			<td style="font-size: 10px; line-height: 20px">\(lines)</td>
+			<td style="vertical-align: top"><div style="height: 250px"></div>\
+			<img src="\(Self.icon)" width="100" height="100" style="display: block"></td>
+			</tr></table>
+			"""
+		// The page ends at 300px, inside the image (250–350px), where the lines
+		// of the first cell offer breaks at every 20px.
+		let options = RenderOptions(pageWidthPx: 400, pageHeightPx: 300, pageMarginPx: 0, compressStreams: false)
+		let data = try await HTMLRenderer.renderPDF(html: html, options: options)
+		let pdf = String(decoding: data, as: UTF8.self)
+		#expect(occurrences(of: "/Type /Page", in: pdf) - occurrences(of: "/Type /Pages", in: pdf) == 2)
+		// Drawn once, on the second page: not also as a sliver on the first.
+		#expect(occurrences(of: " Do", in: pdf) == 1)
+	}
+
 	// MARK: - End to end
 
 	/// The structure of Google's "Payment received" receipt, which rendered
@@ -338,6 +393,10 @@ struct HTMLEmailLayoutTests {
 			if let block = child as? BlockBox { result += blocks(block, name) }
 		}
 		return result
+	}
+
+	private func occurrences(of needle: String, in haystack: String) -> Int {
+		haystack.components(separatedBy: needle).count - 1
 	}
 
 	private func replacedFragments(_ box: BlockBox) -> [TextFragment] {

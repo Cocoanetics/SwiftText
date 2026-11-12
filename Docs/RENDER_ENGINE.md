@@ -138,6 +138,11 @@ browser does:
   draws as a placeholder, and the warning handler says why), or supply your own
   loader to resolve other schemes, such as an email's `cid:` parts. Loading an
   email's images tells its sender it was opened, as any mail client does.
+- **Blocks where a table or a line does not expect them** are kept, as CSS 2.1
+  keeps them: a `<td style="display: block">` (how templates centre a column of
+  fixed width) is wrapped in an anonymous table cell, and an inline box holding
+  a block — `<a href="…"><img style="display: block"></a>` — is split around
+  it. A block image moves to the next page whole rather than being cut.
 - **CR LF line ends**, which every mail body has, read as single newlines.
 - The **Euro sign** is drawn from an embedded, metric-compatible face (Arial,
   Times New Roman, or Liberation) when one is installed: viewers disagree on the
@@ -146,7 +151,8 @@ browser does:
 ## Not yet (roadmap)
 
 Flex/grid, floats (an `align="left"` image or table stays in the flow),
-positioned boxes, inline-block boxes (laid out as inline), parent/child margin
+positioned boxes, inline-block boxes (laid out as inline, or as a block when
+they hold block-level boxes, so side-by-side columns stack), parent/child margin
 collapsing, transforms, gradients, background images, GIF/WebP/SVG images,
 OpenType shaping beyond Arabic presentation forms (GSUB/GPOS), hyphenation. See
 the layout source for the simplifications called out in comments.
