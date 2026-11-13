@@ -31,7 +31,8 @@ public struct DocxDocument {
 	/// Returns rendered paragraphs using the requested style. In Markdown, the
 	/// paragraphs of an alert box (SwiftText's "Callout" styles) render together as one
 	/// `> [!KIND]` block, consecutive quoted paragraphs as one `>` block, "Code Block"
-	/// paragraphs as one fenced block, and a rule paragraph as `---`.
+	/// paragraphs as one fenced block, a native Word table as a GFM pipe table, and a
+	/// rule paragraph as `---`.
 	public func renderedParagraphs(style: RenderStyle = .markdown) -> [RenderedParagraph] {
 		var numberingState = NumberingState(numbering: numbering)
 		var rendered = [RenderedParagraph]()
@@ -39,6 +40,29 @@ public struct DocxDocument {
 		while index < paragraphs.count {
 			let paragraph = paragraphs[index]
 			let paragraphStyle = styles.style(for: paragraph.styleIdentifier)
+
+			// Native Word tables anchored on this paragraph become Markdown table blocks.
+			if !paragraph.tables.isEmpty {
+				for table in paragraph.tables where !table.cells.isEmpty {
+					switch style {
+					case .markdown:
+						if let text = Self.markdownTable(table) {
+							rendered.append(RenderedParagraph(text: text, isListItem: false))
+						}
+					case .plainText:
+						let text = table.cells.map { $0.joined(separator: "\t") }.joined(separator: "\n")
+						if !text.isEmpty {
+							rendered.append(RenderedParagraph(text: text, isListItem: false))
+						}
+					}
+				}
+				// A table-only anchor has no other paragraph content.
+				if paragraph.isEmpty {
+					index += 1
+					continue
+				}
+			}
+
 			if style == .markdown, let callout = paragraphStyle?.callout {
 				let alert = markdownAlert(from: index, kind: callout.kind, numberingState: &numberingState)
 				rendered.append(RenderedParagraph(text: alert.block, isListItem: false))
@@ -67,6 +91,35 @@ public struct DocxDocument {
 			}
 		}
 		return rendered
+	}
+
+	/// Renders a table (row 0 = header) as a GitHub-flavored Markdown table. Hand-rolled
+	/// like `PagesDocument.markdownTable` so cell strikethrough stays `~~…~~` — cmark's
+	/// `MarkupFormatter` always emits a single tilde, which GFM does not treat as strike.
+	static func markdownTable(_ table: Paragraph.Table) -> String? {
+		let grid = table.cells
+		let columns = grid.map(\.count).max() ?? 0
+		guard columns > 0, !grid.isEmpty else { return nil }
+		func cell(_ value: String) -> String {
+			value.replacingOccurrences(of: "\n", with: " ")
+				.replacingOccurrences(of: "|", with: "\\|")
+				.trimmingCharacters(in: .whitespaces)
+		}
+		func row(_ cells: [String]) -> String {
+			let padded = (0..<columns).map { $0 < cells.count ? cell(cells[$0]) : "" }
+			return "| " + padded.joined(separator: " | ") + " |"
+		}
+		func delimiter(_ column: Int) -> String {
+			switch column < table.columnAlignments.count ? table.columnAlignments[column] : .left {
+			case .left: return "---"
+			case .center: return ":-:"
+			case .right: return "--:"
+			}
+		}
+		var lines = [row(grid[0])]
+		lines.append("| " + (0..<columns).map(delimiter).joined(separator: " | ") + " |")
+		for bodyRow in grid.dropFirst() { lines.append(row(bodyRow)) }
+		return lines.joined(separator: "\n")
 	}
 
 	/// Renders the run of "Code Block" paragraphs starting at `start` as a fenced block:
@@ -166,10 +219,49 @@ public struct DocxDocument {
 		/// Whether an empty, unstyled paragraph preceded this one: a boundary between
 		/// two quotes.
 		internal var followsBreak = false
+		/// Native Word tables anchored at this paragraph, in document order; rendered
+		/// as GFM pipe tables. The writer also wraps code blocks in a single-cell
+		/// table — those stay as ordinary paragraphs, not entries here.
+		internal var tables: [Table] = []
+
+		/// A native Word table reconstructed from `w:tbl` / `w:tr` / `w:tc`: cell
+		/// strings (row 0 = header, already marked up for Markdown) plus per-column
+		/// horizontal alignment from each header cell's `w:jc`.
+		public struct Table {
+			public enum ColumnAlignment: Sendable {
+				case left, center, right
+			}
+			public var cells: [[String]]
+			public var columnAlignments: [ColumnAlignment]
+			public init(cells: [[String]], columnAlignments: [ColumnAlignment] = []) {
+				self.cells = cells
+				self.columnAlignments = columnAlignments
+			}
+		}
 
 		/// Returns the raw text for the paragraph without any formatting.
 		public var text: String {
 			runs.map(\.text).joined()
+		}
+
+		/// Marked-up Markdown for this paragraph's runs. When `suppressingUniformBold`
+		/// is set and every non-empty run is bold (SwiftText's force-bolded header
+		/// look), bold markers are dropped; partial bold such as `Revenue **2026**`
+		/// is kept.
+		internal func markedUpText(suppressingUniformBold: Bool = false) -> String {
+			let suppressBold = suppressingUniformBold && hasUniformBold
+			return DocxDocument.normalizedText(runs.map { $0.markedUp(suppressingBold: suppressBold) }.joined())
+		}
+
+		/// True when every non-empty text run is bold. Used to strip the writer's
+		/// force-bolded header styling without dropping intentional partial bold.
+		internal var hasUniformBold: Bool {
+			let textRuns = runs.filter {
+				$0.footnoteNumber == nil
+					&& !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+			}
+			guard !textRuns.isEmpty else { return false }
+			return textRuns.allSatisfy(\.bold)
 		}
 
 		/// Indicates whether the paragraph belongs to a list.
@@ -214,7 +306,7 @@ public struct DocxDocument {
 			case .plainText:
 				joined = runs.map(\.text).joined()
 			case .markdown:
-				joined = runs.map { $0.markedUp() }.joined()
+				joined = runs.map { $0.markedUp(suppressingBold: false) }.joined()
 			}
 			var result = DocxDocument.normalizedText(joined)
 			guard !result.isEmpty else {
@@ -244,15 +336,17 @@ public struct DocxDocument {
 		public var footnoteNumber: Int?
 
 		/// Returns the run text with Markdown bold/italic/strikethrough markers
-		/// applied. Strikethrough (`~~`) wraps any emphasis markers.
-		public func markedUp() -> String {
+		/// applied. Strikethrough (`~~`) wraps any emphasis markers. Pass
+		/// `suppressingBold` for table header cells the writer force-bolded.
+		public func markedUp(suppressingBold: Bool = false) -> String {
 			if let footnoteNumber {
 				return "[^\(footnoteNumber)]"
 			}
 			guard !text.isEmpty else {
 				return ""
 			}
-			guard bold || italic || strike else {
+			let effectiveBold = bold && !suppressingBold
+			guard effectiveBold || italic || strike else {
 				return text
 			}
 			let components = splitWhitespace(from: text)
@@ -260,9 +354,9 @@ public struct DocxDocument {
 				return text
 			}
 			var core = components.core
-			if bold && italic {
+			if effectiveBold && italic {
 				core = "***\(core)***"
-			} else if bold {
+			} else if effectiveBold {
 				core = "**\(core)**"
 			} else if italic {
 				core = "*\(core)*"

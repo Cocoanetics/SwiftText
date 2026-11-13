@@ -284,6 +284,8 @@ let packageTargets: [Target] = [
 		name: "SwiftTextDOCX",
 		dependencies: [
 			"SwiftTextMarkdown",
+			// Markdown → DOCX walks a swift-markdown AST (MarkdownDocxBuilder).
+			.product(name: "Markdown", package: "swift-markdown"),
 			// DOCX must be active wherever SwiftTextDOCX compiles; the CLI trait
 			// transitively enables it, so listing CLI here would be redundant.
 			.product(name: "Archive", package: "swift-archive", condition: .when(traits: ["DOCX"])),
