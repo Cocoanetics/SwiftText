@@ -1,0 +1,5 @@
+{
+  "name": "swifttext",
+  "description": "Read PDFs, scans, Word, Pages, Numbers, Keynote and web pages as text, Markdown or tables, and render Markdown into PDF, DOCX, Pages, EPUB or HTML with the SwiftText CLI.",
+  "author": "Oliver Drobnik"
+}
