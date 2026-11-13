@@ -25,12 +25,16 @@ TAP="Cocoanetics/homebrew-tap"
 FORMULA="Formula/swifttext.rb"
 URL="https://github.com/Cocoanetics/SwiftText/archive/refs/tags/$TAG.tar.gz"
 
-fetch_formula() { gh api "repos/$TAP/contents/$FORMULA?ref=main" --jq .content | base64 -d; }
+# Fetch the formula blob at a specific commit so the edit and expectedHeadOid
+# refer to the same revision (concurrent tap updates then reject the mutation).
+fetch_formula() { gh api "repos/$TAP/contents/$FORMULA?ref=$1" --jq .content | base64 -d; }
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
-fetch_formula >"$work/formula.rb"
+head=$(gh api "repos/$TAP/branches/main" --jq .commit.sha)
+fetch_formula "$head" >"$work/formula.rb"
+cp "$work/formula.rb" "$work/formula.orig.rb"
 if grep -qF "url \"$URL\"" "$work/formula.rb"; then
     echo "$FORMULA already points at $TAG"
     exit 0
@@ -47,21 +51,40 @@ grep -qF "url \"$URL\"" "$work/formula.rb" && grep -qF "sha256 \"$SHA\"" "$work/
     echo "Could not update the url/sha256 lines in $FORMULA" >&2
     exit 1
 }
-diff -u <(fetch_formula) "$work/formula.rb" || true
+diff -u "$work/formula.orig.rb" "$work/formula.rb" || true
 
-head=$(gh api "repos/$TAP/branches/main" --jq .commit.sha)
 if [[ "$DRY_RUN" == 1 ]]; then
     echo "[dry run] would commit 'swifttext $VERSION' to $TAP@main (head $head)"
     exit 0
 fi
-jq -n --arg repo "$TAP" --arg head "$head" --arg message "swifttext $VERSION" \
-    --arg path "$FORMULA" --arg contents "$(base64 -i "$work/formula.rb")" '{
-        query: "mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { url } } }",
-        variables: { input: {
-            branch: { repositoryNameWithOwner: $repo, branchName: "main" },
-            expectedHeadOid: $head,
-            message: { headline: $message },
-            fileChanges: { additions: [{ path: $path, contents: $contents }] }
-        } }
-    }' | gh api graphql --input - --jq .data.createCommitOnBranch.commit.url
+
+# Build the GraphQL body with gh only (no standalone jq). Values are version /
+# hex / base64, so embedding them in JSON is safe for this script's inputs.
+contents_b64=$(base64 -i "$work/formula.rb" | tr -d '\n')
+cat >"$work/payload.json" <<EOF
+{
+  "query": "mutation(\$input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: \$input) { commit { url } } }",
+  "variables": {
+    "input": {
+      "branch": {
+        "repositoryNameWithOwner": "$TAP",
+        "branchName": "main"
+      },
+      "expectedHeadOid": "$head",
+      "message": {
+        "headline": "swifttext $VERSION"
+      },
+      "fileChanges": {
+        "additions": [
+          {
+            "path": "$FORMULA",
+            "contents": "$contents_b64"
+          }
+        ]
+      }
+    }
+  }
+}
+EOF
+gh api graphql --input "$work/payload.json" --jq .data.createCommitOnBranch.commit.url
 echo "Updated $FORMULA to $TAG ($SHA)"
