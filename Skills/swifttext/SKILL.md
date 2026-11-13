@@ -43,7 +43,7 @@ app needs to be open or installed.
 | Web page or `.html` | text or Markdown | `swifttext html <url-or-file> -m [--main-content]` |
 | Markdown | HTML, PDF, DOCX, Pages or EPUB | `swifttext render file.md -o out.pdf` (format from the extension) |
 | HTML, Markdown, `.docx`, `.eml`, URL | PDF | `swifttext pdf <input> [-o out.pdf]` |
-| PDF or image | a picture of what was detected | `swifttext overlay file.pdf` |
+| PDF or image | a picture of what was detected | `swifttext overlay file.pdf` (macOS 26+) |
 
 `ocr` is the default subcommand, so `swifttext file.pdf` also works.
 
@@ -58,9 +58,10 @@ so a PDF or image can't be read and there is no default subcommand. `pdf`,
 always use the pure-Swift engine. Every other reader and writer works the same
 on all platforms.
 
-`ocr -m` / `--markdown` needs Vision document segmentation, which is macOS 26
-only. On macOS 13–25 use plain `ocr` (no `-m`); structured Markdown from OCR is
-unavailable there.
+Vision document segmentation is macOS 26 only. That gates `ocr -m` /
+`--markdown`, `ocr --save-images`, and the whole `overlay` subcommand. On
+macOS 13–25 use plain `ocr` (no `-m`, no `--save-images`); structured Markdown,
+saved page images, and overlay drawings are unavailable there.
 
 ## Core rules
 

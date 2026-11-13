@@ -25,13 +25,16 @@ Windows neither subcommand exists.
   Raise it for small print; lower it for speed on large clean scans.
 - `--language de` (repeatable, or `de,en`) is a recognition hint. Give it for
   anything that isn't English, especially for umlauts and accents.
-- `--save-images <dir>` writes detected photos and charts as PNG files.
+- `--save-images <dir>` writes detected photos and charts as PNG files —
+  macOS 26 only (same Vision document segmentation as `-m`). On macOS 13–25
+  omit it; plain OCR still works without saving images.
 
 To see why a page came out in the wrong order or a table was missed, render what
-Vision detected:
+Vision detected (`overlay` is macOS 26 only; on older macOS it fails the same
+way as `ocr -m`):
 
 ```bash
-swifttext overlay page.pdf          # writes page-overlay.pdf
+swifttext overlay page.pdf          # writes page-overlay.pdf (macOS 26+)
 swifttext overlay page.pdf --raw    # raw Vision blocks instead of reconstructed ones
 ```
 
