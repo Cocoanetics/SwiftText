@@ -14,7 +14,9 @@ only (the SwiftText library offers the same recognition on iOS). On Linux and
 Windows neither subcommand exists.
 
 - Without options you get plain text. `-m`/`--markdown` uses Vision document
-  segmentation and emits Markdown with lists, tables and image placeholders.
+  segmentation and emits Markdown with lists, tables and image placeholders —
+  macOS 26 only. On macOS 13–25 omit `-m` and use plain OCR; structured
+  Markdown from OCR fails on those systems.
 - `-l`/`--lines`: one recognised line per output line, unformatted.
 - A PDF's embedded text layer is used when it has one; pages without text are
   rasterised and recognised. `--force-ocr` ignores the text layer for every page

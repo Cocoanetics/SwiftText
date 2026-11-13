@@ -5,7 +5,7 @@
 # MC_RELEASE_TAG and MC_RELEASE_NOTES_FILE set. Needs a signed-in `clawhub`
 # (`clawhub login`). Safe to re-run: a version already on ClawHub is skipped.
 #
-#   DRY_RUN=1 Scripts/release-clawhub.sh 2.10.0   # preview, publishes nothing
+#   DRY_RUN=1 Scripts/release-clawhub.sh 2.10.0   # clawhub --dry-run, publishes nothing
 
 set -euo pipefail
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
@@ -30,10 +30,9 @@ if [[ -s "${MC_RELEASE_NOTES_FILE:-}" ]]; then
     CHANGELOG="$(cat "$MC_RELEASE_NOTES_FILE")"
 fi
 
+PUBLISH_ARGS=(--no-input publish "$SKILL_DIR" --slug swifttext --name SwiftText --version "$VERSION" \
+    --changelog "$CHANGELOG")
 if [[ "${DRY_RUN:-0}" == 1 ]]; then
-    echo "[dry run] would publish $SKILL_DIR to ClawHub as swifttext $VERSION with changelog:"
-    echo "$CHANGELOG"
-    exit 0
+    PUBLISH_ARGS+=(--dry-run)
 fi
-clawhub --no-input publish "$SKILL_DIR" --slug swifttext --name SwiftText --version "$VERSION" \
-    --changelog "$CHANGELOG"
+clawhub "${PUBLISH_ARGS[@]}"

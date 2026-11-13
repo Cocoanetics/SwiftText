@@ -32,8 +32,10 @@ app needs to be open or installed.
 
 | You have | You want | Command |
 | --- | --- | --- |
-| PDF (text layer) | text or Markdown | `swifttext ocr file.pdf [-m]` |
-| Scanned PDF, photo, screenshot | text or Markdown | `swifttext ocr file.png -m [--language de]` |
+| PDF (text layer) | text | `swifttext ocr file.pdf` |
+| PDF (text layer) | Markdown (lists/tables) | `swifttext ocr file.pdf -m` (macOS 26+) |
+| Scanned PDF, photo, screenshot | text | `swifttext ocr file.png [--language de]` |
+| Scanned PDF, photo, screenshot | Markdown (lists/tables) | `swifttext ocr file.png -m [--language de]` (macOS 26+) |
 | Word `.docx` | text or Markdown | `swifttext docx file.docx [-m]` |
 | Pages `.pages` | text or Markdown | `swifttext pages file.pages [-m]` |
 | Numbers `.numbers` | TSV, Markdown, HTML or JSON tables | `swifttext numbers file.numbers [-m \| --html \| --json]` |
@@ -56,12 +58,17 @@ so a PDF or image can't be read and there is no default subcommand. `pdf`,
 always use the pure-Swift engine. Every other reader and writer works the same
 on all platforms.
 
+`ocr -m` / `--markdown` needs Vision document segmentation, which is macOS 26
+only. On macOS 13–25 use plain `ocr` (no `-m`); structured Markdown from OCR is
+unavailable there.
+
 ## Core rules
 
 - Never open or script Pages, Numbers, Keynote or Word to read or produce a
   document. `swifttext` reads and writes these files directly.
 - Ask for Markdown (`-m`/`--markdown`) whenever structure matters: headings,
-  lists and tables survive; plain text flattens them.
+  lists and tables survive; plain text flattens them. Exception: for `ocr`,
+  only pass `-m` on macOS 26+; on older macOS use plain OCR instead.
 - For data you will process further, prefer machine formats: `numbers --json`
   or the default TSV, `keynote --json`.
 - Use `-o`/`--output-path` for anything long instead of capturing stdout.
@@ -73,11 +80,14 @@ on all platforms.
 ## Common jobs
 
 ```bash
-# Scanned German letter → Markdown
+# Scanned German letter → text (works on every macOS that has ocr)
+swifttext ocr scan.pdf --language de -o letter.txt
+
+# Same scan → structured Markdown (macOS 26+ only)
 swifttext ocr scan.pdf -m --language de -o letter.md
 
 # PDF with a broken or garbage text layer → re-recognise every page
-swifttext ocr report.pdf -m --force-ocr
+swifttext ocr report.pdf --force-ocr
 
 # Spreadsheet → JSON for analysis
 swifttext numbers budget.numbers --json -o budget.json
