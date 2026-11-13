@@ -39,11 +39,19 @@ private final class StallingSchemeHandler: NSObject, WKURLSchemeHandler {
 }
 
 /// Serves a first page that navigates on a second after it loads, and answers
-/// that second page only after 5 s. Neither page lets its own timers capture it:
-/// `setTimeout` is disabled, so only the Swift-side fallback can.
+/// that second page only after 3.5 s. Neither page lets its own timers capture
+/// it: `setTimeout` is disabled, so only the Swift-side fallback can.
+///
+/// The hop uses a meta refresh rather than `setTimeout`: off-screen WebKit
+/// throttles page timers (#171), and a hop that never fires leaves the load
+/// waiting out the full timeout once the first page's fallback has been armed
+/// and then… never cancelled by a navigation that never started.
 @MainActor
 private final class HoppingSchemeHandler: NSObject, WKURLSchemeHandler {
 	static let scheme = "swifttext-hop"
+	/// Long enough that the second page is still provisional when the first
+	/// page's 3 s Swift fallback would have fired (hop at 1 s → need > 2 s).
+	static let secondPageDelayNanoseconds: UInt64 = 3_500_000_000
 
 	private var stopped: Set<ObjectIdentifier> = []
 
@@ -52,7 +60,7 @@ private final class HoppingSchemeHandler: NSObject, WKURLSchemeHandler {
 		if url.path == "/second" {
 			let id = ObjectIdentifier(urlSchemeTask as AnyObject)
 			Task { @MainActor in
-				try? await Task.sleep(nanoseconds: 5_000_000_000)
+				try? await Task.sleep(nanoseconds: Self.secondPageDelayNanoseconds)
 				guard !self.stopped.contains(id) else { return }
 				Self.respond(urlSchemeTask, url: url, html: """
 				<html><head><script>window.setTimeout = function() { return 0; };</script></head>
@@ -61,13 +69,10 @@ private final class HoppingSchemeHandler: NSObject, WKURLSchemeHandler {
 			}
 		} else {
 			Self.respond(urlSchemeTask, url: url, html: """
-			<html><head><script>
-			var later = window.setTimeout.bind(window);
-			window.setTimeout = function() { return 0; };
-			window.addEventListener('load', function() {
-				later(function() { location.href = '\(Self.scheme)://site/second'; }, 1000);
-			});
-			</script></head><body><p>First page</p></body></html>
+			<html><head>
+			<meta http-equiv="refresh" content="1;url=\(Self.scheme)://site/second">
+			<script>window.setTimeout = function() { return 0; };</script>
+			</head><body><p>First page</p></body></html>
 			""")
 		}
 	}
@@ -96,7 +101,12 @@ extension WebKitIntegrationTests {
 		browser.configureWebView = { configuration in
 			configuration.setURLSchemeHandler(handler, forURLScheme: HoppingSchemeHandler.scheme)
 		}
-		browser.timeout = 20
+		// Budget for a slow first commit under a long serialized WebKit suite,
+		// then hop (1 s) + second page (3.5 s) + Swift capture fallback (3 s).
+		browser.timeout = 40
+		// A commit-watchdog retry would restart from /first and burn the budget
+		// the hop needs; this test is about fallback cancellation, not retries.
+		browser.commitTimeout = 0
 		await browser.waitForLoadCompletion()
 
 		#expect(browser.loadError == nil, "\(String(describing: browser.loadError))")
