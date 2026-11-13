@@ -1,4 +1,5 @@
 import Foundation
+import Markdown
 import SwiftTextMarkdown
 
 /// Represents a parsed DOCX document and its paragraph content.
@@ -31,7 +32,8 @@ public struct DocxDocument {
 	/// Returns rendered paragraphs using the requested style. In Markdown, the
 	/// paragraphs of an alert box (SwiftText's "Callout" styles) render together as one
 	/// `> [!KIND]` block, consecutive quoted paragraphs as one `>` block, "Code Block"
-	/// paragraphs as one fenced block, and a rule paragraph as `---`.
+	/// paragraphs as one fenced block, a native Word table as a GFM pipe table, and a
+	/// rule paragraph as `---`.
 	public func renderedParagraphs(style: RenderStyle = .markdown) -> [RenderedParagraph] {
 		var numberingState = NumberingState(numbering: numbering)
 		var rendered = [RenderedParagraph]()
@@ -39,6 +41,29 @@ public struct DocxDocument {
 		while index < paragraphs.count {
 			let paragraph = paragraphs[index]
 			let paragraphStyle = styles.style(for: paragraph.styleIdentifier)
+
+			// Native Word tables anchored on this paragraph become Markdown table blocks.
+			if !paragraph.tables.isEmpty {
+				for table in paragraph.tables where !table.cells.isEmpty {
+					switch style {
+					case .markdown:
+						if let text = Self.markdownTable(table) {
+							rendered.append(RenderedParagraph(text: text, isListItem: false))
+						}
+					case .plainText:
+						let text = table.cells.map { $0.joined(separator: "\t") }.joined(separator: "\n")
+						if !text.isEmpty {
+							rendered.append(RenderedParagraph(text: text, isListItem: false))
+						}
+					}
+				}
+				// A table-only anchor has no other paragraph content.
+				if paragraph.isEmpty {
+					index += 1
+					continue
+				}
+			}
+
 			if style == .markdown, let callout = paragraphStyle?.callout {
 				let alert = markdownAlert(from: index, kind: callout.kind, numberingState: &numberingState)
 				rendered.append(RenderedParagraph(text: alert.block, isListItem: false))
@@ -67,6 +92,61 @@ public struct DocxDocument {
 			}
 		}
 		return rendered
+	}
+
+	/// Builds a GFM pipe table via a swift-markdown AST + `MarkupFormatter`, so cell
+	/// pipe escaping and alignment markers stay with cmark rather than ad-hoc strings.
+	static func markdownTable(_ table: Paragraph.Table) -> String? {
+		guard let node = tableMarkup(table) else { return nil }
+		let options = MarkupFormatter.Options(
+			unorderedListMarker: .dash,
+			orderedListNumerals: .incrementing(start: 1),
+			useCodeFence: .always,
+			emphasisMarker: .star,
+			preferredHeadingStyle: .atx
+		)
+		return Document(node).format(options: options).trimmingCharacters(in: .whitespacesAndNewlines)
+	}
+
+	/// Builds a GitHub-flavored Markdown table node, parsing each cell's text (which may
+	/// carry inline `**`/`*`/`~~` markup) so the formatter escapes and re-emits it.
+	static func tableMarkup(_ table: Paragraph.Table) -> Markdown.Table? {
+		let columns = table.cells.map(\.count).max() ?? 0
+		guard columns > 0, !table.cells.isEmpty else { return nil }
+
+		func cell(_ value: String) -> Markdown.Table.Cell {
+			Markdown.Table.Cell(inlineChildren(parsing: value.replacingOccurrences(of: "\n", with: " ")))
+		}
+		func cells(_ row: [String]) -> [Markdown.Table.Cell] {
+			(0..<columns).map { $0 < row.count ? cell(row[$0]) : Markdown.Table.Cell() }
+		}
+
+		let alignments: [Markdown.Table.ColumnAlignment?] = (0..<columns).map { column in
+			switch column < table.columnAlignments.count ? table.columnAlignments[column] : .left {
+			case .left: return nil
+			case .center: return .center
+			case .right: return .right
+			}
+		}
+		return Markdown.Table(
+			columnAlignments: alignments,
+			header: Markdown.Table.Head(cells(table.cells[0])),
+			body: Markdown.Table.Body(table.cells.dropFirst().map { Markdown.Table.Row(cells($0)) })
+		)
+	}
+
+	/// Parses a fragment of inline Markdown into inline nodes.
+	static func inlineChildren(parsing markdown: String) -> [InlineMarkup] {
+		guard !markdown.isEmpty else { return [] }
+		let document = Document(parsing: markdown, options: [.disableSmartOpts])
+		var result = [InlineMarkup]()
+		for block in document.children {
+			let inlines = block.children.compactMap { $0 as? InlineMarkup }
+			guard !inlines.isEmpty else { continue }
+			if !result.isEmpty { result.append(SoftBreak()) }
+			result.append(contentsOf: inlines)
+		}
+		return result.isEmpty ? [Text(markdown)] : result
 	}
 
 	/// Renders the run of "Code Block" paragraphs starting at `start` as a fenced block:
@@ -166,10 +246,35 @@ public struct DocxDocument {
 		/// Whether an empty, unstyled paragraph preceded this one: a boundary between
 		/// two quotes.
 		internal var followsBreak = false
+		/// Native Word tables anchored at this paragraph, in document order; rendered
+		/// as GFM pipe tables. The writer also wraps code blocks in a single-cell
+		/// table — those stay as ordinary paragraphs, not entries here.
+		internal var tables: [Table] = []
+
+		/// A native Word table reconstructed from `w:tbl` / `w:tr` / `w:tc`: cell
+		/// strings (row 0 = header, already marked up for Markdown) plus per-column
+		/// horizontal alignment from each header cell's `w:jc`.
+		public struct Table {
+			public enum ColumnAlignment: Sendable {
+				case left, center, right
+			}
+			public var cells: [[String]]
+			public var columnAlignments: [ColumnAlignment]
+			public init(cells: [[String]], columnAlignments: [ColumnAlignment] = []) {
+				self.cells = cells
+				self.columnAlignments = columnAlignments
+			}
+		}
 
 		/// Returns the raw text for the paragraph without any formatting.
 		public var text: String {
 			runs.map(\.text).joined()
+		}
+
+		/// Marked-up Markdown for this paragraph's runs, optionally suppressing bold
+		/// (Word's table header row is force-bolded on write).
+		internal func markedUpText(suppressingBold: Bool = false) -> String {
+			DocxDocument.normalizedText(runs.map { $0.markedUp(suppressingBold: suppressingBold) }.joined())
 		}
 
 		/// Indicates whether the paragraph belongs to a list.
@@ -214,7 +319,7 @@ public struct DocxDocument {
 			case .plainText:
 				joined = runs.map(\.text).joined()
 			case .markdown:
-				joined = runs.map { $0.markedUp() }.joined()
+				joined = runs.map { $0.markedUp(suppressingBold: false) }.joined()
 			}
 			var result = DocxDocument.normalizedText(joined)
 			guard !result.isEmpty else {
@@ -244,15 +349,17 @@ public struct DocxDocument {
 		public var footnoteNumber: Int?
 
 		/// Returns the run text with Markdown bold/italic/strikethrough markers
-		/// applied. Strikethrough (`~~`) wraps any emphasis markers.
-		public func markedUp() -> String {
+		/// applied. Strikethrough (`~~`) wraps any emphasis markers. Pass
+		/// `suppressingBold` for table header cells the writer force-bolded.
+		public func markedUp(suppressingBold: Bool = false) -> String {
 			if let footnoteNumber {
 				return "[^\(footnoteNumber)]"
 			}
 			guard !text.isEmpty else {
 				return ""
 			}
-			guard bold || italic || strike else {
+			let effectiveBold = bold && !suppressingBold
+			guard effectiveBold || italic || strike else {
 				return text
 			}
 			let components = splitWhitespace(from: text)
@@ -260,9 +367,9 @@ public struct DocxDocument {
 				return text
 			}
 			var core = components.core
-			if bold && italic {
+			if effectiveBold && italic {
 				core = "***\(core)***"
-			} else if bold {
+			} else if effectiveBold {
 				core = "**\(core)**"
 			} else if italic {
 				core = "*\(core)*"

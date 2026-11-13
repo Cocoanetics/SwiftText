@@ -131,6 +131,21 @@ private final class DocumentExtractor: NSObject, XMLParserDelegate {
 	/// Set when an empty paragraph outside a quote was skipped, so the next paragraph is
 	/// marked as following a break (the spacer between two quotes).
 	private var breakPending = false
+	/// Nested `w:tbl` depth. Code-block wrappers and real tables both use `w:tbl`.
+	private var tableDepth = 0
+	/// Rows of the table currently being built (`nil` when not inside a top-level table
+	/// that we are collecting as a GFM table candidate).
+	private var buildingRows: [[[DocxDocument.Paragraph]]]?
+	/// Cells of the current row while `buildingRows != nil`.
+	private var buildingRow: [[DocxDocument.Paragraph]]?
+	/// Paragraphs of the current cell while `buildingRow != nil`.
+	private var buildingCell: [DocxDocument.Paragraph]?
+	/// Per-column alignments captured from the first row's cell `w:jc` values.
+	private var buildingAlignments: [DocxDocument.Paragraph.Table.ColumnAlignment] = []
+	/// Alignment pending for the cell currently open.
+	private var pendingCellAlignment: DocxDocument.Paragraph.Table.ColumnAlignment?
+	/// Whether the first data row has already fixed `buildingAlignments`.
+	private var capturedHeaderAlignments = false
 
 	init(footnotesByID: [String: String], styles: DocxDocument.StyleCatalog) {
 		self.footnotesByID = footnotesByID
@@ -142,103 +157,63 @@ private final class DocumentExtractor: NSObject, XMLParserDelegate {
 	}
 
 	func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes attributeDict: [String: String] = [:]) {
-		switch elementName {
-		case "w:p", "p", "wp:p":
+		let namespaced = elementName.contains(":")
+		switch localName(from: elementName) {
+		case "tbl":
+			beginTable()
+		case "tr":
+			beginTableRow()
+		case "p":
 			beginParagraph()
-		case "w:tc", "tc":
-			cellStartPending = true
-		case "w:pPr", "pPr":
+		case "tc":
+			beginTableCell()
+		case "pPr":
 			insideParagraphProperties = true
 			formatTargetStack.append(.paragraph)
-		case "w:r", "r":
+		case "r":
 			insideRun = true
 			formatStack.append(currentState)
-		case "w:pStyle", "pStyle":
+		case "pStyle":
 			applyParagraphStyle(attributes: attributeDict)
-		case "w:ind", "ind":
+		case "ind":
 			applyIndent(attributes: attributeDict)
-		case "w:t", "t":
+		case "jc":
+			applyJustification(attributes: attributeDict)
+		case "t":
 			insideTextTag = true
 			currentRunText = ""
-		case "w:tab", "tab":
+		case "tab":
 			guard insideRun else { break }
 			flushRunText()
 			appendText("\t")
-		case "w:br", "br", "w:cr", "cr", "w:line", "line":
+		case "br", "cr", "line":
 			guard insideRun else { break }
 			flushRunText()
 			appendText("\n")
-		case "w:numPr", "numPr":
+		case "numPr":
 			insideParagraphNumbering = true
 			pendingNumberingLevel = nil
 			pendingNumberingId = nil
-		case "w:ilvl", "ilvl":
+		case "ilvl":
 			assignNumberingLevel(from: attributeDict)
-		case "w:numId", "numId":
+		case "numId":
 			assignNumberingId(from: attributeDict)
-		case "w:b", "b":
-			setBold(attributes: attributeDict)
-		case "w:i", "i":
-			setItalic(attributes: attributeDict)
-		case "w:strike", "strike", "w:dstrike", "dstrike":
-			setStrike(attributes: attributeDict)
-		case "w:footnoteReference", "footnoteReference":
+		case "b":
+			setBold(attributes: attributeDict, namespaced: namespaced)
+		case "i":
+			setItalic(attributes: attributeDict, namespaced: namespaced)
+		case "strike", "dstrike":
+			setStrike(attributes: attributeDict, namespaced: namespaced)
+		case "footnoteReference":
 			appendFootnoteReference(attributes: attributeDict)
-		case "w:rPr", "rPr":
+		case "rPr":
 			if insideRun {
 				formatTargetStack.append(.run)
 			} else if insideParagraphProperties {
 				formatTargetStack.append(.paragraph)
 			}
 		default:
-			if elementName.hasSuffix(":p") {
-				beginParagraph()
-			} else if elementName.hasSuffix(":tc") {
-				cellStartPending = true
-			} else if elementName.hasSuffix(":pPr") {
-				insideParagraphProperties = true
-				formatTargetStack.append(.paragraph)
-			} else if elementName.hasSuffix(":r") {
-				insideRun = true
-				formatStack.append(currentState)
-			} else if elementName.hasSuffix(":pStyle") {
-				applyParagraphStyle(attributes: attributeDict)
-			} else if elementName.hasSuffix(":ind") {
-				applyIndent(attributes: attributeDict)
-			} else if elementName.hasSuffix(":t") {
-				insideTextTag = true
-				currentRunText = ""
-			} else if elementName.hasSuffix(":tab") {
-				guard insideRun else { break }
-				flushRunText()
-				appendText("\t")
-			} else if elementName.hasSuffix(":br") || elementName.hasSuffix(":cr") || elementName.hasSuffix(":line") {
-				guard insideRun else { break }
-				flushRunText()
-				appendText("\n")
-			} else if elementName.hasSuffix(":numPr") {
-				insideParagraphNumbering = true
-				pendingNumberingLevel = nil
-				pendingNumberingId = nil
-			} else if elementName.hasSuffix(":ilvl") {
-				assignNumberingLevel(from: attributeDict)
-			} else if elementName.hasSuffix(":numId") {
-				assignNumberingId(from: attributeDict)
-			} else if elementName.hasSuffix(":b") {
-				setBold(attributes: attributeDict, namespaced: true)
-			} else if elementName.hasSuffix(":i") {
-				setItalic(attributes: attributeDict, namespaced: true)
-			} else if elementName.hasSuffix(":strike") || elementName.hasSuffix(":dstrike") {
-				setStrike(attributes: attributeDict, namespaced: true)
-			} else if elementName.hasSuffix(":footnoteReference") {
-				appendFootnoteReference(attributes: attributeDict)
-			} else if elementName.hasSuffix(":rPr") {
-				if insideRun {
-					formatTargetStack.append(.run)
-				} else if insideParagraphProperties {
-					formatTargetStack.append(.paragraph)
-				}
-			}
+			break
 		}
 	}
 
@@ -250,41 +225,31 @@ private final class DocumentExtractor: NSObject, XMLParserDelegate {
 	}
 
 	func parser(_ parser: XMLParser, didEndElement elementName: String, namespaceURI: String?, qualifiedName qName: String?) {
-		switch elementName {
-		case "w:t", "t":
+		switch localName(from: elementName) {
+		case "t":
 			insideTextTag = false
 			flushRunText()
-		case "w:p", "p", "wp:p":
+		case "p":
 			finalizeCurrentParagraph()
-		case "w:r", "r":
+		case "tc":
+			endTableCell()
+		case "tr":
+			endTableRow()
+		case "tbl":
+			endTable()
+		case "r":
 			insideRun = false
 			popFormatState()
-		case "w:pPr", "pPr":
+		case "pPr":
 			insideParagraphProperties = false
 			popFormatTarget()
-		case "w:numPr", "numPr":
+		case "numPr":
 			insideParagraphNumbering = false
 			applyPendingNumbering()
-		case "w:rPr", "rPr":
+		case "rPr":
 			popFormatTarget()
 		default:
-			if elementName.hasSuffix(":t") {
-				insideTextTag = false
-				flushRunText()
-			} else if elementName.hasSuffix(":p") {
-				finalizeCurrentParagraph()
-			} else if elementName.hasSuffix(":r") {
-				insideRun = false
-				popFormatState()
-			} else if elementName.hasSuffix(":pPr") {
-				insideParagraphProperties = false
-				popFormatTarget()
-			} else if elementName.hasSuffix(":numPr") {
-				insideParagraphNumbering = false
-				applyPendingNumbering()
-			} else if elementName.hasSuffix(":rPr") {
-				popFormatTarget()
-			}
+			break
 		}
 	}
 
@@ -313,7 +278,14 @@ private final class DocumentExtractor: NSObject, XMLParserDelegate {
 			var paragraph = paragraph
 			paragraph.followsBreak = breakPending
 			breakPending = false
-			document.paragraphs.append(paragraph)
+			if buildingCell != nil {
+				buildingCell?.append(paragraph)
+			} else {
+				document.paragraphs.append(paragraph)
+			}
+		} else if buildingCell != nil {
+			// Empty paragraphs inside a table cell are spacers; keep the cell slot.
+			breakPending = false
 		} else if style?.isBlockQuote != true {
 			breakPending = true
 		}
@@ -322,6 +294,126 @@ private final class DocumentExtractor: NSObject, XMLParserDelegate {
 		formatTargetStack.removeAll(keepingCapacity: true)
 		insideParagraphProperties = false
 		insideRun = false
+	}
+
+	private func beginTable() {
+		finalizeCurrentParagraph()
+		tableDepth += 1
+		// Only the outermost table is collected; nested tables flatten into the cell.
+		guard tableDepth == 1 else { return }
+		buildingRows = []
+		buildingRow = nil
+		buildingCell = nil
+		buildingAlignments = []
+		capturedHeaderAlignments = false
+		pendingCellAlignment = nil
+	}
+
+	private func beginTableRow() {
+		guard tableDepth == 1, buildingRows != nil else { return }
+		finalizeCurrentParagraph()
+		buildingRow = []
+		buildingCell = nil
+		pendingCellAlignment = nil
+	}
+
+	private func beginTableCell() {
+		cellStartPending = true
+		guard tableDepth == 1, buildingRow != nil else { return }
+		finalizeCurrentParagraph()
+		buildingCell = []
+		pendingCellAlignment = nil
+	}
+
+	private func endTableCell() {
+		guard tableDepth == 1, buildingRow != nil else {
+			cellStartPending = false
+			return
+		}
+		finalizeCurrentParagraph()
+		buildingRow?.append(buildingCell ?? [])
+		if !capturedHeaderAlignments {
+			buildingAlignments.append(pendingCellAlignment ?? .left)
+		}
+		buildingCell = nil
+		pendingCellAlignment = nil
+		cellStartPending = false
+	}
+
+	private func endTableRow() {
+		guard tableDepth == 1, var rows = buildingRows, let row = buildingRow else { return }
+		finalizeCurrentParagraph()
+		rows.append(row)
+		buildingRows = rows
+		if !capturedHeaderAlignments {
+			capturedHeaderAlignments = true
+		}
+		buildingRow = nil
+		buildingCell = nil
+	}
+
+	private func endTable() {
+		finalizeCurrentParagraph()
+		defer { tableDepth = max(0, tableDepth - 1) }
+		guard tableDepth == 1, let rows = buildingRows else { return }
+		buildingRows = nil
+		buildingRow = nil
+		buildingCell = nil
+
+		// The writer wraps fenced code blocks in a single-cell padded table. Keep those
+		// paragraphs on the flat list so `renderedParagraphs` still emits a fence.
+		if isCodeBlockWrapper(rows) {
+			var first = true
+			for paragraph in rows.flatMap({ $0.flatMap { $0 } }) {
+				var paragraph = paragraph
+				paragraph.startsTableCell = first
+				first = false
+				document.paragraphs.append(paragraph)
+			}
+			return
+		}
+
+		guard !rows.isEmpty else { return }
+		let cells: [[String]] = rows.enumerated().map { rowIndex, row in
+			row.map { cellParagraphs in
+				cellParagraphs
+					.map { $0.markedUpText(suppressingBold: rowIndex == 0) }
+					.filter { !$0.isEmpty }
+					.joined(separator: " ")
+			}
+		}
+		guard cells.contains(where: { $0.contains(where: { !$0.isEmpty }) }) else { return }
+		var anchor = DocxDocument.Paragraph()
+		anchor.tables = [
+			DocxDocument.Paragraph.Table(cells: cells, columnAlignments: buildingAlignments)
+		]
+		document.paragraphs.append(anchor)
+	}
+
+	/// True when every paragraph in a single-cell table uses the Code Block style —
+	/// the writer's fenced-code wrapper, not a data table.
+	private func isCodeBlockWrapper(_ rows: [[[DocxDocument.Paragraph]]]) -> Bool {
+		guard rows.count == 1, rows[0].count == 1 else { return false }
+		let paragraphs = rows[0][0]
+		guard !paragraphs.isEmpty else { return false }
+		return paragraphs.allSatisfy { styles.style(for: $0.styleIdentifier)?.isCodeBlock == true }
+	}
+
+	/// Cell (or paragraph) horizontal alignment from `w:jc`. Ignored outside a cell we
+	/// are collecting, and ignored for table-level justification in `w:tblPr`.
+	private func applyJustification(attributes: [String: String]) {
+		guard buildingCell != nil, insideParagraphProperties else { return }
+		guard let value = attributeValue(from: attributes, for: ["w:val", "val"])?.lowercased() else {
+			return
+		}
+		switch value {
+		case "center":
+			pendingCellAlignment = .center
+		case "right", "end":
+			pendingCellAlignment = .right
+		default:
+			pendingCellAlignment = .left
+		}
 	}
 
 	private func appendText(_ text: String) {
