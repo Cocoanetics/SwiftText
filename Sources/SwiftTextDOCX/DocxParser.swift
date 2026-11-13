@@ -144,6 +144,8 @@ private final class DocumentExtractor: NSObject, XMLParserDelegate {
 	private var buildingAlignments: [DocxDocument.Paragraph.Table.ColumnAlignment] = []
 	/// Alignment pending for the cell currently open.
 	private var pendingCellAlignment: DocxDocument.Paragraph.Table.ColumnAlignment?
+	/// `w:gridSpan` for the cell currently open (1 when unmerged).
+	private var pendingCellGridSpan = 1
 	/// Whether the first data row has already fixed `buildingAlignments`.
 	private var capturedHeaderAlignments = false
 
@@ -179,6 +181,8 @@ private final class DocumentExtractor: NSObject, XMLParserDelegate {
 			applyIndent(attributes: attributeDict)
 		case "jc":
 			applyJustification(attributes: attributeDict)
+		case "gridSpan":
+			applyGridSpan(attributes: attributeDict)
 		case "t":
 			insideTextTag = true
 			currentRunText = ""
@@ -307,6 +311,7 @@ private final class DocumentExtractor: NSObject, XMLParserDelegate {
 		buildingAlignments = []
 		capturedHeaderAlignments = false
 		pendingCellAlignment = nil
+		pendingCellGridSpan = 1
 	}
 
 	private func beginTableRow() {
@@ -315,6 +320,7 @@ private final class DocumentExtractor: NSObject, XMLParserDelegate {
 		buildingRow = []
 		buildingCell = nil
 		pendingCellAlignment = nil
+		pendingCellGridSpan = 1
 	}
 
 	private func beginTableCell() {
@@ -323,6 +329,7 @@ private final class DocumentExtractor: NSObject, XMLParserDelegate {
 		finalizeCurrentParagraph()
 		buildingCell = []
 		pendingCellAlignment = nil
+		pendingCellGridSpan = 1
 	}
 
 	private func endTableCell() {
@@ -331,12 +338,24 @@ private final class DocumentExtractor: NSObject, XMLParserDelegate {
 			return
 		}
 		finalizeCurrentParagraph()
-		buildingRow?.append(buildingCell ?? [])
+		let span = max(1, pendingCellGridSpan)
+		let content = buildingCell ?? []
+		let alignment = pendingCellAlignment ?? .left
+		// Expand horizontally merged cells into one content column plus empty
+		// placeholders so later unmerged rows keep their column positions.
+		buildingRow?.append(content)
 		if !capturedHeaderAlignments {
-			buildingAlignments.append(pendingCellAlignment ?? .left)
+			buildingAlignments.append(alignment)
+		}
+		for _ in 1..<span {
+			buildingRow?.append([])
+			if !capturedHeaderAlignments {
+				buildingAlignments.append(alignment)
+			}
 		}
 		buildingCell = nil
 		pendingCellAlignment = nil
+		pendingCellGridSpan = 1
 		cellStartPending = false
 	}
 
@@ -377,7 +396,7 @@ private final class DocumentExtractor: NSObject, XMLParserDelegate {
 		let cells: [[String]] = rows.enumerated().map { rowIndex, row in
 			row.map { cellParagraphs in
 				cellParagraphs
-					.map { $0.markedUpText(suppressingBold: rowIndex == 0) }
+					.map { $0.markedUpText(suppressingUniformBold: rowIndex == 0) }
 					.filter { !$0.isEmpty }
 					.joined(separator: " ")
 			}
@@ -414,6 +433,14 @@ private final class DocumentExtractor: NSObject, XMLParserDelegate {
 		default:
 			pendingCellAlignment = .left
 		}
+	}
+
+	/// Horizontal merge width from `w:gridSpan` inside `w:tcPr`.
+	private func applyGridSpan(attributes: [String: String]) {
+		guard buildingCell != nil else { return }
+		guard let value = attributeValue(from: attributes, for: ["w:val", "val"]),
+			  let span = Int(value), span > 0 else { return }
+		pendingCellGridSpan = span
 	}
 
 	private func appendText(_ text: String) {

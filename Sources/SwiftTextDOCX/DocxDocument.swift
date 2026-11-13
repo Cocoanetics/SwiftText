@@ -271,10 +271,24 @@ public struct DocxDocument {
 			runs.map(\.text).joined()
 		}
 
-		/// Marked-up Markdown for this paragraph's runs, optionally suppressing bold
-		/// (Word's table header row is force-bolded on write).
-		internal func markedUpText(suppressingBold: Bool = false) -> String {
-			DocxDocument.normalizedText(runs.map { $0.markedUp(suppressingBold: suppressingBold) }.joined())
+		/// Marked-up Markdown for this paragraph's runs. When `suppressingUniformBold`
+		/// is set and every non-empty run is bold (SwiftText's force-bolded header
+		/// look), bold markers are dropped; partial bold such as `Revenue **2026**`
+		/// is kept.
+		internal func markedUpText(suppressingUniformBold: Bool = false) -> String {
+			let suppressBold = suppressingUniformBold && hasUniformBold
+			return DocxDocument.normalizedText(runs.map { $0.markedUp(suppressingBold: suppressBold) }.joined())
+		}
+
+		/// True when every non-empty text run is bold. Used to strip the writer's
+		/// force-bolded header styling without dropping intentional partial bold.
+		internal var hasUniformBold: Bool {
+			let textRuns = runs.filter {
+				$0.footnoteNumber == nil
+					&& !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+			}
+			guard !textRuns.isEmpty else { return false }
+			return textRuns.allSatisfy(\.bold)
 		}
 
 		/// Indicates whether the paragraph belongs to a list.
