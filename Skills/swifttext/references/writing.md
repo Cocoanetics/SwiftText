@@ -56,8 +56,9 @@ with `swifttext pages report.pages -m` gives the Markdown again.
 
 ### PDF engines
 
-`--engine webkit` (the default on macOS) supports full CSS. `--engine swift`
-needs no WebKit; with it, `--font file.ttf` replaces the default fonts.
+`--engine webkit` (macOS only, and the default there) supports full CSS.
+`--engine swift` needs no WebKit and is the only engine on Linux and Windows;
+with it, `--font file.ttf` replaces the default fonts.
 
 ## `pdf`: HTML, Markdown, DOCX, email or URL → PDF
 

@@ -9,6 +9,10 @@ Every reader writes to stdout unless you pass `-o <path>` (`--output-path`).
 swifttext ocr <file.pdf|file.png|file.jpg> [options]
 ```
 
+`ocr` and `overlay` use Apple's Vision framework, so the CLI has them on macOS
+only (the SwiftText library offers the same recognition on iOS). On Linux and
+Windows neither subcommand exists.
+
 - Without options you get plain text. `-m`/`--markdown` uses Vision document
   segmentation and emits Markdown with lists, tables and image placeholders.
 - `-l`/`--lines`: one recognised line per output line, unformatted.
@@ -65,7 +69,7 @@ swifttext html <url-or-file> [-m] [--main-content]
 - `-m` gives Markdown; `--save-images <dir>` downloads the images it references.
 - `--main-content` keeps the article and drops navigation, cookie banners,
   sidebars and footers. Use it for articles and blog posts.
-- `--webkit` loads the page in WebKit first, for pages that build their content
-  with JavaScript. `--webkit --via-pdf` parses WebKit's PDF export instead.
+- `--webkit` (macOS only) loads the page in WebKit first, for pages that build
+  their content with JavaScript. `--webkit --via-pdf` parses WebKit's PDF export instead.
 - `--charset windows-1252` (or `iso-8859-1`, …) fixes garbled characters on old
   pages with wrong encoding declarations. Not available with `--webkit`.

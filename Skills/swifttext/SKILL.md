@@ -45,6 +45,17 @@ app needs to be open or installed.
 
 `ocr` is the default subcommand, so `swifttext file.pdf` also works.
 
+## Platforms
+
+Recognising text in images and PDFs (`ocr`) and drawing what was detected
+(`overlay`) use Apple's Vision framework. They are available only on Apple
+platforms: in the CLI on macOS, and through the SwiftText library on iOS. The
+CLI also builds for Linux and Windows. There `ocr` and `overlay` don't exist,
+so a PDF or image can't be read and there is no default subcommand. `pdf`,
+`render` and `html --webkit` can't use WebKit there either; `pdf` and `render`
+always use the pure-Swift engine. Every other reader and writer works the same
+on all platforms.
+
 ## Core rules
 
 - Never open or script Pages, Numbers, Keynote or Word to read or produce a
