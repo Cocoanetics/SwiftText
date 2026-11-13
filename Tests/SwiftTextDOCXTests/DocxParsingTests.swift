@@ -57,13 +57,35 @@ struct DocxParsingTests {
 		let paragraphs = try DocxFile(url: url).markdownParagraphs().map(\.text)
 
 		#expect(output.hasPrefix("# Report"))
-		// A real pipe table (MarkupFormatter's compact GFM), not flattened bold headers.
+		// A real pipe table, not flattened bold headers.
 		#expect(!paragraphs.contains("**A**"))
 		#expect(!paragraphs.contains("**B**"))
 		#expect(paragraphs.contains(where: { $0.contains("|") && $0.contains("A") && $0.contains("B") }))
 		#expect(paragraphs.contains(where: { $0.contains("|") && $0.contains("1") && $0.contains("2") }))
-		#expect(output.contains("|A|B|") || output.contains("| A | B |"))
-		#expect(output.contains("|1|2|") || output.contains("| 1 | 2 |"))
+		#expect(output.contains("| A | B |"))
+		#expect(output.contains("| 1 | 2 |"))
+	}
+
+	/// Cell strikethrough must stay GFM `~~…~~`, not MarkupFormatter's single `~`
+	/// (#259 review).
+	@Test("Markdown table strikethrough round-trips as double tilde")
+	func markdownTableStrikethroughRoundTrips() throws {
+		let markdown = """
+		| ~~Old~~ | Fresh |
+		| --- | --- |
+		| value | next |
+		"""
+		let url = FileManager.default.temporaryDirectory
+			.appendingPathComponent("docx-table-strike-\(UUID().uuidString).docx")
+		defer { try? FileManager.default.removeItem(at: url) }
+
+		try MarkdownToDocx.convert(markdown, to: url)
+		let output = try DocxFile(url: url).markdown()
+		#expect(output.contains("~~Old~~"))
+		// MarkupFormatter would emit `~Old~`; that must not appear once `~~Old~~` is removed.
+		#expect(!output.replacingOccurrences(of: "~~Old~~", with: "").contains("~Old~"))
+		#expect(output.contains("Fresh"))
+		#expect(output.contains("value"))
 	}
 
 	/// Partial bold in a header cell must survive; only uniform (force-bold) headers

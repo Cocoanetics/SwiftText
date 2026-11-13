@@ -1,5 +1,4 @@
 import Foundation
-import Markdown
 import SwiftTextMarkdown
 
 /// Represents a parsed DOCX document and its paragraph content.
@@ -94,59 +93,33 @@ public struct DocxDocument {
 		return rendered
 	}
 
-	/// Builds a GFM pipe table via a swift-markdown AST + `MarkupFormatter`, so cell
-	/// pipe escaping and alignment markers stay with cmark rather than ad-hoc strings.
+	/// Renders a table (row 0 = header) as a GitHub-flavored Markdown table. Hand-rolled
+	/// like `PagesDocument.markdownTable` so cell strikethrough stays `~~…~~` — cmark's
+	/// `MarkupFormatter` always emits a single tilde, which GFM does not treat as strike.
 	static func markdownTable(_ table: Paragraph.Table) -> String? {
-		guard let node = tableMarkup(table) else { return nil }
-		let options = MarkupFormatter.Options(
-			unorderedListMarker: .dash,
-			orderedListNumerals: .incrementing(start: 1),
-			useCodeFence: .always,
-			emphasisMarker: .star,
-			preferredHeadingStyle: .atx
-		)
-		return Document(node).format(options: options).trimmingCharacters(in: .whitespacesAndNewlines)
-	}
-
-	/// Builds a GitHub-flavored Markdown table node, parsing each cell's text (which may
-	/// carry inline `**`/`*`/`~~` markup) so the formatter escapes and re-emits it.
-	static func tableMarkup(_ table: Paragraph.Table) -> Markdown.Table? {
-		let columns = table.cells.map(\.count).max() ?? 0
-		guard columns > 0, !table.cells.isEmpty else { return nil }
-
-		func cell(_ value: String) -> Markdown.Table.Cell {
-			Markdown.Table.Cell(inlineChildren(parsing: value.replacingOccurrences(of: "\n", with: " ")))
+		let grid = table.cells
+		let columns = grid.map(\.count).max() ?? 0
+		guard columns > 0, !grid.isEmpty else { return nil }
+		func cell(_ value: String) -> String {
+			value.replacingOccurrences(of: "\n", with: " ")
+				.replacingOccurrences(of: "|", with: "\\|")
+				.trimmingCharacters(in: .whitespaces)
 		}
-		func cells(_ row: [String]) -> [Markdown.Table.Cell] {
-			(0..<columns).map { $0 < row.count ? cell(row[$0]) : Markdown.Table.Cell() }
+		func row(_ cells: [String]) -> String {
+			let padded = (0..<columns).map { $0 < cells.count ? cell(cells[$0]) : "" }
+			return "| " + padded.joined(separator: " | ") + " |"
 		}
-
-		let alignments: [Markdown.Table.ColumnAlignment?] = (0..<columns).map { column in
+		func delimiter(_ column: Int) -> String {
 			switch column < table.columnAlignments.count ? table.columnAlignments[column] : .left {
-			case .left: return nil
-			case .center: return .center
-			case .right: return .right
+			case .left: return "---"
+			case .center: return ":-:"
+			case .right: return "--:"
 			}
 		}
-		return Markdown.Table(
-			columnAlignments: alignments,
-			header: Markdown.Table.Head(cells(table.cells[0])),
-			body: Markdown.Table.Body(table.cells.dropFirst().map { Markdown.Table.Row(cells($0)) })
-		)
-	}
-
-	/// Parses a fragment of inline Markdown into inline nodes.
-	static func inlineChildren(parsing markdown: String) -> [InlineMarkup] {
-		guard !markdown.isEmpty else { return [] }
-		let document = Document(parsing: markdown, options: [.disableSmartOpts])
-		var result = [InlineMarkup]()
-		for block in document.children {
-			let inlines = block.children.compactMap { $0 as? InlineMarkup }
-			guard !inlines.isEmpty else { continue }
-			if !result.isEmpty { result.append(SoftBreak()) }
-			result.append(contentsOf: inlines)
-		}
-		return result.isEmpty ? [Text(markdown)] : result
+		var lines = [row(grid[0])]
+		lines.append("| " + (0..<columns).map(delimiter).joined(separator: " | ") + " |")
+		for bodyRow in grid.dropFirst() { lines.append(row(bodyRow)) }
+		return lines.joined(separator: "\n")
 	}
 
 	/// Renders the run of "Code Block" paragraphs starting at `start` as a fenced block:
