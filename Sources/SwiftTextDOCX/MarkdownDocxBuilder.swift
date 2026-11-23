@@ -281,25 +281,35 @@ private struct BlockVisitor: MarkupVisitor {
 	}
 
 	private mutating func emit(listItem: ListItem, ordered: Bool, level: Int) {
-		// Emit the first paragraph of the item as the bulleted line, then any
-		// further content inline. Nested lists are emitted at level+1.
-		var inlineParagraphs: [Paragraph] = []
-		var nestedLists: [Markup] = []
-		for child in listItem.children {
-			if let paragraph = child as? Paragraph {
-				inlineParagraphs.append(paragraph)
-			} else if child is UnorderedList || child is OrderedList {
-				nestedLists.append(child)
-			}
+		// The item's first paragraph is the bulleted line. Nested lists follow at
+		// level+1; any other content (further paragraphs, quotes, code, tables, …)
+		// becomes a continuation indented under the item's text. Source order is kept.
+		var children = Array(listItem.children)
+		var runs: [DocxWriter.Run] = []
+		if let paragraph = children.first as? Paragraph {
+			runs = MarkdownDocxBuilder.runs(from: paragraph, resolver: resolver)
+			children.removeFirst()
 		}
-		let runs = inlineParagraphs.flatMap { MarkdownDocxBuilder.runs(from: $0, resolver: resolver) }
 		blocks.append(.listItem(ordered: ordered, level: level, runs: runs))
 
 		listLevel = level + 1
 		defer { listLevel = level }
-		for nested in nestedLists {
-			visit(nested)
+		var continuation = BlockVisitor(resolver: resolver)
+		continuation.insideAlert = insideAlert
+		func flushContinuation(into blocks: inout [DocxWriter.Block]) {
+			guard !continuation.blocks.isEmpty else { return }
+			blocks.append(.listContinuation(level: level, blocks: continuation.blocks))
+			continuation.blocks = []
 		}
+		for child in children {
+			if child is UnorderedList || child is OrderedList {
+				flushContinuation(into: &blocks)
+				visit(child)
+			} else {
+				continuation.visit(child)
+			}
+		}
+		flushContinuation(into: &blocks)
 	}
 
 	mutating func visitTable(_ table: Table) {

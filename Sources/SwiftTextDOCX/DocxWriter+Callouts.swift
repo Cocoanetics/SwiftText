@@ -31,7 +31,7 @@ extension DocxWriter {
 		case .alert: return .box
 		case .horizontalRule: return .rule
 		case .heading(let level, _): return .spacing(Self.headingSpaceBefore(level: max(1, min(level, 6))))
-		case .blockquote(let inner): return inner.first.map(topEdge(of:)) ?? .spacing(0)
+		case .blockquote(let inner), .listContinuation(_, let inner): return inner.first.map(topEdge(of:)) ?? .spacing(0)
 		case .paragraph, .listItem, .codeBlock, .table, .image: return .spacing(0)
 		}
 	}
@@ -45,7 +45,7 @@ extension DocxWriter {
 			return .box
 		case .horizontalRule: return .rule
 		case .heading: return .spacing(Self.headingSpaceAfter)
-		case .blockquote(let inner): return inner.last.map(bottomEdge(of:)) ?? .spacing(0)
+		case .blockquote(let inner), .listContinuation(_, let inner): return inner.last.map(bottomEdge(of:)) ?? .spacing(0)
 		case .paragraph, .listItem, .image: return .spacing(Self.paragraphSpaceAfter)
 		case .codeBlock, .table: return .spacing(0)
 		}
@@ -58,8 +58,8 @@ extension DocxWriter {
 		let layout = boxLayout
 		var pPr = "<w:pStyle w:val=\"\(DocxStyleID.rule)\"/>"
 		pPr += "<w:spacing w:before=\"\(layout.ruleSpaceBefore(above: above))\" w:after=\"\(layout.ruleSpaceAfter(below: below))\"/>"
-		if quoteDepth > 0 {
-			pPr += "<w:ind w:left=\"\(quoteDepth * Self.quoteIndent)\"/>"
+		if quoteDepth > 0 || listTextIndent > 0 {
+			pPr += "<w:ind w:left=\"\(leftIndent(quoteDepth: quoteDepth))\"/>"
 		}
 		return "<w:p><w:pPr>\(pPr)</w:pPr></w:p>\n"
 	}
@@ -117,6 +117,8 @@ extension DocxWriter {
 					current.append(CalloutParagraph(role: .body, runs: [Run(text: text, italic: italic, code: true)]))
 				case .blockquote(let inner):
 					flatten(inner, italic: true)
+				case .listContinuation(_, let inner):
+					flatten(inner, italic: italic)
 				case .alert(_, let innerTitle, let inner):
 					current.append(CalloutParagraph(role: .body, runs: [Run(text: innerTitle, bold: true, italic: true)]))
 					flatten(inner, italic: true)
@@ -173,7 +175,7 @@ extension DocxWriter {
 		// the same ones: the style's, unless a quote's indent or list bullets (which hang
 		// in a wider left padding) move the text.
 		let listHang = paragraphs.contains(where: \.isListItem) ? Self.listHangingIndent : 0
-		let offset = quoteDepth * Self.quoteIndent
+		let offset = leftIndent(quoteDepth: quoteDepth)
 		let directBorders = listHang > 0 ? calloutBordersXML(kind: kind, listHang: listHang) : ""
 		let directIndent = listHang > 0 || offset > 0
 		var xml = ""
