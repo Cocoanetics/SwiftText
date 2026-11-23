@@ -16,12 +16,31 @@ extension DocxWriter {
 			let previous = index > 0 ? bottomEdge(of: blocks[index - 1]) : above
 			let next = index + 1 < blocks.count ? topEdge(of: blocks[index + 1]) : below
 			xml += renderBlock(block, quoteDepth: quoteDepth, above: previous, below: next)
-			if case .blockquote = block, index + 1 < blocks.count, case .blockquote = blocks[index + 1] {
-				// Two quotes in a row would draw (and read back) as one.
+			if endsInQuote(block), index + 1 < blocks.count, startsWithQuote(blocks[index + 1]) {
+				// Two quotes in a row would draw (and read back) as one, also when one
+				// of them belongs to a list item.
 				xml += spacerParagraph()
 			}
 		}
 		return xml
+	}
+
+	/// Whether the last paragraph a block writes is quoted.
+	private func endsInQuote(_ block: Block) -> Bool {
+		switch block {
+		case .blockquote: return true
+		case .listContinuation(_, let inner): return inner.last.map(endsInQuote) ?? false
+		default: return false
+		}
+	}
+
+	/// Whether the first paragraph a block writes is quoted.
+	private func startsWithQuote(_ block: Block) -> Bool {
+		switch block {
+		case .blockquote: return true
+		case .listContinuation(_, let inner): return inner.first.map(startsWithQuote) ?? false
+		default: return false
+		}
 	}
 
 	/// What a block shows the block above it: its first paragraph's space before, or
