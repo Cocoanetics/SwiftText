@@ -139,6 +139,65 @@ struct DocxFootnoteWriterTests {
 		#expect(document.contains("[^1]"))  // reference stays literal
 	}
 
+	@Test("Links in footnotes become w:hyperlink elements with their own footnotes.xml.rels")
+	func footnoteLinksAreHyperlinks() throws {
+		let markdown = """
+		Text.[^1] See [body](https://example.org/body).
+
+		[^1]: <https://example.org/a> and [label](https://example.org/b)
+		"""
+
+		let url = FileManager.default.temporaryDirectory
+			.appendingPathComponent("fn-links-\(UUID().uuidString).docx")
+		defer { try? FileManager.default.removeItem(at: url) }
+
+		try MarkdownToDocx.convert(markdown, to: url)
+		let archive = try DocxArchive(contentsOf: url)
+
+		// Both links are wrapped in hyperlinks pointing at footnote-scoped ids.
+		let footnotes = try part("word/footnotes.xml", from: archive)
+		let autolink = "<w:hyperlink r:id=\"rLink1\"><w:r><w:rPr><w:rStyle w:val=\"Hyperlink\"/></w:rPr>"
+			+ "<w:t xml:space=\"preserve\">https://example.org/a</w:t></w:r></w:hyperlink>"
+		let labelled = "<w:hyperlink r:id=\"rLink2\"><w:r><w:rPr><w:rStyle w:val=\"Hyperlink\"/></w:rPr>"
+			+ "<w:t xml:space=\"preserve\">label</w:t></w:r></w:hyperlink>"
+		#expect(footnotes.contains(autolink))
+		#expect(footnotes.contains(labelled))
+		#expect(footnotes.components(separatedBy: "<w:hyperlink r:id=").count - 1 == 2)
+
+		// The footnotes part has its own relationships with both external targets.
+		let footnoteRels = try part("word/_rels/footnotes.xml.rels", from: archive)
+		#expect(footnoteRels.contains("<Relationship Id=\"rLink1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink\" Target=\"https://example.org/a\" TargetMode=\"External\"/>"))
+		#expect(footnoteRels.contains("<Relationship Id=\"rLink2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink\" Target=\"https://example.org/b\" TargetMode=\"External\"/>"))
+
+		// Body links keep their own relationships in document.xml.rels.
+		let documentRels = try part("word/_rels/document.xml.rels", from: archive)
+		#expect(documentRels.contains("Target=\"https://example.org/body\" TargetMode=\"External\""))
+		#expect(!documentRels.contains("Target=\"https://example.org/a\""))
+		#expect(!documentRels.contains("Target=\"https://example.org/b\""))
+	}
+
+	@Test("Footnotes without links write no footnotes.xml.rels part")
+	func footnotesWithoutLinksHaveNoRels() throws {
+		let markdown = """
+		Text.[^1]
+
+		[^1]: Plain note.
+		"""
+
+		let url = FileManager.default.temporaryDirectory
+			.appendingPathComponent("fn-nolinks-\(UUID().uuidString).docx")
+		defer { try? FileManager.default.removeItem(at: url) }
+
+		try MarkdownToDocx.convert(markdown, to: url)
+		let archive = try DocxArchive(contentsOf: url)
+
+		let footnotes = try part("word/footnotes.xml", from: archive)
+		#expect(footnotes.contains("Plain note."))
+		#expect(!footnotes.contains("w:hyperlink"))
+		#expect(!archive.contains("word/_rels/footnotes.xml.rels"))
+		#expect(try DocxFile(url: url).markdown().contains("[^1]: Plain note."))
+	}
+
 	/// Reads a part out of a `.docx` archive as a UTF-8 string.
 	private func part(_ path: String, from archive: DocxArchive) throws -> String {
 		try archive.text(path)
