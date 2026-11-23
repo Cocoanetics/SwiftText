@@ -16,12 +16,49 @@ extension DocxWriter {
 			let previous = index > 0 ? bottomEdge(of: blocks[index - 1]) : above
 			let next = index + 1 < blocks.count ? topEdge(of: blocks[index + 1]) : below
 			xml += renderBlock(block, quoteDepth: quoteDepth, above: previous, below: next)
-			if case .blockquote = block, index + 1 < blocks.count, case .blockquote = blocks[index + 1] {
-				// Two quotes in a row would draw (and read back) as one.
+			if quoteDepth == 0, listTextIndent == 0, index + 1 < blocks.count, endsList(block, before: blocks[index + 1]) {
+				// A nested quote's indent can match a list item's text indent; the reader
+				// would take it for the item's content without a mark that the list is over.
+				xml += spacerParagraph(resettingIndent: true)
+			} else if endsInQuote(block), index + 1 < blocks.count, startsWithQuote(blocks[index + 1]) {
+				// Two quotes in a row would draw (and read back) as one, also when one
+				// of them belongs to a list item.
 				xml += spacerParagraph()
 			}
 		}
 		return xml
+	}
+
+	/// Whether `block` is the last of a list and `next` a quote or alert box after it
+	/// (an alert holding a list has a direct indent too).
+	private func endsList(_ block: Block, before next: Block) -> Bool {
+		switch block {
+		case .listItem, .listContinuation:
+			switch next {
+			case .blockquote, .alert: return true
+			default: return false
+			}
+		default:
+			return false
+		}
+	}
+
+	/// Whether the last paragraph a block writes is quoted.
+	private func endsInQuote(_ block: Block) -> Bool {
+		switch block {
+		case .blockquote: return true
+		case .listContinuation(_, let inner): return inner.last.map(endsInQuote) ?? false
+		default: return false
+		}
+	}
+
+	/// Whether the first paragraph a block writes is quoted.
+	private func startsWithQuote(_ block: Block) -> Bool {
+		switch block {
+		case .blockquote: return true
+		case .listContinuation(_, let inner): return inner.first.map(startsWithQuote) ?? false
+		default: return false
+		}
 	}
 
 	/// What a block shows the block above it: its first paragraph's space before, or
@@ -31,7 +68,7 @@ extension DocxWriter {
 		case .alert: return .box
 		case .horizontalRule: return .rule
 		case .heading(let level, _): return .spacing(Self.headingSpaceBefore(level: max(1, min(level, 6))))
-		case .blockquote(let inner): return inner.first.map(topEdge(of:)) ?? .spacing(0)
+		case .blockquote(let inner), .listContinuation(_, let inner): return inner.first.map(topEdge(of:)) ?? .spacing(0)
 		case .paragraph, .listItem, .codeBlock, .table, .image: return .spacing(0)
 		}
 	}
@@ -45,7 +82,7 @@ extension DocxWriter {
 			return .box
 		case .horizontalRule: return .rule
 		case .heading: return .spacing(Self.headingSpaceAfter)
-		case .blockquote(let inner): return inner.last.map(bottomEdge(of:)) ?? .spacing(0)
+		case .blockquote(let inner), .listContinuation(_, let inner): return inner.last.map(bottomEdge(of:)) ?? .spacing(0)
 		case .paragraph, .listItem, .image: return .spacing(Self.paragraphSpaceAfter)
 		case .codeBlock, .table: return .spacing(0)
 		}
@@ -58,8 +95,8 @@ extension DocxWriter {
 		let layout = boxLayout
 		var pPr = "<w:pStyle w:val=\"\(DocxStyleID.rule)\"/>"
 		pPr += "<w:spacing w:before=\"\(layout.ruleSpaceBefore(above: above))\" w:after=\"\(layout.ruleSpaceAfter(below: below))\"/>"
-		if quoteDepth > 0 {
-			pPr += "<w:ind w:left=\"\(quoteDepth * Self.quoteIndent)\"/>"
+		if quoteDepth > 0 || listTextIndent > 0 {
+			pPr += "<w:ind w:left=\"\(leftIndent(quoteDepth: quoteDepth))\"/>"
 		}
 		return "<w:p><w:pPr>\(pPr)</w:pPr></w:p>\n"
 	}
@@ -117,6 +154,8 @@ extension DocxWriter {
 					current.append(CalloutParagraph(role: .body, runs: [Run(text: text, italic: italic, code: true)]))
 				case .blockquote(let inner):
 					flatten(inner, italic: true)
+				case .listContinuation(_, let inner):
+					flatten(inner, italic: italic)
 				case .alert(_, let innerTitle, let inner):
 					current.append(CalloutParagraph(role: .body, runs: [Run(text: innerTitle, bold: true, italic: true)]))
 					flatten(inner, italic: true)
@@ -173,7 +212,7 @@ extension DocxWriter {
 		// the same ones: the style's, unless a quote's indent or list bullets (which hang
 		// in a wider left padding) move the text.
 		let listHang = paragraphs.contains(where: \.isListItem) ? Self.listHangingIndent : 0
-		let offset = quoteDepth * Self.quoteIndent
+		let offset = leftIndent(quoteDepth: quoteDepth)
 		let directBorders = listHang > 0 ? calloutBordersXML(kind: kind, listHang: listHang) : ""
 		let directIndent = listHang > 0 || offset > 0
 		var xml = ""
@@ -218,10 +257,13 @@ extension DocxWriter {
 
 	/// An empty, unstyled 1pt paragraph that keeps two framed groups (boxes, quotes)
 	/// from joining; the reader takes it as the boundary between them.
-	func spacerParagraph() -> String {
+	/// With `resettingIndent`, its explicit zero indent also tells the reader that a list
+	/// is over, so indented content below isn't read as the last item's.
+	func spacerParagraph(resettingIndent: Bool = false) -> String {
 		let hairline = DocxBoxLayout.hairlineTwips
 		let size = DocxBoxLayout.hairlineHalfPoints
-		return "<w:p><w:pPr><w:spacing w:before=\"0\" w:after=\"0\" w:line=\"\(hairline)\" w:lineRule=\"exact\"/><w:rPr><w:sz w:val=\"\(size)\"/><w:szCs w:val=\"\(size)\"/></w:rPr></w:pPr></w:p>\n"
+		let indent = resettingIndent ? "<w:ind w:left=\"0\"/>" : ""
+		return "<w:p><w:pPr><w:spacing w:before=\"0\" w:after=\"0\" w:line=\"\(hairline)\" w:lineRule=\"exact\"/>\(indent)<w:rPr><w:sz w:val=\"\(size)\"/><w:szCs w:val=\"\(size)\"/></w:rPr></w:pPr></w:p>\n"
 	}
 
 	/// The box frame: the kind's 3pt accent border on the left, and borders in the fill

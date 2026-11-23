@@ -61,6 +61,10 @@ public final class DocxWriter {
 		case heading(level: Int, runs: [Run])
 		case paragraph(runs: [Run])
 		case listItem(ordered: Bool, level: Int, runs: [Run])
+		/// Content of the list item at `level` after its first paragraph (further
+		/// paragraphs, quotes, code blocks, …): written unnumbered, indented to the
+		/// item's text, without restarting the list's numbering.
+		case listContinuation(level: Int, blocks: [Block])
 		case codeBlock(language: String?, text: String)
 		case blockquote(blocks: [Block])
 		/// An alert box (`> [!NOTE]`, `> [!WARNING] Watch out`): `title` is the custom
@@ -158,7 +162,12 @@ public final class DocxWriter {
 
 	/// Tracks numbering instances for list continuity.
 	private var nextNumId = 0
+	/// The numbering instance list items currently continue.
+	var currentNumId = 0
 	var lastListType: ListType?
+	/// The extra left indent (twips) of list-item continuation content being written:
+	/// the text indent of the item it belongs to.
+	var listTextIndent = 0
 	/// Maps each concrete numId to its abstract numbering id (0=bullet, 1=decimal).
 	private var numInstances: [(numId: Int, abstractNumId: Int)] = []
 
@@ -204,7 +213,9 @@ public final class DocxWriter {
 		hyperlinkCounter = 0
 		footnoteHyperlinks = []
 		nextNumId = 0
+		currentNumId = 0
 		lastListType = nil
+		listTextIndent = 0
 		numInstances = []
 		mediaFiles = []
 		imageRels = []
@@ -300,6 +311,9 @@ public final class DocxWriter {
 		case .listItem(let ordered, let level, let runs):
 			return listParagraph(runs: runs, numId: listNumId(ordered: ordered), ilvl: level, quoteDepth: quoteDepth)
 
+		case .listContinuation(let level, let innerBlocks):
+			return listContinuationXML(innerBlocks, level: level, quoteDepth: quoteDepth, above: above, below: below)
+
 		case .codeBlock(_, let text):
 			lastListType = nil
 			return codeBlockParagraphs(text, quoteDepth: quoteDepth)
@@ -331,11 +345,12 @@ public final class DocxWriter {
 		let listType: ListType = ordered ? .ordered : .unordered
 		if lastListType != listType {
 			nextNumId += 1
+			currentNumId = nextNumId
 			let abstractNumId = ordered ? 1 : 0
 			numInstances.append((numId: nextNumId, abstractNumId: abstractNumId))
 			lastListType = listType
 		}
-		return nextNumId
+		return currentNumId
 	}
 
 	// MARK: - Paragraph Builders
@@ -344,13 +359,15 @@ public final class DocxWriter {
 		var pPr = ""
 		if let style {
 			pPr += "<w:pStyle w:val=\"\(xmlEscape(style))\"/>"
-			if quoteDepth > 0 { pPr += "<w:ind w:left=\"\(quoteDepth * Self.quoteIndent)\"/>" }
+			if quoteDepth > 0 || listTextIndent > 0 { pPr += "<w:ind w:left=\"\(leftIndent(quoteDepth: quoteDepth))\"/>" }
 		} else if quoteDepth > 0 {
 			// A quoted paragraph: the "Block Quote" style (a grey bar at one level's
 			// indent), which the reader turns back into `>`; deeper levels indent further.
 			usesQuoteStyle = true
 			pPr += "<w:pStyle w:val=\"\(DocxStyleID.blockQuote)\"/>"
-			if quoteDepth > 1 { pPr += "<w:ind w:left=\"\(quoteDepth * Self.quoteIndent)\"/>" }
+			if quoteDepth > 1 || listTextIndent > 0 { pPr += "<w:ind w:left=\"\(leftIndent(quoteDepth: quoteDepth))\"/>" }
+		} else if listTextIndent > 0 {
+			pPr += "<w:ind w:left=\"\(listTextIndent)\"/>"
 		}
 		let pPrXML = pPr.isEmpty ? "" : "<w:pPr>\(pPr)</w:pPr>"
 		return "<w:p>\(pPrXML)\(renderRuns(runs))</w:p>\n"
@@ -358,9 +375,8 @@ public final class DocxWriter {
 
 	private func listParagraph(runs: [Run], numId: Int, ilvl: Int, quoteDepth: Int) -> String {
 		var indentXML = ""
-		if quoteDepth > 0 {
-			let indent = quoteDepth * 360
-			indentXML = "<w:ind w:left=\"\(indent + (ilvl + 1) * 720)\"/>"
+		if quoteDepth > 0 || listTextIndent > 0 {
+			indentXML = "<w:ind w:left=\"\(leftIndent(quoteDepth: quoteDepth) + Self.listTextIndent(level: ilvl))\"/>"
 		}
 		let pPr = """
 		<w:pPr>\
@@ -385,7 +401,7 @@ public final class DocxWriter {
 		// Single-cell table with cell margins for true inner padding
 		let cellBorder = "w:val=\"single\" w:color=\"000000\" w:sz=\"2\" w:space=\"0\""
 		let tblBorder = "w:val=\"single\" w:color=\"ffffff\" w:sz=\"8\" w:space=\"0\" w:shadow=\"0\" w:frame=\"0\""
-		let indent = 108 + quoteDepth * 360
+		let indent = 108 + leftIndent(quoteDepth: quoteDepth)
 		let cellWidth = pageSetup.contentWidth - indent
 
 		return """
@@ -465,14 +481,14 @@ public final class DocxWriter {
 		let emuPerTwip = 635 // 914400 EMU/inch ÷ 1440 twips/inch
 		var cx = pixelWidth * emuPerPixel
 		var cy = pixelHeight * emuPerPixel
-		let indentTwips = quoteDepth * 360
+		let indentTwips = leftIndent(quoteDepth: quoteDepth)
 		let maxCx = max(0, pageSetup.contentWidth - indentTwips) * emuPerTwip
 		if maxCx > 0, cx > maxCx {
 			cy = Int((Double(cy) * Double(maxCx) / Double(cx)).rounded())
 			cx = maxCx
 		}
 
-		let indentXML = quoteDepth > 0 ? "<w:ind w:left=\"\(indentTwips)\"/>" : ""
+		let indentXML = indentTwips > 0 ? "<w:ind w:left=\"\(indentTwips)\"/>" : ""
 		let pPrXML = indentXML.isEmpty ? "" : "<w:pPr>\(indentXML)</w:pPr>"
 		let descr = xmlEscape(alt)
 		let drawing = """
@@ -553,7 +569,7 @@ public final class DocxWriter {
 		guard columnCount > 0 else { return "" }
 
 		// Calculate column widths (evenly distributed)
-		let indent = quoteDepth * 360
+		let indent = leftIndent(quoteDepth: quoteDepth)
 		let availableWidth = pageSetup.contentWidth - indent
 		let colWidth = availableWidth / columnCount
 
@@ -1070,7 +1086,7 @@ public final class DocxWriter {
 				paragraphs.append(runs)
 			case .listItem(_, _, let runs):
 				paragraphs.append(runs)
-			case .blockquote(let inner):
+			case .blockquote(let inner), .listContinuation(_, let inner):
 				paragraphs.append(contentsOf: footnoteRunParagraphs(from: inner))
 			case .alert(_, let title, let inner):
 				paragraphs.append([Run(text: title, bold: true)])
