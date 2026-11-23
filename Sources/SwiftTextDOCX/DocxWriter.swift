@@ -1111,6 +1111,10 @@ public final class DocxWriter {
 				if run.bold { rPr += "<w:b/><w:bCs/>" }
 				if run.italic { rPr += "<w:i/><w:iCs/>" }
 				if run.strike { rPr += "<w:strike/>" }
+				if run.code {
+					rPr += "<w:rFonts w:ascii=\"Courier New\" w:hAnsi=\"Courier New\" w:cs=\"Courier New\"/>"
+					rPr += "<w:sz w:val=\"21\"/><w:szCs w:val=\"21\"/>"
+				}
 				xml += "<w:hyperlink r:id=\"\(rId)\"><w:r><w:rPr>\(rPr)</w:rPr>\(textElements(run.text))</w:r></w:hyperlink>"
 				continue
 			}

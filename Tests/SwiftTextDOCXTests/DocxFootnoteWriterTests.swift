@@ -176,6 +176,27 @@ struct DocxFootnoteWriterTests {
 		#expect(!documentRels.contains("Target=\"https://example.org/b\""))
 	}
 
+	@Test("Linked inline code in a footnote keeps its code styling inside the hyperlink")
+	func footnoteCodeLinkKeepsCodeStyle() throws {
+		let markdown = """
+		Text.[^1]
+
+		[^1]: See [`foo`](https://example.org/foo).
+		"""
+
+		let url = FileManager.default.temporaryDirectory
+			.appendingPathComponent("fn-codelink-\(UUID().uuidString).docx")
+		defer { try? FileManager.default.removeItem(at: url) }
+
+		try MarkdownToDocx.convert(markdown, to: url)
+		let archive = try DocxArchive(contentsOf: url)
+
+		let footnotes = try part("word/footnotes.xml", from: archive)
+		#expect(footnotes.contains("<w:hyperlink r:id=\"rLink1\"><w:r><w:rPr><w:rStyle w:val=\"Hyperlink\"/>"
+			+ "<w:rFonts w:ascii=\"Courier New\" w:hAnsi=\"Courier New\" w:cs=\"Courier New\"/>"
+			+ "<w:sz w:val=\"21\"/><w:szCs w:val=\"21\"/></w:rPr><w:t xml:space=\"preserve\">foo</w:t></w:r></w:hyperlink>"))
+	}
+
 	@Test("Footnotes without links write no footnotes.xml.rels part")
 	func footnotesWithoutLinksHaveNoRels() throws {
 		let markdown = """
