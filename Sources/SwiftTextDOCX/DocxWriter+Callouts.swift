@@ -29,12 +29,15 @@ extension DocxWriter {
 		return xml
 	}
 
-	/// Whether `block` is the last of a list and `next` a quote after it.
+	/// Whether `block` is the last of a list and `next` a quote or alert box after it
+	/// (an alert holding a list has a direct indent too).
 	private func endsList(_ block: Block, before next: Block) -> Bool {
 		switch block {
 		case .listItem, .listContinuation:
-			if case .blockquote = next { return true }
-			return false
+			switch next {
+			case .blockquote, .alert: return true
+			default: return false
+			}
 		default:
 			return false
 		}

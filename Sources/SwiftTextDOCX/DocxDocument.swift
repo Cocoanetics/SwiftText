@@ -71,7 +71,7 @@ public struct DocxDocument {
 
 			if style == .markdown, let callout = paragraphStyle?.callout {
 				let alert = markdownAlert(from: index, kind: callout.kind, numberingState: &numberingState)
-				rendered.append(RenderedParagraph(text: alert.block, isListItem: false))
+				rendered.append(RenderedParagraph(text: parent?.indent(alert.block) ?? alert.block, isListItem: false))
 				index = alert.end
 				continue
 			}
@@ -91,7 +91,7 @@ public struct DocxDocument {
 			}
 			index += 1
 			if paragraphStyle?.isRule == true, paragraph.plainText().isEmpty {
-				if style == .markdown { rendered.append(RenderedParagraph(text: "---", isListItem: false)) }
+				if style == .markdown { rendered.append(RenderedParagraph(text: parent?.indent("---") ?? "---", isListItem: false)) }
 				continue
 			}
 			if var result = paragraph.rendered(using: self, numberingState: &numberingState, style: style) {

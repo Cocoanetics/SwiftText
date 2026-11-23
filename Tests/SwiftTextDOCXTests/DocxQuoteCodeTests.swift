@@ -126,6 +126,30 @@ struct DocxQuoteCodeTests {
 		#expect(try roundTrip(markdown) == markdown)
 	}
 
+	@Test("Rules and alert boxes in a list item stay under it; an alert after a list stays at top level")
+	func listItemRuleAndAlertRoundTrip() throws {
+		let rule = """
+		1. a
+
+		   ---
+
+		2. b
+		"""
+		#expect(try roundTrip(rule) == rule)
+		let alerts = """
+		- c
+
+		  > [!NOTE]
+		  > n
+
+		- d
+
+		> [!WARNING]
+		> - w
+		"""
+		#expect(try roundTrip(alerts) == alerts)
+	}
+
 	@Test("A deeply nested quote after a list stays at top level, though indented like the item's text")
 	func nestedQuoteAfterListRoundTrip() throws {
 		let markdown = """
