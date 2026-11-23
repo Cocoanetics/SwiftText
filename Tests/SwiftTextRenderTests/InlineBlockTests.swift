@@ -86,6 +86,22 @@ struct InlineBlockTests {
 		#expect(pdf.contains("/URI (https://example.com/off)"))
 	}
 
+	@Test("An inline-block moves with its line when a table cell is vertically centred")
+	func inlineBlockInMiddleAlignedCell() async throws {
+		let html = "<table><tr><td id=\"short\"><span style=\"display: inline-block; padding: 8px\">Off</span></td>"
+			+ "<td><div style=\"height: 100px\">tall</div></td></tr></table>"
+		let root = try await layout(html)
+		let cell = try #require(blocks(root, "td").first)
+		let line = try #require(cell.lines.first)
+		let box = try #require(atomicBlocks(in: cell).first)
+		// Centred, not left at the top of the cell…
+		#expect(line.y > cell.y + 20)
+		// …and the inline-block and its text went with the line.
+		let word = try #require(box.lines.first?.fragments.first)
+		#expect(abs(word.y - (box.y + 8)) < 0.01)
+		#expect(box.y >= line.y - 0.01 && box.y + box.height <= line.y + line.height + 0.01)
+	}
+
 	@Test("An inline box's margin and padding take up room on the line")
 	func inlineBoxSpacing() async throws {
 		let root = try await layout("<p><span style=\"margin-right: 10px\">VAT</span><span style=\"padding-left: 4px\">19,17</span></p>")

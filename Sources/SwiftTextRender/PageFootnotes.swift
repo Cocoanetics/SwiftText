@@ -73,6 +73,8 @@ struct FootnoteSet {
 						ids.append(id)
 					}
 					inline.children.forEach(scan)
+					// An inline-block keeps its content apart from `children`.
+					if let content = inline.atomicBlock { scan(content) }
 				} else if let block = box as? BlockBox {
 					block.children.forEach(scan)
 				}
@@ -141,15 +143,22 @@ struct FootnoteSet {
 		for (index, note) in notes.enumerated() { indexByID[note.id] = index }
 		var found: [FootnoteReference] = []
 		var seen = Set<Int>()
-		func walk(_ block: BlockBox) {
+		/// Records the references in `block`; `outerY` is the top of the line an
+		/// enclosing inline-block sits on, which pages break at instead.
+		func walk(_ block: BlockBox, outerY: Double? = nil) {
 			for line in block.lines {
+				let y = outerY ?? line.y
 				for fragment in line.fragments {
+					if case .block(let inner, _, _) = fragment.inlineControl {
+						walk(inner, outerY: y)
+						continue
+					}
 					guard let href = fragment.href, let id = Self.noteID(inHref: href, baseURL: baseURL), let note = indexByID[id],
 					      seen.insert(note).inserted else { continue }
-					found.append(FootnoteReference(y: line.y, note: note))
+					found.append(FootnoteReference(y: y, note: note))
 				}
 			}
-			for case let child as BlockBox in block.children { walk(child) }
+			for case let child as BlockBox in block.children { walk(child, outerY: outerY) }
 		}
 		walk(root)
 		// A note referred to from another note's text goes where that note goes; a

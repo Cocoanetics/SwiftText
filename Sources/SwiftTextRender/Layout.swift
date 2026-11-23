@@ -992,6 +992,9 @@ public final class LayoutEngine {
 				for index in line.fragments.indices {
 					line.fragments[index].y += dy
 					line.fragments[index].baseline += dy
+					if case .block(let inner, _, _) = line.fragments[index].inlineControl {
+						translate(inner, dx: 0, dy: dy)
+					}
 				}
 			}
 		} else {
