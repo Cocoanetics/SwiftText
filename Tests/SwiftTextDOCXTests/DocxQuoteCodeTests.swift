@@ -126,6 +126,21 @@ struct DocxQuoteCodeTests {
 		#expect(try roundTrip(markdown) == markdown)
 	}
 
+	@Test("A deeply nested quote after a list stays at top level, though indented like the item's text")
+	func nestedQuoteAfterListRoundTrip() throws {
+		let markdown = """
+		- a
+
+		> > > deep
+		"""
+		#expect(try roundTrip(markdown) == markdown)
+		// A code block or table inside a quote after a list isn't adopted by the item.
+		for nested in ["> >     code", "> > | A |\n> > | --- |\n> > | 1 |"] {
+			let readBack = try roundTrip("- a\n\n" + nested)
+			#expect(!readBack.contains("\n  "), "\(readBack)")
+		}
+	}
+
 	@Test("Word's own Quote and Intense Quote styles read as quotes")
 	func wordQuoteStyles() {
 		#expect(DocxStyleID.isBlockQuote(styleId: "Quote", name: "Quote"))

@@ -43,6 +43,7 @@ public struct DocxDocument {
 			let paragraph = paragraphs[index]
 			let paragraphStyle = styles.style(for: paragraph.styleIdentifier)
 			let isQuote = style == .markdown && paragraphStyle?.isBlockQuote == true
+			if paragraph.followsMarginReset { listItems.removeAll() }
 			let parent = style == .markdown ? ListItemContext.parent(in: listItems, of: paragraph, isQuote: isQuote) : nil
 			if paragraph.numbering == nil, parent == nil { listItems.removeAll() }
 
@@ -265,6 +266,9 @@ public struct DocxDocument {
 		/// Whether an empty, unstyled paragraph preceded this one: a boundary between
 		/// two quotes.
 		internal var followsBreak = false
+		/// Whether the writer's end-of-list mark preceded this paragraph, so it doesn't
+		/// continue a list item even when indented like one.
+		internal var followsMarginReset = false
 		/// Native Word tables anchored at this paragraph, in document order; rendered
 		/// as GFM pipe tables. The writer also wraps code blocks in a single-cell
 		/// table — those stay as ordinary paragraphs, not entries here.

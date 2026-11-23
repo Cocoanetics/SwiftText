@@ -131,6 +131,11 @@ private final class DocumentExtractor: NSObject, XMLParserDelegate {
 	/// Set when an empty paragraph outside a quote was skipped, so the next paragraph is
 	/// marked as following a break (the spacer between two quotes).
 	private var breakPending = false
+	/// Set when an empty paragraph with an explicit zero indent was skipped: the
+	/// writer's mark that a list is over.
+	private var marginResetPending = false
+	/// `marginResetPending` as it was when the table being collected began.
+	private var tableFollowsMarginReset = false
 	/// Nested `w:tbl` depth. Code-block wrappers and real tables both use `w:tbl`.
 	private var tableDepth = 0
 	/// Rows of the table currently being built (`nil` when not inside a top-level table
@@ -286,7 +291,9 @@ private final class DocumentExtractor: NSObject, XMLParserDelegate {
 		if !paragraph.isEmpty || style?.isRule == true || style?.isCodeBlock == true {
 			var paragraph = paragraph
 			paragraph.followsBreak = breakPending
+			paragraph.followsMarginReset = marginResetPending
 			breakPending = false
+			marginResetPending = false
 			if buildingCell != nil {
 				buildingCell?.append(paragraph)
 			} else {
@@ -297,6 +304,7 @@ private final class DocumentExtractor: NSObject, XMLParserDelegate {
 			breakPending = false
 		} else if style?.isBlockQuote != true {
 			breakPending = true
+			if paragraph.leftIndent == 0 { marginResetPending = true }
 		}
 		currentParagraph = nil
 		formatStack.removeAll(keepingCapacity: true)
@@ -310,6 +318,8 @@ private final class DocumentExtractor: NSObject, XMLParserDelegate {
 		tableDepth += 1
 		// Only the outermost table is collected; nested tables flatten into the cell.
 		guard tableDepth == 1 else { return }
+		tableFollowsMarginReset = marginResetPending
+		marginResetPending = false
 		buildingRows = []
 		buildingRow = nil
 		buildingCell = nil
@@ -402,6 +412,7 @@ private final class DocumentExtractor: NSObject, XMLParserDelegate {
 				var paragraph = paragraph
 				paragraph.startsTableCell = first
 				paragraph.leftIndent = paragraph.leftIndent ?? buildingTableIndent
+				paragraph.followsMarginReset = paragraph.followsMarginReset || (first && tableFollowsMarginReset)
 				first = false
 				document.paragraphs.append(paragraph)
 			}
@@ -420,6 +431,7 @@ private final class DocumentExtractor: NSObject, XMLParserDelegate {
 		guard cells.contains(where: { $0.contains(where: { !$0.isEmpty }) }) else { return }
 		var anchor = DocxDocument.Paragraph()
 		anchor.leftIndent = buildingTableIndent
+		anchor.followsMarginReset = tableFollowsMarginReset
 		anchor.tables = [
 			DocxDocument.Paragraph.Table(cells: cells, columnAlignments: buildingAlignments)
 		]

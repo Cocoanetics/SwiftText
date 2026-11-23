@@ -16,13 +16,28 @@ extension DocxWriter {
 			let previous = index > 0 ? bottomEdge(of: blocks[index - 1]) : above
 			let next = index + 1 < blocks.count ? topEdge(of: blocks[index + 1]) : below
 			xml += renderBlock(block, quoteDepth: quoteDepth, above: previous, below: next)
-			if endsInQuote(block), index + 1 < blocks.count, startsWithQuote(blocks[index + 1]) {
+			if quoteDepth == 0, listTextIndent == 0, index + 1 < blocks.count, endsList(block, before: blocks[index + 1]) {
+				// A nested quote's indent can match a list item's text indent; the reader
+				// would take it for the item's content without a mark that the list is over.
+				xml += spacerParagraph(resettingIndent: true)
+			} else if endsInQuote(block), index + 1 < blocks.count, startsWithQuote(blocks[index + 1]) {
 				// Two quotes in a row would draw (and read back) as one, also when one
 				// of them belongs to a list item.
 				xml += spacerParagraph()
 			}
 		}
 		return xml
+	}
+
+	/// Whether `block` is the last of a list and `next` a quote after it.
+	private func endsList(_ block: Block, before next: Block) -> Bool {
+		switch block {
+		case .listItem, .listContinuation:
+			if case .blockquote = next { return true }
+			return false
+		default:
+			return false
+		}
 	}
 
 	/// Whether the last paragraph a block writes is quoted.
@@ -239,10 +254,13 @@ extension DocxWriter {
 
 	/// An empty, unstyled 1pt paragraph that keeps two framed groups (boxes, quotes)
 	/// from joining; the reader takes it as the boundary between them.
-	func spacerParagraph() -> String {
+	/// With `resettingIndent`, its explicit zero indent also tells the reader that a list
+	/// is over, so indented content below isn't read as the last item's.
+	func spacerParagraph(resettingIndent: Bool = false) -> String {
 		let hairline = DocxBoxLayout.hairlineTwips
 		let size = DocxBoxLayout.hairlineHalfPoints
-		return "<w:p><w:pPr><w:spacing w:before=\"0\" w:after=\"0\" w:line=\"\(hairline)\" w:lineRule=\"exact\"/><w:rPr><w:sz w:val=\"\(size)\"/><w:szCs w:val=\"\(size)\"/></w:rPr></w:pPr></w:p>\n"
+		let indent = resettingIndent ? "<w:ind w:left=\"0\"/>" : ""
+		return "<w:p><w:pPr><w:spacing w:before=\"0\" w:after=\"0\" w:line=\"\(hairline)\" w:lineRule=\"exact\"/>\(indent)<w:rPr><w:sz w:val=\"\(size)\"/><w:szCs w:val=\"\(size)\"/></w:rPr></w:pPr></w:p>\n"
 	}
 
 	/// The box frame: the kind's 3pt accent border on the left, and borders in the fill
