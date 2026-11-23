@@ -381,6 +381,7 @@ public enum HTMLRenderer {
 			if let block = box as? BlockBox {
 				for child in block.children { walk(child, blockY: blockY) }
 			} else if let inline = box as? InlineBox {
+				if let content = inline.atomicBlock { walk(content, blockY: blockY) }
 				for child in inline.children { walk(child, blockY: blockY) }
 			}
 		}

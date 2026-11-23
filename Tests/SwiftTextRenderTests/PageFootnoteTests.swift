@@ -126,6 +126,17 @@ struct PageFootnoteTests {
 		#expect(pages[0].contains("Note02"))
 	}
 
+	@Test("a reference inside an inline-block lifts its note to its page")
+	func referenceInInlineBlock() async throws {
+		let html = document(count: 14).replacingOccurrences(of: "<sup>", with: "<span style=\"display: inline-block\"><sup>")
+			.replacingOccurrences(of: "</sup>", with: "</sup></span>")
+		let pages = try await pages(html)
+		#expect(pages.count > 1)
+		for (index, text) in pages.enumerated() {
+			#expect(numbers(text, prefix: "Ref") == numbers(text, prefix: "Note"), "page \(index + 1): \(text)")
+		}
+	}
+
 	@Test("an @page size turns the page footnotes on")
 	func atPageSizeCounts() async throws {
 		var options = options(footnotes: true)

@@ -52,15 +52,28 @@ public enum BoxTreeBuilder {
 		switch style.display {
 		case .inline:
 			box = InlineBox(style: style, children: childBoxes)
-		case .inlineBlock where !childBoxes.contains(where: { $0 is BlockBox }):
+		case .inlineBlock where element.localName == "input":
+			// A form control is replaced content that inline layout draws itself
+			// (a checkbox), not a container.
 			box = InlineBox(style: style, children: childBoxes)
+		case .inlineBlock:
+			// An inline-block is a block container that sits in a line as one
+			// box: a button, a label of fixed width, a column `<div>` beside
+			// another. Its content is a block of its own, carried by an inline
+			// box so that the enclosing block still holds only inline content.
+			var contentStyle = style
+			contentStyle.display = .block
+			let content = BlockBox(style: contentStyle)
+			content.children = normalizeBlockChildren(childBoxes, parentStyle: contentStyle)
+			content.element = element
+			if element.localName == "a", let href = element.attributeValue("href") {
+				inheritLink(href, into: content)
+			}
+			let inline = InlineBox(style: style)
+			inline.atomicBlock = content
+			box = inline
 		default:
-			// An inline-block that holds block-level boxes — `<span
-			// style="display: inline-block"><p>…</p></span>`, a column `<div>` —
-			// lays out as a block: there is no atomic inline-block layout yet,
-			// and inline layout would drop the blocks with all they contain.
-			var blockStyle = style
-			if blockStyle.display == .inlineBlock { blockStyle.display = .block }
+			let blockStyle = style
 			let block = BlockBox(style: blockStyle)
 			block.children = normalizeBlockChildren(childBoxes, parentStyle: blockStyle)
 			if blockStyle.display == .tableRow {
@@ -363,7 +376,7 @@ public enum BoxTreeBuilder {
 
 	/// Give `box` and every block inside it a link's `href`, stopping at blocks
 	/// a nearer link has claimed already — the tree is built from the inside out.
-	private static func inheritLink(_ href: String, into box: Box) {
+	static func inheritLink(_ href: String, into box: Box) {
 		guard let block = box as? BlockBox, block.linkHref == nil else { return }
 		block.linkHref = href
 		for child in block.children {
@@ -408,7 +421,7 @@ public enum BoxTreeBuilder {
 	/// of such boxes.
 	private static func isCollapsibleWhitespace(_ box: Box) -> Bool {
 		if box is TextBox { return isWhitespaceOnly(box) }
-		guard let inline = box as? InlineBox, inline.image == nil,
+		guard let inline = box as? InlineBox, inline.image == nil, inline.atomicBlock == nil,
 		      inline.element?.localName != "br", inline.element?.localName != "input" else { return false }
 		return inline.children.allSatisfy(isCollapsibleWhitespace)
 	}

@@ -20,8 +20,28 @@ extension LayoutEngine {
 		case checkbox(isChecked: Bool, style: ComputedStyle)
 		/// A replaced image, placed as one unbreakable box.
 		case image(DecodedImage, ComputedStyle, href: String?)
+		/// An inline-block, placed as one unbreakable box.
+		case block(BlockBox, ComputedStyle)
+		/// The left or right margin, border and padding of an inline box: an
+		/// advance that stays with the text beside it.
+		case spacer(InlineEdge)
 		case space(ComputedStyle)
 		case forcedBreak(ComputedStyle)
+	}
+
+	/// One side's margin, border and padding of an inline box. Percentages
+	/// resolve against the containing block's width, known only at layout.
+	struct InlineEdge {
+		let margin: Length
+		let padding: Length
+		let border: Double
+		/// The start edge, which moves to the next line with the content after it.
+		let isLeading: Bool
+
+		func width(percentageBasis: Double) -> Double {
+			max(0, (margin.resolved(percentageBasis: percentageBasis) ?? 0)
+				+ (padding.resolved(percentageBasis: percentageBasis) ?? 0) + border)
+		}
 	}
 
 	/// Lay out the inline content of `box` into lines. Returns the content height.
@@ -44,7 +64,8 @@ extension LayoutEngine {
 			tokenScalarStart.append(bidiScalars.count)
 			switch token {
 			case .word(let word, _, _, _): bidiScalars.append(contentsOf: word.unicodeScalars)
-			case .checkbox, .image: bidiScalars.append("\u{FFFC}")
+			case .checkbox, .image, .block: bidiScalars.append("\u{FFFC}")
+			case .spacer: bidiScalars.append("\u{200B}")
 			case .space: bidiScalars.append(" ")
 			case .forcedBreak: bidiScalars.append("\n")
 			}
@@ -61,6 +82,10 @@ extension LayoutEngine {
 		var fragments: [TextFragment] = []
 		var penX = box.style.textIndent // first line indentation (reset to 0 after)
 		var pendingSpace: ComputedStyle?
+		/// Leading inline edges advanced past since the last fragment. They belong
+		/// to the content after them, so a break before that content carries them
+		/// to the next line.
+		var leadingEdges = 0.0
 		/// Indices of fragments that follow a collapsed space: the line's justification
 		/// opportunities, independent of how wide word-spacing left the gap.
 		var spaceBoundaries = Set<Int>()
@@ -129,6 +154,9 @@ extension LayoutEngine {
 		func finishLine(isLast: Bool) {
 			guard !fragments.isEmpty else { pendingSpace = nil; return }
 			let (lineHeight, baselineFromTop) = lineMetrics(&fragments, strut: box.style)
+			// Leading edges with no content after them yet start the next line.
+			let carried = leadingEdges
+			penX -= carried
 
 			let line = LineBox()
 			line.x = contentX
@@ -176,12 +204,17 @@ extension LayoutEngine {
 					return positioned
 				}
 			}
+			// An inline-block was laid out at the origin; move it to its place.
+			for fragment in line.fragments {
+				guard case .block(let block, _, let top) = fragment.inlineControl else { continue }
+				translate(block, dx: fragment.x, dy: fragment.y + top)
+			}
 			lines.append(line)
 
 			lineTop += lineHeight
 			fragments = []
 			spaceBoundaries = []
-			penX = 0
+			penX = carried
 			pendingSpace = nil
 		}
 
@@ -189,7 +222,9 @@ extension LayoutEngine {
 		/// new line first if it does not fit after the pending space.
 		func placeAtomic(_ control: TextFragment.InlineControl, width: Double, style: ComputedStyle, href: String?, tokenIndex: Int) {
 			let precedingSpaceWidth = pendingSpace.map(spaceWidth) ?? 0
-			if style.whiteSpace.wraps, penX + precedingSpaceWidth + width > contentWidth, !fragments.isEmpty {
+			// The slack lets boxes whose percentage widths add up to the line
+			// (two columns of 50%) share it despite rounding.
+			if style.whiteSpace.wraps, penX + precedingSpaceWidth + width > contentWidth + 0.01, !fragments.isEmpty {
 				finishLine(isLast: false)
 			} else {
 				penX += precedingSpaceWidth
@@ -200,6 +235,7 @@ extension LayoutEngine {
 			                            bidiLevel: wordLevel(tokenIndex), font: fonts.font(for: style))
 			fragment.inlineControl = control
 			fragments.append(fragment)
+			leadingEdges = 0
 			penX += width
 		}
 
@@ -231,6 +267,16 @@ extension LayoutEngine {
 				let metrics = replacedBoxMetrics(of: image, style: style, containingWidth: contentWidth)
 				// `finishLine` decides the vertical position.
 				placeAtomic(.image(image, metrics, top: 0), width: metrics.width, style: style, href: href, tokenIndex: tokenIndex)
+			case .block(let block, let style):
+				let metrics = layoutAtomicBlock(block, containingWidth: contentWidth)
+				// Whether it may move to the next line is the line's `white-space`.
+				var lineStyle = style
+				lineStyle.whiteSpace = box.style.whiteSpace
+				placeAtomic(.block(block, metrics, top: 0), width: metrics.width, style: lineStyle, href: nil, tokenIndex: tokenIndex)
+			case .spacer(let edge):
+				let width = edge.width(percentageBasis: contentWidth)
+				penX += width
+				if edge.isLeading { leadingEdges += width }
 			case .word(let sourceWord, let style, let href, let decorations):
 				// Soft hyphens are break opportunities, not glyphs: they leave the
 				// text and reappear as a visible hyphen where a line breaks at one.
@@ -257,6 +303,7 @@ extension LayoutEngine {
 				let level = wordLevel(tokenIndex)
 				func append(_ pieces: [Piece]) {
 					for piece in pieces {
+						leadingEdges = 0
 						if let last = fragments.indices.last,
 						   fragments[last].inlineControl == nil,
 						   !fragments[last].carriesPreservedWhitespace,
@@ -508,6 +555,12 @@ func collectInline(_ box: Box, into tokens: inout [InlineToken], href: String?, 
 				tokens.append(.image(image, inline.style, href: href))
 				return
 			}
+			if let content = inline.atomicBlock {
+				// Inside a link, the block's text and images link there too.
+				if let href { BoxTreeBuilder.inheritLink(href, into: content) }
+				tokens.append(.block(content, inline.style))
+				return
+			}
 			// A <br> forces a line break.
 			if inline.element?.localName == "br" {
 				tokens.append(.forcedBreak(inline.style))
@@ -537,8 +590,86 @@ func collectInline(_ box: Box, into tokens: inout [InlineToken], href: String?, 
 				lineThrough: inline.style.lineThrough
 					? decorations.lineThrough ?? TextDecorationRun(source: source, style: inline.style)
 					: nil)
+			// The box's own margin, border and padding take up room on the line
+			// either side of its content. (They are not painted: an inline box
+			// has no background or border here.)
+			let style = inline.style
+			func isZero(_ length: Length) -> Bool {
+				switch length {
+				case .px(let value), .percent(let value): return value == 0
+				case .auto: return true
+				}
+			}
+			func isEmpty(_ edge: InlineEdge) -> Bool {
+				isZero(edge.margin) && isZero(edge.padding) && edge.border == 0
+			}
+			let left = InlineEdge(margin: style.margin.left, padding: style.padding.left,
+			                      border: style.usedBorderWidth(\.left, style: \.left), isLeading: true)
+			let right = InlineEdge(margin: style.margin.right, padding: style.padding.right,
+			                       border: style.usedBorderWidth(\.right, style: \.right), isLeading: false)
+			if !isEmpty(left) { tokens.append(.spacer(left)) }
 			for child in inline.children {
 				collectInline(child, into: &tokens, href: childHref, decorations: childDecorations)
+			}
+			if !isEmpty(right) { tokens.append(.spacer(right)) }
+		}
+	}
+
+	/// Lay out an inline-block at the origin and measure its margin box. With
+	/// no width of its own it shrinks to fit its content, up to the line's width.
+	func layoutAtomicBlock(_ block: BlockBox, containingWidth: Double) -> AtomicBlockMetrics {
+		let style = block.style
+		let marginTop = style.margin.top.resolved(percentageBasis: containingWidth) ?? 0
+		let marginBottom = style.margin.bottom.resolved(percentageBasis: containingWidth) ?? 0
+		let marginLeft = style.margin.left.resolved(percentageBasis: containingWidth) ?? 0
+		let marginRight = style.margin.right.resolved(percentageBasis: containingWidth) ?? 0
+		var available = containingWidth
+		if style.width == .auto, block.image == nil, style.display != .table {
+			// Shrink-to-fit (CSS 2.1 §10.3.9), measured over the margin box.
+			available = min(max(minContentWidth(of: block), containingWidth), maxContentWidth(of: block))
+		}
+		let height = layoutBlock(block, containingWidth: available, marginX: 0, borderBoxTop: marginTop)
+		// An auto margin is zero on an inline-block: undo any centring.
+		let offset = marginLeft - block.x
+		if abs(offset) > 0.001 { translate(block, dx: offset, dy: 0) }
+		let marginBoxHeight = marginTop + height + marginBottom
+		return AtomicBlockMetrics(
+			width: marginLeft + block.width + marginRight, height: marginBoxHeight,
+			baseline: lastBaseline(in: block) ?? marginBoxHeight)
+	}
+
+	/// The baseline of the last line in a laid-out block, in its coordinates.
+	private func lastBaseline(in block: BlockBox) -> Double? {
+		if block.establishesInlineContext {
+			return block.lines.last.map { $0.y + $0.baseline }
+		}
+		for child in block.children.reversed() {
+			if let childBlock = child as? BlockBox, childBlock.image == nil, let baseline = lastBaseline(in: childBlock) {
+				return baseline
+			}
+		}
+		return nil
+	}
+
+	/// Move a laid-out block and everything in it.
+	func translate(_ block: BlockBox, dx: Double, dy: Double) {
+		block.x += dx
+		block.y += dy
+		for line in block.lines {
+			line.x += dx
+			line.y += dy
+			for index in line.fragments.indices {
+				line.fragments[index].x += dx
+				line.fragments[index].y += dy
+				line.fragments[index].baseline += dy
+				if case .block(let inner, _, _) = line.fragments[index].inlineControl {
+					translate(inner, dx: dx, dy: dy)
+				}
+			}
+		}
+		if !block.establishesInlineContext {
+			for child in block.children {
+				if let childBlock = child as? BlockBox { translate(childBlock, dx: dx, dy: dy) }
 			}
 		}
 	}
@@ -562,38 +693,48 @@ func collectInline(_ box: Box, into tokens: inout [InlineToken], href: String?, 
 		return (lineHeight, baselineFromTop)
 	}
 
-	/// Fit a line's images into it: grow the line until every image's margin
-	/// box fits where its `vertical-align` puts it, then record how far below
-	/// the line's top each one starts.
+	/// Fit a line's images and inline-blocks into it: grow the line until every
+	/// one's margin box fits where its `vertical-align` puts it, then record
+	/// how far below the line's top each one starts.
 	private func placeReplacedFragments(_ fragments: inout [TextFragment], lineHeight: inout Double,
 	                                    baselineFromTop: inout Double, textAscent: Double, textDescent: Double) {
-		// `middle` centres an image on the baseline raised by half an x-height,
+		// `middle` centres a box on the baseline raised by half an x-height,
 		// taken as the usual half an em.
 		func middleLift(_ style: ComputedStyle) -> Double { style.fontSize * 0.25 }
+		/// The margin-box height of an atomic fragment and how much of it lies
+		/// above its baseline: all of an image, down to its last line for a block.
+		func size(of fragment: TextFragment) -> (height: Double, ascent: Double)? {
+			switch fragment.inlineControl {
+			case .image(_, let metrics, _): return (metrics.height, metrics.height)
+			case .block(_, let metrics, _): return (metrics.height, metrics.baseline)
+			case .checkbox, nil: return nil
+			}
+		}
 
 		var above = baselineFromTop
 		var below = lineHeight - baselineFromTop
 		for fragment in fragments {
-			guard case .image(_, let metrics, _) = fragment.inlineControl else { continue }
+			guard let (height, ascent) = size(of: fragment) else { continue }
 			switch fragment.style.verticalAlign {
 			case .middle:
-				above = max(above, metrics.height / 2 + middleLift(fragment.style))
-				below = max(below, metrics.height / 2 - middleLift(fragment.style))
+				above = max(above, height / 2 + middleLift(fragment.style))
+				below = max(below, height / 2 - middleLift(fragment.style))
 			case .textTop:
-				below = max(below, metrics.height - textAscent)
+				below = max(below, height - textAscent)
 			case .textBottom:
-				above = max(above, metrics.height - textDescent)
+				above = max(above, height - textDescent)
 			case .top, .bottom:
 				break // aligned to the line's edges, once those are known
 			case .baseline, .sub:
-				above = max(above, metrics.height)
+				above = max(above, ascent)
+				below = max(below, height - ascent)
 			}
 		}
 		for fragment in fragments {
-			guard case .image(_, let metrics, _) = fragment.inlineControl else { continue }
+			guard let (height, _) = size(of: fragment) else { continue }
 			switch fragment.style.verticalAlign {
-			case .top: below = max(below, metrics.height - above)
-			case .bottom: above = max(above, metrics.height - below)
+			case .top: below = max(below, height - above)
+			case .bottom: above = max(above, height - below)
 			default: break
 			}
 		}
@@ -601,18 +742,22 @@ func collectInline(_ box: Box, into tokens: inout [InlineToken], href: String?, 
 		baselineFromTop = above
 
 		for index in fragments.indices {
-			guard case .image(let image, let metrics, _) = fragments[index].inlineControl else { continue }
+			guard let (height, ascent) = size(of: fragments[index]) else { continue }
 			let style = fragments[index].style
 			let top: Double
 			switch style.verticalAlign {
-			case .middle: top = above - metrics.height / 2 - middleLift(style)
+			case .middle: top = above - height / 2 - middleLift(style)
 			case .textTop: top = above - textAscent
-			case .textBottom: top = above + textDescent - metrics.height
+			case .textBottom: top = above + textDescent - height
 			case .top: top = 0
-			case .bottom: top = lineHeight - metrics.height
-			case .baseline, .sub: top = above - metrics.height
+			case .bottom: top = lineHeight - height
+			case .baseline, .sub: top = above - ascent
 			}
-			fragments[index].inlineControl = .image(image, metrics, top: top)
+			switch fragments[index].inlineControl {
+			case .image(let image, let metrics, _): fragments[index].inlineControl = .image(image, metrics, top: top)
+			case .block(let block, let metrics, _): fragments[index].inlineControl = .block(block, metrics, top: top)
+			case .checkbox, nil: break
+			}
 		}
 	}
 

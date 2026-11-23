@@ -119,6 +119,11 @@ public final class Painter {
 		stream.endPath()
 	}
 
+	/// How many inline-blocks deep the painter is. Pagination keeps a line on
+	/// one page, so everything inside an inline-block belongs to the page of
+	/// the line that holds it, wherever its own lines fall.
+	private var atomicDepth = 0
+
 	/// The column-coordinate range this page shows (y-down).
 	private var sliceTop: Double { geometry.columnTop }
 	private var sliceBottom: Double { geometry.columnTop + geometry.sliceHeightPx }
@@ -129,7 +134,7 @@ public final class Painter {
 	/// stream would carry the entire document's drawing, making a paginated
 	/// render O(pages × document) in both time and output size.
 	private func blockIntersectsSlice(top: Double, height: Double) -> Bool {
-		if paintingRepeatedHeader { return true }
+		if paintingRepeatedHeader || atomicDepth > 0 { return true }
 		return top + height >= sliceTop - 0.5 && top <= sliceBottom + 0.5
 	}
 
@@ -138,7 +143,7 @@ public final class Painter {
 	/// the next page whole, so one that only touches the edge belongs to the
 	/// neighbouring page: painting it here, clipped, would leave a sliver.
 	private func boxOverlapsSlice(top: Double, height: Double) -> Bool {
-		if paintingRepeatedHeader { return true }
+		if paintingRepeatedHeader || atomicDepth > 0 { return true }
 		return top + height > sliceTop + 0.5 && top < sliceBottom - 0.5
 	}
 
@@ -148,7 +153,7 @@ public final class Painter {
 	/// Keying on the top (rather than an inclusive overlap) avoids painting a
 	/// boundary line as a clipped sliver on the preceding page too.
 	private func lineOnThisPage(_ top: Double) -> Bool {
-		if paintingRepeatedHeader { return true }
+		if paintingRepeatedHeader || atomicDepth > 0 { return true }
 		return top >= sliceTop - 0.5 && top < sliceBottom - 0.5
 	}
 
@@ -223,16 +228,24 @@ public final class Painter {
 				stream.stroke()
 			}
 			stream.popState()
+		case .block(let block, _, _):
+			atomicDepth += 1
+			paint(block)
+			atomicDepth -= 1
 		case .image(let image, let metrics, let top):
 			let marginTop = fragment.y + top
 			let borderX = fragment.x + metrics.borderX
 			let borderTop = marginTop + metrics.borderY
+			let radius = fragment.style.usedBorderRadius(width: metrics.borderWidth, height: metrics.borderHeight)
 			paintBackground(fragment.style.backgroundColor, x: borderX, top: borderTop,
-			                width: metrics.borderWidth, height: metrics.borderHeight)
-			paintBorders(metrics.border, colors: fragment.style.borderColor, x: borderX, top: borderTop,
-			             width: metrics.borderWidth, height: metrics.borderHeight)
+			                width: metrics.borderWidth, height: metrics.borderHeight, radius: radius)
+			let clip = radius > 0
+				? RoundedBox(x: borderX, top: borderTop, width: metrics.borderWidth, height: metrics.borderHeight, radius: radius)
+				: nil
 			drawImage(image, x: fragment.x + metrics.contentX, top: marginTop + metrics.contentY,
-			          width: metrics.contentWidth, height: metrics.contentHeight)
+			          width: metrics.contentWidth, height: metrics.contentHeight, clippedTo: clip)
+			paintBorders(metrics.border, colors: fragment.style.borderColor, x: borderX, top: borderTop,
+			             width: metrics.borderWidth, height: metrics.borderHeight, radius: radius)
 			if let href = fragment.href {
 				addLinkAnnotation(x: fragment.x, width: metrics.width, top: marginTop,
 				                  bottom: marginTop + metrics.height, anchor: fragment.baseline, href: href)
@@ -254,17 +267,59 @@ public final class Painter {
 	// MARK: - Backgrounds and borders
 
 	private func paintBackground(_ box: Box) {
-		paintBackground(box.style.backgroundColor, x: box.x, top: box.y, width: box.width, height: box.height)
+		paintBackground(box.style.backgroundColor, x: box.x, top: box.y, width: box.width, height: box.height,
+		                radius: box.style.usedBorderRadius(width: box.width, height: box.height))
 	}
 
 	/// Fill a border box, given in column coordinates, with its background.
-	private func paintBackground(_ color: RGBA?, x: Double, top: Double, width: Double, height: Double) {
+	private func paintBackground(_ color: RGBA?, x: Double, top: Double, width: Double, height: Double,
+	                             radius: Double = 0) {
 		guard let color, color.alpha > 0 else { return }
 		stream.pushState()
 		stream.setColorRGB(color.red, color.green, color.blue)
-		stream.rectangle(x, yUp(columnTop: top, height: height), width, height)
+		addPath(RoundedBox(x: x, top: top, width: width, height: height, radius: radius))
 		stream.fill()
 		stream.popState()
+	}
+
+	/// A box in column coordinates with all four corners rounded by `radius`.
+	private struct RoundedBox {
+		var x: Double
+		var top: Double
+		var width: Double
+		var height: Double
+		var radius: Double
+
+		/// The box `distance` inside this one, its corners following.
+		func inset(by distance: Double) -> RoundedBox {
+			RoundedBox(x: x + distance, top: top + distance,
+			           width: max(0, width - 2 * distance), height: max(0, height - 2 * distance),
+			           radius: max(0, radius - distance))
+		}
+	}
+
+	/// Add a box's outline to the current path: a rectangle, or four lines
+	/// joined by quarter circles when it has a radius.
+	private func addPath(_ box: RoundedBox) {
+		let bottom = yUp(columnTop: box.top, height: box.height)
+		let radius = min(box.radius, box.width / 2, box.height / 2)
+		guard radius > 0.01 else {
+			stream.rectangle(box.x, bottom, box.width, box.height)
+			return
+		}
+		let left = box.x, right = box.x + box.width, top = bottom + box.height
+		// The control-point distance that makes a cubic Bézier a quarter circle.
+		let control = radius * 0.5522847498
+		stream.moveTo(left + radius, bottom)
+		stream.lineTo(right - radius, bottom)
+		stream.curveTo(right - radius + control, bottom, right, bottom + radius - control, right, bottom + radius)
+		stream.lineTo(right, top - radius)
+		stream.curveTo(right, top - radius + control, right - radius + control, top, right - radius, top)
+		stream.lineTo(left + radius, top)
+		stream.curveTo(left + radius - control, top, left, top - radius + control, left, top - radius)
+		stream.lineTo(left, bottom + radius)
+		stream.curveTo(left, bottom + radius - control, left + radius - control, bottom, left + radius, bottom)
+		stream.close()
 	}
 
 	private func paintBorders(_ box: Box) {
@@ -276,13 +331,29 @@ public final class Painter {
 				bottom: $0.bottom?.color ?? style.borderColor.bottom,
 				left: $0.left?.color ?? style.borderColor.left)
 		} ?? style.borderColor
-		paintBorders(box.usedBorder, colors: colors, x: box.x, top: box.y, width: box.width, height: box.height)
+		paintBorders(box.usedBorder, colors: colors, x: box.x, top: box.y, width: box.width, height: box.height,
+		             radius: box.resolvedCollapsedBorders == nil
+		             	? style.usedBorderRadius(width: box.width, height: box.height) : 0)
 	}
 
 	/// Draw the edges of a border box given in column coordinates.
 	private func paintBorders(_ border: Edges<Double>, colors: Edges<RGBA>,
-	                          x: Double, top: Double, width: Double, height: Double) {
+	                          x: Double, top: Double, width: Double, height: Double, radius: Double = 0) {
 		guard border.top > 0 || border.right > 0 || border.bottom > 0 || border.left > 0 else { return }
+		// A rounded border of one width and colour is the ring between the
+		// border box and the padding box. (Uneven rounded borders keep square
+		// corners.)
+		if radius > 0.01, border.top == border.right, border.right == border.bottom, border.bottom == border.left,
+		   colors.top == colors.right, colors.right == colors.bottom, colors.bottom == colors.left {
+			let outer = RoundedBox(x: x, top: top, width: width, height: height, radius: radius)
+			stream.pushState()
+			stream.setColorRGB(colors.top.red, colors.top.green, colors.top.blue)
+			addPath(outer)
+			addPath(outer.inset(by: border.top))
+			stream.fill(evenOdd: true)
+			stream.popState()
+			return
+		}
 		let bottomY = yUp(columnTop: top, height: height)
 
 		func fillEdge(_ x: Double, _ y: Double, _ w: Double, _ h: Double, _ color: RGBA) {
@@ -317,11 +388,14 @@ public final class Painter {
 		let paddingTop = style.padding.top.resolved(percentageBasis: 0) ?? 0
 		let paddingRight = style.padding.right.resolved(percentageBasis: 0) ?? 0
 		let paddingBottom = style.padding.bottom.resolved(percentageBasis: 0) ?? 0
+		let radius = style.usedBorderRadius(width: box.width, height: box.height)
 		drawImage(image,
 		          x: box.x + border.left + paddingLeft,
 		          top: box.y + border.top + paddingTop,
 		          width: box.width - border.left - border.right - paddingLeft - paddingRight,
-		          height: box.height - border.top - border.bottom - paddingTop - paddingBottom)
+		          height: box.height - border.top - border.bottom - paddingTop - paddingBottom,
+		          clippedTo: radius > 0
+		          	? RoundedBox(x: box.x, top: box.y, width: box.width, height: box.height, radius: radius) : nil)
 		// `<a href="…"><img style="display: block"></a>`: the image is the link.
 		if let href = box.linkHref {
 			addLinkAnnotation(x: box.x, width: box.width, top: box.y, bottom: box.y + box.height,
@@ -331,11 +405,20 @@ public final class Painter {
 
 	/// Draw an image (or its placeholder) into a content box given in column
 	/// coordinates.
-	private func drawImage(_ image: DecodedImage, x: Double, top: Double, width: Double, height: Double) {
+	///
+	/// - Parameter clip: The image's rounded border box, when it has a
+	///   `border-radius`: the image shows only inside it.
+	private func drawImage(_ image: DecodedImage, x: Double, top: Double, width: Double, height: Double,
+	                       clippedTo clip: RoundedBox? = nil) {
 		guard width > 0, height > 0 else { return }
 		let yUpBottom = geometry.pageHeightPx - pageY(top) - height
 
 		stream.pushState()
+		if let clip {
+			addPath(clip)
+			stream.clip()
+			stream.endPath()
+		}
 		if let imageStream = image.pdfStream {
 			// The image is mapped onto the unit square by the CTM.
 			let name = builder.imageResourceName(for: imageStream, softMask: image.softMask,
@@ -460,6 +543,16 @@ public final class Painter {
 		stream.setColorRGB(color.red, color.green, color.blue)
 		stream.setFontSize(resource, fragment.style.fontSize)
 		if letterSpacing != 0 { stream.setCharacterSpacing(letterSpacing) }
+		// Bold text in a family that has no bold face — a family installed as
+		// one variable font, a web font declared in one weight — is thickened
+		// by stroking the glyph outlines, as browsers synthesize bold.
+		var synthesizesBold = false
+		if fragment.style.fontWeight > 500, case .embedded(let embedded) = font, !embedded.isBold {
+			synthesizesBold = true
+			stream.setColorRGB(color.red, color.green, color.blue, stroke: true)
+			stream.setLineWidth(fragment.style.fontSize / 32)
+			stream.setTextRendering(2) // fill, then stroke
+		}
 		stream.moveTextTo(fragment.x, geometry.pageHeightPx - pageY(fragment.baseline))
 		switch font {
 		case .standard:
@@ -467,6 +560,7 @@ public final class Painter {
 		case .embedded(let embedded):
 			stream.showHexString(encodeGlyphs(fragment.text, font: embedded, fontKey: font.key))
 		}
+		if synthesizesBold { stream.setTextRendering(0) }
 		stream.endText()
 		if letterSpacing != 0 { stream.setCharacterSpacing(0) } // reset for following text
 
