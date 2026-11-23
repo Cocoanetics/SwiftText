@@ -245,14 +245,14 @@ jobs:
           $root = "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows"
           # Two names are needed for zlib's one import lib: CArchive's
           # `.linkedLibrary("z")` wants z.lib, and libxml2's headers autolink
-          # `zlib.lib` via #pragma comment(lib). Which of the two vcpkg installs
-          # depends on the zlib port: 1.3.x gave z.lib, 1.4 (runner image
-          # 20261116) no longer does. Provide whichever name is missing.
+          # `zlib.lib` via #pragma comment(lib). What vcpkg calls the file depends
+          # on the zlib port: 1.3.x gave z.lib, 1.4 (runner image 20261116) gives
+          # libz.lib. Provide both wanted names from whichever one is installed.
           $names = @("z.lib", "zlib.lib")
-          $have = $names | Where-Object { Test-Path "$root\lib\$_" } | Select-Object -First 1
+          $have = ($names + "libz.lib") | Where-Object { Test-Path "$root\lib\$_" } | Select-Object -First 1
           if (-not $have) {
             Get-ChildItem "$root\lib" -Filter *.lib | ForEach-Object { Write-Host $_.Name }
-            throw "vcpkg installed no zlib import lib named z.lib or zlib.lib in $root\lib"
+            throw "vcpkg installed no zlib import lib named z.lib, zlib.lib or libz.lib in $root\lib"
           }
           foreach ($name in $names) {
             if (-not (Test-Path "$root\lib\$name")) { Copy-Item "$root\lib\$have" "$root\lib\$name" }
