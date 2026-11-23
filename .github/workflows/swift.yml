@@ -171,8 +171,11 @@ jobs:
     # paths, so a cache would mean re-implementing its provisioning. A transient
     # 503/504 on that download (seen once on 2026-11-08, #183) is handled by
     # re-running the job.
+    #
+    # A normal run takes about 4 minutes. The limit is 25 so that an emulator that
+    # hangs on shutdown (see android-emulator-options below) costs 25 minutes, not 60.
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 25
     env:
       SWIFTTEXT_PORTABLE_ONLY: "1"
     steps:
@@ -187,6 +190,14 @@ jobs:
           # Build the test bundle and run it on the emulator. With the portable
           # subset there's no libxml2/libarchive for the SDK to choke on.
           run-tests: true
+          # Cold-boot the emulator instead of loading the snapshot the action caches
+          # (`avd-…` cache key). On 2026-11-23, with emulator 37.3.10, every job that
+          # restored that cache logged `adb: device offline` right after the snapshot
+          # loaded; four of six then had adb killed (exit 137) and three of those sat
+          # in "Terminate Emulator" until the job timeout. The three jobs that built
+          # the AVD fresh all passed. A cold boot takes about 20 seconds. The first
+          # three options are the action's defaults.
+          android-emulator-options: -no-window -noaudio -no-boot-anim -no-snapshot-load
 
   # Windows job — builds and smoke-tests the full `swifttext` CLI. Unlike the
   # portable job above, this is a real (non-SWIFTTEXT_PORTABLE_ONLY) build: it
