@@ -109,6 +109,9 @@ public struct EmbeddedFont {
 		self.postScriptName = postScriptName
 	}
 
+	/// Whether this is a bold face, as the font file declares it.
+	var isBold: Bool { FontBook.faceStyle(of: otf).bold }
+
 	var unitsPerEm: Double { Double(otf.unitsPerEm) }
 	var ascentUnits: Int { otf.ascent }
 	var descentUnits: Int { otf.descent }
@@ -226,7 +229,7 @@ public final class FontBook {
 
 	/// Bold and italic as the font declares them: `OS/2` `usWeightClass` and
 	/// `fsSelection` (via ``OpenTypeFont``), else the `name` table's subfamily.
-	private static func faceStyle(of otf: OpenTypeFont) -> (bold: Bool, italic: Bool) {
+	static func faceStyle(of otf: OpenTypeFont) -> (bold: Bool, italic: Bool) {
 		let subfamily = otf.subfamilyName?.lowercased() ?? ""
 		let bold = otf.weightClass >= 600 || otf.isBold
 			|| (otf.weightClass == 400 && otf.fsSelection == 0 && subfamily.contains("bold"))
@@ -257,7 +260,7 @@ public final class FontBook {
 	}
 
 	public func font(for style: ComputedStyle) -> Font {
-		let bold = style.fontWeight >= 600
+		let bold = style.fontWeight > 500
 		let italic = style.fontStyle != .normal
 		for family in style.fontFamily {
 			if let faces = registered[family.lowercased()], let face = Self.pickFace(faces, bold: bold, italic: italic) {
@@ -406,7 +409,7 @@ public final class FontBook {
 		for embedded in registrationOrder where embedded.postScriptName != primaryName(primary) {
 			if embedded.hasGlyph(for: scalar) { return .embedded(embedded) }
 		}
-		let bold = style.fontWeight >= 600
+		let bold = style.fontWeight > 500
 		let italic = style.fontStyle != .normal
 		let base14 = StandardFont.helvetica(bold: bold, italic: italic)
 		// With embedding on, never reintroduce an unembedded base-14 face.
@@ -446,7 +449,7 @@ public final class FontBook {
 			// The Euro stands in for a base-14 glyph, so it comes from a face with
 			// the base-14 metrics — Arial or Liberation for Helvetica, Times New
 			// Roman or Liberation for Times — in the text's weight and slant.
-			let bold = style.fontWeight >= 600
+			let bold = style.fontWeight > 500
 			let italic = style.fontStyle != .normal
 			let macStyle = bold ? (italic ? " Bold Italic" : " Bold") : (italic ? " Italic" : "")
 			let liberationStyle = bold ? (italic ? "BoldItalic" : "Bold") : (italic ? "Italic" : "Regular")

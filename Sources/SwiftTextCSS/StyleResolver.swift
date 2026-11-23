@@ -116,6 +116,12 @@ public final class StyleResolver {
 		// is left↔right): inline-start is left in LTR, right in RTL.
 		applyLogicalInline(winners, to: &style, rootFontSize: rootFontSize)
 		adjustStyle(&style, for: element)
+		// A decoration does not reach into an inline-block (CSS 2.1 §16.3.1): the
+		// button inside a link is not underlined unless it asks for that itself.
+		if style.display == .inlineBlock, winners["text-decoration"] == nil, winners["text-decoration-line"] == nil {
+			style.underline = false
+			style.lineThrough = false
+		}
 		return style
 	}
 
@@ -254,6 +260,16 @@ private func expand(_ declaration: Declaration) -> [(name: String, value: [Compo
 	switch name {
 	case "margin", "padding":
 		return expandBox(prefix: name, value: value)
+	case "padding-inline", "margin-inline":
+		// One value sets both edges, two set start then end.
+		let values = significant(value).map { [$0] }
+		guard values.count == 1 || values.count == 2 else { return [] }
+		return [("\(name)-start", values[0]), ("\(name)-end", values[values.count - 1])]
+	case "border-radius":
+		// One radius for all corners: the first value. Per-corner and elliptical
+		// radii (`a b c d`, `a / b`) round every corner by that first value.
+		guard let first = significant(value).first else { return [] }
+		return [("border-radius", [first])]
 	case "border-width", "border-style", "border-color":
 		let suffix = String(name.dropFirst("border-".count)) // width/style/color
 		return expandBox(prefix: "border", suffix: "-" + suffix, value: value)
@@ -387,6 +403,10 @@ private func applyLonghand(_ name: String, _ value: [ComponentValue], to style: 
 		}
 	case "font-weight":
 		if let weight = parseFontWeight(value, parent: parent) { style.fontWeight = weight }
+	case "border-radius":
+		if let radius = parseLength(value, fontSize: fontSize, rootFontSize: rootFontSize), radius != .auto {
+			style.borderRadius = radius
+		}
 	case "line-height":
 		if let lineHeight = parseLineHeight(value, fontSize: fontSize, rootFontSize: rootFontSize) { style.lineHeight = lineHeight }
 	case "text-align":

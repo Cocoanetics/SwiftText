@@ -47,7 +47,7 @@ public final class LayoutEngine {
 	///
 	/// - Parameter containerAlign: The containing block's `text-align`, whose
 	///   legacy `-webkit-*` values also align a narrower block.
-	private func layoutBlock(_ box: BlockBox, containingWidth: Double, marginX: Double, borderBoxTop: Double,
+	func layoutBlock(_ box: BlockBox, containingWidth: Double, marginX: Double, borderBoxTop: Double,
 	                         containerAlign: TextAlign = .start) -> Double {
 		let style = box.style
 		let basis = containingWidth
@@ -730,14 +730,14 @@ public final class LayoutEngine {
 	}
 
 	/// The border-box width a block needs when none of its inline content wraps.
-	private func maxContentWidth(of box: BlockBox) -> Double {
+	func maxContentWidth(of box: BlockBox) -> Double {
 		intrinsicWidth(of: box, .maximum)
 	}
 
 	/// The border-box width needed at ordinary soft wrap opportunities. Emergency
 	/// opportunities from `overflow-wrap: break-word` deliberately do not count;
 	/// `anywhere` and `word-break: break-all` do count.
-	private func minContentWidth(of box: BlockBox) -> Double {
+	func minContentWidth(of box: BlockBox) -> Double {
 		intrinsicWidth(of: box, .minimum)
 	}
 
@@ -828,6 +828,15 @@ public final class LayoutEngine {
 				lineWidth += replacedBoxMetrics(of: image, style: style, containingWidth: nil).width
 				hasContent = true
 				pendingSpace = nil
+			case .block(let block, _):
+				if hasContent, let space = pendingSpace {
+					lineWidth += fonts.font(for: space).width(of: " ", size: space.fontSize) + space.wordSpacing
+				}
+				lineWidth += maxContentWidth(of: block)
+				hasContent = true
+				pendingSpace = nil
+			case .spacer(let width):
+				lineWidth += width
 			case .word(let word, let style, _, _):
 				if hasContent, let space = pendingSpace {
 					lineWidth += fonts.font(for: space).width(of: " ", size: space.fontSize) + space.wordSpacing
@@ -887,6 +896,16 @@ public final class LayoutEngine {
 				runWidth += isCompressibleReplaced(style) ? metrics.width - metrics.contentWidth : metrics.width
 				finishRun()
 				hasContent = false
+			case .block(let block, _):
+				// As for an image: a line may break on either side.
+				finishRun()
+				pendingSpace = nil
+				beginContent()
+				runWidth += minContentWidth(of: block)
+				finishRun()
+				hasContent = false
+			case .spacer(let width):
+				runWidth += width
 			case .word(let word, let style, _, _):
 				prepareContent(wrapping: style.whiteSpace.wraps)
 				beginContent()

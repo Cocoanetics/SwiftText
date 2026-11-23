@@ -255,6 +255,9 @@ public struct ComputedStyle: Equatable, Sendable {
 	public var borderWidth: Edges<Double>
 	public var borderStyle: Edges<BorderStyle>
 	public var borderColor: Edges<RGBA>
+	/// The radius of all four corners (`border-radius`): a percentage is of the
+	/// border box's shorter side.
+	public var borderRadius: Length = .px(0)
 	/// The table border model (`border-collapse`; inherited by table descendants).
 	public var borderCollapse: BorderCollapse
 	/// Horizontal and vertical table-cell spacing (`border-spacing`; inherited).
@@ -273,6 +276,19 @@ public struct ComputedStyle: Equatable, Sendable {
 	public var breakInside: Break
 	/// The named page this box asks to be laid out on (`page`); `nil` is `auto`.
 	public var page: String?
+
+	/// The corner radius of a border box of the given size, capped at half its
+	/// shorter side, where the curves of neighbouring corners meet.
+	public func usedBorderRadius(width: Double, height: Double) -> Double {
+		let shorter = min(width, height)
+		let radius: Double
+		switch borderRadius {
+		case .px(let value): radius = value
+		case .percent(let percent): radius = percent / 100 * shorter
+		case .auto: radius = 0
+		}
+		return max(0, min(radius, shorter / 2))
+	}
 
 	/// Pixel line height for this style's font size.
 	public func resolvedLineHeight() -> Double {

@@ -152,18 +152,24 @@ struct BoxTreeTests {
 		#expect(plain.linkHref == nil)
 	}
 
-	@Test("An inline-block that holds blocks lays out as a block")
+	@Test("An inline-block is an inline box that carries its content as a block")
 	func inlineBlockWithBlocks() async throws {
 		let tree = try await boxTree("<div><span style=\"display: inline-block\"><p>Bibliothek</p></span></div>")
-		let span = try #require(find(tree, tag: "span") as? BlockBox)
-		#expect(span.style.display == .block)
-		#expect((span.children.first as? BlockBox)?.element?.localName == "p")
+		let span = try #require(find(tree, tag: "span") as? InlineBox)
+		let content = try #require(span.atomicBlock)
+		#expect(content.style.display == .block)
+		#expect((content.children.first as? BlockBox)?.element?.localName == "p")
+		// The enclosing block still holds nothing but inline content.
+		#expect((find(tree, tag: "div") as? BlockBox)?.establishesInlineContext == true)
 	}
 
-	@Test("An inline-block of inline content stays an inline box")
+	@Test("An inline-block of inline content carries a block too, linked like its element")
 	func inlineBlockWithInlines() async throws {
-		let tree = try await boxTree("<p><a href=\"#\" style=\"display: inline-block\">Button</a></p>")
-		#expect(find(tree, tag: "a") is InlineBox)
+		let tree = try await boxTree("<p><a href=\"#top\" style=\"display: inline-block\">Button</a></p>")
+		let link = try #require(find(tree, tag: "a") as? InlineBox)
+		let content = try #require(link.atomicBlock)
+		#expect(content.establishesInlineContext)
+		#expect(content.linkHref == "#top")
 	}
 
 	// MARK: - Anonymous table cells (CSS 2.1 §17.2.1)

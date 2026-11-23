@@ -90,6 +90,10 @@ public final class InlineBox: Box {
 	public var children: [Box] = []
 	/// For an inline `<img>`, the decoded image to draw.
 	public var image: DecodedImage?
+	/// For `display: inline-block`, the block that holds the element's
+	/// content. It is laid out on its own and sits in the line as one
+	/// unbreakable box, the way an image does; `children` is then empty.
+	public var atomicBlock: BlockBox?
 
 	init(style: ComputedStyle, children: [Box] = []) {
 		self.children = children
@@ -141,6 +145,17 @@ struct ReplacedBoxMetrics {
 	let border: Edges<Double>
 }
 
+/// The used geometry of an inline-block placed in a line: its margin box, and
+/// how far below that box's top its baseline lies.
+struct AtomicBlockMetrics {
+	/// Margin-box size.
+	let width: Double
+	let height: Double
+	/// The baseline of the block's last line, or the bottom margin edge when
+	/// it has no line (CSS 2.1 §10.8.1), measured from the margin box's top.
+	let baseline: Double
+}
+
 /// The element that established a propagated text decoration and the style
 /// whose metrics and color should paint it.
 struct TextDecorationRun: Equatable {
@@ -160,6 +175,9 @@ public struct TextFragment {
 		/// An inline image. `top` is its margin box's offset below the line's
 		/// top, which only `vertical-align` against the finished line decides.
 		case image(DecodedImage, ReplacedBoxMetrics, top: Double)
+		/// An inline-block: a block laid out on its own, then moved to where
+		/// the line puts it. `top` is as for an image.
+		case block(BlockBox, AtomicBlockMetrics, top: Double)
 	}
 
 	public var text: String
@@ -182,10 +200,13 @@ public struct TextFragment {
 	/// gaps within one run can be painted without joining separate runs.
 	var decorations: TextDecorationRuns
 
-	/// Whether this fragment is an inline image rather than text.
+	/// Whether this fragment is an inline image or inline-block rather than
+	/// text: a box the line is fitted around.
 	var isReplaced: Bool {
-		if case .image = inlineControl { return true }
-		return false
+		switch inlineControl {
+		case .image, .block: return true
+		case .checkbox, nil: return false
+		}
 	}
 
 	public init(text: String, style: ComputedStyle, x: Double, y: Double, width: Double, baseline: Double, href: String? = nil, bidiLevel: UInt8 = 0, font: Font? = nil) {
