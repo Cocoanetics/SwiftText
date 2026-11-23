@@ -24,9 +24,24 @@ extension LayoutEngine {
 		case block(BlockBox, ComputedStyle)
 		/// The left or right margin, border and padding of an inline box: an
 		/// advance that stays with the text beside it.
-		case spacer(Double)
+		case spacer(InlineEdge)
 		case space(ComputedStyle)
 		case forcedBreak(ComputedStyle)
+	}
+
+	/// One side's margin, border and padding of an inline box. Percentages
+	/// resolve against the containing block's width, known only at layout.
+	struct InlineEdge {
+		let margin: Length
+		let padding: Length
+		let border: Double
+		/// The start edge, which moves to the next line with the content after it.
+		let isLeading: Bool
+
+		func width(percentageBasis: Double) -> Double {
+			max(0, (margin.resolved(percentageBasis: percentageBasis) ?? 0)
+				+ (padding.resolved(percentageBasis: percentageBasis) ?? 0) + border)
+		}
 	}
 
 	/// Lay out the inline content of `box` into lines. Returns the content height.
@@ -67,6 +82,10 @@ extension LayoutEngine {
 		var fragments: [TextFragment] = []
 		var penX = box.style.textIndent // first line indentation (reset to 0 after)
 		var pendingSpace: ComputedStyle?
+		/// Leading inline edges advanced past since the last fragment. They belong
+		/// to the content after them, so a break before that content carries them
+		/// to the next line.
+		var leadingEdges = 0.0
 		/// Indices of fragments that follow a collapsed space: the line's justification
 		/// opportunities, independent of how wide word-spacing left the gap.
 		var spaceBoundaries = Set<Int>()
@@ -135,6 +154,9 @@ extension LayoutEngine {
 		func finishLine(isLast: Bool) {
 			guard !fragments.isEmpty else { pendingSpace = nil; return }
 			let (lineHeight, baselineFromTop) = lineMetrics(&fragments, strut: box.style)
+			// Leading edges with no content after them yet start the next line.
+			let carried = leadingEdges
+			penX -= carried
 
 			let line = LineBox()
 			line.x = contentX
@@ -192,7 +214,7 @@ extension LayoutEngine {
 			lineTop += lineHeight
 			fragments = []
 			spaceBoundaries = []
-			penX = 0
+			penX = carried
 			pendingSpace = nil
 		}
 
@@ -213,6 +235,7 @@ extension LayoutEngine {
 			                            bidiLevel: wordLevel(tokenIndex), font: fonts.font(for: style))
 			fragment.inlineControl = control
 			fragments.append(fragment)
+			leadingEdges = 0
 			penX += width
 		}
 
@@ -250,8 +273,10 @@ extension LayoutEngine {
 				var lineStyle = style
 				lineStyle.whiteSpace = box.style.whiteSpace
 				placeAtomic(.block(block, metrics, top: 0), width: metrics.width, style: lineStyle, href: nil, tokenIndex: tokenIndex)
-			case .spacer(let width):
+			case .spacer(let edge):
+				let width = edge.width(percentageBasis: contentWidth)
 				penX += width
+				if edge.isLeading { leadingEdges += width }
 			case .word(let sourceWord, let style, let href, let decorations):
 				// Soft hyphens are break opportunities, not glyphs: they leave the
 				// text and reappear as a visible hyphen where a line breaks at one.
@@ -278,6 +303,7 @@ extension LayoutEngine {
 				let level = wordLevel(tokenIndex)
 				func append(_ pieces: [Piece]) {
 					for piece in pieces {
+						leadingEdges = 0
 						if let last = fragments.indices.last,
 						   fragments[last].inlineControl == nil,
 						   !fragments[last].carriesPreservedWhitespace,
@@ -568,16 +594,24 @@ func collectInline(_ box: Box, into tokens: inout [InlineToken], href: String?, 
 			// either side of its content. (They are not painted: an inline box
 			// has no background or border here.)
 			let style = inline.style
-			func edge(_ margin: Length, _ padding: Length, _ border: Double) -> Double {
-				max(0, (margin.resolved(percentageBasis: 0) ?? 0) + (padding.resolved(percentageBasis: 0) ?? 0) + border)
+			func isZero(_ length: Length) -> Bool {
+				switch length {
+				case .px(let value), .percent(let value): return value == 0
+				case .auto: return true
+				}
 			}
-			let left = edge(style.margin.left, style.padding.left, style.usedBorderWidth(\.left, style: \.left))
-			let right = edge(style.margin.right, style.padding.right, style.usedBorderWidth(\.right, style: \.right))
-			if left > 0 { tokens.append(.spacer(left)) }
+			func isEmpty(_ edge: InlineEdge) -> Bool {
+				isZero(edge.margin) && isZero(edge.padding) && edge.border == 0
+			}
+			let left = InlineEdge(margin: style.margin.left, padding: style.padding.left,
+			                      border: style.usedBorderWidth(\.left, style: \.left), isLeading: true)
+			let right = InlineEdge(margin: style.margin.right, padding: style.padding.right,
+			                       border: style.usedBorderWidth(\.right, style: \.right), isLeading: false)
+			if !isEmpty(left) { tokens.append(.spacer(left)) }
 			for child in inline.children {
 				collectInline(child, into: &tokens, href: childHref, decorations: childDecorations)
 			}
-			if right > 0 { tokens.append(.spacer(right)) }
+			if !isEmpty(right) { tokens.append(.spacer(right)) }
 		}
 	}
 

@@ -95,6 +95,39 @@ struct InlineBlockTests {
 		#expect(abs(gap - 14) < 0.01)
 	}
 
+	@Test("An inline box's percentage padding resolves against the containing block")
+	func inlineBoxPercentagePadding() async throws {
+		let root = try await layout("<div style=\"width: 400px\"><span>VAT</span><span style=\"padding-left: 10%\">19,17</span></div>")
+		let line = try #require(blocks(root, "div").first?.lines.first)
+		#expect(line.fragments.count == 2)
+		let gap = line.fragments[1].x - (line.fragments[0].x + line.fragments[0].width)
+		#expect(abs(gap - 40) < 0.01)
+	}
+
+	@Test("An inline box's leading spacing moves to the next line with its first word")
+	func leadingSpacingWraps() async throws {
+		let root = try await layout("<div style=\"width: 60px\">aaaaa <span style=\"padding-left: 20px\">bbbbb</span></div>")
+		let div = try #require(blocks(root, "div").first)
+		#expect(div.lines.count == 2)
+		let word = try #require(div.lines.last?.fragments.first)
+		#expect(word.text == "bbbbb")
+		#expect(abs(word.x - (div.x + 20)) < 0.01)
+	}
+
+	@Test("Logical and physical padding compete in cascade order")
+	func logicalPhysicalCascade() async throws {
+		let root = try await layout("<div style=\"padding-inline: 10px; padding-left: 20px\">x</div>"
+			+ "<p style=\"padding-left: 20px; padding-inline: 10px\">y</p>"
+			+ "<style>ul { padding-left: 0 }</style><ul><li>z</li></ul>")
+		let div = try #require(blocks(root, "div").first)
+		#expect(div.style.padding.left == .px(20) && div.style.padding.right == .px(10))
+		let paragraph = try #require(blocks(root, "p").first)
+		#expect(paragraph.style.padding.left == .px(10))
+		// The author's physical padding beats the UA's padding-inline-start.
+		let list = try #require(blocks(root, "ul").first)
+		#expect(list.style.padding.left == .px(0))
+	}
+
 	@Test("padding-inline sets the start and end padding")
 	func paddingInlineShorthand() async throws {
 		let root = try await layout("<div style=\"padding-inline: 0 20px\">x</div><p style=\"padding-inline: 7px\">y</p>")

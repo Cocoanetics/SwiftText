@@ -835,8 +835,9 @@ public final class LayoutEngine {
 				lineWidth += maxContentWidth(of: block)
 				hasContent = true
 				pendingSpace = nil
-			case .spacer(let width):
-				lineWidth += width
+			case .spacer(let edge):
+				// Percentages contribute nothing to an intrinsic width (CSS Sizing §5.2.1).
+				lineWidth += edge.width(percentageBasis: 0)
 			case .word(let word, let style, _, _):
 				if hasContent, let space = pendingSpace {
 					lineWidth += fonts.font(for: space).width(of: " ", size: space.fontSize) + space.wordSpacing
@@ -904,8 +905,8 @@ public final class LayoutEngine {
 				runWidth += minContentWidth(of: block)
 				finishRun()
 				hasContent = false
-			case .spacer(let width):
-				runWidth += width
+			case .spacer(let edge):
+				runWidth += edge.width(percentageBasis: 0)
 			case .word(let word, let style, _, _):
 				prepareContent(wrapping: style.whiteSpace.wraps)
 				beginContent()

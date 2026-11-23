@@ -95,7 +95,7 @@ public final class StyleResolver {
 	/// Compute the style of `element`, inheriting from `parent`.
 	public func style(for element: SelectorElement, inheriting parent: ComputedStyle, rootFontSize: Double) -> ComputedStyle {
 		var style = ComputedStyle.inheriting(from: parent)
-		let winners = cascade(for: element)
+		let (winners, winnerKeys) = cascade(for: element)
 
 		// font-size first: em/ex units in other properties resolve against it.
 		if let value = winners["font-size"] {
@@ -114,7 +114,7 @@ public final class StyleResolver {
 		// Logical inline padding/margin map to physical edges only now, against the
 		// element's final `direction` (block flow is horizontal, so the inline axis
 		// is left↔right): inline-start is left in LTR, right in RTL.
-		applyLogicalInline(winners, to: &style, rootFontSize: rootFontSize)
+		applyLogicalInline(winners, keys: winnerKeys, to: &style, rootFontSize: rootFontSize)
 		adjustStyle(&style, for: element)
 		// A decoration does not reach into an inline-block (CSS 2.1 §16.3.1): the
 		// button inside a link is not underlined unless it asks for that itself.
@@ -126,40 +126,57 @@ public final class StyleResolver {
 	}
 
 	/// Resolve `padding/margin-inline-start/-end` to physical left/right edges.
-	private func applyLogicalInline(_ winners: [String: [ComponentValue]], to style: inout ComputedStyle, rootFontSize: Double) {
+	/// A logical property and the physical one it maps to set the same edge, so
+	/// whichever the cascade ranks later wins.
+	private func applyLogicalInline(_ winners: [String: [ComponentValue]], keys: [String: CascadeKey],
+	                                to style: inout ComputedStyle, rootFontSize: Double) {
 		let rtl = style.direction == .rtl
 		let startEdge = rtl ? "right" : "left"
 		let endEdge = rtl ? "left" : "right"
-		func length(_ value: [ComponentValue]) -> Length? {
-			parseLength(value, fontSize: style.fontSize, rootFontSize: rootFontSize)
+		func winning(_ logical: String, over physical: String) -> Length? {
+			guard let value = winners[logical], let key = keys[logical] else { return nil }
+			if let physicalKey = keys[physical], key.precedes(physicalKey) { return nil }
+			return parseLength(value, fontSize: style.fontSize, rootFontSize: rootFontSize)
 		}
-		if let value = winners["padding-inline-start"], let l = length(value), l != .auto {
+		if let l = winning("padding-inline-start", over: "padding-\(startEdge)"), l != .auto {
 			setEdge(&style.padding, "padding-\(startEdge)", l)
 		}
-		if let value = winners["padding-inline-end"], let l = length(value), l != .auto {
+		if let l = winning("padding-inline-end", over: "padding-\(endEdge)"), l != .auto {
 			setEdge(&style.padding, "padding-\(endEdge)", l)
 		}
-		if let value = winners["margin-inline-start"], let l = length(value) {
+		if let l = winning("margin-inline-start", over: "margin-\(startEdge)") {
 			setEdge(&style.margin, "margin-\(startEdge)", l)
 		}
-		if let value = winners["margin-inline-end"], let l = length(value) {
+		if let l = winning("margin-inline-end", over: "margin-\(endEdge)") {
 			setEdge(&style.margin, "margin-\(endEdge)", l)
 		}
 	}
 
 	// MARK: - Cascade
 
-	private func cascade(for element: SelectorElement) -> [String: [ComponentValue]] {
-		var winnerKey: [String: (level: Int, specificity: Specificity, order: Int)] = [:]
+	/// Where a declaration ranks in the cascade: a later key wins.
+	struct CascadeKey {
+		let level: Int
+		let specificity: Specificity
+		let order: Int
+
+		func precedes(_ other: CascadeKey) -> Bool {
+			level < other.level || (level == other.level
+				&& (specificity < other.specificity || (specificity == other.specificity && order < other.order)))
+		}
+	}
+
+	/// The winning value of every property, and where each winner ranks.
+	private func cascade(for element: SelectorElement) -> ([String: [ComponentValue]], [String: CascadeKey]) {
+		var winnerKey: [String: CascadeKey] = [:]
 		var winnerValue: [String: [ComponentValue]] = [:]
 		var order = 0
 
 		func consider(name: String, value: [ComponentValue], level: Int, specificity: Specificity) {
-			let key = (level, specificity, order)
+			let key = CascadeKey(level: level, specificity: specificity, order: order)
 			order += 1
 			if let existing = winnerKey[name] {
-				let lhs = (existing.level, existing.specificity, existing.order)
-				if !(key.0 < lhs.0 || (key.0 == lhs.0 && (key.1 < lhs.1 || (key.1 == lhs.1 && key.2 < lhs.2)))) {
+				if !key.precedes(existing) {
 					winnerKey[name] = key
 					winnerValue[name] = value
 				}
@@ -203,7 +220,7 @@ public final class StyleResolver {
 			}
 		}
 
-		return winnerValue
+		return (winnerValue, winnerKey)
 	}
 
 	private func cascadeLevel(_ origin: Origin, important: Bool, inline: Bool) -> Int {
