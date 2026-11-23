@@ -143,6 +143,9 @@ public final class DocxWriter {
 	/// Tracks hyperlink relationships for document.xml.rels.
 	private var hyperlinks: [(id: String, url: String)] = []
 	private var hyperlinkCounter = 0
+	/// Tracks hyperlink relationships for footnotes.xml.rels. Relationship ids
+	/// are scoped per part, so footnote links get their own list.
+	private var footnoteHyperlinks: [(id: String, url: String)] = []
 
 	/// Embedded image media collected while rendering the body: the `word/media/*`
 	/// part bytes, the `document.xml.rels` relationship, and the `[Content_Types].xml`
@@ -199,6 +202,7 @@ public final class DocxWriter {
 		// Reset state
 		hyperlinks = []
 		hyperlinkCounter = 0
+		footnoteHyperlinks = []
 		nextNumId = 0
 		lastListType = nil
 		numInstances = []
@@ -245,7 +249,12 @@ public final class DocxWriter {
 		}
 
 		if !footnotes.isEmpty {
+			// Generating the footnotes populates `footnoteHyperlinks`, so it must
+			// run before the footnotes rels part is emitted.
 			entries.append(xmlPart("word/footnotes.xml", generateFootnotes()))
+			if !footnoteHyperlinks.isEmpty {
+				entries.append(xmlPart("word/_rels/footnotes.xml.rels", generateFootnoteRels()))
+			}
 		}
 
 		do {
@@ -1084,10 +1093,10 @@ public final class DocxWriter {
 		return paragraphs
 	}
 
-	/// Like ``renderRuns(_:)`` but for footnote bodies: never allocates document
-	/// hyperlink relationships (links render as styled text), and a nested
-	/// footnote reference degrades to a superscript `[N]` since Word can't nest
-	/// footnotes.
+	/// Like ``renderRuns(_:)`` but for footnote bodies: links allocate their
+	/// relationships in `footnotes.xml.rels` (see ``generateFootnoteRels()``)
+	/// rather than the document's, and a nested footnote reference degrades to a
+	/// superscript `[N]` since Word can't nest footnotes.
 	private func renderFootnoteRuns(_ runs: [Run]) -> String {
 		var xml = ""
 		for run in runs {
@@ -1095,8 +1104,21 @@ public final class DocxWriter {
 				xml += "<w:r><w:rPr><w:rStyle w:val=\"FootnoteReference\"/></w:rPr><w:t xml:space=\"preserve\">[\(number)]</w:t></w:r>"
 				continue
 			}
+			if let link = run.link {
+				let rId = "rLink\(footnoteHyperlinks.count + 1)"
+				footnoteHyperlinks.append((id: rId, url: link))
+				var rPr = "<w:rStyle w:val=\"Hyperlink\"/>"
+				if run.bold { rPr += "<w:b/><w:bCs/>" }
+				if run.italic { rPr += "<w:i/><w:iCs/>" }
+				if run.strike { rPr += "<w:strike/>" }
+				if run.code {
+					rPr += "<w:rFonts w:ascii=\"Courier New\" w:hAnsi=\"Courier New\" w:cs=\"Courier New\"/>"
+					rPr += "<w:sz w:val=\"21\"/><w:szCs w:val=\"21\"/>"
+				}
+				xml += "<w:hyperlink r:id=\"\(rId)\"><w:r><w:rPr>\(rPr)</w:rPr>\(textElements(run.text))</w:r></w:hyperlink>"
+				continue
+			}
 			var rPr = ""
-			if run.link != nil { rPr += "<w:rStyle w:val=\"Hyperlink\"/>" }
 			if run.bold { rPr += "<w:b/><w:bCs/>" }
 			if run.italic { rPr += "<w:i/><w:iCs/>" }
 			if run.strike { rPr += "<w:strike/>" }
@@ -1108,6 +1130,21 @@ public final class DocxWriter {
 			xml += "<w:r>\(rPrXML)<w:t xml:space=\"preserve\">\(xmlEscape(run.text))</w:t></w:r>"
 		}
 		return xml
+	}
+
+	/// The relationships of `word/footnotes.xml`: one external hyperlink per
+	/// footnote link.
+	private func generateFootnoteRels() -> String {
+		var rels = """
+		<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+		<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+
+		"""
+		for link in footnoteHyperlinks {
+			rels += "<Relationship Id=\"\(link.id)\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink\" Target=\"\(xmlEscape(link.url))\" TargetMode=\"External\"/>\n"
+		}
+		rels += "</Relationships>"
+		return rels
 	}
 
 	// MARK: - Utilities
