@@ -48,7 +48,7 @@ public final class LayoutEngine {
 	/// - Parameter containerAlign: The containing block's `text-align`, whose
 	///   legacy `-webkit-*` values also align a narrower block.
 	func layoutBlock(_ box: BlockBox, containingWidth: Double, marginX: Double, borderBoxTop: Double,
-	                         containerAlign: TextAlign = .start) -> Double {
+	                 containerAlign: TextAlign = .start) -> Double {
 		let style = box.style
 		let basis = containingWidth
 		let isTable = style.display == .table
