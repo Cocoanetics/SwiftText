@@ -148,6 +148,9 @@ private final class DocumentExtractor: NSObject, XMLParserDelegate {
 	private var pendingCellGridSpan = 1
 	/// Whether the first data row has already fixed `buildingAlignments`.
 	private var capturedHeaderAlignments = false
+	/// The `w:tblInd` (twips) of the table being collected: a list item's indent
+	/// when the table or code block sits inside one.
+	private var buildingTableIndent: Int?
 
 	init(footnotesByID: [String: String], styles: DocxDocument.StyleCatalog) {
 		self.footnotesByID = footnotesByID
@@ -179,6 +182,8 @@ private final class DocumentExtractor: NSObject, XMLParserDelegate {
 			applyParagraphStyle(attributes: attributeDict)
 		case "ind":
 			applyIndent(attributes: attributeDict)
+		case "tblInd":
+			applyTableIndent(attributes: attributeDict)
 		case "jc":
 			applyJustification(attributes: attributeDict)
 		case "gridSpan":
@@ -310,8 +315,18 @@ private final class DocumentExtractor: NSObject, XMLParserDelegate {
 		buildingCell = nil
 		buildingAlignments = []
 		capturedHeaderAlignments = false
+		buildingTableIndent = nil
 		pendingCellAlignment = nil
 		pendingCellGridSpan = 1
+	}
+
+	/// The outermost table's indent, which the reader uses to keep a code block or
+	/// table inside the list item it is indented under.
+	private func applyTableIndent(attributes: [String: String]) {
+		guard tableDepth == 1, buildingRows != nil, buildingRow == nil,
+			  let value = attributeValue(from: attributes, for: ["w:w", "w"]),
+			  let indent = Int(value) else { return }
+		buildingTableIndent = indent
 	}
 
 	private func beginTableRow() {
@@ -386,6 +401,7 @@ private final class DocumentExtractor: NSObject, XMLParserDelegate {
 			for paragraph in rows.flatMap({ $0.flatMap { $0 } }) {
 				var paragraph = paragraph
 				paragraph.startsTableCell = first
+				paragraph.leftIndent = paragraph.leftIndent ?? buildingTableIndent
 				first = false
 				document.paragraphs.append(paragraph)
 			}
@@ -403,6 +419,7 @@ private final class DocumentExtractor: NSObject, XMLParserDelegate {
 		}
 		guard cells.contains(where: { $0.contains(where: { !$0.isEmpty }) }) else { return }
 		var anchor = DocxDocument.Paragraph()
+		anchor.leftIndent = buildingTableIndent
 		anchor.tables = [
 			DocxDocument.Paragraph.Table(cells: cells, columnAlignments: buildingAlignments)
 		]

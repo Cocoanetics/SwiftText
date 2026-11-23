@@ -52,7 +52,7 @@ public struct DocxDocument {
 					switch style {
 					case .markdown:
 						if let text = Self.markdownTable(table) {
-							rendered.append(RenderedParagraph(text: text, isListItem: false))
+							rendered.append(RenderedParagraph(text: parent?.indent(text) ?? text, isListItem: false))
 						}
 					case .plainText:
 						let text = table.cells.map { $0.joined(separator: "\t") }.joined(separator: "\n")
@@ -76,7 +76,7 @@ public struct DocxDocument {
 			}
 			if style == .markdown, paragraphStyle?.isCodeBlock == true {
 				let code = markdownCodeBlock(from: index)
-				rendered.append(RenderedParagraph(text: code.block, isListItem: false))
+				rendered.append(RenderedParagraph(text: parent?.indent(code.block) ?? code.block, isListItem: false))
 				index = code.end
 				continue
 			}

@@ -106,6 +106,26 @@ struct DocxQuoteCodeTests {
 		#expect(try roundTrip(markdown) == markdown)
 	}
 
+	@Test("Code blocks and tables in a list item stay under it; a following top-level quote stays separate")
+	func listItemCodeTableAndQuoteRoundTrip() throws {
+		let markdown = """
+		- Item
+
+		  ```
+		  code
+		  ```
+
+		  | A | B |
+		  | --- | --- |
+		  | 1 | 2 |
+
+		  > Inner
+
+		> Outer
+		"""
+		#expect(try roundTrip(markdown) == markdown)
+	}
+
 	@Test("Word's own Quote and Intense Quote styles read as quotes")
 	func wordQuoteStyles() {
 		#expect(DocxStyleID.isBlockQuote(styleId: "Quote", name: "Quote"))
