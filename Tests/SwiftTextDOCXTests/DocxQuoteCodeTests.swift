@@ -67,6 +67,45 @@ struct DocxQuoteCodeTests {
 		#expect(styles.contains("<w:name w:val=\"Block Quote\"/>"))
 	}
 
+	@Test("A quote and a second paragraph inside a list item are kept, indented under the item (#261)")
+	func listItemContent() throws {
+		let url = url()
+		defer { try? FileManager.default.removeItem(at: url) }
+		try MarkdownToDocx.convert("- Punkt\n    > Zitat im Punkt\n\n- Taufe 1814\n\n    Eintrag: x\n", to: url)
+		let document = try DocxArchive(contentsOf: url).text("word/document.xml")
+		let textIndent = 720
+		#expect(document.contains(
+			"<w:pStyle w:val=\"SwiftTextBlockQuote\"/><w:ind w:left=\"\(textIndent + DocxWriter.quoteIndent)\"/></w:pPr>"
+				+ "<w:r><w:t xml:space=\"preserve\">Zitat im Punkt"
+		))
+		#expect(document.contains("<w:p><w:pPr><w:ind w:left=\"\(textIndent)\"/></w:pPr><w:r><w:t xml:space=\"preserve\">Eintrag: x"))
+		#expect(!document.contains("Taufe 1814Eintrag"))
+	}
+
+	@Test("Content nested in list items reads back indented under its item, numbering running on")
+	func listItemContentRoundTrip() throws {
+		let markdown = """
+		- Punkt
+
+		  > Zitat im Punkt
+
+		- Taufe 1814
+
+		  Eintrag: x
+
+		  - Nested
+
+		    More
+
+		1. One
+
+		   > Quoted
+
+		2. Two
+		"""
+		#expect(try roundTrip(markdown) == markdown)
+	}
+
 	@Test("Word's own Quote and Intense Quote styles read as quotes")
 	func wordQuoteStyles() {
 		#expect(DocxStyleID.isBlockQuote(styleId: "Quote", name: "Quote"))

@@ -32,14 +32,19 @@ public struct DocxDocument {
 	/// paragraphs of an alert box (SwiftText's "Callout" styles) render together as one
 	/// `> [!KIND]` block, consecutive quoted paragraphs as one `>` block, "Code Block"
 	/// paragraphs as one fenced block, a native Word table as a GFM pipe table, and a
-	/// rule paragraph as `---`.
+	/// rule paragraph as `---`. Paragraphs and quotes indented under the text of the
+	/// list item above them render as that item's continuation, indented to match.
 	public func renderedParagraphs(style: RenderStyle = .markdown) -> [RenderedParagraph] {
 		var numberingState = NumberingState(numbering: numbering)
 		var rendered = [RenderedParagraph]()
+		var listItems = [ListItemContext]()
 		var index = 0
 		while index < paragraphs.count {
 			let paragraph = paragraphs[index]
 			let paragraphStyle = styles.style(for: paragraph.styleIdentifier)
+			let isQuote = style == .markdown && paragraphStyle?.isBlockQuote == true
+			let parent = style == .markdown ? ListItemContext.parent(in: listItems, of: paragraph, isQuote: isQuote) : nil
+			if paragraph.numbering == nil, parent == nil { listItems.removeAll() }
 
 			// Native Word tables anchored on this paragraph become Markdown table blocks.
 			if !paragraph.tables.isEmpty {
@@ -75,9 +80,11 @@ public struct DocxDocument {
 				index = code.end
 				continue
 			}
-			if style == .markdown, paragraphStyle?.isBlockQuote == true {
-				let quote = markdownQuote(from: index, numberingState: &numberingState)
-				if !quote.block.isEmpty { rendered.append(RenderedParagraph(text: quote.block, isListItem: false)) }
+			if isQuote {
+				let quote = markdownQuote(from: index, baseIndent: parent?.textIndent ?? 0, numberingState: &numberingState)
+				if !quote.block.isEmpty {
+					rendered.append(RenderedParagraph(text: parent?.indent(quote.block) ?? quote.block, isListItem: false))
+				}
 				index = quote.end
 				continue
 			}
@@ -86,11 +93,50 @@ public struct DocxDocument {
 				if style == .markdown { rendered.append(RenderedParagraph(text: "---", isListItem: false)) }
 				continue
 			}
-			if let result = paragraph.rendered(using: self, numberingState: &numberingState, style: style) {
+			if var result = paragraph.rendered(using: self, numberingState: &numberingState, style: style) {
+				if style == .markdown, let level = paragraph.listLevel {
+					listItems.removeAll { $0.level >= level }
+					listItems.append(ListItemContext(level: level, marker: result.text))
+				} else if let parent {
+					result = RenderedParagraph(text: parent.indent(result.text), isListItem: false)
+				}
 				rendered.append(result)
 			}
 		}
 		return rendered
+	}
+
+	/// A list item that later paragraphs indented under its text continue.
+	private struct ListItemContext {
+		let level: Int
+		/// The item's text indent in twips, as the writer sets it.
+		let textIndent: Int
+		/// The width of the item's Markdown prefix (indent and marker).
+		let markdownIndent: Int
+
+		init(level: Int, marker text: String) {
+			self.level = level
+			textIndent = DocxWriter.listTextIndent(level: level)
+			let leading = 2 * max(level, 0)
+			let marker = text.dropFirst(leading).prefix { $0 != " " }
+			markdownIndent = leading + marker.count + 1
+		}
+
+		/// The innermost item `paragraph` is indented under; a quote needs room for
+		/// at least one quote level past the item's text.
+		static func parent(in items: [ListItemContext], of paragraph: Paragraph, isQuote: Bool) -> ListItemContext? {
+			guard paragraph.numbering == nil, let indent = paragraph.leftIndent else { return nil }
+			let minimum = isQuote ? DocxWriter.quoteIndent : 0
+			return items.last { indent - $0.textIndent >= minimum }
+		}
+
+		/// `block` indented to the item's text, so it reads as the item's content.
+		func indent(_ block: String) -> String {
+			let pad = String(repeating: " ", count: markdownIndent)
+			return block.split(separator: "\n", omittingEmptySubsequences: false)
+				.map { $0.isEmpty ? "" : pad + $0 }
+				.joined(separator: "\n")
+		}
 	}
 
 	/// Renders a table (row 0 = header) as a GitHub-flavored Markdown table. Hand-rolled
@@ -144,7 +190,7 @@ public struct DocxDocument {
 	/// paragraph's depth is its direct indent in quote levels (the writer indents
 	/// deeper levels by 360 twips each); the line between two paragraphs carries the
 	/// shallower depth.
-	private func markdownQuote(from start: Int, numberingState: inout NumberingState) -> (block: String, end: Int) {
+	private func markdownQuote(from start: Int, baseIndent: Int, numberingState: inout NumberingState) -> (block: String, end: Int) {
 		var index = start
 		var lines = [String]()
 		var previousDepth: Int?
@@ -153,7 +199,7 @@ public struct DocxDocument {
 			let paragraph = paragraphs[index]
 			index += 1
 			guard let rendered = paragraph.rendered(using: self, numberingState: &numberingState, style: .markdown) else { continue }
-			let depth = max(1, (paragraph.leftIndent ?? 0) / DocxWriter.quoteIndent)
+			let depth = max(1, ((paragraph.leftIndent ?? 0) - baseIndent) / DocxWriter.quoteIndent)
 			if let previousDepth {
 				lines.append(String(repeating: ">", count: min(previousDepth, depth)))
 			}
