@@ -71,6 +71,62 @@ struct VisualRegionDetectionTests {
 		#expect(detectVisualRegions(in: image, pageSize: pageSize, excluding: []).count == 1)
 	}
 
+	/// Black text lines on a white page, returning their boxes with a top-left origin.
+	private func drawTextLines(_ context: CGContext, tops: [CGFloat]) -> [CGRect] {
+		context.setFillColor(CGColor(gray: 0, alpha: 1))
+		return tops.map { top in
+			let line = CGRect(x: 100, y: top, width: 1000, height: 20)
+			for x in stride(from: line.minX, to: line.maxX, by: 12) {
+				context.fill(CGRect(x: x, y: pageSize.height - line.maxY, width: 5, height: line.height))
+			}
+			return line.insetBy(dx: -4, dy: -4)
+		}
+	}
+
+	@Test("Light fills and pale photo areas on a clean white page are still ink")
+	func keepsLightFiguresOnWhitePage() throws {
+		let chart = CGRect(x: 100, y: 200, width: 600, height: 300)
+		let photo = CGRect(x: 100, y: 700, width: 800, height: 400)
+		var textBounds = [CGRect]()
+		let image = try renderPage { context in
+			textBounds = drawTextLines(context, tops: [100, 140, 560, 600, 1200, 1240])
+			// A chart shaded light grey, and a photo with pale sky above dark ground.
+			context.setFillColor(CGColor(gray: 0.7, alpha: 1))
+			context.fill(CGRect(x: chart.minX, y: pageSize.height - chart.maxY, width: chart.width, height: chart.height))
+			context.setFillColor(CGColor(gray: 0.72, alpha: 1))
+			context.fill(CGRect(x: photo.minX, y: pageSize.height - photo.maxY, width: photo.width, height: photo.height))
+			context.setFillColor(CGColor(gray: 0.3, alpha: 1))
+			context.fill(CGRect(x: photo.minX, y: pageSize.height - photo.maxY, width: photo.width, height: photo.height / 2))
+		}
+
+		let regions = detectVisualRegions(in: image, pageSize: pageSize, excluding: textBounds)
+		#expect(regions.count == 2, "\(regions)")
+		for figure in [chart, photo] {
+			#expect(regions.contains { $0.insetBy(dx: -4, dy: -4).contains(figure) && figure.insetBy(dx: -4, dy: -4).contains($0) }, "\(figure) in \(regions)")
+		}
+	}
+
+	@Test("A framed line chart running into the page edge is still found")
+	func findsLineChartAtPageEdge() throws {
+		let chart = CGRect(x: 0, y: 400, width: 800, height: 500)
+		var textBounds = [CGRect]()
+		let image = try renderPage { context in
+			textBounds = drawTextLines(context, tops: [100, 140, 1000, 1040])
+			context.setStrokeColor(CGColor(gray: 0, alpha: 1))
+			context.setLineWidth(3)
+			context.stroke(CGRect(x: chart.minX + 2, y: pageSize.height - chart.maxY + 2, width: chart.width - 4, height: chart.height - 4))
+			context.beginPath()
+			context.move(to: CGPoint(x: 40, y: pageSize.height - 850))
+			context.addLine(to: CGPoint(x: 760, y: pageSize.height - 450))
+			context.strokePath()
+		}
+
+		let regions = detectVisualRegions(in: image, pageSize: pageSize, excluding: textBounds)
+		#expect(regions.count == 1, "\(regions)")
+		let region = try #require(regions.first)
+		#expect(region.insetBy(dx: -4, dy: -4).contains(chart) && chart.insetBy(dx: -4, dy: -4).contains(region), "\(region)")
+	}
+
 	@Test("Scan edge shadow and grey show-through on a scanned page are not images")
 	func ignoresScanArtefacts() throws {
 		let page = try ScannedPage.render()

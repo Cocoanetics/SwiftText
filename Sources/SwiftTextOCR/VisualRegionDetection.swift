@@ -101,17 +101,17 @@ func detectVisualRegions(in cgImage: CGImage, pageSize: CGSize, excluding textBo
 		      box.width < CGFloat(width) * 0.95 || box.height < CGFloat(height) * 0.95 else { continue }
 
 		// A dark scan edge or page shadow is a thin strip lying along the border it
-		// touches for most of the page, or an L along two edges that leaves most of
-		// its box empty. A picture reaching the border, even a wide banner, fills
-		// its box and stops well short of running the page's whole length.
+		// touches for most of the page, or an L around a corner that leaves most of
+		// its box empty. A picture reaching the border, even a wide banner, stops
+		// well short of running the page's whole length; line art reaching one edge
+		// is sparse but does not wrap around a corner.
 		let touchesVerticalBorder = minX == 0 || maxX == width - 1
 		let touchesHorizontalBorder = minY == 0 || maxY == height - 1
-		if touchesVerticalBorder || touchesHorizontalBorder {
-			let fill = CGFloat(inkCount) / (box.width * box.height)
-			let verticalStrip = touchesVerticalBorder && box.height >= box.width * 5 && box.height >= CGFloat(height) * 0.75
-			let horizontalStrip = touchesHorizontalBorder && box.width >= box.height * 5 && box.width >= CGFloat(width) * 0.75
-			guard fill >= 0.5, !verticalStrip, !horizontalStrip else { continue }
-		}
+		let verticalStrip = touchesVerticalBorder && box.height >= box.width * 5 && box.height >= CGFloat(height) * 0.75
+		let horizontalStrip = touchesHorizontalBorder && box.width >= box.height * 5 && box.width >= CGFloat(width) * 0.75
+		let cornerShadow = touchesVerticalBorder && touchesHorizontalBorder
+			&& CGFloat(inkCount) < box.width * box.height * 0.5
+		guard !verticalStrip, !horizontalStrip, !cornerShadow else { continue }
 
 		regions.append(CGRect(
 			x: box.minX / scale, y: box.minY / scale, width: box.width / scale, height: box.height / scale
@@ -129,8 +129,11 @@ func detectVisualRegions(in cgImage: CGImage, pageSize: CGSize, excluding textBo
 /// Scans carry grey show-through from the back of the page that is darker than
 /// white paper but much lighter than the printed ink. The paper level is the most
 /// common bright luminance, and the text boxes show how dark the page's ink is;
-/// anything lighter than 60% of the way from ink to paper is not ink. Without text
+/// anything lighter than 65% of the way from ink to paper is not ink. Without text
 /// to calibrate on, only pixels clearly darker than the paper count.
+///
+/// Rendered pages and screenshots have pure white paper and no show-through, but
+/// do have light fills and pale photo areas, so they keep the plain cut of 200.
 private func inkThreshold(
 	_ pixels: [UInt8], width: Int, textRanges: [(x: ClosedRange<Int>, y: ClosedRange<Int>)]
 ) -> UInt8 {
@@ -138,6 +141,7 @@ private func inkThreshold(
 	for pixel in pixels { histogram[Int(pixel)] += 1 }
 	let paper = (128...255).max { histogram[$0] < histogram[$1] } ?? 255
 	let fallback = min(200, paper - 40)
+	guard paper < 250 else { return UInt8(fallback) }
 
 	var textHistogram = [Int](repeating: 0, count: 256)
 	var textInkCount = 0
