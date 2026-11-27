@@ -459,7 +459,7 @@ struct Render: AsyncParsableCommand {
 		let preparation = try await browser.preparePageFurniture(paperSize: size, footer: pageNumbers,
 		                                                        header: runningHeads, headingLevel: runningHeadLevel,
 		                                                        collectChapters: numberFromChapter,
-		                                                        measurePrintableArea: footnotes == .page && browser.pageSideMargins != nil)
+		                                                        measurePrintableArea: footnotes == .page)
 		let headings = try await browser.outlineHeadings()
 		var namedPages: WebKitNamedPages?
 		if let userCSS {

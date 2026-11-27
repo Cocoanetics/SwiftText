@@ -449,6 +449,28 @@ struct RenderPageFurnitureTests {
 		}
 	}
 
+	@Test("webkit: page-foot notes break at the printed page, whatever its @page size and margins", .timeLimit(.minutes(3)),
+	      arguments: ["size: 170mm 240mm;", "size: 170mm 240mm; margin: 18mm 16mm 20mm 26mm;", "size: 170mm 240mm; margin: 22mm 24mm 24mm 34mm;",
+	                  "margin: 22mm 24mm 24mm 34mm;", "margin-left: 34mm; margin-right: 24mm;"])
+	func pageFootnotesWithPageSize(pageRule: String) async throws {
+		let line = "Dies ist ein Satz mit etwas Text, damit die Zeilen gefüllt werden und der Absatz mehrere Zeilen lang wird. "
+		let paragraphs = (1...14).map { "\(String(repeating: line, count: 9))[^\($0)]" }.joined(separator: "\n\n")
+		let definitions = (1...14).map { "[^\($0)]: Eine Fußnote mit Quellenangabe \($0)." }.joined(separator: "\n")
+		let markdown = "# Kapitel\n\n\(paragraphs)\n\n\(definitions)\n"
+		let css = "@page { \(pageRule) }"
+		let section = try await render(markdown, arguments: ["--footnotes", "section"], css: css)
+		let paged = try await render(markdown, arguments: ["--footnotes", "page"], css: css)
+		#expect(paged.pageCount <= section.pageCount + 1, "\(paged.pageCount) pages with page notes, \(section.pageCount) with section notes")
+		for index in 0..<paged.pageCount {
+			let page = try #require(paged.page(at: index))
+			let box = page.bounds(for: .mediaBox)
+			let size: CGSize = pageRule.hasPrefix("size") ? CGSize(width: 481.89, height: 680.31) : CGSize(width: 595.28, height: 841.89)
+			#expect(abs(box.width - size.width) < 1 && abs(box.height - size.height) < 1, "page \(index + 1) is \(box.size)")
+			let words = (page.string ?? "").split(whereSeparator: \.isWhitespace).count
+			if index < paged.pageCount - 1 { #expect(words > 100, "page \(index + 1) holds only \(words) words") }
+		}
+	}
+
 	@Test("webkit: page-foot notes with a named page keep the title page and contents first", .timeLimit(.minutes(3)), arguments: [[], ["--toc"]])
 	func pageFootnotesKeepFrontMatterFirst(extra: [String]) async throws {
 		let markdown = """

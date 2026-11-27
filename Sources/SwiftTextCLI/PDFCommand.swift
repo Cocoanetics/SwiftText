@@ -656,10 +656,32 @@ private func footnotePageScript(printableWidth: Double, printableHeight: Double)
 	    });
 	}, { once: true });
 	function placeFootnotes() {
-	    var layoutWidth = document.documentElement.clientWidth;
-	    if (layoutWidth <= 0) return;
+	    // Print lays the text out again, one CSS pixel to the pixel, across the
+	    // printable width: lay the pages out across that column, not the window.
+	    // WebKit rounds that width, which scales the printed page by a few tenths
+	    // of a percent; a box that came out taller than its page would push a blank
+	    // page after it, so each is kept 1% short.
 	    var printable = window.__swiftTextPrintableSize || [\(printableWidth), \(printableHeight)];
-	    var pageHeight = Math.floor(printable[1] * layoutWidth / printable[0]) - 2;
+	    var root = document.documentElement, width = root.style.width;
+	    root.style.width = Math.floor(printable[0] / printTracking()) + 'px';
+	    try { paginate(Math.floor(printable[1] * 0.99) - 2); } finally { root.style.width = width; }
+	}
+	// How much wider the body text sets in print than on screen. Print draws a
+	// 14.67px font at 11pt, and a font with size-specific tracking (the system
+	// font) sets wider at the smaller size; a column narrowed by that much breaks
+	// its lines where print will.
+	function printTracking() {
+	    var probe = document.createElement('span');
+	    probe.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap;';
+	    probe.textContent = (document.body.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 400);
+	    document.body.appendChild(probe);
+	    var screen = probe.getBoundingClientRect().width;
+	    probe.style.fontSize = parseFloat(getComputedStyle(probe).fontSize) * 0.75 + 'px';
+	    var print = probe.getBoundingClientRect().width / 0.75;
+	    probe.remove();
+	    return screen > 0 && print > screen ? print / screen : 1;
+	}
+	function paginate(pageHeight) {
 	    var notes = {};
 	    document.querySelectorAll('.footnote-definition').forEach(function (n) { notes[n.id] = n; n.remove(); });
 	    var blocks = Array.from(document.body.children).filter(function (e) { return e.tagName !== 'SCRIPT'; });
