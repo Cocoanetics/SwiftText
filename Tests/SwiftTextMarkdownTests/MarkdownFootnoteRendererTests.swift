@@ -161,6 +161,50 @@ struct MarkdownFootnotePlacementTests {
 		#expect(html.range(of: "<h1>B")!.lowerBound < html.range(of: "id=\"fn-1\"")!.lowerBound)
 	}
 
+	// MARK: - Labels from the source id (#270)
+
+	@Test func sourceLabelsKeepThePrintedNumber() {
+		// An excerpt that starts mid-count: the first footnote is 31.
+		let html = MarkdownFootnoteRenderer.convert(
+			"a[^31] b[^32]\n\n[^31]: One\n\n[^32]: Two", options: [.footnoteLabelsFromSource])
+		#expect(html.contains("<a href=\"#fn-1\" id=\"ref-1\">[31]</a>"))
+		#expect(html.contains("id=\"fn-1\"><strong>[31]:</strong> One"))
+		#expect(html.contains("id=\"fn-2\"><strong>[32]:</strong> Two"))
+	}
+
+	@Test func sourceLabelsReadTrailingDigitsAfterASeparator() {
+		let html = MarkdownFootnoteRenderer.convert(
+			"# A\n\na[^47]\n\n[^47]: One\n\n# B\n\nb[^k2-48] c[^III.5]\n\n[^k2-48]: Two\n\n[^III.5]: Three",
+			options: [.footnoteLabelsFromSource])
+		#expect(html.contains("<strong>[47]:</strong> One"))
+		#expect(html.contains("<strong>[48]:</strong> Two"))
+		#expect(html.contains("<strong>[5]:</strong> Three"))
+		// Anchors stay internal and unique although two labels could collide.
+		#expect(html.contains("id=\"fn-1\"") && html.contains("id=\"fn-2\"") && html.contains("id=\"fn-3\""))
+	}
+
+	@Test func sourceLabelsLeaveNamedIDsOnTheRunningNumber() {
+		let html = MarkdownFootnoteRenderer.convert(
+			"a[^note] b[^note1] c[^7]\n\n[^note]: One\n\n[^note1]: Two\n\n[^7]: Three",
+			options: [.footnoteLabelsFromSource])
+		#expect(html.contains("<strong>[1]:</strong> One"))
+		#expect(html.contains("<strong>[2]:</strong> Two"))
+		#expect(html.contains("<strong>[7]:</strong> Three"))
+	}
+
+	@Test func sourceLabelsAreOptIn() {
+		let html = MarkdownFootnoteRenderer.convert("a[^31]\n\n[^31]: One")
+		#expect(html.contains("<strong>[1]:</strong> One"))
+	}
+
+	@Test func sourceLabelsWorkWithFootnotesAtEnd() {
+		let html = MarkdownFootnoteRenderer.convert(
+			"# A\n\nx[^31]\n\n[^31]: One\n\n# B\n\ny[^k2-1]\n\n[^k2-1]: Two",
+			options: [.footnotesAtEnd, .footnoteLabelsFromSource])
+		#expect(html.contains("<strong>[31]:</strong> One"))
+		#expect(html.contains("<strong>[1]:</strong> Two"))
+	}
+
 	@Test func footnotesAtEndCollectsBlocksWithContinuousNumbering() {
 		let html = MarkdownFootnoteRenderer.convert(
 			"# A\n\nx[^a]\n\n[^a]: One\n\n# B\n\ny[^b]\n\n[^b]: Two", options: [.footnotesAtEnd])
