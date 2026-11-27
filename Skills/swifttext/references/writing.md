@@ -31,6 +31,9 @@ output is the input's name with `.html`. HTML input isn't accepted; use `pdf`.
   punctuation; `--language de` picks German quotes („…“).
 - `--footnotes section|end|page` places footnotes per block, at the end, or at
   the foot of each PDF page.
+- `--footnote-labels source` labels a footnote with the number in its id, so
+  `[^31]` and `[^k2-31]` show 31 (HTML, PDF). For digitised books and excerpts
+  whose printed numbers must survive; ids without a number keep the running one.
 - `--link-citations` makes `[n]` references clickable to the list item that
   starts with `[n]`.
 - `--css style.css` appends custom CSS (HTML, PDF, EPUB). DOCX and Pages take

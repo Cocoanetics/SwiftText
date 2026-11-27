@@ -50,6 +50,14 @@ enum FootnotePlacement: String, ExpressibleByArgument, CaseIterable {
 	case page
 }
 
+/// What a footnote's label shows in HTML and PDF output.
+enum FootnoteLabels: String, ExpressibleByArgument, CaseIterable {
+	/// The running number, in order of first reference.
+	case numbered
+	/// The number written in the id (`[^31]`, `[^k2-31]`), where it has one.
+	case source
+}
+
 @available(macOS 10.15, macCatalyst 13, iOS 13, tvOS 13, watchOS 6, *)
 struct Render: AsyncParsableCommand {
 	static let configuration = CommandConfiguration(
@@ -110,6 +118,9 @@ struct Render: AsyncParsableCommand {
 
 	@Option(name: .long, help: "For HTML and PDF output, footnote placement: section = per source block (default); end = all at the end; page = foot of the page (PDF).")
 	var footnotes: FootnotePlacement = .section
+
+	@Option(name: .long, help: "For HTML and PDF output, the footnote label: numbered = running number (default); source = the number in the id, so [^31] and [^k2-31] show 31.")
+	var footnoteLabels: FootnoteLabels = .numbered
 
 	@Flag(name: .long, help: "Typographic punctuation: curly quotes (style per --language), -- en dash, --- em dash, ... ellipsis. Code, URLs and footnote/citation markers stay as typed.")
 	var smart: Bool = false
@@ -270,7 +281,7 @@ struct Render: AsyncParsableCommand {
 		return markdownToHTML(markdown, paper: paper, landscape: landscape, passThroughRawHTML: true, pageBreakBefore: pageBreakBefore,
 		                      chapterStart: chapterStart, chapterLevel: chapterLevel,
 		                      extraCSS: userCSS, title: title, authors: author, linkCitations: linkCitations, footnotes: footnotes,
-		                      language: language, frontMatter: titlePage || toc ? frontMatter : nil)
+		                      footnoteLabels: footnoteLabels, language: language, frontMatter: titlePage || toc ? frontMatter : nil)
 	}
 
 	// MARK: - EPUB
