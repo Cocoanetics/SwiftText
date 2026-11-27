@@ -67,12 +67,17 @@ func detectVisualRegions(in cgImage: CGImage, pageSize: CGSize, excluding textBo
 
 	for start in 0..<(width * height) where mask[start] && !visited[start] {
 		var minX = width, minY = height, maxX = 0, maxY = 0
+		var inkMinX = width, inkMinY = height, inkMaxX = 0, inkMaxY = 0
 		var inkCount = 0
 		visited[start] = true
 		stack.append(start)
 		while let index = stack.popLast() {
 			let x = index % width, y = index / width
-			if ink[index] { inkCount += 1 }
+			if ink[index] {
+				inkCount += 1
+				inkMinX = min(inkMinX, x); inkMaxX = max(inkMaxX, x)
+				inkMinY = min(inkMinY, y); inkMaxY = max(inkMaxY, y)
+			}
 			minX = min(minX, x); maxX = max(maxX, x)
 			minY = min(minY, y); maxY = max(maxY, y)
 			for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
@@ -86,23 +91,26 @@ func detectVisualRegions(in cgImage: CGImage, pageSize: CGSize, excluding textBo
 			}
 		}
 
-		// The dilation grew the box by its radius on every side.
-		let box = CGRect(x: minX + 3, y: minY + 3, width: maxX - minX - 5, height: maxY - minY - 5)
-		guard box.width > 0, box.height > 0 else { continue }
+		// The box covers the ink itself, not the margin the dilation grew around it.
+		guard inkCount > 0 else { continue }
+		let box = CGRect(x: inkMinX, y: inkMinY, width: inkMaxX - inkMinX + 1, height: inkMaxY - inkMinY + 1)
 		// Specks, rules and residue of undetected text are not images.
 		guard box.width * box.height >= pageArea * 0.01,
 		      box.width >= CGFloat(width) * 0.04,
 		      box.height >= CGFloat(height) * 0.04,
 		      box.width < CGFloat(width) * 0.95 || box.height < CGFloat(height) * 0.95 else { continue }
 
-		// A dark scan edge or page shadow runs into the border as a strip, or as an
-		// L along two edges that leaves most of its box empty. A picture reaching the
-		// border fills its box.
-		let touchesBorder = minX == 0 || minY == 0 || maxX == width - 1 || maxY == height - 1
-		if touchesBorder {
-			let elongation = max(box.width, box.height) / min(box.width, box.height)
+		// A dark scan edge or page shadow is a thin strip lying along the border it
+		// touches for most of the page, or an L along two edges that leaves most of
+		// its box empty. A picture reaching the border, even a wide banner, fills
+		// its box and stops well short of running the page's whole length.
+		let touchesVerticalBorder = minX == 0 || maxX == width - 1
+		let touchesHorizontalBorder = minY == 0 || maxY == height - 1
+		if touchesVerticalBorder || touchesHorizontalBorder {
 			let fill = CGFloat(inkCount) / (box.width * box.height)
-			guard elongation < 5, fill >= 0.5 else { continue }
+			let verticalStrip = touchesVerticalBorder && box.height >= box.width * 5 && box.height >= CGFloat(height) * 0.75
+			let horizontalStrip = touchesHorizontalBorder && box.width >= box.height * 5 && box.width >= CGFloat(width) * 0.75
+			guard fill >= 0.5, !verticalStrip, !horizontalStrip else { continue }
 		}
 
 		regions.append(CGRect(

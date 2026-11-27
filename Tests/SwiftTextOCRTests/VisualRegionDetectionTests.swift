@@ -81,7 +81,9 @@ struct VisualRegionDetectionTests {
 	@Test("A photo in the body of a noisy scanned page is still found", arguments: [
 		CGRect(x: 700, y: 1300, width: 1100, height: 700),
 		// Close to the right edge, but not touching it.
-		CGRect(x: 1800, y: 1300, width: 720, height: 700)
+		CGRect(x: 1800, y: 1300, width: 720, height: 700),
+		// A 6:1 banner running into the bottom edge.
+		CGRect(x: 700, y: 3050, width: 1500, height: 250)
 	])
 	func findsPhotoOnScannedPage(photo: CGRect) throws {
 		let page = try ScannedPage.render(photo: photo)
