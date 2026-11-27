@@ -40,16 +40,21 @@ func detectVisualRegions(in cgImage: CGImage, pageSize: CGSize, excluding textBo
 	}
 	guard drawn else { return [] }
 
-	var ink = pixels.map { $0 < 200 }
-
-	for bounds in textBounds {
+	let textRanges = textBounds.compactMap { bounds -> (x: ClosedRange<Int>, y: ClosedRange<Int>)? in
 		let minX = max(0, Int((bounds.minX * scale).rounded(.down)))
 		let maxX = min(width - 1, Int((bounds.maxX * scale).rounded(.up)))
 		let minY = max(0, Int((bounds.minY * scale).rounded(.down)))
 		let maxY = min(height - 1, Int((bounds.maxY * scale).rounded(.up)))
-		guard minX <= maxX, minY <= maxY else { continue }
-		for y in minY...maxY {
-			for x in minX...maxX { ink[y * width + x] = false }
+		guard minX <= maxX, minY <= maxY else { return nil }
+		return (minX...maxX, minY...maxY)
+	}
+
+	let threshold = inkThreshold(pixels, width: width, textRanges: textRanges)
+	var ink = pixels.map { $0 < threshold }
+
+	for range in textRanges {
+		for y in range.y {
+			for x in range.x { ink[y * width + x] = false }
 		}
 	}
 
@@ -62,10 +67,12 @@ func detectVisualRegions(in cgImage: CGImage, pageSize: CGSize, excluding textBo
 
 	for start in 0..<(width * height) where mask[start] && !visited[start] {
 		var minX = width, minY = height, maxX = 0, maxY = 0
+		var inkCount = 0
 		visited[start] = true
 		stack.append(start)
 		while let index = stack.popLast() {
 			let x = index % width, y = index / width
+			if ink[index] { inkCount += 1 }
 			minX = min(minX, x); maxX = max(maxX, x)
 			minY = min(minY, y); maxY = max(maxY, y)
 			for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
@@ -88,6 +95,16 @@ func detectVisualRegions(in cgImage: CGImage, pageSize: CGSize, excluding textBo
 		      box.height >= CGFloat(height) * 0.04,
 		      box.width < CGFloat(width) * 0.95 || box.height < CGFloat(height) * 0.95 else { continue }
 
+		// A dark scan edge or page shadow runs into the border as a strip, or as an
+		// L along two edges that leaves most of its box empty. A picture reaching the
+		// border fills its box.
+		let touchesBorder = minX == 0 || minY == 0 || maxX == width - 1 || maxY == height - 1
+		if touchesBorder {
+			let elongation = max(box.width, box.height) / min(box.width, box.height)
+			let fill = CGFloat(inkCount) / (box.width * box.height)
+			guard elongation < 5, fill >= 0.5 else { continue }
+		}
+
 		regions.append(CGRect(
 			x: box.minX / scale, y: box.minY / scale, width: box.width / scale, height: box.height / scale
 		).integral.intersection(CGRect(origin: .zero, size: pageSize)))
@@ -97,6 +114,45 @@ func detectVisualRegions(in cgImage: CGImage, pageSize: CGSize, excluding textBo
 	return regions.filter { region in
 		!regions.contains { $0 != region && $0.insetBy(dx: -2, dy: -2).contains(region) }
 	}
+}
+
+/// The luminance below which a pixel counts as ink.
+///
+/// Scans carry grey show-through from the back of the page that is darker than
+/// white paper but much lighter than the printed ink. The paper level is the most
+/// common bright luminance, and the text boxes show how dark the page's ink is;
+/// anything lighter than 60% of the way from ink to paper is not ink. Without text
+/// to calibrate on, only pixels clearly darker than the paper count.
+private func inkThreshold(
+	_ pixels: [UInt8], width: Int, textRanges: [(x: ClosedRange<Int>, y: ClosedRange<Int>)]
+) -> UInt8 {
+	var histogram = [Int](repeating: 0, count: 256)
+	for pixel in pixels { histogram[Int(pixel)] += 1 }
+	let paper = (128...255).max { histogram[$0] < histogram[$1] } ?? 255
+	let fallback = min(200, paper - 40)
+
+	var textHistogram = [Int](repeating: 0, count: 256)
+	var textInkCount = 0
+	for range in textRanges {
+		for y in range.y {
+			for x in range.x {
+				let pixel = Int(pixels[y * width + x])
+				guard pixel < fallback else { continue }
+				textHistogram[pixel] += 1
+				textInkCount += 1
+			}
+		}
+	}
+	guard textInkCount > 0 else { return UInt8(fallback) }
+
+	// The darker tail is the glyph cores; anti-aliased edges are lighter.
+	var remaining = textInkCount / 10
+	var textInk = 0
+	while textInk < 255, remaining >= textHistogram[textInk] {
+		remaining -= textHistogram[textInk]
+		textInk += 1
+	}
+	return UInt8(min(fallback, textInk + (paper - textInk) * 65 / 100))
 }
 
 /// Square dilation with the given radius, done as two separable passes.
