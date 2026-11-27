@@ -287,16 +287,18 @@ final class FootnoteState {
 	private let groupByID: [String: Int]?
 	private var nextNumberByGroup: [Int: Int] = [:]
 	private var displayNumberByNumber: [Int: Int] = [:]
-	private let sourceLabels: Bool
+	/// Whether a number written in the id is shown instead of the running one.
+	private let labelsFromSource: Bool
 
-	/// - Parameter groupByID: definition block per id. When it spans more than
-	///   one block, the displayed numbers restart at 1 in every block (the
-	///   internal numbers, used for anchors, stay unique across the document).
-	/// - Parameter sourceLabels: show the number written in the id instead of
-	///   the running number, where the id carries one (see ``sourceLabel(forID:)``).
-	init(definitionIDs: [String], groupByID: [String: Int]? = nil, sourceLabels: Bool = false) {
+	/// - Parameters:
+	///   - groupByID: definition block per id. When it spans more than
+	///     one block, the displayed numbers restart at 1 in every block (the
+	///     internal numbers, used for anchors, stay unique across the document).
+	///   - labelsFromSource: show the number an id carries (see
+	///     ``sourceLabel(forID:)``) instead of the running number.
+	init(definitionIDs: [String], groupByID: [String: Int]? = nil, labelsFromSource: Bool = false) {
+		self.labelsFromSource = labelsFromSource
 		self.validIDs = Set(definitionIDs)
-		self.sourceLabels = sourceLabels
 		if let groupByID, Set(groupByID.values).count > 1 {
 			self.groupByID = groupByID
 		} else {
@@ -304,21 +306,8 @@ final class FootnoteState {
 		}
 	}
 
-	/// The number written in a footnote id: the whole id when it is all digits
-	/// (`31`, `031` → 31), or the digits after a trailing `-`, `_`, `.` or `:`
-	/// separator (`k2-48`, `III-48` → 48). `nil` for any other id.
-	static func sourceLabel(forID id: String) -> Int? {
-		let digits = id.reversed().prefix(while: { $0.isASCII && $0.isNumber })
-		guard !digits.isEmpty else { return nil }
-		if digits.count < id.count {
-			let separator = id[id.index(id.endIndex, offsetBy: -digits.count - 1)]
-			guard "-_.:".contains(separator) else { return nil }
-		}
-		return Int(String(digits.reversed()))
-	}
-
 	/// The number to show for the internal `number` — equal to it unless
-	/// numbering restarts per definition block or labels come from the ids.
+	/// numbering restarts per definition block.
 	func displayNumber(forNumber number: Int) -> Int {
 		displayNumberByNumber[number] ?? number
 	}
@@ -341,12 +330,26 @@ final class FootnoteState {
 				nextNumberByGroup[group] = display + 1
 				displayNumberByNumber[number] = display
 			}
-			if sourceLabels, let label = Self.sourceLabel(forID: id) {
+			// The running count above still advances, so an id without a number
+			// of its own gets the same label it would have had without this.
+			if labelsFromSource, let label = Self.sourceLabel(forID: id) {
 				displayNumberByNumber[number] = label
 			}
 		}
 		totalReferenceCountByNumber[number, default: 0] += 1
 		return number
+	}
+
+	/// The number an id carries: the id itself when it is all digits (`31`),
+	/// or its trailing digits when a separator precedes them (`k2-31`,
+	/// `III.31`). `nil` for ids like `note` or `note1`, where a trailing digit
+	/// is part of a name, not a printed footnote number.
+	static func sourceLabel(forID id: String) -> Int? {
+		let digits = id.reversed().prefix { $0.isASCII && $0.isNumber }
+		guard !digits.isEmpty, let value = Int(String(digits.reversed())) else { return nil }
+		if digits.count == id.count { return value }
+		let separator = id[id.index(id.endIndex, offsetBy: -digits.count - 1)]
+		return separator.isLetter || separator.isNumber ? nil : value
 	}
 
 	/// Looks up an already-assigned number without recording a new reference.

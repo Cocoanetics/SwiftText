@@ -63,11 +63,13 @@ public enum SwiftMarkdownHTMLRenderer {
 		/// block where the source puts it (per-block numbering).
 		public static let footnotesAtEnd = Options(rawValue: 1 << 4)
 
-		/// Labels each footnote with the number written in its id instead of the
-		/// running number, for digitised books that keep their printed numbering:
-		/// `[^31]` shows 31, `[^k2-48]` and `[^III-48]` show 48. Ids without such
-		/// trailing digits keep the running number; anchors stay unique either way.
-		public static let sourceFootnoteLabels = Options(rawValue: 1 << 5)
+		/// Labels a footnote with the number its id carries instead of the
+		/// running number: `[^31]` shows 31, and so does an id that ends in
+		/// digits after a separator (`k2-31`, `III.31`). An id without such a
+		/// number keeps the running one. For digitised books and excerpts,
+		/// whose printed footnote numbers must survive and may not start at 1.
+		/// Anchors (`fn-N`, `ref-N`) keep the internal, document-unique numbers.
+		public static let footnoteLabelsFromSource = Options(rawValue: 1 << 5)
 	}
 
 	/// The `n` of every list item in `document` that starts with `[n]`.

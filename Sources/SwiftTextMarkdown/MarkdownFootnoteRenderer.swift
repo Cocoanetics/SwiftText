@@ -45,7 +45,7 @@ public enum MarkdownFootnoteRenderer {
 		let state = FootnoteState(
 			definitionIDs: definitions.map { $0.id },
 			groupByID: atEnd ? nil : Dictionary(definitions.map { ($0.id, $0.group) }, uniquingKeysWith: { first, _ in first }),
-			sourceLabels: options.contains(.sourceFootnoteLabels)
+			labelsFromSource: options.contains(.footnoteLabelsFromSource)
 		)
 
 		// Rewrite references in the main body.

@@ -387,7 +387,7 @@ func markdownToHTML(
 	authors: [String] = [],
 	linkCitations: Bool = false,
 	footnotes: FootnotePlacement = .section,
-	footnoteLabels: FootnoteLabels = .running,
+	footnoteLabels: FootnoteLabels = .numbered,
 	language: String = "en",
 	frontMatter: FrontMatter? = nil
 ) -> String {
@@ -402,7 +402,7 @@ func markdownToHTML(
 	if passThroughRawHTML { options.insert(.passThroughRawHTML) }
 	if linkCitations { options.insert(.linkCitations) }
 	if footnotes == .end { options.insert(.footnotesAtEnd) }
-	if footnoteLabels == .source { options.insert(.sourceFootnoteLabels) }
+	if footnoteLabels == .source { options.insert(.footnoteLabelsFromSource) }
 	let (markedMarkdown, contentsPlaceholder) = FrontMatterHTML.placeContentsMarker(in: markdown)
 	var body = MarkdownToHTML.convert(markedMarkdown, options: options)
 	// Optional forced page break before a given heading level (e.g. h2 so each

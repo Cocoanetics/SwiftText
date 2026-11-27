@@ -161,6 +161,50 @@ struct MarkdownFootnotePlacementTests {
 		#expect(html.range(of: "<h1>B")!.lowerBound < html.range(of: "id=\"fn-1\"")!.lowerBound)
 	}
 
+	// MARK: - Labels from the source id (#270)
+
+	@Test func sourceLabelsKeepThePrintedNumber() {
+		// An excerpt that starts mid-count: the first footnote is 31.
+		let html = MarkdownFootnoteRenderer.convert(
+			"a[^31] b[^32]\n\n[^31]: One\n\n[^32]: Two", options: [.footnoteLabelsFromSource])
+		#expect(html.contains("<a href=\"#fn-1\" id=\"ref-1\">[31]</a>"))
+		#expect(html.contains("id=\"fn-1\"><strong>[31]:</strong> One"))
+		#expect(html.contains("id=\"fn-2\"><strong>[32]:</strong> Two"))
+	}
+
+	@Test func sourceLabelsReadTrailingDigitsAfterASeparator() {
+		let html = MarkdownFootnoteRenderer.convert(
+			"# A\n\na[^47]\n\n[^47]: One\n\n# B\n\nb[^k2-48] c[^III.5]\n\n[^k2-48]: Two\n\n[^III.5]: Three",
+			options: [.footnoteLabelsFromSource])
+		#expect(html.contains("<strong>[47]:</strong> One"))
+		#expect(html.contains("<strong>[48]:</strong> Two"))
+		#expect(html.contains("<strong>[5]:</strong> Three"))
+		// Anchors stay internal and unique although two labels could collide.
+		#expect(html.contains("id=\"fn-1\"") && html.contains("id=\"fn-2\"") && html.contains("id=\"fn-3\""))
+	}
+
+	@Test func sourceLabelsLeaveNamedIDsOnTheRunningNumber() {
+		let html = MarkdownFootnoteRenderer.convert(
+			"a[^note] b[^note1] c[^7]\n\n[^note]: One\n\n[^note1]: Two\n\n[^7]: Three",
+			options: [.footnoteLabelsFromSource])
+		#expect(html.contains("<strong>[1]:</strong> One"))
+		#expect(html.contains("<strong>[2]:</strong> Two"))
+		#expect(html.contains("<strong>[7]:</strong> Three"))
+	}
+
+	@Test func sourceLabelsAreOptIn() {
+		let html = MarkdownFootnoteRenderer.convert("a[^31]\n\n[^31]: One")
+		#expect(html.contains("<strong>[1]:</strong> One"))
+	}
+
+	@Test func sourceLabelsWorkWithFootnotesAtEnd() {
+		let html = MarkdownFootnoteRenderer.convert(
+			"# A\n\nx[^31]\n\n[^31]: One\n\n# B\n\ny[^k2-1]\n\n[^k2-1]: Two",
+			options: [.footnotesAtEnd, .footnoteLabelsFromSource])
+		#expect(html.contains("<strong>[31]:</strong> One"))
+		#expect(html.contains("<strong>[1]:</strong> Two"))
+	}
+
 	@Test func footnotesAtEndCollectsBlocksWithContinuousNumbering() {
 		let html = MarkdownFootnoteRenderer.convert(
 			"# A\n\nx[^a]\n\n[^a]: One\n\n# B\n\ny[^b]\n\n[^b]: Two", options: [.footnotesAtEnd])
@@ -191,13 +235,13 @@ struct MarkdownFootnotePlacementTests {
 		#expect(!html.contains(footnoteSentinelOpen))
 	}
 
-	// MARK: Source labels (#270)
+	// MARK: - Labels from the source id: anchors, default output, parsing (#270)
 
 	private static let printedNumbers = "A[^31] B[^k2-48] C[^III-48] D[^note] E[^31]\n\n"
 		+ "[^31]: One.\n[^k2-48]: Two.\n[^III-48]: Three.\n[^note]: Four."
 
 	@Test func sourceLabelsShowNumberWrittenInID() {
-		let html = MarkdownFootnoteRenderer.convert(Self.printedNumbers, options: [.sourceFootnoteLabels])
+		let html = MarkdownFootnoteRenderer.convert(Self.printedNumbers, options: [.footnoteLabelsFromSource])
 		#expect(html.contains("A<sup><a href=\"#fn-1\" id=\"ref-1\">[31]</a></sup>"))
 		#expect(html.contains("B<sup><a href=\"#fn-2\" id=\"ref-2\">[48]</a></sup>"))
 		#expect(html.contains("C<sup><a href=\"#fn-3\" id=\"ref-3\">[48]</a></sup>"))
@@ -209,7 +253,7 @@ struct MarkdownFootnotePlacementTests {
 		#expect(html.contains("id=\"fn-4\"><strong>[4]:</strong> Four."))
 	}
 
-	@Test func runningLabelsUnchangedWithoutOption() {
+	@Test func numberedLabelsUnchangedWithoutOption() {
 		let html = MarkdownFootnoteRenderer.convert(Self.printedNumbers)
 		#expect(html == "<p>A<sup><a href=\"#fn-1\" id=\"ref-1\">[1]</a></sup> B<sup><a href=\"#fn-2\" id=\"ref-2\">[2]</a></sup> "
 			+ "C<sup><a href=\"#fn-3\" id=\"ref-3\">[3]</a></sup> D<sup><a href=\"#fn-4\" id=\"ref-4\">[4]</a></sup> "
@@ -222,7 +266,7 @@ struct MarkdownFootnotePlacementTests {
 
 	@Test func sourceLabelsWorkWithPerBlockAndEndPlacement() {
 		let input = "# I\n\nx[^31] y[^a]\n\n[^31]: Late.\n[^a]: Word.\n\n# II\n\nz[^1]\n\n[^1]: First."
-		for options: SwiftMarkdownHTMLRenderer.Options in [[.sourceFootnoteLabels], [.sourceFootnoteLabels, .footnotesAtEnd]] {
+		for options: SwiftMarkdownHTMLRenderer.Options in [[.footnoteLabelsFromSource], [.footnoteLabelsFromSource, .footnotesAtEnd]] {
 			let html = MarkdownFootnoteRenderer.convert(input, options: options)
 			#expect(html.contains("x<sup><a href=\"#fn-1\" id=\"ref-1\">[31]</a></sup>"))
 			#expect(html.contains("z<sup><a href=\"#fn-3\" id=\"ref-3\">[1]</a></sup>"))
@@ -230,7 +274,7 @@ struct MarkdownFootnotePlacementTests {
 			#expect(html.contains("id=\"fn-3\"><strong>[1]:</strong> First."))
 		}
 		// Ids without a number keep the running number of their placement.
-		#expect(MarkdownFootnoteRenderer.convert(input, options: [.sourceFootnoteLabels]).contains("id=\"fn-2\"><strong>[2]:</strong> Word."))
+		#expect(MarkdownFootnoteRenderer.convert(input, options: [.footnoteLabelsFromSource]).contains("id=\"fn-2\"><strong>[2]:</strong> Word."))
 	}
 
 	@Test func sourceLabelParsing() {
@@ -241,6 +285,8 @@ struct MarkdownFootnotePlacementTests {
 		#expect(FootnoteState.sourceLabel(forID: "ch_7") == 7)
 		#expect(FootnoteState.sourceLabel(forID: "2.13") == 13)
 		#expect(FootnoteState.sourceLabel(forID: "n:5") == 5)
+		#expect(FootnoteState.sourceLabel(forID: "ch/31") == 31)
+		#expect(FootnoteState.sourceLabel(forID: "ch#31") == 31)
 		#expect(FootnoteState.sourceLabel(forID: "note") == nil)
 		#expect(FootnoteState.sourceLabel(forID: "k2") == nil)
 		#expect(FootnoteState.sourceLabel(forID: "48-") == nil)
