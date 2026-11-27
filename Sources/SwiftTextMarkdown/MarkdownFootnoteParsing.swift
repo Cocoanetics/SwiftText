@@ -287,12 +287,16 @@ final class FootnoteState {
 	private let groupByID: [String: Int]?
 	private var nextNumberByGroup: [Int: Int] = [:]
 	private var displayNumberByNumber: [Int: Int] = [:]
+	private let sourceLabels: Bool
 
 	/// - Parameter groupByID: definition block per id. When it spans more than
 	///   one block, the displayed numbers restart at 1 in every block (the
 	///   internal numbers, used for anchors, stay unique across the document).
-	init(definitionIDs: [String], groupByID: [String: Int]? = nil) {
+	/// - Parameter sourceLabels: show the number written in the id instead of
+	///   the running number, where the id carries one (see ``sourceLabel(forID:)``).
+	init(definitionIDs: [String], groupByID: [String: Int]? = nil, sourceLabels: Bool = false) {
 		self.validIDs = Set(definitionIDs)
+		self.sourceLabels = sourceLabels
 		if let groupByID, Set(groupByID.values).count > 1 {
 			self.groupByID = groupByID
 		} else {
@@ -300,8 +304,21 @@ final class FootnoteState {
 		}
 	}
 
+	/// The number written in a footnote id: the whole id when it is all digits
+	/// (`31`, `031` → 31), or the digits after a trailing `-`, `_`, `.` or `:`
+	/// separator (`k2-48`, `III-48` → 48). `nil` for any other id.
+	static func sourceLabel(forID id: String) -> Int? {
+		let digits = id.reversed().prefix(while: { $0.isASCII && $0.isNumber })
+		guard !digits.isEmpty else { return nil }
+		if digits.count < id.count {
+			let separator = id[id.index(id.endIndex, offsetBy: -digits.count - 1)]
+			guard "-_.:".contains(separator) else { return nil }
+		}
+		return Int(String(digits.reversed()))
+	}
+
 	/// The number to show for the internal `number` — equal to it unless
-	/// numbering restarts per definition block.
+	/// numbering restarts per definition block or labels come from the ids.
 	func displayNumber(forNumber number: Int) -> Int {
 		displayNumberByNumber[number] ?? number
 	}
@@ -323,6 +340,9 @@ final class FootnoteState {
 				let display = nextNumberByGroup[group, default: 1]
 				nextNumberByGroup[group] = display + 1
 				displayNumberByNumber[number] = display
+			}
+			if sourceLabels, let label = Self.sourceLabel(forID: id) {
+				displayNumberByNumber[number] = label
 			}
 		}
 		totalReferenceCountByNumber[number, default: 0] += 1

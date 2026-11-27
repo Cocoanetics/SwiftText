@@ -62,6 +62,12 @@ public enum SwiftMarkdownHTMLRenderer {
 		/// document, numbered continuously, instead of keeping each definition
 		/// block where the source puts it (per-block numbering).
 		public static let footnotesAtEnd = Options(rawValue: 1 << 4)
+
+		/// Labels each footnote with the number written in its id instead of the
+		/// running number, for digitised books that keep their printed numbering:
+		/// `[^31]` shows 31, `[^k2-48]` and `[^III-48]` show 48. Ids without such
+		/// trailing digits keep the running number; anchors stay unique either way.
+		public static let sourceFootnoteLabels = Options(rawValue: 1 << 5)
 	}
 
 	/// The `n` of every list item in `document` that starts with `[n]`.
